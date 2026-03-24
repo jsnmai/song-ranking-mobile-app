@@ -1,0 +1,38 @@
+[project]                                                                                                                                          
+name = "listn-api"                                                                                                                                 
+version = "0.1.0"                                                                                                                                  
+description = "LISTn API — FastAPI backend for the LISTn song ranking app"                                                                         
+readme = "README.md"                        
+requires-python = ">=3.11"   
+
+# =============================================================================                                                                    
+# Runtime Dependencies — installed in all environments
+# =============================================================================                                                                    
+dependencies = [
+    "alembic>=1.18.4",              # database migrations — tracks schema changes over time
+    "fastapi>=0.135.2",             # web framework — defines API endpoints
+    "psycopg2-binary>=2.9.11",      # PostgreSQL driver — connects SQLAlchemy to Postgres
+    "pydantic-settings>=2.13.1",    # reads .env file into typed Python settings
+    "sqlalchemy>=2.0.48",           # ORM — Python classes instead of raw SQL queries
+    "uvicorn[standard]>=0.42.0",    # ASGI server — runs FastAPI with hot reload
+]
+
+# =============================================================================                                                                    
+# Dev Dependencies — only installed locally, never in production
+# =============================================================================  
+[dependency-groups]
+dev = [
+    "black>=26.3.1",    # auto-formats Python code      
+    "httpx>=0.28.1",    # makes HTTP requests to the API in tests
+    "pytest>=9.0.2",    # test framework 
+]
+
+# =============================================================================                                                                    
+# Tool Configuration
+# ============================================================================= 
+[tool.black]                                                                                                                                       
+line-length = 88        # max characters per line before black wraps it
+                                                                                                                                                    
+[tool.pytest.ini_options]               
+testpaths = ["tests"]   # tells pytest where to look for tests
+                                                                                                                                                                                                                                                                                          
