@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: listn
+    ports:
+      - "5432:5432"
+    volumes:
+      # Persists data between docker restarts — without this, DB resets every time
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
