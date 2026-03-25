@@ -25,7 +25,7 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(254), unique=True, nullable=False)
-    hashed_password: Mapped[str] = mapped_column(String(72), nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String(60), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
