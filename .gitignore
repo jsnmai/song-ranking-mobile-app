@@ -1,6 +1,7 @@
 # Python
 # Compiled bytecode cache — regenerated automatically
 __pycache__/
+**/__pycache__/
 *.pyc
 *.pyo
 # Virtual environment — recreated from pyproject.toml + uv.lock

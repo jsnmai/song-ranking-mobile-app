@@ -7,6 +7,7 @@ from alembic import context
 
 from src.core.config import settings
 from src.db.base import Base
+import src.models.user  # noqa: F401 — ADDED: registers User with Base.metadata so autogenerate can see it
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
