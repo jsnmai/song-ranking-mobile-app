@@ -9,12 +9,14 @@ requires-python = ">=3.11"
 # Runtime Dependencies — installed in all environments
 # =============================================================================                                                                    
 dependencies = [
-    "alembic>=1.18.4",              # database migrations — tracks schema changes over time
-    "fastapi>=0.135.2",             # web framework — defines API endpoints
-    "psycopg2-binary>=2.9.11",      # PostgreSQL driver — connects SQLAlchemy to Postgres
-    "pydantic-settings>=2.13.1",    # reads .env file into typed Python settings
-    "sqlalchemy>=2.0.48",           # ORM — Python classes instead of raw SQL queries
-    "uvicorn[standard]>=0.42.0",    # ASGI server — runs FastAPI with hot reload
+    "alembic>=1.18.4",                  # database migrations — tracks schema changes over time
+    "fastapi>=0.135.2",                 # web framework — defines API endpoints
+    "psycopg2-binary>=2.9.11",          # PostgreSQL driver — connects SQLAlchemy to Postgres
+    "pydantic-settings>=2.13.1",        # reads .env file into typed Python settings
+    "sqlalchemy>=2.0.48",               # ORM — Python classes instead of raw SQL queries
+    "uvicorn[standard]>=0.42.0",        # ASGI server — runs FastAPI with hot reload
+    "passlib[bcrypt]>=1.7.4",           # password hashing — bcrypt is slow by design (brute-force resistant)
+    "python-jose[cryptography]>=3.3.0", # JWT encode/decode — signs tokens with your secret key
 ]
 
 # =============================================================================                                                                    
