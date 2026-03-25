@@ -7,14 +7,12 @@ class UserRegister(BaseModel):
     """
     Shape of the request body for POST /auth/register.
 
-    This is what the client sends — email, plain-text password, name, username.
+    This is what the client sends — email and plain-text password.
     The plain-text password is hashed in the service layer before it ever touches the DB.
     """
 
     email: EmailStr # a Pydantic type that validates email format automatically. Without it, "notanemail" would be accepted as a valid string.
     password: str = Field(min_length=8, max_length=72) # bcrypt truncates pws longer than 72 bytes, so accepting longer ones would be a security bug (2 diff pws could hash identically).
-    name: str = Field(min_length=1, max_length=100)
-    username: str = Field(min_length=1, max_length=30)
 
 
 class UserResponse(BaseModel):
