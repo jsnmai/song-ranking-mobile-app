@@ -9,6 +9,8 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str
+    jwt_secret_key: str                                                                                                             
+    cors_origins: str = "http://localhost:8081"
 
     model_config = SettingsConfigDict(
         env_file=".env",
