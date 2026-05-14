@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 
 from src.core.security import decode_access_token
 from src.db.session import SessionLocal
-from src.models.user import User
-from src.repositories import user as user_repo
+from src.sqlalchemy_tables.user import User
+from src.crud import user as user_repo
 
 # Tells FastAPI where clients send their token.
 # When a route declares Depends(get_current_user), Swagger UI will show a

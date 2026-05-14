@@ -2,8 +2,8 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from src.core.security import create_access_token, hash_password, verify_password
-from src.schemas.user import Token, UserRegister, UserResponse
-from src.repositories import user as user_repo
+from src.pydantic_schemas.user import Token, UserRegister, UserResponse
+from src.crud import user as user_repo
 
 
 def register_user(db: Session, data: UserRegister) -> UserResponse:

@@ -59,5 +59,7 @@ web-build/
 # JetBrains (PyCharm, WebStorm) project files
 .idea/
 
-# Internal AI context file
+# Internal AI context files
 CLAUDE.md
+.claude/
+DOCUMENTATION.md
