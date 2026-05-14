@@ -15,8 +15,10 @@ dependencies = [
     "pydantic-settings>=2.13.1",        # reads .env file into typed Python settings
     "sqlalchemy>=2.0.48",               # ORM — Python classes instead of raw SQL queries
     "uvicorn[standard]>=0.42.0",        # ASGI server — runs FastAPI with hot reload
-    "passlib[bcrypt]>=1.7.4",           # password hashing — bcrypt is slow by design (brute-force resistant)
+    "bcrypt>=4.0.0",                    # password hashing — bcrypt is slow by design (brute-force resistant)
     "python-jose[cryptography]>=3.3.0", # JWT encode/decode — signs tokens with your secret key
+    "slowapi>=0.1.9",
+    "pydantic[email]>=2.12.5",
 ]
 
 # =============================================================================                                                                    
@@ -35,6 +37,7 @@ dev = [
 [tool.black]                                                                                                                                       
 line-length = 88        # max characters per line before black wraps it
                                                                                                                                                     
-[tool.pytest.ini_options]               
+[tool.pytest.ini_options]
 testpaths = ["tests"]   # tells pytest where to look for tests
+pythonpath = ["."]      # adds backend/ to sys.path so `import main` and `import src` work
                                                                                                                                                                                                                                                                                           

@@ -1,34 +1,31 @@
 from datetime import datetime, timedelta, timezone
 
-from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
+from jose import jwt
 
-from src.core.config import settings # JWT config is centralized in settings (config.py) so it can be changed in one place.
-
-# CryptContext tells passlib which algorithm to use.
-# We select bcrypt as our hashing algorithm (called scheme by passlib)
-# "deprecated='auto'" means if we ever add a newer algorithm, old hashes are flagged for rehashing automatically.
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+from src.core.config import settings
 
 
 def hash_password(plain: str) -> str:
     """
     Hash a plain-text password using bcrypt.
 
+    bcrypt is deliberately slow (work factor 12 = 2^12 rounds) to make
+    brute-force guessing impractical even if the database is stolen.
     Returns a string like '$2b$12$...' that is safe to store in the DB.
     There is no way to reverse this back to the original password.
     """
-    return pwd_context.hash(plain)
+    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     """
     Check whether a plain-text password matches a stored bcrypt hash.
 
-    bcrypt re-hashes the plain password and compares — you never decrypt.
+    bcrypt re-hashes the plain text internally and compares — you never decrypt.
     Returns True if they match, False otherwise.
     """
-    return pwd_context.verify(plain, hashed)
+    return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 
 def create_access_token(data: dict) -> str:
