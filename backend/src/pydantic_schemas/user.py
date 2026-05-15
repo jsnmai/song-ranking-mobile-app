@@ -1,26 +1,24 @@
+# Pydantic schemas define the shapes of request bodies and response payloads.
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class UserRegister(BaseModel):
-    """
-    Shape of the request body for POST /auth/register.
-
-    This is what the client sends — email and plain-text password.
-    The plain-text password is hashed in the service layer before it ever touches the DB.
-    """
-
-    email: EmailStr # a Pydantic type that validates email format automatically. Without it, "notanemail" would be accepted as a valid string.
-    password: str = Field(min_length=8, max_length=72) # bcrypt truncates pws longer than 72 bytes, so accepting longer ones would be a security bug (2 diff pws could hash identically).
+    """Request body for POST /auth/register and POST /auth/login."""
+    email: EmailStr  # a Pydantic type that validates email format automatically. i.e. rejects "notanemail"
+    password: str = Field(
+        min_length=8,  
+        max_length=72,  # bcrypt limit — over 72 chars are silently truncated, making two passwords hash identically
+    )
 
 
 class UserResponse(BaseModel):
     """
-    Shape of the response body when returning a user to the client.
-
+    Response body for any endpoint that returns a user.
+    
     hashed_password is intentionally excluded — never expose it in any response.
-    from_attributes=True lets Pydantic read directly off a SQLAlchemy model instance.
+    from_attributes=True lets Pydantic read fields directly off a SQLAlchemy model instance.
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -31,12 +29,7 @@ class UserResponse(BaseModel):
 
 
 class Token(BaseModel):
-    """
-    Shape of the response body for POST /auth/login.
+    """Response body for POST /auth/login."""
 
-    access_token is the JWT string the client stores and sends on future requests.
-    token_type is always "bearer" — it tells the client how to format the Authorization header.
-    """
-
-    access_token: str
-    token_type: str = "bearer"
+    access_token: str  # JWT the client stores in expo-secure-store and sends as Bearer token
+    token_type: str = "bearer"  # always "bearer" per OAuth2 spec, tells client how to format the Authorization header.

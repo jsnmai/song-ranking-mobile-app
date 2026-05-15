@@ -1,3 +1,6 @@
+# FastAPI dependency functions injected into route handlers via Depends().
+# get_db provides a per-request database session; get_current_user enforces
+# authentication on any route that declares it as a dependency.
 from typing import Generator
 
 from fastapi import Depends, HTTPException, status
@@ -6,13 +9,12 @@ from jose import JWTError
 from sqlalchemy.orm import Session
 
 from src.core.security import decode_access_token
+from src.crud.user import get_by_id
 from src.db.session import SessionLocal
 from src.sqlalchemy_tables.user import User
-from src.crud import user as user_repo
 
-# Tells FastAPI where clients send their token.
-# When a route declares Depends(get_current_user), Swagger UI will show a
-# login form and automatically attach the token to requests.
+# tokenUrl tells FastAPI (and Swagger UI) where clients submit credentials to
+# obtain a token. The value must match the actual login endpoint path.
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
@@ -56,7 +58,10 @@ def get_current_user(
     except JWTError:
         raise credentials_exception
 
-    user = user_repo.get_by_id(db, int(user_id))
+    user = get_by_id(
+        db,
+        int(user_id),
+    )
     if user is None:
         raise credentials_exception
 

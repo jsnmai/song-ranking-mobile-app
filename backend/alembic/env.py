@@ -23,6 +23,7 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
+# NOTES: Point Alembic at our models so autogenerate can diff them against the live schema.
 target_metadata = Base.metadata # ADDED: tells Alembic what tables to track
 
 # other values from the config, defined by the needs of env.py,
@@ -31,6 +32,7 @@ target_metadata = Base.metadata # ADDED: tells Alembic what tables to track
 # ... etc.
 
 # Override sqlalchemy.url with the value from .env
+# NOTES: Read the database URL from .env rather than alembic.ini so there is one source of truth.
 config.set_main_option("sqlalchemy.url", settings.database_url) # ADDED: reads URL from .env
 
 
@@ -73,7 +75,8 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection, 
+            target_metadata=target_metadata
         )
 
         with context.begin_transaction():

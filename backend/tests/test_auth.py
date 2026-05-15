@@ -1,4 +1,6 @@
-import pytest
+# Integration tests for authentication endpoints.
+# Tests run against a real test database (listn_test) with no mocking —
+# each test exercises the full stack from HTTP through service to database.
 from fastapi.testclient import TestClient
 
 
@@ -19,8 +21,14 @@ def test_register_success(client: TestClient):
 def test_register_duplicate_email(client: TestClient):
     """Registering the same email twice returns 409."""
     payload = {"email": "user@example.com", "password": "password123"}
-    client.post("/api/v1/auth/register", json=payload)
-    response = client.post("/api/v1/auth/register", json=payload)
+    client.post(
+        "/api/v1/auth/register",
+        json=payload,
+    )
+    response = client.post(
+        "/api/v1/auth/register",
+        json=payload,
+    )
     assert response.status_code == 409
 
 
@@ -87,11 +95,20 @@ def test_login_unknown_email(client: TestClient):
 
 def test_me_success(client: TestClient):
     """A valid token returns the authenticated user's profile."""
-    client.post("/api/v1/auth/register", json={"email": "user@example.com", "password": "password123"})
-    login_response = client.post("/api/v1/auth/login", json={"email": "user@example.com", "password": "password123"})
+    client.post(
+        "/api/v1/auth/register",
+        json={"email": "user@example.com", "password": "password123"},
+    )
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"email": "user@example.com", "password": "password123"},
+    )
     token = login_response.json()["access_token"]
 
-    response = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert response.status_code == 200
     body = response.json()
     assert body["email"] == "user@example.com"
@@ -106,5 +123,8 @@ def test_me_no_token(client: TestClient):
 
 def test_me_invalid_token(client: TestClient):
     """Calling /me with a garbage token returns 401."""
-    response = client.get("/api/v1/auth/me", headers={"Authorization": "Bearer notavalidtoken"})
+    response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": "Bearer notavalidtoken"},
+    )
     assert response.status_code == 401
