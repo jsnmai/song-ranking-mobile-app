@@ -38,7 +38,7 @@ def register(
     "/login",
     response_model=Token,
 )
-@limiter.limit("20/minute")
+@limiter.limit("5/minute")
 def login(
     request: Request,
     data: UserRegister,

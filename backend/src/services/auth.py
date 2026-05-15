@@ -2,6 +2,7 @@
 # All decisions about what constitutes a valid registration or login live here.
 # The router calls these functions; this layer calls the crud layer for data access.
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.core.security import create_access_token, hash_password, verify_password
@@ -33,11 +34,18 @@ def register_user(
         )
 
     hashed = hash_password(data.password)
-    user = create_user(
-        db,
-        email=data.email,
-        hashed_password=hashed,
-    )
+    try:
+        user = create_user(
+            db,
+            email=data.email,
+            hashed_password=hashed,
+        )
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email already exists.",
+        )
     return UserResponse.model_validate(user)
 
 

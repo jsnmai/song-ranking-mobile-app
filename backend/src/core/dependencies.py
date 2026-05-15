@@ -55,12 +55,13 @@ def get_current_user(
         user_id: str | None = payload.get("sub")
         if user_id is None:
             raise credentials_exception
-    except JWTError:
+        user_id_int = int(user_id)
+    except (JWTError, ValueError):
         raise credentials_exception
 
     user = get_by_id(
         db,
-        int(user_id),
+        user_id_int,
     )
     if user is None:
         raise credentials_exception
