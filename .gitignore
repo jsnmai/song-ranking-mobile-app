@@ -19,9 +19,7 @@ __pycache__/
 # HTML coverage report folder — open htmlcov/index.html to view
 htmlcov/
 
-# Environment Variables
-# Never commit .env files — they contain secrets like JWT keys and DB passwords
-# Use .env.example (committed) as a template with placeholder values instead
+# Environment Variables - never commit
 .env
 .env.local
 .env.*.local
