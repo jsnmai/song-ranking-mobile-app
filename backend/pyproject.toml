@@ -17,8 +17,8 @@ dependencies = [
     "uvicorn[standard]>=0.42.0",        # ASGI server — runs FastAPI with hot reload
     "bcrypt>=4.0.0",                    # password hashing — bcrypt is slow by design (brute-force resistant)
     "python-jose[cryptography]>=3.3.0", # JWT encode/decode — signs tokens with your secret key
-    "slowapi>=0.1.9",
-    "pydantic[email]>=2.12.5",
+    "slowapi>=0.1.9",                 # rate limiting middleware for FastAPI
+    "pydantic[email]>=2.12.5",        # enables EmailStr validation in Pydantic schemas
 ]
 
 # =============================================================================                                                                    
@@ -26,17 +26,18 @@ dependencies = [
 # =============================================================================  
 [dependency-groups]
 dev = [
-    "black>=26.3.1",    # auto-formats Python code      
-    "httpx>=0.28.1",    # makes HTTP requests to the API in tests
-    "pytest>=9.0.2",    # test framework 
+    "ruff>=0.11.0",    # linter — catches unused imports, style errors, import ordering
+    "httpx>=0.28.1",   # makes HTTP requests to the API in tests
+    "pytest>=9.0.2",   # test framework
 ]
 
 # =============================================================================                                                                    
 # Tool Configuration
 # ============================================================================= 
-[tool.black]                                                                                                                                       
-line-length = 88        # max characters per line before black wraps it
-                                                                                                                                                    
+[tool.ruff]
+line-length = 120
+lint.select = ["E", "F", "I"]  # E=style errors, F=pyflakes (unused imports etc), I=import sorting
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]   # tells pytest where to look for tests
 pythonpath = ["."]      # adds backend/ to sys.path so `import main` and `import src` work
