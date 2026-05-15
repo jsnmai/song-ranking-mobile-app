@@ -3,10 +3,8 @@
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000"  // ?? means use left side if it has a value, otherwise use right side
 
-// <ResponseType> is a generic — a placeholder that the caller fills in with the actual
-// return type (e.g. User, Token). This lets one function handle all endpoints
-// while still giving TypeScript accurate type information.
-async function request<ResponseType>(
+
+async function request<ResponseType>(  // <ResponseType> is a generic, lets one function handle all endpoints while still giving TypeScript type info
   method: string,
   path: string,
   options: { body?: unknown; token?: string } = {},  // '= {}' means options is optional — callers can omit it entirely
