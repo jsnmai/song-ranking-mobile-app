@@ -1,3 +1,3 @@
 export const KEYS = {
-  JWT_TOKEN: "jwt_token",
+    JWT_TOKEN: "jwt_token",
 }
