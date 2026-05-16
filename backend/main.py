@@ -8,7 +8,7 @@ from slowapi.errors import RateLimitExceeded
 
 from src.core.config import settings
 from src.core.limiter import limiter
-from src.routers import auth
+from src.api_routers import auth
 
 app = FastAPI(title="LISTn API")
 
@@ -34,8 +34,9 @@ app.add_exception_handler(
     _rate_limit_exceeded_handler,  # converts slowapi's internal error into HTTP 429 "Too Many Requests" response.
 )
 
+# Mount routers
 app.include_router(
-    auth.router,
+    auth.router,  # the router object defined in src/api_routers/auth.py
     prefix="/api/v1",
 )
 

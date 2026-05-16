@@ -15,9 +15,8 @@ router = APIRouter(
     tags=["auth"],
 )
 
-
-@router.post(
-    "/register",
+@router.post(  # decorators registers function below as an HTTP endpoint.
+    "/register",  # tells FastAPI: "when a POST request comes in to /register, call this function."
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
 )
