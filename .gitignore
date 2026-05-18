@@ -60,4 +60,7 @@ web-build/
 # Internal AI context files
 CLAUDE.md
 .claude/
+
+# Notes
 DOCUMENTATION.md
+FRONTEND_GUIDE.md
