@@ -1,12 +1,15 @@
 // Discover tab — houses song search, recommendations, and trending in later phases.
-// Phase 3 will wire the search bar to the Deezer API.
+// Phase 3 wires the search bar to LISTn's backend Deezer proxy.
 // The search bar auto-focuses when the user navigates here via the FAB.
-import { useEffect, useRef } from "react"
-import { StyleSheet, Text, TextInput, View } from "react-native"
+import { useEffect, useRef, useState } from "react"
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, View } from "react-native"
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native"
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
 
 import { TabParamList } from "../../navigation/types"
+import { useAuth } from "../auth/AuthContext"
+import { searchSongs } from "../search/apiRequests"
+import { SongSearchResult } from "../search/types"
 
 // RouteProp<ParamList, ScreenName> gives the type of route.params for a specific screen.
 type DiscoverRouteProp = RouteProp<TabParamList, "Discover">
@@ -15,8 +18,13 @@ type DiscoverNavigationProp = BottomTabNavigationProp<TabParamList, "Discover">
 export default function DiscoverScreen() {
     const route = useRoute<DiscoverRouteProp>()
     const navigation = useNavigation<DiscoverNavigationProp>()
+    const { token } = useAuth()
     // useRef holds a reference to the TextInput DOM node so we can call .focus() imperatively.
     const searchRef = useRef<TextInput>(null)
+    const [query, setQuery] = useState("")
+    const [results, setResults] = useState<SongSearchResult[]>([])
+    const [isLoading, setIsLoading] = useState(false)
+    const [error, setError] = useState<string | null>(null)
 
     // Auto-focus the search bar when navigated here via the FAB.
     // After focusing, reset the param so a normal tab press later does not re-trigger focus.
@@ -27,6 +35,59 @@ export default function DiscoverScreen() {
         }
     }, [route.params?.focusSearch, navigation])
 
+    // Debounce means wait for typing to pause before searching, instead of firing one request per keypress.
+    useEffect(() => {
+        const trimmedQuery = query.trim()
+        if (trimmedQuery.length === 0) {
+            setResults([])
+            setError(null)
+            setIsLoading(false)
+            return
+        }
+
+        if (trimmedQuery.length < 2) {
+            setResults([])
+            setError("Type at least 2 characters.")
+            setIsLoading(false)
+            return
+        }
+
+        if (!token) {
+            return
+        }
+
+        let isCurrentSearch = true
+        const timeoutId = setTimeout(async () => {
+            setIsLoading(true)
+            setError(null)
+
+            try {
+                const response = await searchSongs(trimmedQuery, token)
+                if (isCurrentSearch) {
+                    setResults(response.results)
+                }
+            } catch (err) {
+                if (isCurrentSearch) {
+                    setResults([])
+                    if (err instanceof Error) {
+                        setError(err.message)
+                    } else {
+                        setError("Search is temporarily unavailable.")
+                    }
+                }
+            } finally {
+                if (isCurrentSearch) {
+                    setIsLoading(false)
+                }
+            }
+        }, 350)
+
+        return () => {
+            isCurrentSearch = false
+            clearTimeout(timeoutId)
+        }
+    }, [query, token])
+
     return (
         <View style={styles.container}>
             <View style={styles.searchRow}>
@@ -35,11 +96,40 @@ export default function DiscoverScreen() {
                     style={styles.searchBar}
                     placeholder="Search for a song..."
                     placeholderTextColor="#555"
+                    value={query}
+                    onChangeText={setQuery}
+                    autoCapitalize="none"
+                    returnKeyType="search"
                 />
             </View>
-            <View style={styles.body}>
-                <Text style={styles.label}>Discover</Text>
-            </View>
+            <ScrollView
+                style={styles.results}
+                contentContainerStyle={styles.resultsContent}
+                keyboardShouldPersistTaps="handled"
+            >
+                {isLoading && <ActivityIndicator color="#fff" style={styles.status} />}
+                {!isLoading && error !== null && <Text style={styles.errorText}>{error}</Text>}
+                {!isLoading && error === null && query.trim().length === 0 && (
+                    <Text style={styles.emptyText}>Search for a song to start ranking.</Text>
+                )}
+                {!isLoading && error === null && query.trim().length >= 2 && results.length === 0 && (
+                    <Text style={styles.emptyText}>No songs found.</Text>
+                )}
+                {!isLoading && error === null && results.map((song) => (
+                    <View key={song.deezer_id} style={styles.resultRow}>
+                        {song.cover_url ? (
+                            <Image source={{ uri: song.cover_url }} style={styles.cover} />
+                        ) : (
+                            <View style={styles.coverPlaceholder} />
+                        )}
+                        <View style={styles.songText}>
+                            <Text style={styles.title} numberOfLines={1}>{song.title}</Text>
+                            <Text style={styles.artist} numberOfLines={1}>{song.artist}</Text>
+                            <Text style={styles.album} numberOfLines={1}>{song.album}</Text>
+                        </View>
+                    </View>
+                ))}
+            </ScrollView>
         </View>
     )
 }
@@ -62,13 +152,64 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
         fontSize: 16,
     },
-    body: {
+    results: {
         flex: 1,
-        alignItems: "center",
-        justifyContent: "center",
     },
-    label: {
+    resultsContent: {
+        paddingHorizontal: 16,
+        paddingBottom: 24,
+    },
+    status: {
+        marginTop: 40,
+    },
+    emptyText: {
+        color: "#777",
+        fontSize: 15,
+        marginTop: 40,
+        textAlign: "center",
+    },
+    errorText: {
+        color: "#ff6b6b",
+        fontSize: 15,
+        marginTop: 40,
+        textAlign: "center",
+    },
+    resultRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: "#1f1f1f",
+    },
+    cover: {
+        width: 56,
+        height: 56,
+        borderRadius: 6,
+        marginRight: 12,
+    },
+    coverPlaceholder: {
+        width: 56,
+        height: 56,
+        borderRadius: 6,
+        marginRight: 12,
+        backgroundColor: "#1a1a1a",
+    },
+    songText: {
+        flex: 1,
+    },
+    title: {
         color: "#fff",
-        fontSize: 18,
+        fontSize: 16,
+        fontWeight: "600",
+        marginBottom: 3,
+    },
+    artist: {
+        color: "#b8b8b8",
+        fontSize: 14,
+        marginBottom: 3,
+    },
+    album: {
+        color: "#777",
+        fontSize: 13,
     },
 })

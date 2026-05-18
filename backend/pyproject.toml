@@ -19,6 +19,7 @@ dependencies = [
     "python-jose[cryptography]>=3.3.0", # JWT encode/decode — signs tokens with your secret key
     "slowapi>=0.1.9",                 # rate limiting middleware for FastAPI
     "pydantic[email]>=2.12.5",        # enables EmailStr validation in Pydantic schemas
+    "httpx>=0.28.1",                  # server-side external API calls, starting with Deezer search
 ]
 
 # =============================================================================                                                                    
@@ -27,7 +28,6 @@ dependencies = [
 [dependency-groups]
 dev = [
     "ruff>=0.11.0",    # linter — catches unused imports, style errors, import ordering
-    "httpx>=0.28.1",   # makes HTTP requests to the API in tests
     "pytest>=9.0.2",   # test framework
 ]
 
