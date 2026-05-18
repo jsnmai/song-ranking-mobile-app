@@ -6,13 +6,28 @@ from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
 from src.pydantic_schemas.profile import ProfileResponse, ProfileSetup
-from src.services.profile import setup_profile
+from src.services.profile import get_my_profile, setup_profile
 from src.sqlalchemy_tables.user import User
 
 router = APIRouter(
     prefix="/profile",
     tags=["profile"],
 )
+
+
+@router.get(
+    "/me",
+    response_model=ProfileResponse,
+)
+def profile_me(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProfileResponse:
+    """Return the authenticated user's own profile."""
+    return get_my_profile(
+        db,
+        user_id=current_user.id,
+    )
 
 
 @router.post(

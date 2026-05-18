@@ -5,7 +5,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from src.crud.profile import create_profile, get_by_username
+from src.crud.profile import create_profile, get_by_user_id, get_by_username
 from src.pydantic_schemas.profile import ProfileResponse, ProfileSetup
 
 
@@ -47,4 +47,21 @@ def setup_profile(
             detail="This username is already taken.",
         )
 
+    return ProfileResponse.model_validate(profile)
+
+
+def get_my_profile(
+    db: Session,
+    user_id: int,
+) -> ProfileResponse:
+    """Return the profile for the given user, or 404 if they have not completed setup."""
+    profile = get_by_user_id(
+        db,
+        user_id,
+    )
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Profile not found.",
+        )
     return ProfileResponse.model_validate(profile)
