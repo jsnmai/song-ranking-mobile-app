@@ -23,6 +23,10 @@ type Props = {
     navigation: RegisterNavigationProp;
 }
 
+export function isValidEmail(value: string): boolean {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+}
+
 export default function RegisterScreen({ navigation }: Props) {
     const [currentStep, setCurrentStep] = useState(1)
 
@@ -45,8 +49,6 @@ export default function RegisterScreen({ navigation }: Props) {
             setCurrentStep(currentStep - 1)
         }
     }
-
-    const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 
     const handleEmailNext = () => {
         if (!email) {

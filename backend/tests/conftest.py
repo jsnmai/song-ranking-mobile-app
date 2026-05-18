@@ -4,14 +4,16 @@
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 import src.sqlalchemy_tables.user  # noqa: F401 — registers User with Base.metadata so create_all() creates the table
+import src.sqlalchemy_tables.profile  # noqa: F401 — registers Profile with Base.metadata so create_all() creates the table
+# Add a new import here each time a new model file is created.
+
 from main import app
 from src.core.dependencies import get_db
+from src.core.limiter import limiter
 from src.db.base import Base
-
-# Add a new import here each time a new model file is created.
 
 # Isolated test database — never touches the development database.
 # Create it once before running tests: createdb listn_test
@@ -59,6 +61,18 @@ def clear_tables() -> None:
         db.close()
 
 
+@pytest.fixture(autouse=True)
+def reset_rate_limiter() -> None:
+    """
+    Clear the in-memory rate limiter counters before each test.
+
+    Without this, requests made in one test count toward the limit in the next,
+    making rate limit tests non-deterministic and causing false 429s in unrelated tests.
+    """
+    limiter._storage.reset()
+    yield
+
+
 @pytest.fixture
 def client() -> TestClient:
     """
@@ -79,3 +93,18 @@ def client() -> TestClient:
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def db_session() -> Session:
+    """
+    Direct database session for tests that need to inspect row state after an HTTP request.
+
+    Used by atomicity tests to verify what was actually written to the database,
+    independent of what the HTTP response reported.
+    """
+    db = TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
