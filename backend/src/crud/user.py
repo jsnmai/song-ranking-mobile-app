@@ -4,6 +4,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.user import User
 
 
@@ -29,23 +30,26 @@ def get_by_id(
     ).scalar_one_or_none()
 
 
-def create_user(
+def create_user_with_profile(
     db: Session,
     email: str,
     hashed_password: str,
+    username: str,
+    display_name: str,
 ) -> User:
     """
-    Insert a new user row and return the saved instance.
+    Insert a user row and a profile row in a single database transaction.
 
-    The caller must verify the email is not already taken — a duplicate will
-    raise an IntegrityError from the database unique constraint.
-    db.refresh() reloads the row after commit so id and created_at are populated.
+    1. db.add(user) — stages the user INSERT, nothing written yet
+    2. db.flush() — sends the INSERT within the open transaction, populating user.id without committing
+    3. db.add(profile) — stages the profile INSERT, referencing user.id as the foreign key
+    4. db.commit() — finalises both rows at once; if anything fails, both roll back
     """
-    user = User(
-        email=email,
-        hashed_password=hashed_password,
-    )
+    user = User(email=email, hashed_password=hashed_password)
     db.add(user)
+    db.flush()  # populates user.id without committing
+    profile = Profile(user_id=user.id, username=username, display_name=display_name)
+    db.add(profile)
     db.commit()
-    db.refresh(user)  # reloads the row from DB so id and created_at are populated
+    db.refresh(user)
     return user

@@ -3,59 +3,68 @@
 # each test exercises the full stack from HTTP through service to database.
 from fastapi.testclient import TestClient
 
+# Shared payload used by tests that need a registered user.
+# Defined once so that any change to required fields is updated in one place.
+REGISTER_PAYLOAD = {
+    "email": "user@example.com",
+    "password": "password123",
+    "display_name": "Test User",
+    "username": "testuser",
+}
+
 
 def test_register_success(client: TestClient):
-    """Valid email and password creates a new user and returns 201."""
-    response = client.post(
-        "/api/v1/auth/register",
-        json={"email": "user@example.com", "password": "password123"},
-    )
+    """Valid registration payload creates a user + profile atomically, returns 201 with token + user."""
+    response = client.post("/api/v1/auth/register", json=REGISTER_PAYLOAD)
     assert response.status_code == 201
     body = response.json()
-    assert body["email"] == "user@example.com"
-    assert "id" in body
-    assert "created_at" in body
-    assert "hashed_password" not in body
+    assert "access_token" in body
+    assert body["token_type"] == "bearer"
+    assert body["user"]["email"] == "user@example.com"
+    assert "id" in body["user"]
+    assert "created_at" in body["user"]
+    assert "hashed_password" not in body["user"]
 
 
 def test_register_duplicate_email(client: TestClient):
     """Registering the same email twice returns 409."""
-    payload = {"email": "user@example.com", "password": "password123"}
-    client.post(
-        "/api/v1/auth/register",
-        json=payload,
-    )
-    response = client.post(
-        "/api/v1/auth/register",
-        json=payload,
-    )
+    client.post("/api/v1/auth/register", json=REGISTER_PAYLOAD)
+    response = client.post("/api/v1/auth/register", json=REGISTER_PAYLOAD)
+    assert response.status_code == 409
+
+
+def test_register_duplicate_username(client: TestClient):
+    """Two accounts with the same username return 409 on the second attempt."""
+    client.post("/api/v1/auth/register", json=REGISTER_PAYLOAD)
+    different_email = {**REGISTER_PAYLOAD, "email": "other@example.com"}
+    response = client.post("/api/v1/auth/register", json=different_email)
     assert response.status_code == 409
 
 
 def test_register_invalid_email(client: TestClient):
     """A malformed email is rejected by Pydantic before reaching the service."""
-    response = client.post(
-        "/api/v1/auth/register",
-        json={"email": "notanemail", "password": "password123"},
-    )
+    payload = {**REGISTER_PAYLOAD, "email": "notanemail"}
+    response = client.post("/api/v1/auth/register", json=payload)
     assert response.status_code == 422
 
 
 def test_register_password_too_short(client: TestClient):
     """A password under 8 characters is rejected by Pydantic."""
-    response = client.post(
-        "/api/v1/auth/register",
-        json={"email": "user@example.com", "password": "short"},
-    )
+    payload = {**REGISTER_PAYLOAD, "password": "short"}
+    response = client.post("/api/v1/auth/register", json=payload)
+    assert response.status_code == 422
+
+
+def test_register_invalid_username(client: TestClient):
+    """A username with invalid characters is rejected by Pydantic."""
+    payload = {**REGISTER_PAYLOAD, "username": "bad username!"}
+    response = client.post("/api/v1/auth/register", json=payload)
     assert response.status_code == 422
 
 
 def test_login_success(client: TestClient):
     """Correct credentials return a bearer token."""
-    client.post(
-        "/api/v1/auth/register",
-        json={"email": "user@example.com", "password": "password123"},
-    )
+    client.post("/api/v1/auth/register", json=REGISTER_PAYLOAD)
     response = client.post(
         "/api/v1/auth/login",
         json={"email": "user@example.com", "password": "password123"},
@@ -68,10 +77,7 @@ def test_login_success(client: TestClient):
 
 def test_login_wrong_password(client: TestClient):
     """A correct email with the wrong password returns 401."""
-    client.post(
-        "/api/v1/auth/register",
-        json={"email": "user@example.com", "password": "password123"},
-    )
+    client.post("/api/v1/auth/register", json=REGISTER_PAYLOAD)
     response = client.post(
         "/api/v1/auth/login",
         json={"email": "user@example.com", "password": "wrongpassword"},
@@ -95,10 +101,7 @@ def test_login_unknown_email(client: TestClient):
 
 def test_me_success(client: TestClient):
     """A valid token returns the authenticated user's profile."""
-    client.post(
-        "/api/v1/auth/register",
-        json={"email": "user@example.com", "password": "password123"},
-    )
+    client.post("/api/v1/auth/register", json=REGISTER_PAYLOAD)
     login_response = client.post(
         "/api/v1/auth/login",
         json={"email": "user@example.com", "password": "password123"},

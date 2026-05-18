@@ -6,47 +6,67 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.core.security import create_access_token, hash_password, verify_password
-from src.crud.user import create_user, get_by_email
-from src.pydantic_schemas.user import Token, UserRegister, UserResponse
+from src.crud.profile import get_by_username
+from src.crud.user import create_user_with_profile, get_by_email
+from src.pydantic_schemas.user import RegisterResponse, Token, UserLogin, UserRegister, UserResponse
 
 
 def register_user(
     db: Session,
     data: UserRegister,
-) -> UserResponse:
+) -> RegisterResponse:
     """
-    Register a new user account.
+    Register a new user account with profile in a single atomic transaction.
 
-    Decision chain:
-    1. Does a user with this email already exist? → 409 if yes
-    2. Hash the password — plain-text never touches the DB
-    3. Create the user row via the crud layer
-    4. Return the new user as a UserResponse (no hashed_password)
+    1. Email already exists? → 409
+    2. Username already taken? → 409
+    3. Hash the password — plain-text never touches the DB
+    4. Create user + profile atomically — if either insert fails, both roll back
+    5. Issue a JWT and return it alongside the user — client needs no separate login call
+
+    The IntegrityError catch handles the race window between steps 2 and 4.
+    The psycopg2 error string contains the column name, so the right 409 message
+    is returned (username vs email) even when two requests slip through simultaneously.
     """
-    existing = get_by_email(
-        db,
-        data.email,
-    )
-    if existing:
+    if get_by_email(db, data.email):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="An account with this email already exists.",
+        )
+    if get_by_username(db, data.username):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Username already taken.",
         )
 
     hashed = hash_password(data.password)
     try:
-        user = create_user(
+        user = create_user_with_profile(
             db,
             email=data.email,
             hashed_password=hashed,
+            username=data.username,  # already lowercased by the Pydantic validator
+            display_name=data.display_name,
         )
-    except IntegrityError:
+    except IntegrityError as err:
         db.rollback()
+        # Inspect the underlying psycopg2 error to distinguish which unique constraint fired.
+        # The error string contains the column name, e.g. "Key (username)=(...) already exists."
+        if "username" in str(err.orig):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Username already taken.",
+            )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="An account with this email already exists.",
         )
-    return UserResponse.model_validate(user)
+
+    token = create_access_token({"sub": str(user.id)})
+    return RegisterResponse(
+        access_token=token,
+        user=UserResponse.model_validate(user),
+    )
 
 
 def login_user(
@@ -57,12 +77,11 @@ def login_user(
     """
     Authenticate a user and return a JWT access token.
 
-    Decision chain:
-    1. Does a user with this email exist? → 401 if not
-    2. Does the password match the stored hash? → 401 if not
+    1. User with this email exists? → 401 if not
+    2. Password matches the stored hash? → 401 if not
     3. Issue a JWT with the user ID as the subject claim
-    Both failures return the same 401 message — prevents email enumeration
-    (callers cannot tell which check failed).
+
+    Both failures return the same 401 — prevents email enumeration.
     """
     user = get_by_email(
         db,

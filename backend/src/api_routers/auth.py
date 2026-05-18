@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
 from src.core.limiter import limiter
-from src.pydantic_schemas.user import Token, UserRegister, UserResponse
+from src.pydantic_schemas.user import RegisterResponse, Token, UserLogin, UserRegister, UserResponse
 from src.services.auth import login_user, register_user
 from src.sqlalchemy_tables.user import User
 
@@ -17,7 +17,7 @@ router = APIRouter(
 
 @router.post(  # decorators registers function below as an HTTP endpoint.
     "/register",  # tells FastAPI: "when a POST request comes in to /register, call this function."
-    response_model=UserResponse,
+    response_model=RegisterResponse,
     status_code=status.HTTP_201_CREATED,
 )
 @limiter.limit("20/minute")
@@ -25,8 +25,8 @@ def register(
     request: Request,
     data: UserRegister,
     db: Session = Depends(get_db),
-) -> UserResponse:
-    """Create a new user account. Rate limited to block automated sign-up spam."""
+) -> RegisterResponse:
+    """Create a new user account and return a JWT. Rate limited to block automated sign-up spam."""
     return register_user(
         db,
         data,
@@ -40,7 +40,7 @@ def register(
 @limiter.limit("5/minute")
 def login(
     request: Request,
-    data: UserRegister,
+    data: UserLogin,
     db: Session = Depends(get_db),
 ) -> Token:
     """
