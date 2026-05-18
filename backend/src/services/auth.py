@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from src.core.security import create_access_token, hash_password, verify_password
 from src.crud.profile import get_by_username
 from src.crud.user import create_user_with_profile, get_by_email
-from src.pydantic_schemas.user import RegisterResponse, Token, UserLogin, UserRegister, UserResponse
+from src.pydantic_schemas.user import RegisterResponse, Token, UserRegister, UserResponse
 
 
 def register_user(
