@@ -2,7 +2,7 @@
 // Calls login() from AuthContext on submit.
 // On success, AuthContext sets the user and navigation switches to the app stack automatically.
 
-import React, { useState } from "react"
+import { useState } from "react"
 import {
     ActivityIndicator,
     StyleSheet,
@@ -15,7 +15,7 @@ import {
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 
 import { useAuth } from "./AuthContext"
-import { AuthStackParamList } from "../../navigation"
+import { AuthStackParamList } from "../../navigation/AuthNavigator"
 
 type LoginNavigationProp = NativeStackNavigationProp<AuthStackParamList, "Login">
 

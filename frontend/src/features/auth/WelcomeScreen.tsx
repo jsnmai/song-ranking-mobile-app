@@ -2,7 +2,6 @@
 // Two buttons: go to Login or go to Register.
 // No logic here — just navigation.
 
-import React from "react"
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
 // NativeStackNavigationProp is the TypeScript type for the navigation object
@@ -10,7 +9,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 // It lets us call navigation.navigate() with type-checking on the screen name.
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 
-import { AuthStackParamList } from "../../navigation"
+import { AuthStackParamList } from "../../navigation/AuthNavigator"
 
 // The type of the navigation prop this screen receives.
 // AuthStackParamList is the map of all screens in the auth stack (defined in navigation/index.tsx).

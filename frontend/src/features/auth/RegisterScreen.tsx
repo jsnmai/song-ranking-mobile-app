@@ -1,8 +1,10 @@
-// Register screen — email + password form.
-// Calls register() from AuthContext on submit.
-// register() also calls login() internally, so on success the user is logged in automatically.
+// Multi-step registration screen — all form data stored as local state here.
+// Steps: 1. Email → 2. Password → 3. Name + Username
+// Nothing is submitted to the backend until the user completes step 3.
+//
+// Phase 2: handleSubmit will also call the profile creation endpoint after register().
 
-import React, { useState } from "react"
+import { useState } from "react"
 import {
     ActivityIndicator,
     StyleSheet,
@@ -15,7 +17,7 @@ import {
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 
 import { useAuth } from "./AuthContext"
-import { AuthStackParamList } from "../../navigation"
+import { AuthStackParamList } from "../../navigation/AuthNavigator"
 
 type RegisterNavigationProp = NativeStackNavigationProp<AuthStackParamList, "Register">
 
@@ -24,21 +26,69 @@ type Props = {
 }
 
 export default function RegisterScreen({ navigation }: Props) {
+    const [currentStep, setCurrentStep] = useState(1)
+
+    // All registration data lives here — nothing is passed between screens
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
+    const [name, setName] = useState("")
+    const [username, setUsername] = useState("")
+
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
     const { register } = useAuth()
 
-    const handleRegister = async () => {
+    const handleBack = () => {
+        setError(null)
+        if (currentStep === 1) {
+            navigation.navigate("Welcome")
+        } else {
+            setCurrentStep(currentStep - 1)
+        }
+    }
+
+    const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+
+    const handleEmailNext = () => {
+        if (!email) {
+            setError("Please enter your email.")
+            return
+        }
+        if (!isValidEmail(email)) {
+            setError("Please enter a valid email address.")
+            return
+        }
+        setError(null)
+        setCurrentStep(2)
+    }
+
+    const handlePasswordNext = () => {
+        if (!password) {
+            setError("Please enter a password.")
+            return
+        }
+        setError(null)
+        setCurrentStep(3)
+    }
+
+    const handleSubmit = async () => {
+        if (!name) {
+            setError("Please enter your name.")
+            return
+        }
+        if (!username) {
+            setError("Please choose a username.")
+            return
+        }
         setError(null)
         setIsLoading(true)
 
         try {
             await register(email, password)
-            // Same as LoginScreen: register() calls login() internally, which sets the user
-            // in AuthContext. RootNavigator detects the user and switches to the app stack.
+            // register() calls login() internally — AuthContext sets the user
+            // and RootNavigator switches to AppNavigator automatically.
+            // Phase 2: also call profile creation endpoint here with name + username.
         } catch (err) {
             if (err instanceof Error) {
                 setError(err.message)
@@ -52,40 +102,89 @@ export default function RegisterScreen({ navigation }: Props) {
 
     return (
         <View style={styles.container}>
-            <Text style={styles.title}>Create Account</Text>
+            {/* Step indicator e.g. "Step 1 of 3" */}
+            <Text style={styles.stepIndicator}>Step {currentStep} of 3</Text>
 
-            <TextInput
-                style={styles.input}
-                placeholder="Email"
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-            />
+            {currentStep === 1 && (
+                <View style={styles.stepContainer}>
+                    <Text style={styles.title}>What's your email?</Text>
 
-            <TextInput
-                style={styles.input}
-                placeholder="Password"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-            />
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Email"
+                        value={email}
+                        onChangeText={setEmail}
+                        autoCapitalize="none"
+                        keyboardType="email-address"
+                        autoFocus
+                    />
 
-            {error !== null && <Text style={styles.errorText}>{error}</Text>}
+                    {error !== null && <Text style={styles.errorText}>{error}</Text>}
 
-            <TouchableOpacity
-                style={styles.primaryButton}
-                onPress={handleRegister}
-                disabled={isLoading}
-            >
-                {isLoading
-                    ? <ActivityIndicator color="#fff" />
-                    : <Text style={styles.primaryButtonText}>Create Account</Text>
-                }
-            </TouchableOpacity>
+                    <TouchableOpacity style={styles.primaryButton} onPress={handleEmailNext}>
+                        <Text style={styles.primaryButtonText}>Next</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
 
-            <TouchableOpacity onPress={() => navigation.navigate("Login")}>
-                <Text style={styles.linkText}>Already have an account? Log in</Text>
+            {currentStep === 2 && (
+                <View style={styles.stepContainer}>
+                    <Text style={styles.title}>Create a password</Text>
+
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Password"
+                        value={password}
+                        onChangeText={setPassword}
+                        secureTextEntry
+                        autoFocus
+                    />
+
+                    {error !== null && <Text style={styles.errorText}>{error}</Text>}
+
+                    <TouchableOpacity style={styles.primaryButton} onPress={handlePasswordNext}>
+                        <Text style={styles.primaryButtonText}>Next</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+
+            {currentStep === 3 && (
+                <View style={styles.stepContainer}>
+                    <Text style={styles.title}>Set up your profile</Text>
+
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Name"
+                        value={name}
+                        onChangeText={setName}
+                        autoFocus
+                    />
+
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Username"
+                        value={username}
+                        onChangeText={setUsername}
+                        autoCapitalize="none"
+                    />
+
+                    {error !== null && <Text style={styles.errorText}>{error}</Text>}
+
+                    <TouchableOpacity
+                        style={styles.primaryButton}
+                        onPress={handleSubmit}
+                        disabled={isLoading}
+                    >
+                        {isLoading
+                            ? <ActivityIndicator color="#fff" />
+                            : <Text style={styles.primaryButtonText}>Create Account</Text>
+                        }
+                    </TouchableOpacity>
+                </View>
+            )}
+
+            <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+                <Text style={styles.backButtonText}>Back</Text>
             </TouchableOpacity>
         </View>
     )
@@ -99,10 +198,18 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         paddingHorizontal: 32,
     },
+    stepIndicator: {
+        fontSize: 14,
+        color: "#999",
+        marginBottom: 24,
+    },
+    stepContainer: {
+        width: "100%",
+    },
     title: {
-        fontSize: 32,
+        fontSize: 28,
         fontWeight: "bold",
-        marginBottom: 32,
+        marginBottom: 24,
     },
     input: {
         width: "100%",
@@ -126,14 +233,16 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         alignItems: "center",
         marginTop: 8,
-        marginBottom: 16,
     },
     primaryButtonText: {
         color: "#fff",
         fontSize: 16,
         fontWeight: "600",
     },
-    linkText: {
+    backButton: {
+        marginTop: 24,
+    },
+    backButtonText: {
         color: "#666",
         fontSize: 14,
     },

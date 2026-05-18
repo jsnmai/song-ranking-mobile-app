@@ -1,6 +1,4 @@
 // App entry point.
-import React from "react"
-
 import { AuthProvider } from "./src/features/auth/AuthContext"
 import RootNavigator from "./src/navigation"
 

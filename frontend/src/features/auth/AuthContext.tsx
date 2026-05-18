@@ -1,7 +1,7 @@
 // AuthContext.tsx is a shared storage box for auth state that any screen in the app can reach into.
 // Tracks who is logged in, and exposes login/register/logout functions.
 // Any screen that needs the current user or auth actions reads from here via useAuth().
-import React, { createContext, useContext, useEffect, useState } from "react"
+import { createContext, useContext, useEffect, useState } from "react"
 import * as SecureStore from "expo-secure-store"
 
 import { KEYS } from "../../constants/keys"
