@@ -20,3 +20,11 @@ export type LoginCredentials = {
     email: string;
     password: string;
 }
+
+// Mirrors RegisterResponse in backend/src/pydantic_schemas/user.py
+// Returned by POST /auth/register — includes the JWT so the client needs no separate login call
+export type RegisterResponse = {
+    access_token: string;
+    token_type: string;
+    user: User;
+}

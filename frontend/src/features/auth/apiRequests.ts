@@ -2,12 +2,18 @@
 // One function per backend endpoint — AuthContext calls these, never fetch directly.
 
 import { apiClient } from "../../api/client"
-import { Token, User } from "./types"
+import { RegisterResponse, Token, User } from "./types"
 
 // Calls POST /api/v1/auth/register
-// Returns the newly created user (without password)
-export async function register(email: string, password: string): Promise<User> {
-    return apiClient.post<User>("/api/v1/auth/register", { email, password })
+// Creates user + profile atomically in a single backend transaction.
+// Returns the JWT alongside the new user — no separate login call needed.
+export async function register(
+    email: string,
+    password: string,
+    display_name: string,
+    username: string,
+): Promise<RegisterResponse> {
+    return apiClient.post<RegisterResponse>("/api/v1/auth/register", { email, password, display_name, username })
 }
 
 // Calls POST /api/v1/auth/login

@@ -8,12 +8,13 @@ import { KEYS } from "../../constants/keys"
 import { login as loginRequest, me, register as registerRequest } from "./apiRequests"
 import { User } from "./types"
 
-// The shape of everything this context contains - a user, a loading flag, and 3 functions.
+// The shape of everything this context contains - a user, a JWT token, a loading flag, and 3 functions.
 type AuthContextType = {
     user: User | null;      // the logged-in user, or null if not logged in
+    token: string | null;   // the raw JWT — available if screens ever need to call authenticated endpoints directly
     isLoading: boolean;     // true while checking the stored token on app launch
     login: (email: string, password: string) => Promise<void>;
-    register: (email: string, password: string) => Promise<void>;
+    register: (email: string, password: string, display_name: string, username: string) => Promise<void>;
     logout: () => Promise<void>;
 }
 // Create the actual context box. Starts empty: (null)
@@ -28,23 +29,35 @@ type AuthProviderProps = {
 export function AuthProvider({ children }: AuthProviderProps) {
     // [value, updater] = useState(starting value) 
     const [user, setUser] = useState<User | null>(null)
+    const [token, setToken] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(true)
 
     const login = async (email: string, password: string) => {
-        const token = await loginRequest(email, password)
-        await SecureStore.setItemAsync(KEYS.JWT_TOKEN, token.access_token)
-        const currentUser = await me(token.access_token)
+        const tokenResponse = await loginRequest(email, password)
+        await SecureStore.setItemAsync(KEYS.JWT_TOKEN, tokenResponse.access_token)
+        const currentUser = await me(tokenResponse.access_token)
+        setToken(tokenResponse.access_token)
         setUser(currentUser)
     }
 
-    const register = async (email: string, password: string) => {
-        await registerRequest(email, password)
-        await login(email, password)  // automatically log in after registering
+    const register = async (
+        email: string,
+        password: string,
+        display_name: string,
+        username: string,
+    ): Promise<void> => {
+        // The register endpoint returns a JWT alongside the new user in one response —
+        // no separate login or /me call needed after registration.
+        const response = await registerRequest(email, password, display_name, username)
+        await SecureStore.setItemAsync(KEYS.JWT_TOKEN, response.access_token)
+        setToken(response.access_token)
+        setUser(response.user)
     }
 
     const logout = async () => {
         await SecureStore.deleteItemAsync(KEYS.JWT_TOKEN)
         setUser(null)
+        setToken(null)
     }
 
     const checkStoredToken = async () => {
@@ -56,6 +69,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             }
             // YES token: validate the token is still accepted by the backend and get the user
             const currentUser = await me(token)  // me() will throw an error if token is expired/invalid
+            setToken(token)
             setUser(currentUser)
         } catch {  // only runs if 'try' threw an error. For expired/invalid token
             await SecureStore.deleteItemAsync(KEYS.JWT_TOKEN)  // delete it so the user sees the login screen
@@ -70,7 +84,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }, []) 
 
     return (
-        <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
+        <AuthContext.Provider value={{ user, token, isLoading, login, register, logout }}>
             {children}
         </AuthContext.Provider>
     )

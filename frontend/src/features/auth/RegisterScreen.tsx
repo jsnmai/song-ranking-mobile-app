@@ -1,8 +1,6 @@
 // Multi-step registration screen — all form data stored as local state here.
 // Steps: 1. Email → 2. Password → 3. Name + Username
 // Nothing is submitted to the backend until the user completes step 3.
-//
-// Phase 2: handleSubmit will also call the profile creation endpoint after register().
 
 import { useState } from "react"
 import {
@@ -68,6 +66,10 @@ export default function RegisterScreen({ navigation }: Props) {
             setError("Please enter a password.")
             return
         }
+        if (password.length < 8) {
+            setError("Password must be at least 8 characters.")
+            return
+        }
         setError(null)
         setCurrentStep(3)
     }
@@ -85,10 +87,9 @@ export default function RegisterScreen({ navigation }: Props) {
         setIsLoading(true)
 
         try {
-            await register(email, password)
-            // register() calls login() internally — AuthContext sets the user
-            // and RootNavigator switches to AppNavigator automatically.
-            // Phase 2: also call profile creation endpoint here with name + username.
+            // User + profile are created atomically on the backend — no separate profile call needed.
+            // RootNavigator sees user is set in AuthContext and switches to AppNavigator automatically.
+            await register(email, password, name, username)
         } catch (err) {
             if (err instanceof Error) {
                 setError(err.message)

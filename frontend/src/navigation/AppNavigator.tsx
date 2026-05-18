@@ -1,6 +1,6 @@
 // Screens shown when the user IS logged in.
-// Will become a tab navigator in Phase 2 (Rankings, Search, Feed, Profile).
-// Placeholder home screen until Phase 2 screens are built.
+// Will become a tab navigator (Rankings, Search, Feed, Profile).
+// Placeholder home screen until more screens are built.
 
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
@@ -14,7 +14,7 @@ export type AppStackParamList = {
 
 const Stack = createNativeStackNavigator<AppStackParamList>()
 
-// Temporary placeholder — replace with tab navigator in Phase 2
+// Temporary placeholder — replace with tab navigator 
 function HomeScreen() {
     const { logout } = useAuth()
 

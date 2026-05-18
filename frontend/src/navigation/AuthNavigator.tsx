@@ -3,8 +3,8 @@
 
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 
-import LoginScreen from "../features/auth/LoginScreen"
 import WelcomeScreen from "../features/auth/WelcomeScreen"
+import LoginScreen from "../features/auth/LoginScreen"
 import RegisterScreen from "../features/auth/RegisterScreen"
 
 // Each key is a screen name; the value is the type of params it accepts.
