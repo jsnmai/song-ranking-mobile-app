@@ -8,7 +8,7 @@ from slowapi.errors import RateLimitExceeded
 
 from src.core.config import settings
 from src.core.limiter import limiter
-from src.api_routers import auth
+from src.api_routers import auth, profile
 
 app = FastAPI(title="LISTn API")
 
@@ -36,7 +36,11 @@ app.add_exception_handler(
 
 # Mount routers
 app.include_router(
-    auth.router,  # the router object defined in src/api_routers/auth.py
+    auth.router,
+    prefix="/api/v1",
+)
+app.include_router(
+    profile.router,
     prefix="/api/v1",
 )
 
