@@ -8,7 +8,7 @@ from slowapi.errors import RateLimitExceeded
 
 from src.core.config import settings
 from src.core.limiter import limiter
-from src.api_routers import auth, profile, rating, search
+from src.api_routers import auth, comparison, profile, rating, search
 
 app = FastAPI(title="LISTn API")
 
@@ -49,6 +49,10 @@ app.include_router(
 )
 app.include_router(
     rating.router,
+    prefix="/api/v1",
+)
+app.include_router(
+    comparison.router,
     prefix="/api/v1",
 )
 

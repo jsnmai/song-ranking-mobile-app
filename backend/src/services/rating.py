@@ -1,4 +1,6 @@
-# Business logic for ratings, rankings, and rating events.
+"""Business logic for ratings, rankings, and rating events."""
+from dataclasses import dataclass
+
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -50,6 +52,15 @@ DEFAULT_RANKING_LIMIT = 20
 MAX_RANKING_LIMIT = 50
 
 
+@dataclass(frozen=True)
+class FinalizedRatingState:
+    """Uncommitted finalized rating objects used by rating and comparison flows."""
+
+    ranking: Ranking
+    rating_event: RatingEvent
+    song: Song
+
+
 def finalize_rating(
     db: Session,
     user_id: int,
@@ -65,53 +76,16 @@ def finalize_rating(
     5. Commit the whole rating write atomically.
     """
     try:
-        song = upsert_from_deezer(
-            db,
-            data.song,
-            commit=False,
-        )
-        existing_ranking = get_user_ranking_by_song(
-            db,
-            user_id,
-            song.id,
-        )
-        previous_bucket = existing_ranking.bucket if existing_ranking else None
-        previous_position = existing_ranking.position if existing_ranking else None
-        previous_score = existing_ranking.score if existing_ranking else None
-        new_position = _resolve_new_position(
+        finalized_rating = write_finalized_rating(
             db,
             user_id=user_id,
-            bucket=data.bucket,
-            current_ranking=existing_ranking,
-            requested_position=data.position,
-        )
-        ranking = _place_ranking(
-            db,
-            user_id=user_id,
-            song_id=song.id,
-            bucket=data.bucket,
-            position=new_position,
-            current_ranking=existing_ranking,
-        )
-        # Phase 10: update songs.global_avg_score and songs.global_rating_count here.
-        rating_event = create_rating_event(
-            db,
-            user_id=user_id,
-            song_id=song.id,
-            event_type="rerated" if existing_ranking else "rated",
-            previous_bucket=previous_bucket,
-            new_bucket=ranking.bucket,
-            previous_position=previous_position,
-            new_position=ranking.position,
-            previous_score=previous_score,
-            new_score=ranking.score,
-            note=data.note,
+            data=data,
         )
         commit_changes(db)
         refresh_ranking_event_pair(
             db,
-            ranking,
-            rating_event,
+            finalized_rating.ranking,
+            finalized_rating.rating_event,
         )
     except HTTPException:
         db.rollback()
@@ -120,12 +94,102 @@ def finalize_rating(
         db.rollback()
         raise
 
+    return build_rating_finalize_response(finalized_rating)
+
+
+def write_finalized_rating(
+    db: Session,
+    user_id: int,
+    data: RatingFinalizeRequest,
+) -> FinalizedRatingState:
+    """
+    Write ranking and rating_event rows without committing.
+
+    Comparison-session finalization reuses this so rankings, events,
+    comparisons, and session deletion can commit atomically.
+    """
+    song = upsert_from_deezer(
+        db,
+        data.song,
+        commit=False,
+    )
+    existing_ranking = get_user_ranking_by_song(
+        db,
+        user_id,
+        song.id,
+    )
+    previous_bucket = existing_ranking.bucket if existing_ranking else None
+    previous_position = existing_ranking.position if existing_ranking else None
+    previous_score = existing_ranking.score if existing_ranking else None
+    new_position = _resolve_new_position(
+        db,
+        user_id=user_id,
+        bucket=data.bucket,
+        current_ranking=existing_ranking,
+        requested_position=data.position,
+    )
+    ranking = _place_ranking(
+        db,
+        user_id=user_id,
+        song_id=song.id,
+        bucket=data.bucket,
+        position=new_position,
+        current_ranking=existing_ranking,
+    )
+    # Phase 10: update songs.global_avg_score and songs.global_rating_count here.
+    rating_event = create_rating_event(
+        db,
+        user_id=user_id,
+        song_id=song.id,
+        event_type="rerated" if existing_ranking else "rated",
+        previous_bucket=previous_bucket,
+        new_bucket=ranking.bucket,
+        previous_position=previous_position,
+        new_position=ranking.position,
+        previous_score=previous_score,
+        new_score=ranking.score,
+        note=data.note,
+    )
+    return FinalizedRatingState(
+        ranking=ranking,
+        rating_event=rating_event,
+        song=song,
+    )
+
+
+def build_rating_finalize_response(
+    finalized_rating: FinalizedRatingState,
+) -> RatingFinalizeResponse:
+    """Build the public finalized-rating response shape."""
     return RatingFinalizeResponse(
         ranking=_ranking_response(
-            ranking,
-            song,
+            finalized_rating.ranking,
+            finalized_rating.song,
         ),
-        rating_event=_rating_event_response(rating_event),
+        rating_event=_rating_event_response(finalized_rating.rating_event),
+    )
+
+
+def refresh_finalized_rating(
+    db: Session,
+    finalized_rating: FinalizedRatingState,
+) -> None:
+    """Refresh finalized rating rows after an outer service commits them."""
+    refresh_ranking_event_pair(
+        db,
+        finalized_rating.ranking,
+        finalized_rating.rating_event,
+    )
+
+
+def build_ranking_response(
+    ranking: Ranking,
+    song: Song,
+) -> RankingResponse:
+    """Build a public ranking response from a ranking row and song row."""
+    return _ranking_response(
+        ranking,
+        song,
     )
 
 
