@@ -2,18 +2,22 @@
 // Phase 3 wires the search bar to LISTn's backend Deezer proxy.
 // The search bar auto-focuses when the user navigates here via the FAB.
 import { useEffect, useRef, useState } from "react"
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, View } from "react-native"
-import { useNavigation, useRoute, RouteProp } from "@react-navigation/native"
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
+import { CompositeNavigationProp, useNavigation, useRoute, RouteProp } from "@react-navigation/native"
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
+import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 
-import { TabParamList } from "../../navigation/types"
+import { AppStackParamList, TabParamList } from "../../navigation/types"
 import { useAuth } from "../auth/AuthContext"
 import { searchSongs } from "../search/apiRequests"
 import { SongSearchResult } from "../search/types"
 
 // RouteProp<ParamList, ScreenName> gives the type of route.params for a specific screen.
 type DiscoverRouteProp = RouteProp<TabParamList, "Discover">
-type DiscoverNavigationProp = BottomTabNavigationProp<TabParamList, "Discover">
+type DiscoverNavigationProp = CompositeNavigationProp<
+    BottomTabNavigationProp<TabParamList, "Discover">,
+    NativeStackNavigationProp<AppStackParamList>
+>
 
 export default function DiscoverScreen() {
     const route = useRoute<DiscoverRouteProp>()
@@ -25,6 +29,10 @@ export default function DiscoverScreen() {
     const [results, setResults] = useState<SongSearchResult[]>([])
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
+
+    const handleSongPress = (song: SongSearchResult) => {
+        navigation.navigate("BucketSelection", { song })
+    }
 
     // Auto-focus the search bar when navigated here via the FAB.
     // After focusing, reset the param so a normal tab press later does not re-trigger focus.
@@ -116,7 +124,12 @@ export default function DiscoverScreen() {
                     <Text style={styles.emptyText}>No songs found.</Text>
                 )}
                 {!isLoading && error === null && results.map((song) => (
-                    <View key={song.deezer_id} style={styles.resultRow}>
+                    <TouchableOpacity
+                        key={song.deezer_id}
+                        style={styles.resultRow}
+                        onPress={() => handleSongPress(song)}
+                        activeOpacity={0.75}
+                    >
                         {song.cover_url ? (
                             <Image source={{ uri: song.cover_url }} style={styles.cover} />
                         ) : (
@@ -127,7 +140,7 @@ export default function DiscoverScreen() {
                             <Text style={styles.artist} numberOfLines={1}>{song.artist}</Text>
                             <Text style={styles.album} numberOfLines={1}>{song.album}</Text>
                         </View>
-                    </View>
+                    </TouchableOpacity>
                 ))}
             </ScrollView>
         </View>

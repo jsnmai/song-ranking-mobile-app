@@ -5,16 +5,21 @@
 
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
+import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { useNavigation } from "@react-navigation/native"
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
 
-import { TabParamList } from "./types"
+import { AppStackParamList, TabParamList } from "./types"
+import BucketSelectionScreen from "../features/comparison/BucketSelectionScreen"
+import ComparisonFlowScreen from "../features/comparison/ComparisonFlowScreen"
+import ScoreRevealScreen from "../features/comparison/ScoreRevealScreen"
 import FeedScreen from "../features/feed/FeedScreen"
 import RankingsScreen from "../features/rankings/RankingsScreen"
 import DiscoverScreen from "../features/discover/DiscoverScreen"
 import ProfileScreen from "../features/profile/ProfileScreen"
 
 const Tab = createBottomTabNavigator<TabParamList>()
+const Stack = createNativeStackNavigator<AppStackParamList>()
 
 // FABButton is the center action button — visually floats above the tab bar.
 // Not a tab: it always navigates to Discover with focusSearch:true.
@@ -41,7 +46,7 @@ function FABPlaceholderScreen() {
     return <View style={{ flex: 1, backgroundColor: "#000" }} />
 }
 
-export default function AppNavigator() {
+function MainTabs() {
     return (
         <Tab.Navigator
             screenOptions={{
@@ -65,6 +70,17 @@ export default function AppNavigator() {
             <Tab.Screen name="Discover" component={DiscoverScreen} />
             <Tab.Screen name="Profile" component={ProfileScreen} />
         </Tab.Navigator>
+    )
+}
+
+export default function AppNavigator() {
+    return (
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="MainTabs" component={MainTabs} />
+            <Stack.Screen name="BucketSelection" component={BucketSelectionScreen} />
+            <Stack.Screen name="ComparisonFlow" component={ComparisonFlowScreen} />
+            <Stack.Screen name="ScoreReveal" component={ScoreRevealScreen} />
+        </Stack.Navigator>
     )
 }
 

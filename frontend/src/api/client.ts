@@ -47,4 +47,7 @@ export const apiClient = {
     async post<ResponseType>(path: string, body: unknown, token?: string): Promise<ResponseType> {
         return request<ResponseType>("POST", path, { body, token })
     },
+    async delete<ResponseType>(path: string, token?: string): Promise<ResponseType> {
+        return request<ResponseType>("DELETE", path, { token })
+    },
 }
