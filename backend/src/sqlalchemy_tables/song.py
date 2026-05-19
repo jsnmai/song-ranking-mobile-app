@@ -2,7 +2,7 @@
 # Songs are persisted only after a user rates, bookmarks, or otherwise acts on a search result.
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, Index, Integer, String, func
+from sqlalchemy import BigInteger, DateTime, Float, Index, Integer, String, func
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -37,7 +37,7 @@ class Song(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     deezer_id: Mapped[int] = mapped_column(
-        Integer,
+        BigInteger,
         nullable=False,
     )
     isrc: Mapped[str | None] = mapped_column(
@@ -53,7 +53,7 @@ class Song(Base):
         nullable=False,
     )
     artist_deezer_id: Mapped[int] = mapped_column(
-        Integer,
+        BigInteger,
         nullable=False,
     )
     album: Mapped[str] = mapped_column(

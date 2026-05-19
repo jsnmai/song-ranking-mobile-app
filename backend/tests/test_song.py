@@ -67,3 +67,15 @@ def test_persist_user_touched_song_allows_nullable_isrc(db_session: Session):
 
     assert response.deezer_id == 456
     assert response.isrc is None
+
+
+def test_persist_user_touched_song_allows_large_deezer_id(db_session: Session):
+    """Deezer track IDs can exceed PostgreSQL's 32-bit integer range."""
+    response = persist_user_touched_song(
+        db_session,
+        _song_payload(
+            deezer_id=3_993_449_551,
+        ),
+    )
+
+    assert response.deezer_id == 3_993_449_551

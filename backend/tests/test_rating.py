@@ -142,6 +142,22 @@ def test_finalize_empty_bucket_creates_ranking_and_event(
     assert db_session.scalar(select(func.count()).select_from(RatingEvent)) == 1
 
 
+def test_finalize_rating_accepts_large_deezer_id(client: TestClient):
+    """Real Deezer IDs can exceed PostgreSQL's 32-bit integer range."""
+    token = _get_token(client)
+
+    body = _finalize_rating(
+        client,
+        token,
+        _rating_payload(
+            deezer_id=3_993_449_551,
+            title="Smoke",
+        ),
+    )
+
+    assert body["ranking"]["song"]["deezer_id"] == 3_993_449_551
+
+
 def test_finalize_second_song_without_position_requires_comparison(
     client: TestClient,
     db_session: Session,
