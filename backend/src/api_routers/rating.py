@@ -1,0 +1,76 @@
+# HTTP layer for rating and ranking endpoints.
+# Routers stay thin: parse auth/input, call services, return typed responses.
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
+
+from src.core.dependencies import get_current_user, get_db
+from src.pydantic_schemas.rating import (
+    RankingListResponse,
+    RatingFinalizeRequest,
+    RatingFinalizeResponse,
+    RatingRemoveResponse,
+)
+from src.services.rating import finalize_rating, list_my_rankings, remove_rating
+from src.sqlalchemy_tables.user import User
+
+router = APIRouter(
+    tags=["ratings"],
+)
+
+
+@router.post(
+    "/ratings/finalize",
+    response_model=RatingFinalizeResponse,
+    status_code=201,
+)
+def finalize_rating_endpoint(
+    data: RatingFinalizeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RatingFinalizeResponse:
+    """Finalize a rating into the authenticated user's current rankings."""
+    return finalize_rating(
+        db,
+        user_id=current_user.id,
+        data=data,
+    )
+
+
+@router.delete(
+    "/ratings/{song_id}",
+    response_model=RatingRemoveResponse,
+)
+def remove_rating_endpoint(
+    song_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RatingRemoveResponse:
+    """Remove the authenticated user's current rating for one song."""
+    return remove_rating(
+        db,
+        user_id=current_user.id,
+        song_id=song_id,
+    )
+
+
+@router.get(
+    "/rankings/me",
+    response_model=RankingListResponse,
+)
+def my_rankings(
+    limit: int = Query(
+        default=20,
+        ge=1,
+        le=50,
+    ),
+    cursor: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RankingListResponse:
+    """Return the authenticated user's current rankings."""
+    return list_my_rankings(
+        db,
+        user_id=current_user.id,
+        limit=limit,
+        cursor=cursor,
+    )
