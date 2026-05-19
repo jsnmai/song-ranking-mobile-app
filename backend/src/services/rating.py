@@ -234,7 +234,7 @@ def _resolve_new_position(
     current_ranking: Ranking | None,
     requested_position: int | None,
 ) -> int:
-    """Choose the insertion position, requiring comparisons only once a bucket has depth."""
+    """Choose the insertion position, requiring comparison once a bucket is non-empty."""
     bucket_rankings = [
         ranking
         for ranking in list_user_bucket_rankings(
@@ -253,8 +253,8 @@ def _resolve_new_position(
             )
         return requested_position
 
-    if len(bucket_rankings) <= 1:
-        return max_position
+    if not bucket_rankings:
+        return 1
 
     raise HTTPException(
         status_code=status.HTTP_409_CONFLICT,
@@ -305,6 +305,12 @@ def _place_ranking(
                 current_ranking,
                 position,
             )
+        elif old_bucket is not None and bucket_name == old_bucket:
+            bucket_rankings = [
+                ranking
+                for ranking in bucket_rankings
+                if ranking.id != current_ranking.id
+            ]
         _recalculate_bucket(
             bucket_rankings,
             bucket_name,

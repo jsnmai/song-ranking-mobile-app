@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
+from src.sqlalchemy_tables.song import Song
 
 
 def _register_payload(
@@ -141,11 +142,38 @@ def test_finalize_empty_bucket_creates_ranking_and_event(
     assert db_session.scalar(select(func.count()).select_from(RatingEvent)) == 1
 
 
-def test_finalize_single_song_bucket_needs_no_comparison_and_keeps_positions_contiguous(
+def test_finalize_second_song_without_position_requires_comparison(
     client: TestClient,
     db_session: Session,
 ):
-    """A second song can enter at the bottom without a comparison session."""
+    """A second song needs comparison output to decide above or below the first."""
+    token = _get_token(client)
+    _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=123, title="Nights"),
+    )
+
+    response = client.post(
+        "/api/v1/ratings/finalize",
+        json=_rating_payload(deezer_id=456, title="Pink + White"),
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Comparison session required for this bucket."
+    db_session.expire_all()
+    assert _positions_for_bucket(
+        db_session,
+        "like",
+    ) == [1]
+
+
+def test_finalize_second_song_with_position_recalculates_two_song_bucket(
+    client: TestClient,
+    db_session: Session,
+):
+    """Phase 5 comparison output can place the second song in a non-empty bucket."""
     token = _get_token(client)
     _finalize_rating(
         client,
@@ -156,15 +184,25 @@ def test_finalize_single_song_bucket_needs_no_comparison_and_keeps_positions_con
     body = _finalize_rating(
         client,
         token,
-        _rating_payload(deezer_id=456, title="Pink + White"),
+        _rating_payload(deezer_id=456, title="Pink + White", position=2),
     )
 
     assert body["ranking"]["position"] == 2
     db_session.expire_all()
-    assert _positions_for_bucket(
-        db_session,
-        "like",
-    ) == [1, 2]
+    rows = list(
+        db_session.execute(
+            select(
+                Ranking.position,
+                Ranking.score,
+            )
+            .where(Ranking.bucket == "like")
+            .order_by(Ranking.position.asc())
+        )
+    )
+    assert rows == [
+        (1, 10.0),
+        (2, 7.5),
+    ]
 
 
 def test_finalize_deep_bucket_without_position_requires_comparison(client: TestClient):
@@ -178,7 +216,7 @@ def test_finalize_deep_bucket_without_position_requires_comparison(client: TestC
     _finalize_rating(
         client,
         token,
-        _rating_payload(deezer_id=456, title="Pink + White"),
+        _rating_payload(deezer_id=456, title="Pink + White", position=2),
     )
 
     response = client.post(
@@ -205,7 +243,7 @@ def test_finalize_with_position_recalculates_scores_and_compacts_positions(
     _finalize_rating(
         client,
         token,
-        _rating_payload(deezer_id=456, title="Pink + White"),
+        _rating_payload(deezer_id=456, title="Pink + White", position=2),
     )
 
     body = _finalize_rating(
@@ -248,7 +286,7 @@ def test_remove_rating_deletes_ranking_compacts_bucket_and_writes_removed_event(
     middle = _finalize_rating(
         client,
         token,
-        _rating_payload(deezer_id=456, title="Pink + White"),
+        _rating_payload(deezer_id=456, title="Pink + White", position=2),
     )
     _finalize_rating(
         client,
@@ -370,6 +408,40 @@ def test_finalize_same_deezer_song_for_second_user_does_not_modify_first_user(
 
     db_session.expire_all()
     assert db_session.scalar(select(func.count()).select_from(Ranking)) == 2
+    assert db_session.scalar(select(func.count()).select_from(RatingEvent)) == 2
+
+
+def test_finalize_already_rated_song_writes_rerated_event_and_reuses_song(
+    client: TestClient,
+    db_session: Session,
+):
+    """Finalizing an already-rated song updates one ranking and writes rerated history."""
+    token = _get_token(client)
+    first_body = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=123, title="Nights", bucket="like"),
+    )
+
+    second_body = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=123, title="Nights", bucket="dislike"),
+    )
+
+    assert second_body["ranking"]["id"] == first_body["ranking"]["id"]
+    assert second_body["ranking"]["bucket"] == "dislike"
+    assert second_body["ranking"]["position"] == 1
+    assert second_body["rating_event"]["event_type"] == "rerated"
+    assert second_body["rating_event"]["previous_bucket"] == first_body["ranking"]["bucket"]
+    assert second_body["rating_event"]["previous_position"] == first_body["ranking"]["position"]
+    assert second_body["rating_event"]["previous_score"] == first_body["ranking"]["score"]
+    assert second_body["rating_event"]["new_bucket"] == second_body["ranking"]["bucket"]
+    assert second_body["rating_event"]["new_position"] == second_body["ranking"]["position"]
+    assert second_body["rating_event"]["new_score"] == second_body["ranking"]["score"]
+    db_session.expire_all()
+    assert db_session.scalar(select(func.count()).select_from(Song)) == 1
+    assert db_session.scalar(select(func.count()).select_from(Ranking)) == 1
     assert db_session.scalar(select(func.count()).select_from(RatingEvent)) == 2
 
 
