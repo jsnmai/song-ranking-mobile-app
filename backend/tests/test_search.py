@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from src.sqlalchemy_tables.profile import Profile
+from src.sqlalchemy_tables.song import Song
 from src.sqlalchemy_tables.user import User
 
 REGISTER_PAYLOAD = {
@@ -259,6 +260,7 @@ def test_search_does_not_write_database_rows(
     _mock_successful_deezer_search(monkeypatch)
     user_count_before = db_session.scalar(select(func.count()).select_from(User))
     profile_count_before = db_session.scalar(select(func.count()).select_from(Profile))
+    song_count_before = db_session.scalar(select(func.count()).select_from(Song))
 
     response = client.get(
         "/api/v1/search/songs?q=ocean",
@@ -269,3 +271,4 @@ def test_search_does_not_write_database_rows(
     db_session.expire_all()
     assert db_session.scalar(select(func.count()).select_from(User)) == user_count_before
     assert db_session.scalar(select(func.count()).select_from(Profile)) == profile_count_before
+    assert db_session.scalar(select(func.count()).select_from(Song)) == song_count_before
