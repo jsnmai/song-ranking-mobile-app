@@ -9,6 +9,7 @@ from src.core.config import settings
 from src.db.base import Base
 import src.sqlalchemy_tables.user  # noqa: F401 — registers User with Base.metadata so Alembic sees the table
 import src.sqlalchemy_tables.profile  # noqa: F401 — registers Profile with Base.metadata so Alembic sees the table
+import src.sqlalchemy_tables.song  # noqa: F401 — registers Song with Base.metadata so Alembic sees the table
 # Add a new import here each time a new model file is created.
 
 # this is the Alembic Config object, which provides
