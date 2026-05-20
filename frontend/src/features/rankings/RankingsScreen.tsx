@@ -152,7 +152,6 @@ export default function RankingsScreen() {
             </View>
             <FlashList
                 data={rankings}
-                estimatedItemSize={81}
                 renderItem={renderRanking}
                 keyExtractor={(item) => item.id.toString()}
                 onEndReached={handleLoadMore}
