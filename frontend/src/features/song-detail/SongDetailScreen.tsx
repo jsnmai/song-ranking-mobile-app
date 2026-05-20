@@ -4,18 +4,12 @@ import { Alert, Image, StyleSheet, Text, TouchableOpacity, View } from "react-na
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 
 import { ApiError } from "../../api/client"
+import BucketBadge from "../../components/BucketBadge"
 import { AppStackParamList } from "../../navigation/types"
 import { useAuth } from "../auth/AuthContext"
-import { BucketName } from "../comparison/types"
 import { removeRating } from "../rankings/apiRequests"
 
 type SongDetailProps = NativeStackScreenProps<AppStackParamList, "SongDetail">
-
-const BUCKET_LABELS: Record<BucketName, string> = {
-    like: "Like",
-    alright: "Alright",
-    dislike: "Dislike",
-}
 
 export default function SongDetailScreen({ navigation, route }: SongDetailProps) {
     const { token } = useAuth()
@@ -25,6 +19,10 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
 
     const handleRateAgain = () => {
         navigation.navigate("BucketSelection", { song: ranking.song })
+    }
+
+    const handleReorder = () => {
+        navigation.navigate("Reorder")
     }
 
     const handleRemovePress = () => {
@@ -92,7 +90,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                     </View>
                     <View style={styles.statBlock}>
                         <Text style={styles.statLabel}>Bucket</Text>
-                        <Text style={styles.statValue}>{BUCKET_LABELS[ranking.bucket]}</Text>
+                        <BucketBadge bucket={ranking.bucket} />
                     </View>
                     <View style={styles.statBlock}>
                         <Text style={styles.statLabel}>Position</Text>
@@ -104,6 +102,9 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
             <View style={styles.actions}>
                 <TouchableOpacity style={styles.primaryButton} onPress={handleRateAgain}>
                     <Text style={styles.primaryButtonText}>Rate Again</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.secondaryButton} onPress={handleReorder}>
+                    <Text style={styles.secondaryButtonText}>Reorder</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                     style={styles.secondaryButton}

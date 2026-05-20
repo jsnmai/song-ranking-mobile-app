@@ -107,4 +107,20 @@ describe("RankingsScreen", () => {
 
         expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
     })
+
+    it("navigates to Reorder when the header button is tapped", async () => {
+        mockListMyRankings.mockResolvedValue({
+            rankings: [ranking],
+            next_cursor: null,
+        })
+
+        render(<RankingsScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByText("Nights")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByText("Reorder"))
+
+        expect(mockNavigate).toHaveBeenCalledWith("Reorder")
+    })
 })

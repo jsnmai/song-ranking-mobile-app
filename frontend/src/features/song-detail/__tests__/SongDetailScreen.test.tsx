@@ -67,6 +67,14 @@ beforeEach(() => {
 })
 
 describe("SongDetailScreen", () => {
+    it("opens Reorder from the action list", () => {
+        render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
+
+        fireEvent.press(screen.getByText("Reorder"))
+
+        expect(mockNavigate).toHaveBeenCalledWith("Reorder")
+    })
+
     it("confirms before removing a rating, then returns to Rankings", async () => {
         const alertSpy = jest.spyOn(Alert, "alert")
         mockRemoveRating.mockResolvedValue({ rating_event: { event_type: "removed" } })

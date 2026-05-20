@@ -7,9 +7,10 @@ import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 
 import { ApiError } from "../../api/client"
+import BucketBadge from "../../components/BucketBadge"
 import { AppStackParamList, TabParamList } from "../../navigation/types"
 import { useAuth } from "../auth/AuthContext"
-import { BucketName, RankingResponse } from "../comparison/types"
+import { RankingResponse } from "../comparison/types"
 import { listMyRankings } from "./apiRequests"
 
 type RankingsViewMode = "flat" | "grouped" | "separators"
@@ -17,12 +18,6 @@ type RankingsNavigation = CompositeNavigationProp<
     BottomTabNavigationProp<TabParamList, "Rankings">,
     NativeStackNavigationProp<AppStackParamList>
 >
-
-const BUCKET_LABELS: Record<BucketName, string> = {
-    like: "Like",
-    alright: "Alright",
-    dislike: "Dislike",
-}
 
 export default function RankingsScreen() {
     // Navigate to Discover and auto-focus the search bar — same action as tapping the FAB.
@@ -88,6 +83,10 @@ export default function RankingsScreen() {
         navigation.navigate("SongDetail", { ranking })
     }
 
+    const handleReorderPress = () => {
+        navigation.navigate("Reorder")
+    }
+
     const renderRanking = ({ item }: { item: RankingResponse }) => {
         if (viewMode !== "flat") {
             return null
@@ -110,9 +109,10 @@ export default function RankingsScreen() {
                 <View style={styles.songText}>
                     <Text style={styles.title} numberOfLines={1}>{item.song.title}</Text>
                     <Text style={styles.artist} numberOfLines={1}>{item.song.artist}</Text>
-                    <Text style={styles.meta} numberOfLines={1}>
-                        {BUCKET_LABELS[item.bucket]} · #{item.position}
-                    </Text>
+                    <View style={styles.metaRow}>
+                        <BucketBadge bucket={item.bucket} />
+                        <Text style={styles.meta} numberOfLines={1}>#{item.position}</Text>
+                    </View>
                 </View>
                 <Text style={styles.score}>{item.score.toFixed(2)}</Text>
             </TouchableOpacity>
@@ -167,6 +167,14 @@ export default function RankingsScreen() {
         <View style={styles.container}>
             <View style={styles.header}>
                 <Text style={styles.heading}>Rankings</Text>
+                <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Reorder rankings"
+                    onPress={handleReorderPress}
+                    style={styles.reorderButton}
+                >
+                    <Text style={styles.reorderButtonText}>Reorder</Text>
+                </TouchableOpacity>
                 {error !== null && <Text style={styles.inlineError}>{error}</Text>}
             </View>
             <FlashList
@@ -200,6 +208,10 @@ const styles = StyleSheet.create({
         paddingBottom: 12,
         borderBottomWidth: 1,
         borderBottomColor: "#1f1f1f",
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        flexWrap: "wrap",
     },
     heading: {
         color: "#fff",
@@ -210,6 +222,19 @@ const styles = StyleSheet.create({
         color: "#ff6b6b",
         fontSize: 14,
         marginTop: 8,
+        width: "100%",
+    },
+    reorderButton: {
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderWidth: 1,
+        borderColor: "#333",
+        borderRadius: 8,
+    },
+    reorderButtonText: {
+        color: "#fff",
+        fontSize: 14,
+        fontWeight: "700",
     },
     listContent: {
         paddingHorizontal: 16,
@@ -270,6 +295,11 @@ const styles = StyleSheet.create({
         color: "#b8b8b8",
         fontSize: 14,
         marginBottom: 4,
+    },
+    metaRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
     },
     meta: {
         color: "#777",
