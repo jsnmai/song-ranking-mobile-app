@@ -2,16 +2,21 @@
 import { useCallback, useState } from "react"
 import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { FlashList } from "@shopify/flash-list"
-import { useFocusEffect, useNavigation } from "@react-navigation/native"
+import { CompositeNavigationProp, useFocusEffect, useNavigation } from "@react-navigation/native"
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
+import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 
 import { ApiError } from "../../api/client"
-import { TabParamList } from "../../navigation/types"
+import { AppStackParamList, TabParamList } from "../../navigation/types"
 import { useAuth } from "../auth/AuthContext"
 import { BucketName, RankingResponse } from "../comparison/types"
 import { listMyRankings } from "./apiRequests"
 
 type RankingsViewMode = "flat" | "grouped" | "separators"
+type RankingsNavigation = CompositeNavigationProp<
+    BottomTabNavigationProp<TabParamList, "Rankings">,
+    NativeStackNavigationProp<AppStackParamList>
+>
 
 const BUCKET_LABELS: Record<BucketName, string> = {
     like: "Like",
@@ -21,7 +26,7 @@ const BUCKET_LABELS: Record<BucketName, string> = {
 
 export default function RankingsScreen() {
     // Navigate to Discover and auto-focus the search bar — same action as tapping the FAB.
-    const navigation = useNavigation<BottomTabNavigationProp<TabParamList>>()
+    const navigation = useNavigation<RankingsNavigation>()
     const { token } = useAuth()
     const [viewMode] = useState<RankingsViewMode>("flat")
     const [rankings, setRankings] = useState<RankingResponse[]>([])
@@ -79,13 +84,24 @@ export default function RankingsScreen() {
         navigation.navigate("Discover", { focusSearch: true })
     }
 
+    const handleRankingPress = (ranking: RankingResponse) => {
+        navigation.navigate("SongDetail", { ranking })
+    }
+
     const renderRanking = ({ item }: { item: RankingResponse }) => {
         if (viewMode !== "flat") {
             return null
         }
 
         return (
-            <View style={styles.rankingRow}>
+            <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${item.song.title} details`}
+                testID={`ranking-row-${item.id}`}
+                style={styles.rankingRow}
+                onPress={() => handleRankingPress(item)}
+                activeOpacity={0.8}
+            >
                 <View style={styles.coverFrame}>
                     {item.song.cover_url ? (
                         <Image source={{ uri: item.song.cover_url }} style={styles.coverImage} />
@@ -99,7 +115,7 @@ export default function RankingsScreen() {
                     </Text>
                 </View>
                 <Text style={styles.score}>{item.score.toFixed(2)}</Text>
-            </View>
+            </TouchableOpacity>
         )
     }
 

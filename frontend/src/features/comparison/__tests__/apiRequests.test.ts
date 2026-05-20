@@ -4,6 +4,7 @@ import {
     chooseComparisonWinner,
     finalizeComparisonSession,
     finalizeRating,
+    removeRating,
     startComparisonSession,
 } from "../apiRequests"
 import { SongSearchResult } from "../../search/types"
@@ -58,6 +59,14 @@ describe("comparison API requests", () => {
             { song, bucket: "like" },
             "test-token",
         )
+    })
+
+    it("removes ratings through the backend rating endpoint", async () => {
+        mockDelete.mockResolvedValue({ rating_event: {} })
+
+        await removeRating(42, "test-token")
+
+        expect(mockDelete).toHaveBeenCalledWith("/api/v1/ratings/42", "test-token")
     })
 
     it("records comparison choices through the backend", async () => {

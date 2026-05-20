@@ -7,7 +7,7 @@ import { AppStackParamList } from "../../navigation/types"
 type ScoreRevealProps = NativeStackScreenProps<AppStackParamList, "ScoreReveal">
 
 export default function ScoreRevealScreen({ navigation, route }: ScoreRevealProps) {
-    const { result } = route.params
+    const { result, isRerate = false } = route.params
     const { ranking } = result
 
     const handleContinue = () => {

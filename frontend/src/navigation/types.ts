@@ -3,7 +3,7 @@
 // Any screen that needs to navigate between tabs or read tab params imports from here.
 import { NavigatorScreenParams } from "@react-navigation/native"
 
-import { ComparisonSessionResponse, RatingFinalizeResponse } from "../features/comparison/types"
+import { ComparisonSessionResponse, RankingResponse, RatingFinalizeResponse } from "../features/comparison/types"
 import { SongSearchResult } from "../features/search/types"
 
 // TabParamList maps each tab name to its route params.
@@ -20,7 +20,8 @@ export type TabParamList = {
 
 export type AppStackParamList = {
     MainTabs: NavigatorScreenParams<TabParamList> | undefined;
+    SongDetail: { ranking: RankingResponse };
     BucketSelection: { song: SongSearchResult };
     ComparisonFlow: { session: ComparisonSessionResponse };
-    ScoreReveal: { result: RatingFinalizeResponse };
+    ScoreReveal: { result: RatingFinalizeResponse; isRerate?: boolean };
 }

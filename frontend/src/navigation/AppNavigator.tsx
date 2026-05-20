@@ -17,6 +17,7 @@ import FeedScreen from "../features/feed/FeedScreen"
 import RankingsScreen from "../features/rankings/RankingsScreen"
 import DiscoverScreen from "../features/discover/DiscoverScreen"
 import ProfileScreen from "../features/profile/ProfileScreen"
+import SongDetailScreen from "../features/song-detail/SongDetailScreen"
 
 const Tab = createBottomTabNavigator<TabParamList>()
 const Stack = createNativeStackNavigator<AppStackParamList>()
@@ -77,6 +78,8 @@ export default function AppNavigator() {
     return (
         <Stack.Navigator screenOptions={{ headerShown: false }}>
             <Stack.Screen name="MainTabs" component={MainTabs} />
+            {/* change presentation to 'modal' to try as bottom sheet */}
+            <Stack.Screen name="SongDetail" component={SongDetailScreen} />
             <Stack.Screen name="BucketSelection" component={BucketSelectionScreen} />
             <Stack.Screen name="ComparisonFlow" component={ComparisonFlowScreen} />
             <Stack.Screen name="ScoreReveal" component={ScoreRevealScreen} />

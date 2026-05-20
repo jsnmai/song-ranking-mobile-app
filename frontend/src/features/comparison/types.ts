@@ -50,6 +50,10 @@ export type RatingFinalizeResponse = {
     rating_event: RatingEventResponse;
 }
 
+export type RatingRemoveResponse = {
+    rating_event: RatingEventResponse;
+}
+
 export type RankingListResponse = {
     rankings: RankingResponse[];
     next_cursor: string | null;
