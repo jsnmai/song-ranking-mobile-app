@@ -4,7 +4,6 @@ import {
     chooseComparisonWinner,
     finalizeComparisonSession,
     finalizeRating,
-    listMyRankings,
     startComparisonSession,
 } from "../apiRequests"
 import { SongSearchResult } from "../../search/types"
@@ -59,14 +58,6 @@ describe("comparison API requests", () => {
             { song, bucket: "like" },
             "test-token",
         )
-    })
-
-    it("lists current rankings through the backend with a cursor", async () => {
-        mockGet.mockResolvedValue({ rankings: [], next_cursor: null })
-
-        await listMyRankings("test-token", "8.75:1")
-
-        expect(mockGet).toHaveBeenCalledWith("/api/v1/rankings/me?cursor=8.75%3A1", "test-token")
     })
 
     it("records comparison choices through the backend", async () => {

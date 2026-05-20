@@ -5,7 +5,8 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack"
 
 import { AppStackParamList } from "../../navigation/types"
 import { useAuth } from "../auth/AuthContext"
-import { finalizeRating, listMyRankings, startComparisonSession } from "./apiRequests"
+import { listMyRankings } from "../rankings/apiRequests"
+import { finalizeRating, startComparisonSession } from "./apiRequests"
 import { BucketName } from "./types"
 
 type BucketSelectionProps = NativeStackScreenProps<AppStackParamList, "BucketSelection">

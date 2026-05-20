@@ -7,7 +7,6 @@ import {
     ComparisonSessionCancelResponse,
     ComparisonSessionFinalizeResponse,
     ComparisonSessionResponse,
-    RankingListResponse,
     RatingFinalizeResponse,
 } from "./types"
 
@@ -29,14 +28,6 @@ export async function finalizeRating(
     token: string,
 ): Promise<RatingFinalizeResponse> {
     return apiClient.post<RatingFinalizeResponse>("/api/v1/ratings/finalize", request, token)
-}
-
-export async function listMyRankings(
-    token: string,
-    cursor?: string,
-): Promise<RankingListResponse> {
-    const path = cursor ? `/api/v1/rankings/me?cursor=${encodeURIComponent(cursor)}` : "/api/v1/rankings/me"
-    return apiClient.get<RankingListResponse>(path, token)
 }
 
 export async function startComparisonSession(
