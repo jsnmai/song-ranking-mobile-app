@@ -5,9 +5,8 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from src.crud.rating import (
-    RankingWithSong,
+    RankingRow,
     apply_ranking_state,
-    commit_changes,
     create_ranking,
     create_rating_event,
     delete_ranking,
@@ -81,12 +80,12 @@ def finalize_rating(
     5. Commit the whole rating write atomically.
     """
     try:
-        finalized_rating = write_finalized_rating(
+        finalized_rating = persist_finalized_rating(
             db,
             user_id=user_id,
             data=data,
         )
-        commit_changes(db)
+        db.commit()
         refresh_ranking_event_pair(
             db,
             finalized_rating.ranking,
@@ -102,7 +101,7 @@ def finalize_rating(
     return build_rating_finalize_response(finalized_rating)
 
 
-def write_finalized_rating(
+def persist_finalized_rating(
     db: Session,
     user_id: int,
     data: RatingFinalizeRequest,
@@ -126,7 +125,7 @@ def write_finalized_rating(
     previous_bucket = existing_ranking.bucket if existing_ranking else None
     previous_position = existing_ranking.position if existing_ranking else None
     previous_score = existing_ranking.score if existing_ranking else None
-    new_position = _resolve_new_position(
+    new_position = _determine_insertion_position(
         db,
         user_id=user_id,
         bucket=data.bucket,
@@ -250,7 +249,7 @@ def remove_rating(
             new_score=None,
             note=None,
         )
-        commit_changes(db)
+        db.commit()
         refresh_rating_event(
             db,
             rating_event,
@@ -341,11 +340,11 @@ def reorder_rankings(
                     previous_score=previous["score"],
                     new_score=ranking.score,
                     note=None,
-                    metadata=event_metadata,
+                    event_metadata=event_metadata,
                 )
             )
 
-        commit_changes(db)
+        db.commit()
         refresh_rating_events(
             db,
             rating_events,
@@ -431,7 +430,7 @@ def _validate_reorder_song_ids(
         )
 
 
-def _resolve_new_position(
+def _determine_insertion_position(
     db: Session,
     user_id: int,
     bucket: str,
@@ -602,7 +601,7 @@ def _ranking_response(
 
 
 def _ranking_with_song_response(
-    row: RankingWithSong,
+    row: RankingRow,
 ) -> RankingResponse:
     """Build a ranking response from a repository row pair."""
     return _ranking_response(

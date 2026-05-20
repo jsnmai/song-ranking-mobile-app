@@ -6,7 +6,6 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from src.crud.comparison import (
-    commit_changes,
     create_comparison,
     create_comparison_session,
     delete_comparison_session,
@@ -30,8 +29,8 @@ from src.pydantic_schemas.song import SongCreate
 from src.services.rating import (
     build_ranking_response,
     build_rating_finalize_response,
+    persist_finalized_rating,
     refresh_finalized_rating,
-    write_finalized_rating,
 )
 from src.sqlalchemy_tables.comparison_session import ComparisonSession
 from src.sqlalchemy_tables.ranking import Ranking
@@ -47,7 +46,7 @@ def start_comparison_session(
     """Start one comparison session for one target song in one non-empty bucket."""
     try:
         _delete_expired_sessions(db)
-        bucket_rankings = _target_bucket_rankings(
+        bucket_rankings = _rankings_in_session_bucket(
             db,
             user_id=user_id,
             data=data,
@@ -75,7 +74,7 @@ def start_comparison_session(
             candidate_index=candidate_index,
             candidate_song_id=bucket_rankings[candidate_index].song_id,
         )
-        commit_changes(db)
+        db.commit()
         refresh_comparison_session(
             db,
             session,
@@ -171,7 +170,7 @@ def record_comparison_choice(
         )
 
     try:
-        commit_changes(db)
+        db.commit()
         refresh_comparison_session(
             db,
             session,
@@ -205,7 +204,7 @@ def finalize_comparison_session(
         )
 
     try:
-        finalized_rating = write_finalized_rating(
+        finalized_rating = persist_finalized_rating(
             db,
             user_id=user_id,
             data=RatingFinalizeRequest(
@@ -226,7 +225,7 @@ def finalize_comparison_session(
             db,
             session,
         )
-        commit_changes(db)
+        db.commit()
         refresh_finalized_rating(
             db,
             finalized_rating,
@@ -259,7 +258,7 @@ def cancel_comparison_session(
             db,
             session,
         )
-        commit_changes(db)
+        db.commit()
     except Exception:
         db.rollback()
         raise
@@ -270,7 +269,7 @@ def cancel_comparison_session(
     )
 
 
-def _target_bucket_rankings(
+def _rankings_in_session_bucket(
     db: Session,
     user_id: int,
     data: ComparisonSessionStartRequest,
@@ -373,7 +372,7 @@ def _session_response(
         high_index=session.high_index,
         candidate_index=session.candidate_index,
         total_in_bucket=len(bucket_rankings),
-        current_bucket_ranking=_bucket_ranking_items(
+        current_bucket_rankings=_bucket_ranking_items(
             db,
             bucket_rankings,
         ),
@@ -428,7 +427,7 @@ def _get_session_or_404(
                 db,
                 session,
             )
-            commit_changes(db)
+            db.commit()
         except Exception:
             db.rollback()
             raise

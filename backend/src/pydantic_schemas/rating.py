@@ -43,10 +43,7 @@ class RankingResponse(BaseModel):
 class RatingEventResponse(BaseModel):
     """One append-only rating event."""
 
-    model_config = ConfigDict(
-        from_attributes=True,
-        populate_by_name=True,
-    )
+    model_config = ConfigDict(from_attributes=True)
 
     id: int
     song_id: int
@@ -58,10 +55,7 @@ class RatingEventResponse(BaseModel):
     previous_score: float | None
     new_score: float | None
     note: str | None
-    metadata: dict[str, Any] | None = Field(
-        default=None,
-        validation_alias="metadata_",
-    )
+    event_metadata: dict[str, Any] | None = None
     created_at: datetime
 
 

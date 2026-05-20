@@ -42,7 +42,7 @@ export type RatingEventResponse = {
     previous_score: number | null;
     new_score: number | null;
     note: string | null;
-    metadata: Record<string, unknown> | null;
+    event_metadata: Record<string, unknown> | null;
     created_at: string;
 }
 
@@ -87,7 +87,7 @@ export type ComparisonSessionResponse = {
     high_index: number;
     candidate_index: number | null;
     total_in_bucket: number;
-    current_bucket_ranking: ComparisonBucketRankingItem[];
+    current_bucket_rankings: ComparisonBucketRankingItem[];
     created_at: string;
 }
 

@@ -13,7 +13,7 @@ import { BucketName, RankingResponse } from "../comparison/types"
 import { listMyRankings, reorderRankings } from "./apiRequests"
 
 type ReorderScreenProps = NativeStackScreenProps<AppStackParamList, "Reorder">
-type DragRanking = RankingResponse & {
+type DraftRanking = RankingResponse & {
     draftBucket: BucketName;
 }
 
@@ -21,7 +21,7 @@ const ROW_HEIGHT = 82
 
 export default function ReorderScreen({ navigation }: ReorderScreenProps) {
     const { token } = useAuth()
-    const [rankings, setRankings] = useState<DragRanking[]>([])
+    const [rankings, setRankings] = useState<DraftRanking[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -49,17 +49,17 @@ export default function ReorderScreen({ navigation }: ReorderScreenProps) {
                 })),
             )
         } catch (err) {
-            setError(errorMessage(err, "Could not load rankings."))
+            setError(extractErrorMessage(err, "Could not load rankings."))
         } finally {
             setIsLoading(false)
         }
     }, [token])
 
-    const handleMove = useCallback((
+    const handleDragMove = useCallback((
         songId: number,
         targetIndex: number,
     ) => {
-        setRankings((currentRankings) => moveRanking(currentRankings, songId, targetIndex))
+        setRankings((currentRankings) => applyDragMove(currentRankings, songId, targetIndex))
     }, [])
 
     const handleSave = async () => {
@@ -79,7 +79,7 @@ export default function ReorderScreen({ navigation }: ReorderScreenProps) {
             )
             navigation.goBack()
         } catch (err) {
-            setError(errorMessage(err, "Could not save reorder."))
+            setError(extractErrorMessage(err, "Could not save reorder."))
         } finally {
             setIsSaving(false)
         }
@@ -120,7 +120,7 @@ export default function ReorderScreen({ navigation }: ReorderScreenProps) {
                         ranking={ranking}
                         index={index}
                         totalRows={rankings.length}
-                        onMove={handleMove}
+                        onMove={handleDragMove}
                     />
                 ))}
             </ScrollView>
@@ -134,7 +134,7 @@ function ReorderRow({
     totalRows,
     onMove,
 }: {
-    ranking: DragRanking;
+    ranking: DraftRanking;
     index: number;
     totalRows: number;
     onMove: (songId: number, targetIndex: number) => void;
@@ -184,11 +184,11 @@ function ReorderRow({
     )
 }
 
-function moveRanking(
-    rankings: DragRanking[],
+function applyDragMove(
+    rankings: DraftRanking[],
     songId: number,
     targetIndex: number,
-): DragRanking[] {
+): DraftRanking[] {
     const fromIndex = rankings.findIndex((ranking) => ranking.song_id === songId)
     if (fromIndex === -1 || fromIndex === targetIndex) {
         return rankings
@@ -197,7 +197,11 @@ function moveRanking(
     const movedRanking = rankings[fromIndex]
     const remainingRankings = rankings.filter((ranking) => ranking.song_id !== songId)
     const insertIndex = clamp(targetIndex, 0, remainingRankings.length)
-    const draftBucket = bucketForInsert(remainingRankings, insertIndex, movedRanking.draftBucket)
+    const draftBucket = determineBucketFromNeighbor(
+        remainingRankings,
+        insertIndex,
+        movedRanking.draftBucket,
+    )
     return [
         ...remainingRankings.slice(0, insertIndex),
         {
@@ -208,8 +212,8 @@ function moveRanking(
     ]
 }
 
-function bucketForInsert(
-    rankings: DragRanking[],
+function determineBucketFromNeighbor(
+    rankings: DraftRanking[],
     insertIndex: number,
     fallbackBucket: BucketName,
 ): BucketName {
@@ -230,7 +234,7 @@ function clamp(
     return Math.min(Math.max(value, min), max)
 }
 
-function errorMessage(
+function extractErrorMessage(
     err: unknown,
     fallback: string,
 ): string {

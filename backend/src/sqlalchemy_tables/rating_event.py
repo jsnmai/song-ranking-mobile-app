@@ -73,8 +73,7 @@ class RatingEvent(Base):
         String(280),
         nullable=True,
     )
-    metadata_: Mapped[dict[str, Any] | None] = mapped_column(
-        "metadata",
+    event_metadata: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB,
         nullable=True,
     )

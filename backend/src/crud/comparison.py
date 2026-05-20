@@ -116,13 +116,6 @@ def create_comparison(
     return comparison
 
 
-def commit_changes(
-    db: Session,
-) -> None:
-    """Commit pending comparison-session changes."""
-    db.commit()
-
-
 def refresh_comparison_session(
     db: Session,
     session: ComparisonSession,

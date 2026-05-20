@@ -50,7 +50,7 @@ class ComparisonSessionResponse(BaseModel):
     high_index: int
     candidate_index: int | None
     total_in_bucket: int
-    current_bucket_ranking: list[ComparisonBucketRankingItem]
+    current_bucket_rankings: list[ComparisonBucketRankingItem]
     created_at: datetime
 
 

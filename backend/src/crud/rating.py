@@ -12,7 +12,7 @@ from src.sqlalchemy_tables.song import Song
 
 
 @dataclass(frozen=True)
-class RankingWithSong:
+class RankingRow:
     """A current ranking row paired with its song metadata."""
 
     ranking: Ranking
@@ -54,7 +54,7 @@ def list_user_bucket_rankings(
 def list_all_user_rankings_with_songs(
     db: Session,
     user_id: int,
-) -> list[RankingWithSong]:
+) -> list[RankingRow]:
     """Return all current rankings for one user with song metadata."""
     rows = db.execute(
         select(
@@ -72,7 +72,7 @@ def list_all_user_rankings_with_songs(
         )
     ).all()
     return [
-        RankingWithSong(
+        RankingRow(
             ranking=row[0],
             song=row[1],
         )
@@ -86,7 +86,7 @@ def list_user_rankings_with_songs(
     limit: int,
     cursor_score: float | None = None,
     cursor_id: int | None = None,
-) -> list[RankingWithSong]:
+) -> list[RankingRow]:
     """Return current rankings with songs using score/id cursor pagination."""
     statement = (
         select(
@@ -119,7 +119,7 @@ def list_user_rankings_with_songs(
         .limit(limit)
     ).all()
     return [
-        RankingWithSong(
+        RankingRow(
             ranking=row[0],
             song=row[1],
         )
@@ -181,7 +181,7 @@ def create_rating_event(
     previous_score: float | None,
     new_score: float | None,
     note: str | None,
-    metadata: dict[str, Any] | None = None,
+    event_metadata: dict[str, Any] | None = None,
 ) -> RatingEvent:
     """Create an append-only rating event without committing."""
     event = RatingEvent(
@@ -195,18 +195,11 @@ def create_rating_event(
         previous_score=previous_score,
         new_score=new_score,
         note=note,
-        metadata_=metadata,
+        event_metadata=event_metadata,
     )
     db.add(event)
     db.flush()
     return event
-
-
-def commit_changes(
-    db: Session,
-) -> None:
-    """Commit pending ranking/rating-event changes."""
-    db.commit()
 
 
 def refresh_ranking_event_pair(

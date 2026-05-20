@@ -172,7 +172,7 @@ def test_start_comparison_session_creates_temporary_state_only(
     assert body["high_index"] == 1
     assert body["candidate_index"] == 0
     assert body["total_in_bucket"] == 1
-    assert body["current_bucket_ranking"] == [
+    assert body["current_bucket_rankings"] == [
         {
             "song_id": body["candidate"]["song_id"],
             "title": "Nights",
@@ -580,7 +580,7 @@ def test_binary_insertion_can_span_multiple_comparisons(client: TestClient):
     assert first_choice.json()["total_in_bucket"] == 3
     assert [
         item["title"]
-        for item in first_choice.json()["current_bucket_ranking"]
+        for item in first_choice.json()["current_bucket_rankings"]
     ] == [
         "Song One",
         "Song Two",

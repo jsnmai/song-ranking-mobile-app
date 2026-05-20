@@ -732,7 +732,7 @@ def test_reorder_crossing_bucket_boundary_writes_reordered_events(
     assert set(events_by_song_id) == set(affected_song_ids)
     for event in body["rating_events"]:
         assert event["event_type"] == "reordered"
-        assert event["metadata"] == {
+        assert event["event_metadata"] == {
             "session_type": "reorder",
             "songs_affected": 2,
             "affected_song_ids": affected_song_ids,
