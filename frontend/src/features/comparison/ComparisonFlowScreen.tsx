@@ -1,11 +1,14 @@
 // Comparison Flow screen — head-to-head binary insertion for one song.
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+// ActivityIndicator is kept for the comparison submission spinner (isSubmitting).
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 
 import { ApiError } from "../../api/client"
+import { useAudioPlayer } from "../../hooks/useAudioPlayer"
 import { AppStackParamList } from "../../navigation/types"
 import { useAuth } from "../auth/AuthContext"
+import { fetchPreviewUrl } from "../songs/apiRequests"
 import { cancelComparisonSession, chooseComparisonWinner, finalizeComparisonSession } from "./apiRequests"
 import { ComparisonSessionResponse } from "./types"
 
@@ -17,11 +20,17 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
+    const [candidatePreviewUrl, setCandidatePreviewUrl] = useState<string | null>(null)
+    const candidatePlayer = useAudioPlayer(candidatePreviewUrl)
+    const targetPlayer = useAudioPlayer(session.target_song.preview_url)
+
     const handleCancel = async () => {
         if (!token || isSubmitting) {
             return
         }
 
+        candidatePlayer.stop()
+        targetPlayer.stop()
         setIsSubmitting(true)
         try {
             await cancelComparisonSession(session.session_uuid, token)
@@ -45,6 +54,9 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
             return
         }
 
+        // Stop both previews before advancing — the candidate changes each round.
+        candidatePlayer.stop()
+        targetPlayer.stop()
         setIsSubmitting(true)
         setError(null)
 
@@ -68,6 +80,43 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
         }
     }
 
+    useEffect(() => {
+        const candidate = session.candidate
+        if (candidate === null) {
+            setCandidatePreviewUrl(null)
+            return
+        }
+
+        if (!token) {
+            setCandidatePreviewUrl(candidate.song.preview_url)
+            return
+        }
+
+        let isActive = true
+        const authToken = token
+        const candidateSong = candidate.song
+        setCandidatePreviewUrl(null)
+
+        async function loadCandidatePreviewUrl() {
+            try {
+                const url = await fetchPreviewUrl(candidateSong.deezer_id, authToken)
+                if (isActive) {
+                    setCandidatePreviewUrl(url)
+                }
+            } catch {
+                if (isActive) {
+                    setCandidatePreviewUrl(candidateSong.preview_url)
+                }
+            }
+        }
+
+        loadCandidatePreviewUrl()
+
+        return () => {
+            isActive = false
+        }
+    }, [session.candidate, token])
+
     return (
         <View style={styles.container}>
             <View style={styles.header}>
@@ -89,6 +138,15 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
                         <Text style={styles.songTitle} numberOfLines={2}>{session.candidate.song.title}</Text>
                         <Text style={styles.songArtist} numberOfLines={1}>{session.candidate.song.artist}</Text>
                         <Text style={styles.scoreText}>Current {session.candidate.score.toFixed(2)}</Text>
+                        {candidatePreviewUrl !== null && (
+                            <PreviewButton
+                                isPlaying={candidatePlayer.isPlaying}
+                                onPress={() => {
+                                    targetPlayer.stop()
+                                    candidatePlayer.toggle()
+                                }}
+                            />
+                        )}
                     </TouchableOpacity>
                 )}
                 <TouchableOpacity
@@ -101,6 +159,15 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
                     <Text style={styles.songTitle} numberOfLines={2}>{session.target_song.title}</Text>
                     <Text style={styles.songArtist} numberOfLines={1}>{session.target_song.artist}</Text>
                     <Text style={styles.newText}>New rating</Text>
+                    {session.target_song.preview_url !== null && (
+                        <PreviewButton
+                            isPlaying={targetPlayer.isPlaying}
+                            onPress={() => {
+                                candidatePlayer.stop()
+                                targetPlayer.toggle()
+                            }}
+                        />
+                    )}
                 </TouchableOpacity>
             </View>
             {isSubmitting && <ActivityIndicator color="#fff" style={styles.loading} />}
@@ -115,6 +182,23 @@ function SongImage({ coverUrl }: { coverUrl: string }) {
     }
 
     return <Image source={{ uri: coverUrl }} style={styles.cover} />
+}
+
+// Tapping the preview button must not bubble up and trigger the card's handleChoice.
+function PreviewButton({ isPlaying, onPress }: { isPlaying: boolean; onPress: () => void }) {
+    return (
+        <TouchableOpacity
+            style={styles.previewButton}
+            onPress={(e) => {
+                // stopPropagation prevents the tap from also firing the parent card's onPress.
+                e.stopPropagation()
+                onPress()
+            }}
+            activeOpacity={0.7}
+        >
+            <Text style={styles.previewButtonText}>{isPlaying ? "Pause" : "Preview"}</Text>
+        </TouchableOpacity>
+    )
 }
 
 const styles = StyleSheet.create({
@@ -204,6 +288,20 @@ const styles = StyleSheet.create({
     },
     newText: {
         color: "#888",
+        fontSize: 13,
+        fontWeight: "700",
+    },
+    previewButton: {
+        marginTop: 10,
+        height: 32,
+        paddingHorizontal: 16,
+        borderRadius: 16,
+        backgroundColor: "#fff",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    previewButtonText: {
+        color: "#000",
         fontSize: 13,
         fontWeight: "700",
     },

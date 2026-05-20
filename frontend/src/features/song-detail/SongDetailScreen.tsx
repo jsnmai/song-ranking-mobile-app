@@ -1,13 +1,15 @@
 // Song Detail shows the current rating state for one ranked song.
-import { useState } from "react"
-import { Alert, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { useEffect, useState } from "react"
+import { ActivityIndicator, Alert, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 
 import { ApiError } from "../../api/client"
 import BucketBadge from "../../components/BucketBadge"
+import { useAudioPlayer } from "../../hooks/useAudioPlayer"
 import { AppStackParamList } from "../../navigation/types"
 import { useAuth } from "../auth/AuthContext"
 import { removeRating } from "../rankings/apiRequests"
+import { fetchPreviewUrl } from "../songs/apiRequests"
 
 type SongDetailProps = NativeStackScreenProps<AppStackParamList, "SongDetail">
 
@@ -16,6 +18,9 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
     const { ranking } = route.params
     const [isRemoving, setIsRemoving] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+    const [isPreviewLoading, setIsPreviewLoading] = useState(true)
+    const { isPlaying, toggle: toggleAudio } = useAudioPlayer(previewUrl)
 
     const handleRateAgain = () => {
         navigation.navigate("BucketSelection", { song: ranking.song })
@@ -67,6 +72,34 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
         }
     }
 
+    useEffect(() => {
+        let isActive = true
+
+        async function loadPreviewUrl() {
+            try {
+                const url = await fetchPreviewUrl(ranking.song.deezer_id, token ?? "")
+                if (isActive) {
+                    setPreviewUrl(url)
+                }
+            } catch {
+                // Preview is non-critical — a failed fetch simply hides the button.
+                if (isActive) {
+                    setPreviewUrl(null)
+                }
+            } finally {
+                if (isActive) {
+                    setIsPreviewLoading(false)
+                }
+            }
+        }
+
+        loadPreviewUrl()
+
+        return () => {
+            isActive = false
+        }
+    }, [ranking.song.deezer_id, token])
+
     return (
         <View style={styles.container}>
             <View style={styles.header}>
@@ -83,6 +116,14 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                 <Text style={styles.title} numberOfLines={2}>{ranking.song.title}</Text>
                 <Text style={styles.artist} numberOfLines={1}>{ranking.song.artist}</Text>
                 <Text style={styles.album} numberOfLines={1}>{ranking.song.album}</Text>
+                {isPreviewLoading && (
+                    <ActivityIndicator style={styles.previewSpinner} color="#fff" />
+                )}
+                {!isPreviewLoading && previewUrl !== null && (
+                    <TouchableOpacity style={styles.previewButton} onPress={toggleAudio}>
+                        <Text style={styles.previewButtonText}>{isPlaying ? "Pause Preview" : "Play Preview"}</Text>
+                    </TouchableOpacity>
+                )}
                 <View style={styles.stats}>
                     <View style={styles.statBlock}>
                         <Text style={styles.statLabel}>Score</Text>
@@ -175,7 +216,24 @@ const styles = StyleSheet.create({
     album: {
         color: "#777",
         fontSize: 14,
-        marginBottom: 30,
+        marginBottom: 16,
+    },
+    previewSpinner: {
+        marginBottom: 20,
+    },
+    previewButton: {
+        height: 38,
+        paddingHorizontal: 20,
+        borderRadius: 20,
+        backgroundColor: "#fff",
+        alignItems: "center",
+        justifyContent: "center",
+        marginBottom: 20,
+    },
+    previewButtonText: {
+        color: "#000",
+        fontSize: 14,
+        fontWeight: "700",
     },
     stats: {
         width: "100%",

@@ -1,4 +1,4 @@
-// Tests for Song Detail remove-rating behavior.
+// Tests for Song Detail audio preview and remove-rating behavior.
 import { Alert, AlertButton } from "react-native"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native"
 
@@ -8,6 +8,15 @@ import { RankingResponse } from "../../comparison/types"
 const mockGoBack = jest.fn()
 const mockNavigate = jest.fn()
 const mockRemoveRating = jest.fn()
+const mockFetchPreviewUrl = jest.fn()
+
+const mockPlay = jest.fn()
+const mockCreatePlayer = jest.fn()
+
+jest.mock("expo-audio", () => ({
+    createAudioPlayer: (...args: unknown[]) => mockCreatePlayer(...args),
+    setAudioModeAsync: jest.fn(),
+}))
 
 jest.mock("../../auth/AuthContext", () => ({
     useAuth: () => ({
@@ -17,6 +26,10 @@ jest.mock("../../auth/AuthContext", () => ({
 
 jest.mock("../../rankings/apiRequests", () => ({
     removeRating: (...args: unknown[]) => mockRemoveRating(...args),
+}))
+
+jest.mock("../../songs/apiRequests", () => ({
+    fetchPreviewUrl: (...args: unknown[]) => mockFetchPreviewUrl(...args),
 }))
 
 const ranking: RankingResponse = {
@@ -64,11 +77,20 @@ const route = {
 
 beforeEach(() => {
     jest.resetAllMocks()
+    mockCreatePlayer.mockReturnValue({
+        play: mockPlay,
+        pause: jest.fn(),
+        remove: jest.fn(),
+        addListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
+    })
+    mockFetchPreviewUrl.mockResolvedValue("https://example.com/preview.mp3")
 })
 
 describe("SongDetailScreen", () => {
-    it("opens Reorder from the action list", () => {
+    it("opens Reorder from the action list", async () => {
         render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
+        // Flush the async fetchPreviewUrl effect before asserting to avoid act() warnings.
+        await act(async () => {})
 
         fireEvent.press(screen.getByText("Reorder"))
 
@@ -80,6 +102,7 @@ describe("SongDetailScreen", () => {
         mockRemoveRating.mockResolvedValue({ rating_event: { event_type: "removed" } })
 
         render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
+        await act(async () => {})
 
         fireEvent.press(screen.getByText("Remove Rating"))
 
@@ -100,10 +123,11 @@ describe("SongDetailScreen", () => {
         expect(mockNavigate).toHaveBeenCalledWith("MainTabs", { screen: "Rankings" })
     })
 
-    it("does nothing when the remove confirmation is canceled", () => {
+    it("does nothing when the remove confirmation is canceled", async () => {
         const alertSpy = jest.spyOn(Alert, "alert")
 
         render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
+        await act(async () => {})
 
         fireEvent.press(screen.getByText("Remove Rating"))
         const buttons = alertSpy.mock.calls[0][2] as AlertButton[]
@@ -111,5 +135,34 @@ describe("SongDetailScreen", () => {
 
         expect(mockRemoveRating).not.toHaveBeenCalled()
         expect(mockNavigate).not.toHaveBeenCalled()
+    })
+
+    it("shows Play Preview button when fetchPreviewUrl returns a URL", async () => {
+        render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
+        // findByText waits until the element appears — handles the async fetch naturally.
+        expect(await screen.findByText("Play Preview")).toBeTruthy()
+    })
+
+    it("creates a player and immediately shows Pause Preview when pressed", async () => {
+        render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
+
+        // Wait for the async fetchPreviewUrl to finish before the button appears.
+        const playButton = await screen.findByText("Play Preview")
+        act(() => {
+            fireEvent.press(playButton)
+        })
+
+        expect(mockCreatePlayer).toHaveBeenCalledWith("https://example.com/preview.mp3")
+        expect(mockPlay).toHaveBeenCalledTimes(1)
+        expect(screen.getByText("Pause Preview")).toBeTruthy()
+    })
+
+    it("does not show preview button when fetchPreviewUrl returns null", async () => {
+        mockFetchPreviewUrl.mockResolvedValue(null)
+
+        render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
+        await act(async () => {})
+
+        expect(screen.queryByText("Play Preview")).toBeNull()
     })
 })
