@@ -184,6 +184,7 @@ export default function RankingsScreen() {
                 onEndReached={handleLoadMore}
                 onEndReachedThreshold={0.6}
                 ListFooterComponent={renderFooter}
+                maintainVisibleContentPosition={{ disabled: true }}
                 contentContainerStyle={styles.listContent}
             />
         </View>
