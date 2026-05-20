@@ -1,6 +1,7 @@
 # Database access layer for the songs table.
 # Durable song rows are created only after user action, never during search.
-from datetime import datetime
+import re
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
@@ -8,6 +9,16 @@ from sqlalchemy.orm import Session
 
 from src.pydantic_schemas.song import SongCreate
 from src.sqlalchemy_tables.song import Song
+
+
+def parse_preview_url_expires_at(preview_url: str | None) -> datetime | None:
+    """Extract the Akamai exp= Unix timestamp from a Deezer preview URL and return as UTC datetime."""
+    if not preview_url:
+        return None
+    match = re.search(r"exp=(\d+)", preview_url)
+    if match is None:
+        return None
+    return datetime.fromtimestamp(int(match.group(1)), tz=timezone.utc)
 
 
 def get_by_id(
@@ -40,11 +51,14 @@ def upsert_from_deezer(
     Insert Deezer metadata for a user-touched song, or return the existing row.
 
     PostgreSQL handles the conflict atomically so two users touching the same
-    song at the same time do not create duplicates.
+    song at the same time do not create duplicates. The preview_url_expires_at
+    is parsed from the preview URL's Akamai exp= token at insert time.
     """
+    expires_at = parse_preview_url_expires_at(data.preview_url)
+    values = {**data.model_dump(), "preview_url_expires_at": expires_at}
     statement = (
         insert(Song)
-        .values(**data.model_dump())
+        .values(**values)
         .on_conflict_do_nothing(index_elements=["deezer_id"])
         .returning(Song.id)
     )
@@ -65,6 +79,18 @@ def upsert_from_deezer(
     if existing_song is None:
         raise RuntimeError("Song upsert failed without returning or finding a row.")
     return existing_song
+
+
+def update_preview_url(
+    db: Session,
+    song: Song,
+    preview_url: str | None,
+    expires_at: datetime | None,
+) -> Song:
+    """Store a refreshed Deezer preview URL and its parsed expiry without committing."""
+    song.preview_url = preview_url
+    song.preview_url_expires_at = expires_at
+    return song
 
 
 def update_musicbrainz_metadata(

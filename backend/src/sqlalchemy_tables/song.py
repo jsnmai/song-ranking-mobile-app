@@ -108,6 +108,12 @@ class Song(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    # Akamai exp= timestamp parsed from preview_url at insert/refresh time.
+    # Null means the URL was stored before expiry tracking was added.
+    preview_url_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

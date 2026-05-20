@@ -27,6 +27,12 @@ class SongCreate(BaseModel):
     )
 
 
+class PreviewUrlResponse(BaseModel):
+    """Response shape for the preview URL refresh endpoint."""
+
+    preview_url: str | None
+
+
 class SongResponse(BaseModel):
     """Response shape for a persisted song."""
 
