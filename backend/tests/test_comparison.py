@@ -392,6 +392,65 @@ def test_other_user_cannot_access_comparison_session(
     assert db_session.scalar(select(func.count()).select_from(ComparisonSession)) == 1
 
 
+def test_other_user_cannot_finalize_comparison_session(
+    client: TestClient,
+    db_session: Session,
+):
+    """Finalizing another user's active session is denied without changing data."""
+    token_a = _get_token(client)
+    token_b = _get_token(
+        client,
+        email="other@example.com",
+        username="otheruser",
+    )
+    _finalize_rating(
+        client,
+        token_a,
+        _rating_payload(deezer_id=123, title="Nights"),
+    )
+    session = _start_session(client, token_a)
+
+    response = client.post(
+        f"/api/v1/comparison-sessions/{session['session_uuid']}/finalize",
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+
+    assert response.status_code == 404
+    db_session.expire_all()
+    assert db_session.scalar(select(func.count()).select_from(ComparisonSession)) == 1
+    assert db_session.scalar(select(func.count()).select_from(Comparison)) == 0
+
+
+def test_other_user_cannot_choose_for_comparison_session(
+    client: TestClient,
+    db_session: Session,
+):
+    """Submitting a choice for another user's session is denied."""
+    token_a = _get_token(client)
+    token_b = _get_token(
+        client,
+        email="other@example.com",
+        username="otheruser",
+    )
+    _finalize_rating(
+        client,
+        token_a,
+        _rating_payload(deezer_id=123, title="Nights"),
+    )
+    session = _start_session(client, token_a)
+
+    response = client.post(
+        f"/api/v1/comparison-sessions/{session['session_uuid']}/choices",
+        json={"winner": "target"},
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+
+    assert response.status_code == 404
+    db_session.expire_all()
+    assert db_session.scalar(select(func.count()).select_from(ComparisonSession)) == 1
+    assert db_session.scalar(select(func.count()).select_from(Comparison)) == 0
+
+
 def test_finalize_before_session_ready_is_rejected(client: TestClient):
     """A session must complete binary insertion before finalize."""
     token = _get_token(client)
@@ -409,6 +468,61 @@ def test_finalize_before_session_ready_is_rejected(client: TestClient):
 
     assert response.status_code == 409
     assert response.json()["detail"] == "Comparison session is not ready to finalize."
+
+
+def test_finalize_already_deleted_session_fails_safely(
+    client: TestClient,
+    db_session: Session,
+):
+    """Finalizing a session twice returns 404 after the first finalize deletes it."""
+    token = _get_token(client)
+    _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=123, title="Nights"),
+    )
+    session = _start_session(client, token)
+    choice_response = client.post(
+        f"/api/v1/comparison-sessions/{session['session_uuid']}/choices",
+        json={"winner": "target"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    first_finalize = client.post(
+        f"/api/v1/comparison-sessions/{session['session_uuid']}/finalize",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    second_finalize = client.post(
+        f"/api/v1/comparison-sessions/{session['session_uuid']}/finalize",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert choice_response.status_code == 200
+    assert first_finalize.status_code == 200
+    assert second_finalize.status_code == 404
+    assert second_finalize.json()["detail"] == "Comparison session not found."
+    db_session.expire_all()
+    assert db_session.scalar(select(func.count()).select_from(ComparisonSession)) == 0
+    assert db_session.scalar(select(func.count()).select_from(Comparison)) == 1
+
+
+def test_comparison_choice_rejects_arbitrary_winner_value(client: TestClient):
+    """Winner input must be one of the two server-defined choices."""
+    token = _get_token(client)
+    _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=123, title="Nights"),
+    )
+    session = _start_session(client, token)
+
+    response = client.post(
+        f"/api/v1/comparison-sessions/{session['session_uuid']}/choices",
+        json={"winner": "999999"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
 
 
 def test_binary_insertion_can_span_multiple_comparisons(client: TestClient):

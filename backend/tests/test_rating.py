@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
 from src.sqlalchemy_tables.song import Song
+from src.services.rating import BUCKET_SCORE_RANGES
 
 
 def _register_payload(
@@ -95,6 +96,23 @@ def _positions_for_bucket(
     )
 
 
+def _ranking_rows_for_bucket(
+    db_session: Session,
+    bucket: str,
+) -> list[tuple[int, float]]:
+    """Return stored position/score rows for a bucket ordered by position."""
+    return list(
+        db_session.execute(
+            select(
+                Ranking.position,
+                Ranking.score,
+            )
+            .where(Ranking.bucket == bucket)
+            .order_by(Ranking.position.asc())
+        )
+    )
+
+
 def test_finalize_rating_requires_auth(client: TestClient):
     """Finalizing without a token returns 401."""
     response = client.post(
@@ -131,12 +149,12 @@ def test_finalize_empty_bucket_creates_ranking_and_event(
 
     assert body["ranking"]["bucket"] == "like"
     assert body["ranking"]["position"] == 1
-    assert body["ranking"]["score"] == 8.75
+    assert body["ranking"]["score"] == BUCKET_SCORE_RANGES["like"]["midpoint"]
     assert body["rating_event"]["event_type"] == "rated"
     assert body["rating_event"]["previous_bucket"] is None
     assert body["rating_event"]["new_bucket"] == "like"
     assert body["rating_event"]["new_position"] == 1
-    assert body["rating_event"]["new_score"] == 8.75
+    assert body["rating_event"]["new_score"] == BUCKET_SCORE_RANGES["like"]["midpoint"]
     assert body["rating_event"]["note"] == "first heard this on a walk"
     assert db_session.scalar(select(func.count()).select_from(Ranking)) == 1
     assert db_session.scalar(select(func.count()).select_from(RatingEvent)) == 1
@@ -241,9 +259,67 @@ def test_finalize_second_song_with_position_recalculates_two_song_bucket(
         )
     )
     assert rows == [
-        (1, 10.0),
-        (2, 7.5),
+        (1, BUCKET_SCORE_RANGES["like"]["max"]),
+        (2, BUCKET_SCORE_RANGES["like"]["min"]),
     ]
+
+
+def test_two_song_bucket_score_boundaries(
+    client: TestClient,
+    db_session: Session,
+):
+    """Two-song buckets use their current top and bottom score boundaries."""
+    token = _get_token(client)
+    expected_scores = {
+        bucket: {
+            1: score_range["max"],
+            2: score_range["min"],
+        }
+        for bucket, score_range in BUCKET_SCORE_RANGES.items()
+    }
+
+    for index, bucket in enumerate(expected_scores):
+        _finalize_rating(
+            client,
+            token,
+            _rating_payload(
+                deezer_id=1_000 + index,
+                title=f"{bucket.title()} One",
+                bucket=bucket,
+            ),
+        )
+        second_body = _finalize_rating(
+            client,
+            token,
+            _rating_payload(
+                deezer_id=2_000 + index,
+                title=f"{bucket.title()} Two",
+                bucket=bucket,
+                position=2,
+            ),
+        )
+        assert second_body["ranking"]["position"] == 2
+
+    rankings_response = client.get(
+        "/api/v1/rankings/me?limit=10",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert rankings_response.status_code == 200
+    rankings = rankings_response.json()["rankings"]
+    for bucket, bucket_scores in expected_scores.items():
+        api_scores_by_position = {
+            ranking["position"]: ranking["score"]
+            for ranking in rankings
+            if ranking["bucket"] == bucket
+        }
+        assert api_scores_by_position == bucket_scores
+
+    db_session.expire_all()
+    for bucket, bucket_scores in expected_scores.items():
+        assert _ranking_rows_for_bucket(
+            db_session,
+            bucket,
+        ) == list(bucket_scores.items())
 
 
 def test_finalize_deep_bucket_without_position_requires_comparison(client: TestClient):
@@ -294,7 +370,7 @@ def test_finalize_with_position_recalculates_scores_and_compacts_positions(
     )
 
     assert body["ranking"]["position"] == 2
-    assert body["ranking"]["score"] == 8.75
+    assert body["ranking"]["score"] == BUCKET_SCORE_RANGES["like"]["midpoint"]
     db_session.expire_all()
     rows = list(
         db_session.execute(
@@ -307,9 +383,9 @@ def test_finalize_with_position_recalculates_scores_and_compacts_positions(
         )
     )
     assert rows == [
-        (1, 10.0),
-        (2, 8.75),
-        (3, 7.5),
+        (1, BUCKET_SCORE_RANGES["like"]["max"]),
+        (2, BUCKET_SCORE_RANGES["like"]["midpoint"]),
+        (3, BUCKET_SCORE_RANGES["like"]["min"]),
     ]
 
 
@@ -368,6 +444,65 @@ def test_remove_rating_deletes_ranking_compacts_bucket_and_writes_removed_event(
     assert db_session.scalar(select(func.count()).select_from(RatingEvent)) == 4
 
 
+def test_remove_middle_rating_compacts_positions_and_recalculates_scores(
+    client: TestClient,
+    db_session: Session,
+):
+    """Removing the middle of three rankings leaves no gaps and recalculates scores."""
+    token = _get_token(client)
+    _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=123, title="Nights"),
+    )
+    middle = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=456, title="Pink + White", position=2),
+    )
+    _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=789, title="Self Control", position=3),
+    )
+
+    response = client.delete(
+        f"/api/v1/ratings/{middle['ranking']['song_id']}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    rankings_response = client.get(
+        "/api/v1/rankings/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    remaining_like_rankings = [
+        ranking
+        for ranking in rankings_response.json()["rankings"]
+        if ranking["bucket"] == "like"
+    ]
+    expected_scores = [
+        BUCKET_SCORE_RANGES["like"]["max"],
+        BUCKET_SCORE_RANGES["like"]["min"],
+    ]
+    assert [
+        ranking["position"]
+        for ranking in remaining_like_rankings
+    ] == [1, 2]
+    assert [
+        ranking["score"]
+        for ranking in remaining_like_rankings
+    ] == expected_scores
+    db_session.expire_all()
+    assert _ranking_rows_for_bucket(
+        db_session,
+        "like",
+    ) == [
+        (1, expected_scores[0]),
+        (2, expected_scores[1]),
+    ]
+
+
 def test_remove_rating_cannot_delete_another_users_ranking(
     client: TestClient,
     db_session: Session,
@@ -393,6 +528,47 @@ def test_remove_rating_cannot_delete_another_users_ranking(
     assert response.status_code == 404
     db_session.expire_all()
     assert db_session.scalar(select(func.count()).select_from(Ranking)) == 1
+
+
+def test_other_user_cannot_remove_or_rerate_first_users_ranking(
+    client: TestClient,
+    db_session: Session,
+):
+    """Remove and rerate-style writes are scoped to the authenticated user."""
+    token_a = _get_token(client)
+    token_b = _get_token(
+        client,
+        email="other@example.com",
+        username="otheruser",
+    )
+    first_user_body = _finalize_rating(
+        client,
+        token_a,
+        _rating_payload(deezer_id=123, title="Nights", bucket="like"),
+    )
+
+    remove_response = client.delete(
+        f"/api/v1/ratings/{first_user_body['ranking']['song_id']}",
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+    second_user_body = _finalize_rating(
+        client,
+        token_b,
+        _rating_payload(deezer_id=123, title="Nights", bucket="dislike"),
+    )
+
+    assert remove_response.status_code == 404
+    assert second_user_body["rating_event"]["event_type"] == "rated"
+    db_session.expire_all()
+    first_user_ranking = db_session.execute(
+        select(Ranking)
+        .where(Ranking.id == first_user_body["ranking"]["id"])
+    ).scalar_one()
+    assert first_user_ranking.bucket == "like"
+    assert first_user_ranking.score == first_user_body["ranking"]["score"]
+    assert db_session.scalar(select(func.count()).select_from(Song)) == 1
+    assert db_session.scalar(select(func.count()).select_from(Ranking)) == 2
+    assert db_session.scalar(select(func.count()).select_from(RatingEvent)) == 2
 
 
 def test_rankings_list_only_returns_current_users_rankings(client: TestClient):
@@ -480,6 +656,33 @@ def test_finalize_already_rated_song_writes_rerated_event_and_reuses_song(
     assert second_body["rating_event"]["new_bucket"] == second_body["ranking"]["bucket"]
     assert second_body["rating_event"]["new_position"] == second_body["ranking"]["position"]
     assert second_body["rating_event"]["new_score"] == second_body["ranking"]["score"]
+    db_session.expire_all()
+    assert db_session.scalar(select(func.count()).select_from(Song)) == 1
+    assert db_session.scalar(select(func.count()).select_from(Ranking)) == 1
+    assert db_session.scalar(select(func.count()).select_from(RatingEvent)) == 2
+
+
+def test_finalize_duplicate_rating_keeps_one_song_and_current_ranking(
+    client: TestClient,
+    db_session: Session,
+):
+    """Rating the same Deezer track again reuses song/current ranking and appends history."""
+    token = _get_token(client)
+    first_body = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=123, title="Nights", bucket="like"),
+    )
+
+    second_body = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=123, title="Nights", bucket="dislike"),
+    )
+
+    assert second_body["ranking"]["id"] == first_body["ranking"]["id"]
+    assert second_body["ranking"]["song_id"] == first_body["ranking"]["song_id"]
+    assert second_body["rating_event"]["event_type"] == "rerated"
     db_session.expire_all()
     assert db_session.scalar(select(func.count()).select_from(Song)) == 1
     assert db_session.scalar(select(func.count()).select_from(Ranking)) == 1
