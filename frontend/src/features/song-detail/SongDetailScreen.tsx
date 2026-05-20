@@ -6,8 +6,8 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack"
 import { ApiError } from "../../api/client"
 import { AppStackParamList } from "../../navigation/types"
 import { useAuth } from "../auth/AuthContext"
-import { removeRating } from "../comparison/apiRequests"
 import { BucketName } from "../comparison/types"
+import { removeRating } from "../rankings/apiRequests"
 
 type SongDetailProps = NativeStackScreenProps<AppStackParamList, "SongDetail">
 

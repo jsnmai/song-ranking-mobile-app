@@ -15,7 +15,7 @@ jest.mock("../../auth/AuthContext", () => ({
     }),
 }))
 
-jest.mock("../../comparison/apiRequests", () => ({
+jest.mock("../../rankings/apiRequests", () => ({
     removeRating: (...args: unknown[]) => mockRemoveRating(...args),
 }))
 

@@ -8,7 +8,6 @@ import {
     ComparisonSessionFinalizeResponse,
     ComparisonSessionResponse,
     RatingFinalizeResponse,
-    RatingRemoveResponse,
 } from "./types"
 
 type RatingFinalizeRequest = {
@@ -29,13 +28,6 @@ export async function finalizeRating(
     token: string,
 ): Promise<RatingFinalizeResponse> {
     return apiClient.post<RatingFinalizeResponse>("/api/v1/ratings/finalize", request, token)
-}
-
-export async function removeRating(
-    songId: number,
-    token: string,
-): Promise<RatingRemoveResponse> {
-    return apiClient.delete<RatingRemoveResponse>(`/api/v1/ratings/${songId}`, token)
 }
 
 export async function startComparisonSession(
