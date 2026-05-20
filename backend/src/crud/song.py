@@ -35,7 +35,6 @@ def get_by_deezer_id(
 def upsert_from_deezer(
     db: Session,
     data: SongCreate,
-    commit: bool = True,
 ) -> Song:
     """
     Insert Deezer metadata for a user-touched song, or return the existing row.
@@ -50,8 +49,6 @@ def upsert_from_deezer(
         .returning(Song.id)
     )
     song_id = db.execute(statement).scalar_one_or_none()
-    if commit:
-        db.commit()
 
     if song_id is not None:
         inserted_song = get_by_id(
@@ -78,11 +75,9 @@ def update_musicbrainz_metadata(
     release_year: int | None,
     enriched_at: datetime,
 ) -> Song:
-    """Store MusicBrainz enrichment results for a song."""
+    """Apply MusicBrainz enrichment results to a song without committing."""
     song.musicbrainz_id = musicbrainz_id
     song.genres_mb = genres_mb
     song.release_year = release_year
     song.metadata_enriched_at = enriched_at
-    db.commit()
-    db.refresh(song)
     return song

@@ -40,12 +40,17 @@ def setup_profile(
             username=data.username,
             display_name=data.display_name,
         )
+        db.commit()
+        db.refresh(profile)
     except IntegrityError:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="This username is already taken.",
         )
+    except Exception:
+        db.rollback()
+        raise
 
     return ProfileResponse.model_validate(profile)
 

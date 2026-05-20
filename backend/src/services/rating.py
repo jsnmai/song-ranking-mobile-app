@@ -115,7 +115,6 @@ def persist_finalized_rating(
     song = upsert_from_deezer(
         db,
         data.song,
-        commit=False,
     )
     existing_ranking = get_user_ranking_by_song(
         db,

@@ -39,7 +39,7 @@ def create_profile(
     display_name: str,
 ) -> Profile:
     """
-    Insert a new profile row and return the saved instance.
+    Stage a new profile row and return the flushed instance.
 
     Caller must verify the username is not already taken — a duplicate raises IntegrityError.
     username must already be lowercased before being passed here.
@@ -50,6 +50,5 @@ def create_profile(
         display_name=display_name,
     )
     db.add(profile)
-    db.commit()
-    db.refresh(profile)
+    db.flush()
     return profile

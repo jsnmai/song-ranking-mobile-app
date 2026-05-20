@@ -48,14 +48,21 @@ def enrich_song_metadata(
     if recording is None:
         return SongResponse.model_validate(song)
 
-    enriched_song = update_musicbrainz_metadata(
-        db,
-        song,
-        musicbrainz_id=str(recording["id"]),
-        genres_mb=_extract_genres(recording),
-        release_year=_extract_release_year(recording),
-        enriched_at=datetime.now(timezone.utc),
-    )
+    try:
+        enriched_song = update_musicbrainz_metadata(
+            db,
+            song,
+            musicbrainz_id=str(recording["id"]),
+            genres_mb=_extract_genres(recording),
+            release_year=_extract_release_year(recording),
+            enriched_at=datetime.now(timezone.utc),
+        )
+        db.commit()
+        db.refresh(enriched_song)
+    except Exception:
+        db.rollback()
+        raise
+
     return SongResponse.model_validate(enriched_song)
 
 

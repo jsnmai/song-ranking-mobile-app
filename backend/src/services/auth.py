@@ -48,6 +48,8 @@ def register_user(
             username=data.username,  # already lowercased by the Pydantic validator
             display_name=data.display_name,
         )
+        db.commit()
+        db.refresh(user)
     except IntegrityError as err:
         db.rollback()
         # Inspect the underlying psycopg2 error to distinguish which unique constraint fired.
@@ -61,6 +63,9 @@ def register_user(
             status_code=status.HTTP_409_CONFLICT,
             detail="An account with this email already exists.",
         )
+    except Exception:
+        db.rollback()
+        raise
 
     token = create_access_token({"sub": str(user.id)})
     return RegisterResponse(

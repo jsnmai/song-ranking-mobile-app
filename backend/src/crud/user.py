@@ -38,18 +38,24 @@ def create_user_with_profile(
     display_name: str,
 ) -> User:
     """
-    Insert a user row and a profile row in a single database transaction.
+    Stage a user row and a profile row in the current database transaction.
 
     1. db.add(user) — stages the user INSERT, nothing written yet
     2. db.flush() — sends the INSERT within the open transaction, populating user.id without committing
     3. db.add(profile) — stages the profile INSERT, referencing user.id as the foreign key
-    4. db.commit() — finalises both rows at once; if anything fails, both roll back
+    4. db.flush() — validates the profile INSERT while the service still owns commit/rollback
     """
-    user = User(email=email, hashed_password=hashed_password)
+    user = User(
+        email=email,
+        hashed_password=hashed_password,
+    )
     db.add(user)
     db.flush()  # populates user.id without committing
-    profile = Profile(user_id=user.id, username=username, display_name=display_name)
+    profile = Profile(
+        user_id=user.id,
+        username=username,
+        display_name=display_name,
+    )
     db.add(profile)
-    db.commit()
-    db.refresh(user)
+    db.flush()
     return user
