@@ -1,9 +1,10 @@
 # HTTP layer for rating and ranking endpoints.
 # Routers stay thin: parse auth/input, call services, return typed responses.
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
+from src.core.limiter import limiter
 from src.pydantic_schemas.rating import (
     RankingListResponse,
     RatingFinalizeRequest,
@@ -23,7 +24,9 @@ router = APIRouter(
     response_model=RatingFinalizeResponse,
     status_code=201,
 )
+@limiter.limit("30/minute")
 def finalize_rating_endpoint(
+    request: Request,
     data: RatingFinalizeRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -40,7 +43,9 @@ def finalize_rating_endpoint(
     "/ratings/{song_id}",
     response_model=RatingRemoveResponse,
 )
+@limiter.limit("30/minute")
 def remove_rating_endpoint(
+    request: Request,
     song_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -57,7 +62,9 @@ def remove_rating_endpoint(
     "/rankings/me",
     response_model=RankingListResponse,
 )
+@limiter.limit("300/minute")
 def my_rankings(
+    request: Request,
     limit: int = Query(
         default=20,
         ge=1,

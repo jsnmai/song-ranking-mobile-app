@@ -1,14 +1,19 @@
-# Application entry point.
-# Creates the FastAPI app, attaches middleware, registers exception handlers,
-# and mounts all routers under /api/v1.
-from fastapi import FastAPI
+"""Application entry point."""
+import logging
+from collections.abc import Awaitable, Callable
+from uuid import uuid4
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, Response
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from src.api_routers import auth, comparison, profile, rating, search
 from src.core.config import settings
 from src.core.limiter import limiter
-from src.api_routers import auth, comparison, profile, rating, search
+
+logger = logging.getLogger("listn.api")
 
 app = FastAPI(title="LISTn API")
 
@@ -33,6 +38,44 @@ app.add_exception_handler(
     RateLimitExceeded,             # When a route's limit is exceeded
     _rate_limit_exceeded_handler,  # converts slowapi's internal error into HTTP 429 "Too Many Requests" response.
 )
+
+
+@app.middleware("http")
+async def request_id_middleware(
+    request: Request,
+    call_next: Callable[[Request], Awaitable[Response]],
+) -> Response:
+    """Attach a request correlation ID to responses and unhandled-error logs."""
+    incoming_request_id = request.headers.get("X-Request-ID")
+    if incoming_request_id and len(incoming_request_id) <= 100:
+        request_id = incoming_request_id
+    else:
+        request_id = str(uuid4())
+    request.state.request_id = request_id
+
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception(
+            "Unhandled request error",
+            extra={
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+            },
+        )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": "Internal server error.",
+                "request_id": request_id,
+            },
+            headers={"X-Request-ID": request_id},
+        )
+
+    response.headers["X-Request-ID"] = request_id
+    return response
+
 
 # Mount routers
 app.include_router(

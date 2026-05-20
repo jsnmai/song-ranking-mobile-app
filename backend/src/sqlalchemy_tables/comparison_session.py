@@ -24,6 +24,10 @@ class ComparisonSession(Base):
             "user_id",
             "created_at",
         ),
+        Index(
+            "ix_comparison_sessions_updated_at",
+            "updated_at",
+        ),
     )
 
     session_uuid: Mapped[uuid.UUID] = mapped_column(

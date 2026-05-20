@@ -2,7 +2,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from src.sqlalchemy_tables.comparison import Comparison
@@ -49,6 +49,19 @@ def get_user_comparison_session(
         .where(ComparisonSession.user_id == user_id)
         .where(ComparisonSession.session_uuid == session_uuid)
     ).scalar_one_or_none()
+
+
+def delete_expired_comparison_sessions(
+    db: Session,
+    expires_before: datetime,
+) -> int:
+    """Delete active sessions older than the expiry cutoff without committing."""
+    result = db.execute(
+        delete(ComparisonSession)
+        .where(ComparisonSession.updated_at < expires_before)
+    )
+    db.flush()
+    return result.rowcount or 0
 
 
 def update_session_progress(

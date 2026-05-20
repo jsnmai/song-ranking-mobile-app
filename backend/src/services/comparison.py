@@ -1,5 +1,5 @@
 """Business logic for binary insertion comparison sessions."""
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -10,6 +10,7 @@ from src.crud.comparison import (
     create_comparison,
     create_comparison_session,
     delete_comparison_session,
+    delete_expired_comparison_sessions,
     get_user_comparison_session,
     refresh_comparison_session,
     update_session_progress,
@@ -34,6 +35,8 @@ from src.services.rating import (
 from src.sqlalchemy_tables.comparison_session import ComparisonSession
 from src.sqlalchemy_tables.ranking import Ranking
 
+COMPARISON_SESSION_TTL = timedelta(hours=24)
+
 
 def start_comparison_session(
     db: Session,
@@ -42,6 +45,7 @@ def start_comparison_session(
 ) -> ComparisonSessionResponse:
     """Start one comparison session for one target song in one non-empty bucket."""
     try:
+        _delete_expired_sessions(db)
         bucket_rankings = _target_bucket_rankings(
             db,
             user_id=user_id,
@@ -379,7 +383,44 @@ def _get_session_or_404(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Comparison session not found.",
         )
+    if _is_session_expired(session):
+        try:
+            delete_comparison_session(
+                db,
+                session,
+            )
+            commit_changes(db)
+        except Exception:
+            db.rollback()
+            raise
+
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Comparison session expired.",
+        )
     return session
+
+
+def _delete_expired_sessions(
+    db: Session,
+) -> None:
+    """Remove abandoned active sessions opportunistically before creating a new one."""
+    delete_expired_comparison_sessions(
+        db,
+        _session_expiry_cutoff(),
+    )
+
+
+def _is_session_expired(
+    session: ComparisonSession,
+) -> bool:
+    """Return true when an active session has been abandoned past the TTL."""
+    return session.updated_at < _session_expiry_cutoff()
+
+
+def _session_expiry_cutoff() -> datetime:
+    """Return the updated_at cutoff for active comparison-session expiry."""
+    return datetime.now(timezone.utc) - COMPARISON_SESSION_TTL
 
 
 def _write_comparisons(

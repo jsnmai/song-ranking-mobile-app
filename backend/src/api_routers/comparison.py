@@ -1,10 +1,11 @@
 """HTTP layer for comparison-session endpoints."""
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
+from src.core.limiter import limiter
 from src.pydantic_schemas.comparison import (
     ComparisonChoiceRequest,
     ComparisonSessionCancelResponse,
@@ -31,7 +32,9 @@ router = APIRouter(
     response_model=ComparisonSessionResponse,
     status_code=201,
 )
+@limiter.limit("30/minute")
 def start_session(
+    request: Request,
     data: ComparisonSessionStartRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -48,7 +51,9 @@ def start_session(
     "/{session_uuid}/choices",
     response_model=ComparisonSessionResponse,
 )
+@limiter.limit("120/minute")
 def choose_winner(
+    request: Request,
     session_uuid: UUID,
     data: ComparisonChoiceRequest,
     db: Session = Depends(get_db),
@@ -67,7 +72,9 @@ def choose_winner(
     "/{session_uuid}/finalize",
     response_model=ComparisonSessionFinalizeResponse,
 )
+@limiter.limit("30/minute")
 def finalize_session(
+    request: Request,
     session_uuid: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -84,7 +91,9 @@ def finalize_session(
     "/{session_uuid}",
     response_model=ComparisonSessionCancelResponse,
 )
+@limiter.limit("60/minute")
 def cancel_session(
+    request: Request,
     session_uuid: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
