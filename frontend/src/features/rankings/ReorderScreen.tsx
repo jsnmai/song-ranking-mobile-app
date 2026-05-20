@@ -1,8 +1,17 @@
 // Full-list reorder screen for Phase 7.
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
-import { Gesture, GestureDetector } from "react-native-gesture-handler"
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated"
+// Uses PanResponder and React Native Animated — Reanimated worklets crash Expo Go with SIGABRT.
+import { useCallback, useEffect, useRef, useState } from "react"
+import {
+    ActivityIndicator,
+    Animated,
+    Image,
+    PanResponder,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 
 import { ApiError } from "../../api/client"
@@ -16,6 +25,12 @@ type ReorderScreenProps = NativeStackScreenProps<AppStackParamList, "Reorder">
 type DraftRanking = RankingResponse & {
     draftBucket: BucketName;
 }
+type DragPreview = {
+    songId: number;
+    startIndex: number;
+    targetIndex: number;
+    draftBucket: BucketName;
+}
 
 const ROW_HEIGHT = 82
 
@@ -25,6 +40,7 @@ export default function ReorderScreen({ navigation }: ReorderScreenProps) {
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [dragPreview, setDragPreview] = useState<DragPreview | null>(null)
 
     const loadAllRankings = useCallback(async () => {
         if (!token) {
@@ -55,10 +71,39 @@ export default function ReorderScreen({ navigation }: ReorderScreenProps) {
         }
     }, [token])
 
-    const handleDragMove = useCallback((
+    const handleDragPreview = useCallback((
+        songId: number,
+        startIndex: number,
+        targetIndex: number,
+    ) => {
+        setDragPreview((currentPreview) => {
+            const preview = previewDragMove(
+                rankings,
+                songId,
+                startIndex,
+                targetIndex,
+            )
+            if (preview === null) {
+                return currentPreview
+            }
+            if (
+                currentPreview
+                && currentPreview.songId === preview.songId
+                && currentPreview.startIndex === preview.startIndex
+                && currentPreview.targetIndex === preview.targetIndex
+                && currentPreview.draftBucket === preview.draftBucket
+            ) {
+                return currentPreview
+            }
+            return preview
+        })
+    }, [rankings])
+
+    const handleDragEnd = useCallback((
         songId: number,
         targetIndex: number,
     ) => {
+        setDragPreview(null)
         setRankings((currentRankings) => applyDragMove(currentRankings, songId, targetIndex))
     }, [])
 
@@ -113,14 +158,17 @@ export default function ReorderScreen({ navigation }: ReorderScreenProps) {
                 </TouchableOpacity>
             </View>
             {error !== null && <Text style={styles.errorText}>{error}</Text>}
-            <ScrollView contentContainerStyle={styles.listContent}>
+            <ScrollView contentContainerStyle={styles.listContent} scrollEnabled={dragPreview === null}>
                 {rankings.map((ranking, index) => (
                     <ReorderRow
                         key={ranking.id}
                         ranking={ranking}
                         index={index}
                         totalRows={rankings.length}
-                        onMove={handleDragMove}
+                        dragPreview={dragPreview}
+                        previewBucket={dragPreview?.songId === ranking.song_id ? dragPreview.draftBucket : null}
+                        onDragPreview={handleDragPreview}
+                        onDragEnd={handleDragEnd}
                     />
                 ))}
             </ScrollView>
@@ -132,56 +180,176 @@ function ReorderRow({
     ranking,
     index,
     totalRows,
-    onMove,
+    dragPreview,
+    previewBucket,
+    onDragPreview,
+    onDragEnd,
 }: {
     ranking: DraftRanking;
     index: number;
     totalRows: number;
-    onMove: (songId: number, targetIndex: number) => void;
+    dragPreview: DragPreview | null;
+    previewBucket: BucketName | null;
+    onDragPreview: (songId: number, startIndex: number, targetIndex: number) => void;
+    onDragEnd: (songId: number, targetIndex: number) => void;
 }) {
-    const translateY = useSharedValue(0)
-    const animatedStyle = useAnimatedStyle(() => ({
-        transform: [{ translateY: translateY.value }],
-        zIndex: translateY.value === 0 ? 0 : 2,
-    }))
+    const dragStartIndex = useRef(index)
+    const latestTargetIndex = useRef(index)
 
-    const gesture = useMemo(() => (
-        Gesture.Pan()
-            .runOnJS(true)
-            .minDistance(4)
-            .onUpdate((event) => {
-                translateY.value = event.translationY
+    // translateY tracks this row's live finger offset while it is being dragged
+    const translateY = useRef(new Animated.Value(0)).current
+    // shiftOffset slides neighboring rows to show where the dragged item will land
+    const shiftOffset = useRef(new Animated.Value(0)).current
+    // Track the previous dragPreview to detect the transition from active drag to released
+    const prevDragPreviewRef = useRef<DragPreview | null>(null)
+
+    // Keep latest prop values in refs so the PanResponder closure never reads stale values
+    const indexRef = useRef(index)
+    indexRef.current = index
+    const totalRowsRef = useRef(totalRows)
+    totalRowsRef.current = totalRows
+    const onDragPreviewRef = useRef(onDragPreview)
+    onDragPreviewRef.current = onDragPreview
+    const onDragEndRef = useRef(onDragEnd)
+    onDragEndRef.current = onDragEnd
+
+    // PanResponder is created once per component instance via useRef
+    const panResponder = useRef(
+        PanResponder.create({
+            // Always claim the responder — panHandlers are placed on the handle area only
+            onStartShouldSetPanResponder: () => true,
+            onMoveShouldSetPanResponder: () => true,
+            onPanResponderGrant: () => {
+                dragStartIndex.current = indexRef.current
+                latestTargetIndex.current = indexRef.current
+            },
+            onPanResponderMove: (_, gestureState) => {
+                translateY.setValue(gestureState.dy)
                 const targetIndex = clamp(
-                    index + Math.round(event.translationY / ROW_HEIGHT),
+                    dragStartIndex.current + Math.round(gestureState.dy / ROW_HEIGHT),
                     0,
-                    totalRows - 1,
+                    totalRowsRef.current - 1,
                 )
-                if (targetIndex !== index) {
-                    onMove(ranking.song_id, targetIndex)
-                }
-            })
-            .onFinalize(() => {
-                translateY.value = withSpring(0)
-            })
-    ), [index, onMove, ranking.song_id, totalRows, translateY])
+                latestTargetIndex.current = targetIndex
+                onDragPreviewRef.current(
+                    ranking.song_id,
+                    dragStartIndex.current,
+                    targetIndex,
+                )
+            },
+            onPanResponderRelease: () => {
+                // Reset to 0 before the re-render so the row snaps cleanly to its new list position
+                translateY.setValue(0)
+                onDragEndRef.current(ranking.song_id, latestTargetIndex.current)
+            },
+            onPanResponderTerminate: () => {
+                translateY.setValue(0)
+                onDragEndRef.current(ranking.song_id, latestTargetIndex.current)
+            },
+        })
+    ).current
+
+    const isBeingDragged = dragPreview?.songId === ranking.song_id
+
+    // Slide neighboring rows into position as the drag preview changes.
+    // On drag-end (dragPreview goes null) snap immediately instead of springing —
+    // the list has already been reordered so a spring from the shifted offset looks wrong.
+    useEffect(() => {
+        if (isBeingDragged) {
+            prevDragPreviewRef.current = dragPreview
+            return
+        }
+        const isDragEnd = prevDragPreviewRef.current !== null && dragPreview === null
+        prevDragPreviewRef.current = dragPreview
+
+        if (isDragEnd) {
+            shiftOffset.setValue(0)
+            return
+        }
+        const targetOffset = dragPreview === null
+            ? 0
+            : previewOffsetForRow(dragPreview, ranking.song_id, index)
+        Animated.spring(shiftOffset, {
+            toValue: targetOffset,
+            useNativeDriver: false,
+            speed: 20,
+            bounciness: 0,
+        }).start()
+    }, [dragPreview, index, isBeingDragged, ranking.song_id, shiftOffset])
 
     return (
-        <GestureDetector gesture={gesture}>
-            <Animated.View style={[styles.row, animatedStyle]} testID={`reorder-row-${ranking.id}`}>
-                <View style={styles.coverFrame}>
-                    {ranking.song.cover_url ? (
-                        <Image source={{ uri: ranking.song.cover_url }} style={styles.coverImage} />
-                    ) : null}
-                </View>
-                <View style={styles.songText}>
-                    <Text style={styles.title} numberOfLines={1}>{ranking.song.title}</Text>
-                    <Text style={styles.artist} numberOfLines={1}>{ranking.song.artist}</Text>
-                    <BucketBadge bucket={ranking.draftBucket} />
-                </View>
+        <Animated.View
+            style={[
+                styles.row,
+                {
+                    zIndex: isBeingDragged ? 2 : 0,
+                    transform: [{ translateY: isBeingDragged ? translateY : shiftOffset }],
+                },
+            ]}
+            testID={`reorder-row-${ranking.id}`}
+        >
+            <View style={styles.coverFrame}>
+                {ranking.song.cover_url ? (
+                    <Image source={{ uri: ranking.song.cover_url }} style={styles.coverImage} />
+                ) : null}
+            </View>
+            <View style={styles.songText}>
+                <Text style={styles.title} numberOfLines={1}>{ranking.song.title}</Text>
+                <Text style={styles.artist} numberOfLines={1}>{ranking.song.artist}</Text>
+                <BucketBadge bucket={previewBucket ?? ranking.draftBucket} />
+            </View>
+            {/* panHandlers on the handle area only — touching art or text does not start a drag */}
+            <View {...panResponder.panHandlers}>
                 <Text style={styles.dragHandle}>≡</Text>
-            </Animated.View>
-        </GestureDetector>
+            </View>
+        </Animated.View>
     )
+}
+
+function previewDragMove(
+    rankings: DraftRanking[],
+    songId: number,
+    startIndex: number,
+    targetIndex: number,
+): DragPreview | null {
+    const fromIndex = rankings.findIndex((ranking) => ranking.song_id === songId)
+    if (fromIndex === -1) {
+        return null
+    }
+
+    const movedRanking = rankings[fromIndex]
+    const remainingRankings = rankings.filter((ranking) => ranking.song_id !== songId)
+    const insertIndex = clamp(targetIndex, 0, remainingRankings.length)
+    return {
+        songId,
+        startIndex,
+        targetIndex,
+        draftBucket: determineBucketFromNeighbor(
+            remainingRankings,
+            insertIndex,
+            movedRanking.draftBucket,
+        ),
+    }
+}
+
+function previewOffsetForRow(
+    dragPreview: DragPreview,
+    songId: number,
+    rowIndex: number,
+): number {
+    if (songId === dragPreview.songId || dragPreview.startIndex === dragPreview.targetIndex) {
+        return 0
+    }
+    if (dragPreview.startIndex < dragPreview.targetIndex) {
+        if (rowIndex > dragPreview.startIndex && rowIndex <= dragPreview.targetIndex) {
+            return -ROW_HEIGHT
+        }
+        return 0
+    }
+    if (rowIndex >= dragPreview.targetIndex && rowIndex < dragPreview.startIndex) {
+        return ROW_HEIGHT
+    }
+    return 0
 }
 
 function applyDragMove(
@@ -212,18 +380,43 @@ function applyDragMove(
     ]
 }
 
+const BUCKET_RANK: Record<BucketName, number> = { like: 0, alright: 1, dislike: 2 }
+
 function determineBucketFromNeighbor(
     rankings: DraftRanking[],
     insertIndex: number,
     fallbackBucket: BucketName,
 ): BucketName {
-    if (insertIndex > 0) {
-        return rankings[insertIndex - 1].draftBucket
+    const above = insertIndex > 0 ? rankings[insertIndex - 1].draftBucket : null
+    const below = insertIndex < rankings.length ? rankings[insertIndex].draftBucket : null
+
+    if (above === null && below === null) {
+        return fallbackBucket
     }
-    if (rankings.length > 0) {
-        return rankings[0].draftBucket
+    if (above === null) {
+        return below!
     }
-    return fallbackBucket
+    if (below === null) {
+        return above
+    }
+    if (above === below) {
+        return above
+    }
+    // At a bucket boundary, prefer whichever neighbor matches the dragged song's current bucket.
+    if (above === fallbackBucket) {
+        return above
+    }
+    if (below === fallbackBucket) {
+        return below
+    }
+    // Neither neighbor matches. If the dragged song's bucket sits between the two neighbors
+    // in ranking order, the song is being returned to a gap it used to fill — preserve it.
+    if (BUCKET_RANK[above] < BUCKET_RANK[fallbackBucket] && BUCKET_RANK[fallbackBucket] < BUCKET_RANK[below]) {
+        return fallbackBucket
+    }
+    // The song is crossing into a genuinely foreign section; take the bucket of the song
+    // directly above, consistent with how the list reads top-to-bottom.
+    return above
 }
 
 function clamp(

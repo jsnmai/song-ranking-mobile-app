@@ -8,39 +8,6 @@ const mockGoBack = jest.fn()
 const mockListMyRankings = jest.fn()
 const mockReorderRankings = jest.fn()
 
-jest.mock("react-native-reanimated", () => {
-    const { View } = require("react-native")
-
-    return {
-        __esModule: true,
-        default: { View },
-        useSharedValue: (value: unknown) => ({ value }),
-        useAnimatedStyle: (callback: () => unknown) => callback(),
-        withSpring: (value: unknown) => value,
-    }
-})
-
-jest.mock("react-native-gesture-handler", () => {
-    const React = require("react")
-
-    function panGesture() {
-        const gesture = {
-            runOnJS: () => gesture,
-            minDistance: () => gesture,
-            onUpdate: () => gesture,
-            onFinalize: () => gesture,
-        }
-        return gesture
-    }
-
-    return {
-        Gesture: {
-            Pan: panGesture,
-        },
-        GestureDetector: ({ children }: { children: unknown }) => <React.Fragment>{children}</React.Fragment>,
-    }
-})
-
 jest.mock("../../auth/AuthContext", () => ({
     useAuth: () => ({
         token: "test-token",
