@@ -175,3 +175,33 @@ def test_register_rate_limit_enforced(client: TestClient):
         payload = {**REGISTER_PAYLOAD, "email": f"user{i}@example.com", "username": f"user{i}aaa"}
         responses.append(client.post("/api/v1/auth/register", json=payload))
     assert responses[-1].status_code == 429
+
+
+def test_finalize_rating_rate_limit_enforced(client: TestClient):
+    """The rating finalize endpoint returns 429 after 30 requests per minute."""
+    token = _get_token(client)
+    payload = {
+        "song": {
+            "deezer_id": 123,
+            "isrc": "USUG11900842",
+            "title": "Nights",
+            "artist": "Frank Ocean",
+            "artist_deezer_id": 456,
+            "album": "Blonde",
+            "cover_url": "https://example.com/cover.jpg",
+            "preview_url": "https://example.com/preview.mp3",
+            "genre_deezer": None,
+        },
+        "bucket": "like",
+    }
+
+    responses = [
+        client.post(
+            "/api/v1/ratings/finalize",
+            json=payload,
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        for _ in range(31)
+    ]
+
+    assert responses[-1].status_code == 429

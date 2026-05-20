@@ -142,6 +142,31 @@ def test_finalize_empty_bucket_creates_ranking_and_event(
     assert db_session.scalar(select(func.count()).select_from(RatingEvent)) == 1
 
 
+def test_finalize_rating_success_includes_request_id_header(client: TestClient):
+    """Successful rating responses include a request correlation ID."""
+    token = _get_token(client)
+
+    response = client.post(
+        "/api/v1/ratings/finalize",
+        json=_rating_payload(),
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 201
+    assert response.headers["X-Request-ID"]
+
+
+def test_finalize_rating_error_includes_request_id_header(client: TestClient):
+    """Failed rating responses include a request correlation ID."""
+    response = client.post(
+        "/api/v1/ratings/finalize",
+        json=_rating_payload(),
+    )
+
+    assert response.status_code == 401
+    assert response.headers["X-Request-ID"]
+
+
 def test_finalize_rating_accepts_large_deezer_id(client: TestClient):
     """Real Deezer IDs can exceed PostgreSQL's 32-bit integer range."""
     token = _get_token(client)

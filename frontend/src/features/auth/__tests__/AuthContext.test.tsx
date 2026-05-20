@@ -4,6 +4,7 @@ import { ReactNode } from "react"
 import { renderHook, act, waitFor } from "@testing-library/react-native"
 import * as SecureStore from "expo-secure-store"
 
+import { ApiError, apiClient } from "../../../api/client"
 import { AuthProvider, useAuth } from "../AuthContext"
 import { login as loginRequest, me, register as registerRequest } from "../apiRequests"
 import { KEYS } from "../../../constants/keys"
@@ -25,6 +26,7 @@ const mockSetItemAsync = jest.mocked(SecureStore.setItemAsync)
 const mockDeleteItemAsync = jest.mocked(SecureStore.deleteItemAsync)
 const mockMe = jest.mocked(me)
 const mockRegisterRequest = jest.mocked(registerRequest)
+const mockFetch = jest.fn()
 
 const wrapper = ({ children }: { children: ReactNode }) => (
     <AuthProvider>{children}</AuthProvider>
@@ -34,6 +36,7 @@ const MOCK_USER = { id: 1, email: "user@example.com", created_at: "2024-01-01T00
 
 beforeEach(() => {
     jest.resetAllMocks()
+    globalThis.fetch = mockFetch as unknown as typeof fetch
 })
 
 // --- App launch: checkStoredToken ---
@@ -92,6 +95,30 @@ describe("logout()", () => {
 
         await act(async () => {
             await result.current.logout()
+        })
+
+        expect(result.current.user).toBeNull()
+        expect(result.current.token).toBeNull()
+        expect(mockDeleteItemAsync).toHaveBeenCalledWith(KEYS.JWT_TOKEN)
+    })
+
+    it("clears user and token when a protected API request returns 401", async () => {
+        mockGetItemAsync.mockResolvedValue("valid-token")
+        mockMe.mockResolvedValue(MOCK_USER)
+        mockFetch.mockResolvedValue({
+            ok: false,
+            status: 401,
+            headers: {
+                get: (name: string) => name === "X-Request-ID" ? "request-123" : null,
+            },
+            json: async () => ({ detail: "Could not validate credentials." }),
+        })
+
+        const { result } = renderHook(() => useAuth(), { wrapper })
+        await waitFor(() => expect(result.current.user).toEqual(MOCK_USER))
+
+        await act(async () => {
+            await expect(apiClient.get("/api/v1/protected", "valid-token")).rejects.toBeInstanceOf(ApiError)
         })
 
         expect(result.current.user).toBeNull()

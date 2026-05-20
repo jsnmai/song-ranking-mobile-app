@@ -1,4 +1,6 @@
 """Integration tests for Phase 5 comparison sessions."""
+from datetime import datetime, timedelta, timezone
+
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -277,6 +279,78 @@ def test_cancel_comparison_session_deletes_only_temporary_state(
     assert db_session.scalar(select(func.count()).select_from(Ranking)) == 1
     assert db_session.scalar(select(func.count()).select_from(RatingEvent)) == 1
     assert db_session.scalar(select(func.count()).select_from(Comparison)) == 0
+
+
+def test_stale_comparison_session_access_returns_gone(
+    client: TestClient,
+    db_session: Session,
+):
+    """Accessing a session after the 24-hour TTL deletes it and returns 410."""
+    token = _get_token(client)
+    _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=123, title="Nights"),
+    )
+    session = _start_session(client, token)
+    stale_session = db_session.execute(
+        select(ComparisonSession)
+        .where(ComparisonSession.session_uuid == session["session_uuid"])
+    ).scalar_one()
+    stale_session.updated_at = datetime.now(timezone.utc) - timedelta(hours=25)
+    db_session.commit()
+
+    response = client.post(
+        f"/api/v1/comparison-sessions/{session['session_uuid']}/choices",
+        json={"winner": "target"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 410
+    assert response.json()["detail"] == "Comparison session expired."
+    db_session.expire_all()
+    assert db_session.scalar(select(func.count()).select_from(ComparisonSession)) == 0
+    assert db_session.scalar(select(func.count()).select_from(Ranking)) == 1
+    assert db_session.scalar(select(func.count()).select_from(RatingEvent)) == 1
+    assert db_session.scalar(select(func.count()).select_from(Comparison)) == 0
+
+
+def test_start_comparison_session_deletes_expired_sessions(
+    client: TestClient,
+    db_session: Session,
+):
+    """Starting a new session opportunistically deletes abandoned active sessions."""
+    token = _get_token(client)
+    _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=123, title="Nights"),
+    )
+    stale = _start_session(
+        client,
+        token,
+        deezer_id=456,
+        title="Pink + White",
+    )
+    stale_session = db_session.execute(
+        select(ComparisonSession)
+        .where(ComparisonSession.session_uuid == stale["session_uuid"])
+    ).scalar_one()
+    stale_session.updated_at = datetime.now(timezone.utc) - timedelta(hours=25)
+    db_session.commit()
+
+    fresh = _start_session(
+        client,
+        token,
+        deezer_id=789,
+        title="Self Control",
+    )
+
+    db_session.expire_all()
+    sessions = list(db_session.execute(select(ComparisonSession)).scalars())
+    assert len(sessions) == 1
+    assert str(sessions[0].session_uuid) == fresh["session_uuid"]
+    assert fresh["session_uuid"] != stale["session_uuid"]
 
 
 def test_other_user_cannot_access_comparison_session(
