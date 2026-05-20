@@ -42,6 +42,7 @@ export type RatingEventResponse = {
     previous_score: number | null;
     new_score: number | null;
     note: string | null;
+    metadata: Record<string, unknown> | null;
     created_at: string;
 }
 
@@ -59,6 +60,21 @@ export type RankingListResponse = {
     next_cursor: string | null;
 }
 
+export type RankingReorderItem = {
+    song_id: number;
+    bucket: BucketName;
+}
+
+export type RankingReorderResponse = {
+    rankings: RankingResponse[];
+    rating_events: RatingEventResponse[];
+}
+
+export type ComparisonBucketRankingItem = {
+    song_id: number;
+    title: string;
+}
+
 export type ComparisonSessionResponse = {
     session_uuid: string;
     bucket: BucketName;
@@ -67,6 +83,11 @@ export type ComparisonSessionResponse = {
     candidate: RankingResponse | null;
     final_position: number | null;
     comparison_count: number;
+    low_index: number;
+    high_index: number;
+    candidate_index: number | null;
+    total_in_bucket: number;
+    current_bucket_ranking: ComparisonBucketRankingItem[];
     created_at: string;
 }
 

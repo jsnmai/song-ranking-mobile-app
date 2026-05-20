@@ -1,12 +1,14 @@
 // Tests for the rankings API request wrappers.
-import { listMyRankings, removeRating } from "../apiRequests"
+import { listMyRankings, removeRating, reorderRankings } from "../apiRequests"
 
 const mockGet = jest.fn()
+const mockPut = jest.fn()
 const mockDelete = jest.fn()
 
 jest.mock("../../../api/client", () => ({
     apiClient: {
         get: (...args: unknown[]) => mockGet(...args),
+        put: (...args: unknown[]) => mockPut(...args),
         delete: (...args: unknown[]) => mockDelete(...args),
     },
 }))
@@ -38,5 +40,21 @@ describe("rankings API requests", () => {
         await removeRating(42, "test-token")
 
         expect(mockDelete).toHaveBeenCalledWith("/api/v1/ratings/42", "test-token")
+    })
+
+    it("saves reordered rankings through the backend", async () => {
+        const rankings = [
+            { song_id: 42, bucket: "like" as const },
+            { song_id: 43, bucket: "alright" as const },
+        ]
+        mockPut.mockResolvedValue({ rankings: [], rating_events: [] })
+
+        await reorderRankings(rankings, "test-token")
+
+        expect(mockPut).toHaveBeenCalledWith(
+            "/api/v1/rankings/reorder",
+            { rankings },
+            "test-token",
+        )
     })
 })

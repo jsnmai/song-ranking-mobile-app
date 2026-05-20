@@ -1,7 +1,7 @@
 // API functions for the Rankings tab.
 
 import { apiClient } from "../../api/client"
-import { RankingListResponse, RatingRemoveResponse } from "../comparison/types"
+import { RankingListResponse, RankingReorderItem, RankingReorderResponse, RatingRemoveResponse } from "../comparison/types"
 
 export async function listMyRankings(
     token: string,
@@ -16,4 +16,11 @@ export async function removeRating(
     token: string,
 ): Promise<RatingRemoveResponse> {
     return apiClient.delete<RatingRemoveResponse>(`/api/v1/ratings/${songId}`, token)
+}
+
+export async function reorderRankings(
+    rankings: RankingReorderItem[],
+    token: string,
+): Promise<RankingReorderResponse> {
+    return apiClient.put<RankingReorderResponse>("/api/v1/rankings/reorder", { rankings }, token)
 }

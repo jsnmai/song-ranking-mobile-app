@@ -1,4 +1,6 @@
 // App entry point.
+import { GestureHandlerRootView } from "react-native-gesture-handler"
+
 import { AuthProvider } from "./src/features/auth/AuthContext"
 import RootNavigator from "./src/navigation"
 
@@ -6,8 +8,10 @@ import RootNavigator from "./src/navigation"
 // RootNavigator lives inside AuthProvider so it can read that state.
 export default function App() {
     return (
-        <AuthProvider>  
-            <RootNavigator />
-        </AuthProvider>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+            <AuthProvider>
+                <RootNavigator />
+            </AuthProvider>
+        </GestureHandlerRootView>
     )
 }

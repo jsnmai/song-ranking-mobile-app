@@ -21,6 +21,7 @@ export type TabParamList = {
 export type AppStackParamList = {
     MainTabs: NavigatorScreenParams<TabParamList> | undefined;
     SongDetail: { ranking: RankingResponse };
+    Reorder: undefined;
     BucketSelection: { song: SongSearchResult };
     ComparisonFlow: { session: ComparisonSessionResponse };
     ScoreReveal: { result: RatingFinalizeResponse; isRerate?: boolean };

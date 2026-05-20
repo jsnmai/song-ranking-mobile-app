@@ -15,6 +15,7 @@ import ComparisonFlowScreen from "../features/comparison/ComparisonFlowScreen"
 import ScoreRevealScreen from "../features/comparison/ScoreRevealScreen"
 import FeedScreen from "../features/feed/FeedScreen"
 import RankingsScreen from "../features/rankings/RankingsScreen"
+import ReorderScreen from "../features/rankings/ReorderScreen"
 import DiscoverScreen from "../features/discover/DiscoverScreen"
 import ProfileScreen from "../features/profile/ProfileScreen"
 import SongDetailScreen from "../features/song-detail/SongDetailScreen"
@@ -80,6 +81,8 @@ export default function AppNavigator() {
             <Stack.Screen name="MainTabs" component={MainTabs} />
             {/* change presentation to 'modal' to try as bottom sheet */}
             <Stack.Screen name="SongDetail" component={SongDetailScreen} />
+            {/* change presentation to 'modal' to try as bottom sheet */}
+            <Stack.Screen name="Reorder" component={ReorderScreen} />
             <Stack.Screen name="BucketSelection" component={BucketSelectionScreen} />
             <Stack.Screen name="ComparisonFlow" component={ComparisonFlowScreen} />
             <Stack.Screen name="ScoreReveal" component={ScoreRevealScreen} />
