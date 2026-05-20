@@ -7,11 +7,13 @@ from src.core.dependencies import get_current_user, get_db
 from src.core.limiter import limiter
 from src.pydantic_schemas.rating import (
     RankingListResponse,
+    RankingReorderRequest,
+    RankingReorderResponse,
     RatingFinalizeRequest,
     RatingFinalizeResponse,
     RatingRemoveResponse,
 )
-from src.services.rating import finalize_rating, list_my_rankings, remove_rating
+from src.services.rating import finalize_rating, list_my_rankings, remove_rating, reorder_rankings
 from src.sqlalchemy_tables.user import User
 
 router = APIRouter(
@@ -80,4 +82,23 @@ def my_rankings(
         user_id=current_user.id,
         limit=limit,
         cursor=cursor,
+    )
+
+
+@router.put(
+    "/rankings/reorder",
+    response_model=RankingReorderResponse,
+)
+@limiter.limit("30/minute")
+def reorder_rankings_endpoint(
+    request: Request,
+    data: RankingReorderRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RankingReorderResponse:
+    """Save a full-list reorder for the authenticated user's rankings."""
+    return reorder_rankings(
+        db,
+        user_id=current_user.id,
+        data=data,
     )

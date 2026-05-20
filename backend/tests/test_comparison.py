@@ -168,6 +168,16 @@ def test_start_comparison_session_creates_temporary_state_only(
     assert body["status"] == "active"
     assert body["candidate"]["song"]["deezer_id"] == 123
     assert body["target_song"]["deezer_id"] == 456
+    assert body["low_index"] == 0
+    assert body["high_index"] == 1
+    assert body["candidate_index"] == 0
+    assert body["total_in_bucket"] == 1
+    assert body["current_bucket_ranking"] == [
+        {
+            "song_id": body["candidate"]["song_id"],
+            "title": "Nights",
+        }
+    ]
     db_session.expire_all()
     assert db_session.scalar(select(func.count()).select_from(ComparisonSession)) == 1
     assert db_session.scalar(select(func.count()).select_from(Song)) == 1
@@ -564,6 +574,18 @@ def test_binary_insertion_can_span_multiple_comparisons(client: TestClient):
     assert first_choice.status_code == 200
     assert first_choice.json()["status"] == "active"
     assert first_choice.json()["comparison_count"] == 1
+    assert first_choice.json()["low_index"] == 0
+    assert first_choice.json()["high_index"] == 1
+    assert first_choice.json()["candidate_index"] == 0
+    assert first_choice.json()["total_in_bucket"] == 3
+    assert [
+        item["title"]
+        for item in first_choice.json()["current_bucket_ranking"]
+    ] == [
+        "Song One",
+        "Song Two",
+        "Song Three",
+    ]
     assert second_choice.status_code == 200
     assert second_choice.json()["status"] == "ready_to_finalize"
     assert second_choice.json()["final_position"] == 2

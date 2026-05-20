@@ -12,14 +12,18 @@ from src.crud.rating import (
     create_rating_event,
     delete_ranking,
     get_user_ranking_by_song,
+    list_all_user_rankings_with_songs,
     list_user_bucket_rankings,
     list_user_rankings_with_songs,
     refresh_ranking_event_pair,
     refresh_rating_event,
+    refresh_rating_events,
 )
 from src.crud.song import upsert_from_deezer
 from src.pydantic_schemas.rating import (
     RankingListResponse,
+    RankingReorderRequest,
+    RankingReorderResponse,
     RankingResponse,
     RatingEventResponse,
     RatingFinalizeRequest,
@@ -50,6 +54,7 @@ BUCKET_SCORE_RANGES = {
 }
 DEFAULT_RANKING_LIMIT = 20
 MAX_RANKING_LIMIT = 50
+BUCKET_ORDER = ("like", "alright", "dislike")
 
 
 @dataclass(frozen=True)
@@ -259,6 +264,115 @@ def remove_rating(
     )
 
 
+def reorder_rankings(
+    db: Session,
+    user_id: int,
+    data: RankingReorderRequest,
+) -> RankingReorderResponse:
+    """
+    Save a full-list reorder without creating comparison rows.
+
+    Reorder can update positions and buckets. Only bucket-crossing songs receive
+    `rating_events` rows because position-only drag edits are current-state changes.
+    """
+    current_rows = list_all_user_rankings_with_songs(
+        db,
+        user_id,
+    )
+    current_by_song_id = {
+        row.ranking.song_id: row
+        for row in current_rows
+    }
+    _validate_reorder_song_ids(
+        current_song_ids=set(current_by_song_id),
+        submitted_song_ids=[
+            item.song_id
+            for item in data.rankings
+        ],
+    )
+
+    previous_state = {
+        row.ranking.song_id: {
+            "bucket": row.ranking.bucket,
+            "position": row.ranking.position,
+            "score": row.ranking.score,
+        }
+        for row in current_rows
+    }
+    bucket_rankings = {
+        bucket: []
+        for bucket in BUCKET_ORDER
+    }
+    for item in data.rankings:
+        bucket_rankings[item.bucket].append(current_by_song_id[item.song_id].ranking)
+
+    affected_song_ids = [
+        item.song_id
+        for item in data.rankings
+        if previous_state[item.song_id]["bucket"] != item.bucket
+    ]
+    event_metadata = {
+        "session_type": "reorder",
+        "songs_affected": len(affected_song_ids),
+        "affected_song_ids": affected_song_ids,
+    }
+    rating_events = []
+
+    try:
+        for bucket, rankings in bucket_rankings.items():
+            _recalculate_bucket(
+                rankings,
+                bucket,
+            )
+
+        for song_id in affected_song_ids:
+            ranking = current_by_song_id[song_id].ranking
+            previous = previous_state[song_id]
+            rating_events.append(
+                create_rating_event(
+                    db,
+                    user_id=user_id,
+                    song_id=song_id,
+                    event_type="reordered",
+                    previous_bucket=previous["bucket"],
+                    new_bucket=ranking.bucket,
+                    previous_position=previous["position"],
+                    new_position=ranking.position,
+                    previous_score=previous["score"],
+                    new_score=ranking.score,
+                    note=None,
+                    metadata=event_metadata,
+                )
+            )
+
+        commit_changes(db)
+        refresh_rating_events(
+            db,
+            rating_events,
+        )
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise
+
+    refreshed_rows = list_all_user_rankings_with_songs(
+        db,
+        user_id,
+    )
+    return RankingReorderResponse(
+        rankings=[
+            _ranking_with_song_response(row)
+            for row in refreshed_rows
+        ],
+        rating_events=[
+            _rating_event_response(event)
+            for event in rating_events
+        ],
+    )
+
+
 def list_my_rankings(
     db: Session,
     user_id: int,
@@ -289,6 +403,32 @@ def list_my_rankings(
         ],
         next_cursor=next_cursor,
     )
+
+
+def _validate_reorder_song_ids(
+    current_song_ids: set[int],
+    submitted_song_ids: list[int],
+) -> None:
+    """Ensure reorder payload contains each current ranking exactly once."""
+    if len(submitted_song_ids) != len(set(submitted_song_ids)):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reorder payload contains duplicate songs.",
+        )
+
+    submitted_set = set(submitted_song_ids)
+    unknown_song_ids = submitted_set - current_song_ids
+    if unknown_song_ids:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ranking not found.",
+        )
+
+    if submitted_set != current_song_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reorder payload must include every current ranking.",
+        )
 
 
 def _resolve_new_position(

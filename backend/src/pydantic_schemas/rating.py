@@ -1,6 +1,6 @@
 # Pydantic schemas for rating and ranking endpoints.
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -43,7 +43,10 @@ class RankingResponse(BaseModel):
 class RatingEventResponse(BaseModel):
     """One append-only rating event."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+    )
 
     id: int
     song_id: int
@@ -55,6 +58,10 @@ class RatingEventResponse(BaseModel):
     previous_score: float | None
     new_score: float | None
     note: str | None
+    metadata: dict[str, Any] | None = Field(
+        default=None,
+        validation_alias="metadata_",
+    )
     created_at: datetime
 
 
@@ -76,3 +83,23 @@ class RankingListResponse(BaseModel):
 
     rankings: list[RankingResponse]
     next_cursor: str | None
+
+
+class RankingReorderItem(BaseModel):
+    """One row in a full-list reorder request."""
+
+    song_id: int
+    bucket: BucketName
+
+
+class RankingReorderRequest(BaseModel):
+    """Request body for saving a full ranked-list reorder."""
+
+    rankings: list[RankingReorderItem] = Field(min_length=1)
+
+
+class RankingReorderResponse(BaseModel):
+    """Response body after a reorder save."""
+
+    rankings: list[RankingResponse]
+    rating_events: list[RatingEventResponse]

@@ -1,8 +1,10 @@
 # SQLAlchemy model for the `rating_events` table.
 # Append-only product history for ratings, removals, and future rerates/reorders.
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.db.base import Base
@@ -69,6 +71,11 @@ class RatingEvent(Base):
     )
     note: Mapped[str | None] = mapped_column(
         String(280),
+        nullable=True,
+    )
+    metadata_: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata",
+        JSONB,
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(

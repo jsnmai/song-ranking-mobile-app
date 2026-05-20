@@ -18,6 +18,7 @@ from src.crud.comparison import (
 from src.crud.rating import get_user_ranking_by_song, list_user_bucket_rankings
 from src.crud.song import get_by_deezer_id, get_by_id
 from src.pydantic_schemas.comparison import (
+    ComparisonBucketRankingItem,
     ComparisonChoiceRequest,
     ComparisonSessionCancelResponse,
     ComparisonSessionFinalizeResponse,
@@ -334,6 +335,11 @@ def _session_response(
     session: ComparisonSession,
 ) -> ComparisonSessionResponse:
     """Build a response for the current comparison-session state."""
+    bucket_rankings = _session_bucket_rankings(
+        db,
+        user_id,
+        session,
+    )
     candidate = None
     if session.candidate_song_id is not None:
         candidate_ranking = get_user_ranking_by_song(
@@ -363,8 +369,41 @@ def _session_response(
         candidate=candidate,
         final_position=session.final_position,
         comparison_count=len(session.decisions or []),
+        low_index=session.low_index,
+        high_index=session.high_index,
+        candidate_index=session.candidate_index,
+        total_in_bucket=len(bucket_rankings),
+        current_bucket_ranking=_bucket_ranking_items(
+            db,
+            bucket_rankings,
+        ),
         created_at=session.created_at,
     )
+
+
+def _bucket_ranking_items(
+    db: Session,
+    bucket_rankings: list[Ranking],
+) -> list[ComparisonBucketRankingItem]:
+    """Return the current ordered bucket ladder for comparison UI previews."""
+    items = []
+    for ranking in bucket_rankings:
+        song = get_by_id(
+            db,
+            ranking.song_id,
+        )
+        if song is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Comparison session is stale.",
+            )
+        items.append(
+            ComparisonBucketRankingItem(
+                song_id=ranking.song_id,
+                title=song.title,
+            )
+        )
+    return items
 
 
 def _get_session_or_404(

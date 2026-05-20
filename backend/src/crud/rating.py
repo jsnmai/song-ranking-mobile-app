@@ -1,6 +1,7 @@
 # Database access layer for rankings and rating_events.
 # Services own scoring decisions; this module owns all SQLAlchemy reads/writes.
 from dataclasses import dataclass
+from typing import Any
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
@@ -48,6 +49,35 @@ def list_user_bucket_rankings(
             )
         ).scalars()
     )
+
+
+def list_all_user_rankings_with_songs(
+    db: Session,
+    user_id: int,
+) -> list[RankingWithSong]:
+    """Return all current rankings for one user with song metadata."""
+    rows = db.execute(
+        select(
+            Ranking,
+            Song,
+        )
+        .join(
+            Song,
+            Song.id == Ranking.song_id,
+        )
+        .where(Ranking.user_id == user_id)
+        .order_by(
+            Ranking.score.desc(),
+            Ranking.id.asc(),
+        )
+    ).all()
+    return [
+        RankingWithSong(
+            ranking=row[0],
+            song=row[1],
+        )
+        for row in rows
+    ]
 
 
 def list_user_rankings_with_songs(
@@ -151,6 +181,7 @@ def create_rating_event(
     previous_score: float | None,
     new_score: float | None,
     note: str | None,
+    metadata: dict[str, Any] | None = None,
 ) -> RatingEvent:
     """Create an append-only rating event without committing."""
     event = RatingEvent(
@@ -164,6 +195,7 @@ def create_rating_event(
         previous_score=previous_score,
         new_score=new_score,
         note=note,
+        metadata_=metadata,
     )
     db.add(event)
     db.flush()
@@ -193,3 +225,12 @@ def refresh_rating_event(
 ) -> None:
     """Refresh a rating event returned after removal."""
     db.refresh(event)
+
+
+def refresh_rating_events(
+    db: Session,
+    events: list[RatingEvent],
+) -> None:
+    """Refresh rating events returned after a multi-row write."""
+    for event in events:
+        db.refresh(event)

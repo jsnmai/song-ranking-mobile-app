@@ -1,12 +1,14 @@
 # Integration tests for Phase 4 ratings, rankings, and rating_events.
 from fastapi.testclient import TestClient
+from httpx import Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from src.services.rating import BUCKET_SCORE_RANGES
+from src.sqlalchemy_tables.comparison import Comparison
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
 from src.sqlalchemy_tables.song import Song
-from src.services.rating import BUCKET_SCORE_RANGES
 
 
 def _register_payload(
@@ -110,6 +112,43 @@ def _ranking_rows_for_bucket(
             .where(Ranking.bucket == bucket)
             .order_by(Ranking.position.asc())
         )
+    )
+
+
+def _expected_score(
+    bucket: str,
+    position: int,
+    total: int,
+) -> float:
+    """Return the current score formula result for test expectations."""
+    score_range = BUCKET_SCORE_RANGES[bucket]
+    if total <= 1:
+        return score_range["midpoint"]
+
+    t_value = (position - 1) / max(
+        total - 1,
+        1,
+    )
+    score = score_range["max"] - (score_range["max"] - score_range["min"]) * t_value
+    return round(
+        max(
+            score,
+            score_range["min"],
+        ),
+        4,
+    )
+
+
+def _reorder_rankings(
+    client: TestClient,
+    token: str,
+    rankings: list[dict],
+) -> Response:
+    """Submit a reorder request and return the raw response."""
+    return client.put(
+        "/api/v1/rankings/reorder",
+        json={"rankings": rankings},
+        headers={"Authorization": f"Bearer {token}"},
     )
 
 
@@ -599,6 +638,332 @@ def test_rankings_list_only_returns_current_users_rankings(client: TestClient):
     body = response.json()
     assert len(body["rankings"]) == 1
     assert body["rankings"][0]["song"]["deezer_id"] == 456
+
+
+def test_reorder_within_bucket_rewrites_positions_without_events(
+    client: TestClient,
+    db_session: Session,
+):
+    """Position-only reorder changes current rankings without writing rating events."""
+    token = _get_token(client)
+    first = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=111, title="Song One"),
+    )
+    second = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=222, title="Song Two", position=2),
+    )
+    third = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=333, title="Song Three", position=3),
+    )
+
+    response = _reorder_rankings(
+        client,
+        token,
+        [
+            {"song_id": second["ranking"]["song_id"], "bucket": "like"},
+            {"song_id": first["ranking"]["song_id"], "bucket": "like"},
+            {"song_id": third["ranking"]["song_id"], "bucket": "like"},
+        ],
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["rating_events"] == []
+    assert [
+        (ranking["song_id"], ranking["position"])
+        for ranking in body["rankings"]
+    ] == [
+        (second["ranking"]["song_id"], 1),
+        (first["ranking"]["song_id"], 2),
+        (third["ranking"]["song_id"], 3),
+    ]
+    db_session.expire_all()
+    assert db_session.scalar(select(func.count()).select_from(RatingEvent)) == 3
+
+
+def test_reorder_crossing_bucket_boundary_writes_reordered_events(
+    client: TestClient,
+    db_session: Session,
+):
+    """Dragging songs across bucket boundaries updates buckets and writes metadata events."""
+    token = _get_token(client)
+    like_one = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=111, title="Song One", bucket="like"),
+    )
+    like_two = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=222, title="Song Two", bucket="like", position=2),
+    )
+    alright_one = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=333, title="Song Three", bucket="alright"),
+    )
+    affected_song_ids = [
+        alright_one["ranking"]["song_id"],
+        like_two["ranking"]["song_id"],
+    ]
+
+    response = _reorder_rankings(
+        client,
+        token,
+        [
+            {"song_id": like_one["ranking"]["song_id"], "bucket": "like"},
+            {"song_id": alright_one["ranking"]["song_id"], "bucket": "like"},
+            {"song_id": like_two["ranking"]["song_id"], "bucket": "alright"},
+        ],
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    events_by_song_id = {
+        event["song_id"]: event
+        for event in body["rating_events"]
+    }
+    assert set(events_by_song_id) == set(affected_song_ids)
+    for event in body["rating_events"]:
+        assert event["event_type"] == "reordered"
+        assert event["metadata"] == {
+            "session_type": "reorder",
+            "songs_affected": 2,
+            "affected_song_ids": affected_song_ids,
+        }
+
+    promoted_event = events_by_song_id[alright_one["ranking"]["song_id"]]
+    assert promoted_event["previous_bucket"] == "alright"
+    assert promoted_event["new_bucket"] == "like"
+    assert promoted_event["previous_position"] == 1
+    assert promoted_event["new_position"] == 2
+    assert promoted_event["previous_score"] == _expected_score("alright", 1, 1)
+    assert promoted_event["new_score"] == _expected_score("like", 2, 2)
+
+    demoted_event = events_by_song_id[like_two["ranking"]["song_id"]]
+    assert demoted_event["previous_bucket"] == "like"
+    assert demoted_event["new_bucket"] == "alright"
+    assert demoted_event["previous_position"] == 2
+    assert demoted_event["new_position"] == 1
+    assert demoted_event["previous_score"] == _expected_score("like", 2, 2)
+    assert demoted_event["new_score"] == _expected_score("alright", 1, 1)
+    db_session.expire_all()
+    assert db_session.scalar(select(func.count()).select_from(Comparison)) == 0
+
+
+def test_reorder_cannot_include_another_users_ranking(
+    client: TestClient,
+    db_session: Session,
+):
+    """Reorder rejects song IDs that are not ranked by the current user."""
+    token_a = _get_token(client)
+    token_b = _get_token(
+        client,
+        email="other@example.com",
+        username="otheruser",
+    )
+    first_user_body = _finalize_rating(
+        client,
+        token_a,
+        _rating_payload(deezer_id=111, title="Song One"),
+    )
+    second_user_body = _finalize_rating(
+        client,
+        token_b,
+        _rating_payload(deezer_id=222, title="Song Two"),
+    )
+
+    response = _reorder_rankings(
+        client,
+        token_b,
+        [
+            {"song_id": first_user_body["ranking"]["song_id"], "bucket": "like"},
+        ],
+    )
+
+    assert response.status_code == 404
+    db_session.expire_all()
+    second_user_ranking = db_session.execute(
+        select(Ranking)
+        .where(Ranking.id == second_user_body["ranking"]["id"])
+    ).scalar_one()
+    assert second_user_ranking.position == 1
+    assert db_session.scalar(select(func.count()).select_from(RatingEvent)) == 2
+
+
+def test_reorder_keeps_positions_contiguous_across_all_buckets(
+    client: TestClient,
+    db_session: Session,
+):
+    """Reorder writes clean 1..n positions inside each bucket."""
+    token = _get_token(client)
+    like_one = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=111, title="Song One", bucket="like"),
+    )
+    like_two = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=222, title="Song Two", bucket="like", position=2),
+    )
+    alright_one = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=333, title="Song Three", bucket="alright"),
+    )
+    dislike_one = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=444, title="Song Four", bucket="dislike"),
+    )
+
+    response = _reorder_rankings(
+        client,
+        token,
+        [
+            {"song_id": alright_one["ranking"]["song_id"], "bucket": "like"},
+            {"song_id": like_one["ranking"]["song_id"], "bucket": "alright"},
+            {"song_id": like_two["ranking"]["song_id"], "bucket": "alright"},
+            {"song_id": dislike_one["ranking"]["song_id"], "bucket": "dislike"},
+        ],
+    )
+
+    assert response.status_code == 200
+    db_session.expire_all()
+    assert _positions_for_bucket(
+        db_session,
+        "like",
+    ) == [1]
+    assert _positions_for_bucket(
+        db_session,
+        "alright",
+    ) == [1, 2]
+    assert _positions_for_bucket(
+        db_session,
+        "dislike",
+    ) == [1]
+
+
+def test_reorder_recalculates_scores_from_new_positions(
+    client: TestClient,
+    db_session: Session,
+):
+    """Reorder recalculates server-owned scores after position changes."""
+    token = _get_token(client)
+    first = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=111, title="Song One"),
+    )
+    second = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=222, title="Song Two", position=2),
+    )
+    third = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=333, title="Song Three", position=3),
+    )
+
+    response = _reorder_rankings(
+        client,
+        token,
+        [
+            {"song_id": third["ranking"]["song_id"], "bucket": "like"},
+            {"song_id": second["ranking"]["song_id"], "bucket": "like"},
+            {"song_id": first["ranking"]["song_id"], "bucket": "like"},
+        ],
+    )
+
+    assert response.status_code == 200
+    scores_by_song_id = {
+        ranking["song_id"]: ranking["score"]
+        for ranking in response.json()["rankings"]
+    }
+    assert scores_by_song_id == {
+        third["ranking"]["song_id"]: _expected_score("like", 1, 3),
+        second["ranking"]["song_id"]: _expected_score("like", 2, 3),
+        first["ranking"]["song_id"]: _expected_score("like", 3, 3),
+    }
+    db_session.expire_all()
+    assert _ranking_rows_for_bucket(
+        db_session,
+        "like",
+    ) == [
+        (1, _expected_score("like", 1, 3)),
+        (2, _expected_score("like", 2, 3)),
+        (3, _expected_score("like", 3, 3)),
+    ]
+
+
+def test_reorder_position_only_moves_do_not_write_rating_events(
+    client: TestClient,
+    db_session: Session,
+):
+    """Moving songs inside one bucket updates rankings only."""
+    token = _get_token(client)
+    first = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=111, title="Song One"),
+    )
+    second = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=222, title="Song Two", position=2),
+    )
+
+    response = _reorder_rankings(
+        client,
+        token,
+        [
+            {"song_id": second["ranking"]["song_id"], "bucket": "like"},
+            {"song_id": first["ranking"]["song_id"], "bucket": "like"},
+        ],
+    )
+
+    assert response.status_code == 200
+    assert response.json()["rating_events"] == []
+    db_session.expire_all()
+    assert db_session.scalar(select(func.count()).select_from(RatingEvent)) == 2
+
+
+def test_reorder_invalid_song_id_fails_safely(
+    client: TestClient,
+    db_session: Session,
+):
+    """Reorder rejects unknown song IDs without changing existing rankings."""
+    token = _get_token(client)
+    body = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=111, title="Song One"),
+    )
+
+    response = _reorder_rankings(
+        client,
+        token,
+        [
+            {"song_id": 999_999, "bucket": "like"},
+        ],
+    )
+
+    assert response.status_code == 404
+    db_session.expire_all()
+    ranking = db_session.execute(
+        select(Ranking)
+        .where(Ranking.id == body["ranking"]["id"])
+    ).scalar_one()
+    assert ranking.position == 1
+    assert ranking.bucket == "like"
 
 
 def test_finalize_same_deezer_song_for_second_user_does_not_modify_first_user(

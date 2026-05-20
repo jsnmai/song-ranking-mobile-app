@@ -29,6 +29,13 @@ class ComparisonChoiceRequest(BaseModel):
     winner: ComparisonWinner
 
 
+class ComparisonBucketRankingItem(BaseModel):
+    """One ordered song in the current comparison bucket ladder."""
+
+    song_id: int
+    title: str
+
+
 class ComparisonSessionResponse(BaseModel):
     """Current comparison-session state returned to the frontend."""
 
@@ -39,6 +46,11 @@ class ComparisonSessionResponse(BaseModel):
     candidate: RankingResponse | None
     final_position: int | None
     comparison_count: int
+    low_index: int
+    high_index: int
+    candidate_index: int | None
+    total_in_bucket: int
+    current_bucket_ranking: list[ComparisonBucketRankingItem]
     created_at: datetime
 
 
