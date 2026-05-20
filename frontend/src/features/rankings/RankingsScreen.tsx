@@ -5,6 +5,7 @@ import { FlashList } from "@shopify/flash-list"
 import { useFocusEffect, useNavigation } from "@react-navigation/native"
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
 
+import { ApiError } from "../../api/client"
 import { TabParamList } from "../../navigation/types"
 import { useAuth } from "../auth/AuthContext"
 import { BucketName, RankingResponse } from "../comparison/types"
@@ -53,7 +54,9 @@ export default function RankingsScreen() {
             }
             setNextCursor(response.next_cursor)
         } catch (err) {
-            if (err instanceof Error) {
+            if (err instanceof ApiError) {
+                setError(err.detail)
+            } else if (err instanceof Error) {
                 setError(err.message)
             } else {
                 setError("Rankings are temporarily unavailable.")

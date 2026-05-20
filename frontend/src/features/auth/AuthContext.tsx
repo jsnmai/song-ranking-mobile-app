@@ -4,6 +4,7 @@
 import { createContext, useContext, useEffect, useState } from "react"
 import * as SecureStore from "expo-secure-store"
 
+import { setUnauthorizedHandler } from "../../api/client"
 import { KEYS } from "../../constants/keys"
 import { login as loginRequest, me, register as registerRequest } from "./apiRequests"
 import { User } from "./types"
@@ -77,7 +78,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
             setIsLoading(false)  // make loading spinner disappear
         }
     }
-    // useEffect runs any time any state in the component changes, 
+    useEffect(() => {
+        setUnauthorizedHandler(logout)
+
+        return () => {
+            setUnauthorizedHandler(null)
+        }
+    }, [])
+
+    // useEffect runs any time any state in the component changes,
     // but empty [] means run it only once when the component mounts — not on every re-render.
     useEffect(() => { 
         checkStoredToken()

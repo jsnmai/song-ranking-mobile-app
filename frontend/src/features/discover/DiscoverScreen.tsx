@@ -7,6 +7,7 @@ import { CompositeNavigationProp, useNavigation, useRoute, RouteProp } from "@re
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 
+import { ApiError } from "../../api/client"
 import { AppStackParamList, TabParamList } from "../../navigation/types"
 import { useAuth } from "../auth/AuthContext"
 import { searchSongs } from "../search/apiRequests"
@@ -77,7 +78,9 @@ export default function DiscoverScreen() {
             } catch (err) {
                 if (isCurrentSearch) {
                     setResults([])
-                    if (err instanceof Error) {
+                    if (err instanceof ApiError) {
+                        setError(err.detail)
+                    } else if (err instanceof Error) {
                         setError(err.message)
                     } else {
                         setError("Search is temporarily unavailable.")

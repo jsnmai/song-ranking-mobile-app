@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
+import { ApiError } from "../../api/client"
 import { useAuth } from "../auth/AuthContext"
 import { getMyProfile } from "./apiRequests"
 import { Profile } from "./types"
@@ -21,7 +22,13 @@ export default function ProfileScreen() {
                 const data = await getMyProfile(token)
                 setProfile(data)
             } catch (err) {
-                setError(err instanceof Error ? err.message : "Failed to load profile.")
+                if (err instanceof ApiError) {
+                    setError(err.detail)
+                } else if (err instanceof Error) {
+                    setError(err.message)
+                } else {
+                    setError("Failed to load profile.")
+                }
             }
         }
         fetchProfile()

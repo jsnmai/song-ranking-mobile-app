@@ -3,6 +3,7 @@ import { useState } from "react"
 import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 
+import { ApiError } from "../../api/client"
 import { AppStackParamList } from "../../navigation/types"
 import { useAuth } from "../auth/AuthContext"
 import { cancelComparisonSession, chooseComparisonWinner, finalizeComparisonSession } from "./apiRequests"
@@ -55,7 +56,9 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
             }
             setSession(nextSession)
         } catch (err) {
-            if (err instanceof Error) {
+            if (err instanceof ApiError) {
+                setError(err.detail)
+            } else if (err instanceof Error) {
                 setError(err.message)
             } else {
                 setError("Could not save comparison.")

@@ -3,10 +3,38 @@
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000"  // ?? means use left side if it has a value, otherwise use right side
 
+type ErrorResponseBody = {
+    detail?: string;
+    request_id?: string;
+}
+
 type RequestOptions = { // What options are allowed when calling request()
     token?: string;  // token is optional — only included for authenticated requests
     body?: unknown;  // body is optional and can be any type — the caller is responsible for passing the correct shape expected by the backend
 }
+
+type UnauthorizedHandler = () => void | Promise<void>
+
+let unauthorizedHandler: UnauthorizedHandler | null = null
+
+export class ApiError extends Error {
+    status: number
+    detail: string
+    requestId: string | null
+
+    constructor(status: number, detail: string, requestId: string | null) {
+        super(detail)
+        this.name = "ApiError"
+        this.status = status
+        this.detail = detail
+        this.requestId = requestId
+    }
+}
+
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): void {
+    unauthorizedHandler = handler
+}
+
 async function request<ResponseType>(requestMethod: string, path: string, requestOptions: RequestOptions={}): Promise<ResponseType> {
     // <ResponseType> is a generic, lets one function handle all endpoints while still giving TypeScript type info
     // requestOptions defaults to empty {} if not provided
@@ -31,11 +59,28 @@ async function request<ResponseType>(requestMethod: string, path: string, reques
     
     // Main fetch call — all API requests go through here. Errors are caught and thrown.
     const response = await fetch(`${BASE_URL}${path}`, fetchOptions)
-    const data = await response.json()  // parse JSON before checking ok — FastAPI returns a JSON body even for errors
+    const data = await parseJsonResponse(response)
     if (!response.ok) {                 // fetch only throws on network failure, not on 4xx/5xx responses — check ok manually
-        throw new Error(data.detail ?? "An error occurred.") // backend returns { detail: "..." } for all error responses (FastAPI default)
+        const requestId = response.headers.get("X-Request-ID") ?? data.request_id ?? null
+        const detail = data.detail ?? "An error occurred."
+        if (response.status === 401 && requestOptions.token && unauthorizedHandler) {
+            await unauthorizedHandler()
+        }
+        throw new ApiError(
+            response.status,
+            detail,
+            requestId,
+        )
     }
     return data as ResponseType
+}
+
+async function parseJsonResponse(response: Response): Promise<ErrorResponseBody & unknown> {
+    try {
+        return await response.json()
+    } catch {
+        return {}
+    }
 }
 
 // apiClient is the public interface:

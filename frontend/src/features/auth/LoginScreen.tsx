@@ -14,6 +14,7 @@ import {
 
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 
+import { ApiError } from "../../api/client"
 import { useAuth } from "./AuthContext"
 import { AuthStackParamList } from "../../navigation/AuthNavigator"
 
@@ -42,8 +43,9 @@ export default function LoginScreen({ navigation }: Props) {
             // login() sets the user in AuthContext, which triggers the RootNavigator
             // to switch from AuthStack to AppStack automatically.
         } catch (err) {
-            // err is typed as 'unknown' in TypeScript — we check it is an Error before reading .message
-            if (err instanceof Error) {
+            if (err instanceof ApiError) {
+                setError(err.detail)
+            } else if (err instanceof Error) {
                 setError(err.message)
             } else {
                 setError("Something went wrong. Please try again.")

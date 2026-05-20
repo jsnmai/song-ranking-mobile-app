@@ -14,6 +14,7 @@ import {
 
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 
+import { ApiError } from "../../api/client"
 import { useAuth } from "./AuthContext"
 import { AuthStackParamList } from "../../navigation/AuthNavigator"
 
@@ -93,7 +94,9 @@ export default function RegisterScreen({ navigation }: Props) {
             // RootNavigator sees user is set in AuthContext and switches to AppNavigator automatically.
             await register(email, password, name, username)
         } catch (err) {
-            if (err instanceof Error) {
+            if (err instanceof ApiError) {
+                setError(err.detail)
+            } else if (err instanceof Error) {
                 setError(err.message)
             } else {
                 setError("Something went wrong. Please try again.")
