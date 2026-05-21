@@ -9,7 +9,7 @@ type BucketBadgeProps = {
 
 const BUCKET_LABELS: Record<BucketName, string> = {
     like: "Like",
-    alright: "Alright",
+    alright: "Okay",
     dislike: "Dislike",
 }
 

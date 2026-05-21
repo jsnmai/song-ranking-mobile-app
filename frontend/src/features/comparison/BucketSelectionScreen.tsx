@@ -1,4 +1,4 @@
-// Bucket Selection screen — user chooses Like / Alright / Dislike before comparison.
+// Bucket Selection screen — user chooses Like / Okay / Dislike before comparison.
 import { useState } from "react"
 import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
@@ -14,7 +14,7 @@ type BucketSelectionProps = NativeStackScreenProps<AppStackParamList, "BucketSel
 
 const BUCKETS: { name: BucketName; label: string; description: string }[] = [
     { name: "like", label: "Like", description: "This belongs near the top." },
-    { name: "alright", label: "Alright", description: "Good, but not a favorite." },
+    { name: "alright", label: "Okay", description: "Good, but not a favorite." },
     { name: "dislike", label: "Dislike", description: "Not for you right now." },
 ]
 
