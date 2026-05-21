@@ -7,6 +7,7 @@ import DiscoverScreen from "../DiscoverScreen"
 const mockNavigate = jest.fn()
 const mockSetParams = jest.fn()
 const mockSearchSongs = jest.fn()
+const mockSearchProfiles = jest.fn()
 const mockGetMyRankingByDeezerId = jest.fn()
 
 jest.mock("@react-navigation/native", () => ({
@@ -27,6 +28,10 @@ jest.mock("../../auth/AuthContext", () => ({
 
 jest.mock("../../search/apiRequests", () => ({
     searchSongs: (...args: unknown[]) => mockSearchSongs(...args),
+}))
+
+jest.mock("../../profile/apiRequests", () => ({
+    searchProfiles: (...args: unknown[]) => mockSearchProfiles(...args),
 }))
 
 jest.mock("../../rankings/apiRequests", () => ({
@@ -69,10 +74,24 @@ const ranking = {
     },
 }
 
+const profile = {
+    id: 3,
+    user_id: 4,
+    username: "jasonmai",
+    display_name: "Jason Mai",
+    is_public: true,
+    created_at: "2026-01-01T00:00:00Z",
+    follower_count: 12,
+    following_count: 8,
+    is_following: false,
+    is_own_profile: false,
+}
+
 beforeEach(() => {
     jest.useFakeTimers()
     jest.resetAllMocks()
     mockSearchSongs.mockResolvedValue({ results: [song] })
+    mockSearchProfiles.mockResolvedValue({ results: [profile] })
 })
 
 afterEach(() => {
@@ -113,5 +132,21 @@ describe("DiscoverScreen", () => {
             expect(mockGetMyRankingByDeezerId).toHaveBeenCalledWith(123, "test-token")
             expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
         })
+    })
+
+    it("switches to user search and opens another user's profile", async () => {
+        render(<DiscoverScreen />)
+
+        fireEvent.press(screen.getByText("Users"))
+        fireEvent.changeText(screen.getByPlaceholderText("Search for a user..."), "jason")
+        act(() => {
+            jest.advanceTimersByTime(350)
+        })
+
+        const result = await screen.findByText("Jason Mai")
+        fireEvent.press(result)
+
+        expect(mockSearchProfiles).toHaveBeenCalledWith("jason", "test-token")
+        expect(mockNavigate).toHaveBeenCalledWith("OtherProfile", { username: "jasonmai" })
     })
 })

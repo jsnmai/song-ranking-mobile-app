@@ -17,6 +17,8 @@ import FeedScreen from "../features/feed/FeedScreen"
 import RankingsScreen from "../features/rankings/RankingsScreen"
 import ReorderScreen from "../features/rankings/ReorderScreen"
 import DiscoverScreen from "../features/discover/DiscoverScreen"
+import OtherProfileScreen from "../features/profile/OtherProfileScreen"
+import ProfileListScreen from "../features/profile/ProfileListScreen"
 import ProfileScreen from "../features/profile/ProfileScreen"
 import SongDetailScreen from "../features/song-detail/SongDetailScreen"
 
@@ -81,6 +83,8 @@ export default function AppNavigator() {
             <Stack.Screen name="MainTabs" component={MainTabs} />
             {/* change presentation to 'modal' to try as bottom sheet */}
             <Stack.Screen name="SongDetail" component={SongDetailScreen} />
+            <Stack.Screen name="OtherProfile" component={OtherProfileScreen} />
+            <Stack.Screen name="ProfileList" component={ProfileListScreen} />
             {/* change presentation to 'modal' to try as bottom sheet */}
             <Stack.Screen name="Reorder" component={ReorderScreen} />
             <Stack.Screen name="BucketSelection" component={BucketSelectionScreen} />

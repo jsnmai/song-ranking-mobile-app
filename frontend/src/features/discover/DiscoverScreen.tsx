@@ -10,6 +10,8 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { ApiError } from "../../api/client"
 import { AppStackParamList, TabParamList } from "../../navigation/types"
 import { useAuth } from "../auth/AuthContext"
+import { searchProfiles } from "../profile/apiRequests"
+import { Profile } from "../profile/types"
 import { getMyRankingByDeezerId } from "../rankings/apiRequests"
 import { searchSongs } from "../search/apiRequests"
 import { SongSearchResult } from "../search/types"
@@ -27,8 +29,10 @@ export default function DiscoverScreen() {
     const { token } = useAuth()
     // useRef holds a reference to the TextInput DOM node so we can call .focus() imperatively.
     const searchRef = useRef<TextInput>(null)
+    const [searchMode, setSearchMode] = useState<"songs" | "users">("songs")
     const [query, setQuery] = useState("")
-    const [results, setResults] = useState<SongSearchResult[]>([])
+    const [songResults, setSongResults] = useState<SongSearchResult[]>([])
+    const [profileResults, setProfileResults] = useState<Profile[]>([])
     const [isLoading, setIsLoading] = useState(false)
     const [openingDeezerId, setOpeningDeezerId] = useState<number | null>(null)
     const [error, setError] = useState<string | null>(null)
@@ -62,6 +66,21 @@ export default function DiscoverScreen() {
         }
     }
 
+    const handleProfilePress = (profile: Profile) => {
+        if (profile.is_own_profile) {
+            navigation.navigate("MainTabs", { screen: "Profile" })
+            return
+        }
+        navigation.navigate("OtherProfile", { username: profile.username })
+    }
+
+    const setMode = (mode: "songs" | "users") => {
+        setSearchMode(mode)
+        setSongResults([])
+        setProfileResults([])
+        setError(null)
+    }
+
     // Auto-focus the search bar when navigated here via the FAB.
     // After focusing, reset the param so a normal tab press later does not re-trigger focus.
     useEffect(() => {
@@ -75,14 +94,16 @@ export default function DiscoverScreen() {
     useEffect(() => {
         const trimmedQuery = query.trim()
         if (trimmedQuery.length === 0) {
-            setResults([])
+            setSongResults([])
+            setProfileResults([])
             setError(null)
             setIsLoading(false)
             return
         }
 
         if (trimmedQuery.length < 2) {
-            setResults([])
+            setSongResults([])
+            setProfileResults([])
             setError("Type at least 2 characters.")
             setIsLoading(false)
             return
@@ -98,13 +119,23 @@ export default function DiscoverScreen() {
             setError(null)
 
             try {
-                const response = await searchSongs(trimmedQuery, token)
-                if (isCurrentSearch) {
-                    setResults(response.results)
+                if (searchMode === "songs") {
+                    const response = await searchSongs(trimmedQuery, token)
+                    if (isCurrentSearch) {
+                        setSongResults(response.results)
+                        setProfileResults([])
+                    }
+                } else {
+                    const response = await searchProfiles(trimmedQuery, token)
+                    if (isCurrentSearch) {
+                        setProfileResults(response.results)
+                        setSongResults([])
+                    }
                 }
             } catch (err) {
                 if (isCurrentSearch) {
-                    setResults([])
+                    setSongResults([])
+                    setProfileResults([])
                     if (err instanceof ApiError) {
                         setError(err.detail)
                     } else if (err instanceof Error) {
@@ -124,15 +155,29 @@ export default function DiscoverScreen() {
             isCurrentSearch = false
             clearTimeout(timeoutId)
         }
-    }, [query, token])
+    }, [query, searchMode, token])
 
     return (
         <View style={styles.container}>
             <View style={styles.searchRow}>
+                <View style={styles.modeRow}>
+                    <TouchableOpacity
+                        style={[styles.modeButton, searchMode === "songs" ? styles.activeModeButton : null]}
+                        onPress={() => setMode("songs")}
+                    >
+                        <Text style={[styles.modeText, searchMode === "songs" ? styles.activeModeText : null]}>Songs</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.modeButton, searchMode === "users" ? styles.activeModeButton : null]}
+                        onPress={() => setMode("users")}
+                    >
+                        <Text style={[styles.modeText, searchMode === "users" ? styles.activeModeText : null]}>Users</Text>
+                    </TouchableOpacity>
+                </View>
                 <TextInput
                     ref={searchRef}
                     style={styles.searchBar}
-                    placeholder="Search for a song..."
+                    placeholder={searchMode === "songs" ? "Search for a song..." : "Search for a user..."}
                     placeholderTextColor="#555"
                     value={query}
                     onChangeText={setQuery}
@@ -148,12 +193,17 @@ export default function DiscoverScreen() {
                 {isLoading && <ActivityIndicator color="#fff" style={styles.status} />}
                 {!isLoading && error !== null && <Text style={styles.errorText}>{error}</Text>}
                 {!isLoading && error === null && query.trim().length === 0 && (
-                    <Text style={styles.emptyText}>Search for a song to start ranking.</Text>
+                    <Text style={styles.emptyText}>
+                        {searchMode === "songs" ? "Search for a song to start ranking." : "Search for users to follow."}
+                    </Text>
                 )}
-                {!isLoading && error === null && query.trim().length >= 2 && results.length === 0 && (
+                {!isLoading && error === null && query.trim().length >= 2 && searchMode === "songs" && songResults.length === 0 && (
                     <Text style={styles.emptyText}>No songs found.</Text>
                 )}
-                {!isLoading && error === null && results.map((song) => (
+                {!isLoading && error === null && query.trim().length >= 2 && searchMode === "users" && profileResults.length === 0 && (
+                    <Text style={styles.emptyText}>No users found.</Text>
+                )}
+                {!isLoading && error === null && searchMode === "songs" && songResults.map((song) => (
                     <TouchableOpacity
                         key={song.deezer_id}
                         style={styles.resultRow}
@@ -174,6 +224,25 @@ export default function DiscoverScreen() {
                         {openingDeezerId === song.deezer_id && <ActivityIndicator color="#fff" />}
                     </TouchableOpacity>
                 ))}
+                {!isLoading && error === null && searchMode === "users" && profileResults.map((profile) => (
+                    <TouchableOpacity
+                        key={profile.id}
+                        style={styles.resultRow}
+                        onPress={() => handleProfilePress(profile)}
+                        activeOpacity={0.75}
+                    >
+                        <View style={styles.avatar}>
+                            <Text style={styles.avatarText}>{profile.display_name.slice(0, 1).toUpperCase()}</Text>
+                        </View>
+                        <View style={styles.songText}>
+                            <Text style={styles.title} numberOfLines={1}>{profile.display_name}</Text>
+                            <Text style={styles.artist} numberOfLines={1}>@{profile.username}</Text>
+                            <Text style={styles.album} numberOfLines={1}>
+                                {profile.follower_count} followers, {profile.following_count} following
+                            </Text>
+                        </View>
+                    </TouchableOpacity>
+                ))}
             </ScrollView>
         </View>
     )
@@ -188,6 +257,30 @@ const styles = StyleSheet.create({
         paddingTop: 60,
         paddingHorizontal: 16,
         paddingBottom: 12,
+    },
+    modeRow: {
+        flexDirection: "row",
+        backgroundColor: "#111",
+        borderRadius: 8,
+        padding: 3,
+        marginBottom: 12,
+    },
+    modeButton: {
+        flex: 1,
+        alignItems: "center",
+        paddingVertical: 8,
+        borderRadius: 6,
+    },
+    activeModeButton: {
+        backgroundColor: "#fff",
+    },
+    modeText: {
+        color: "#888",
+        fontSize: 14,
+        fontWeight: "700",
+    },
+    activeModeText: {
+        color: "#000",
     },
     searchBar: {
         backgroundColor: "#1a1a1a",
@@ -238,6 +331,20 @@ const styles = StyleSheet.create({
         borderRadius: 6,
         marginRight: 12,
         backgroundColor: "#1a1a1a",
+    },
+    avatar: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        marginRight: 12,
+        backgroundColor: "#1f1f1f",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    avatarText: {
+        color: "#fff",
+        fontSize: 20,
+        fontWeight: "700",
     },
     songText: {
         flex: 1,

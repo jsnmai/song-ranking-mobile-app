@@ -43,3 +43,24 @@ class ProfileResponse(BaseModel):
     display_name: str
     is_public: bool
     created_at: datetime
+
+
+class ProfileSummaryResponse(ProfileResponse):
+    """Profile plus social relationship metadata for the current user."""
+
+    follower_count: int
+    following_count: int
+    is_following: bool
+    is_own_profile: bool
+
+
+class ProfileSearchResponse(BaseModel):
+    """Response body for username search in Discover."""
+
+    results: list[ProfileSummaryResponse]
+
+
+class ProfileListResponse(BaseModel):
+    """Response body for follower and following lists."""
+
+    profiles: list[ProfileSummaryResponse]
