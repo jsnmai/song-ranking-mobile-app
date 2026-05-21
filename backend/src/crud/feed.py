@@ -29,11 +29,29 @@ def list_feed_events(
     cursor_id: int | None = None,
 ) -> list[FeedEventRow]:
     """Return feed events from users followed by the current user."""
+    latest_event_ids = (
+        select(RatingEvent.id)
+        .distinct(
+            RatingEvent.user_id,
+            RatingEvent.song_id,
+        )
+        .order_by(
+            RatingEvent.user_id,
+            RatingEvent.song_id,
+            RatingEvent.created_at.desc(),
+            RatingEvent.id.desc(),
+        )
+        .subquery()
+    )
     statement = (
         select(
             RatingEvent,
             Profile,
             Song,
+        )
+        .join(
+            latest_event_ids,
+            latest_event_ids.c.id == RatingEvent.id,
         )
         .join(
             Follow,
@@ -49,6 +67,7 @@ def list_feed_events(
         )
         .where(Follow.follower_id == user_id)
         .where(Profile.is_public.is_(True))
+        .where(RatingEvent.event_type != "removed")
         .where(RatingEvent.new_bucket.is_not(None))
         .where(RatingEvent.new_score.is_not(None))
     )

@@ -247,3 +247,203 @@ def test_feed_hides_private_profiles(client: TestClient, db_session: Session):
 
     assert response.status_code == 200
     assert response.json()["events"] == []
+
+
+def test_feed_hides_song_when_latest_event_is_removed(client: TestClient):
+    """Feed hides the song entirely when the actor's latest action removed the rating."""
+    viewer_token = _register(
+        client,
+        "viewer@example.com",
+        "viewer",
+    )
+    followed_token = _register(
+        client,
+        "followed@example.com",
+        "followed",
+    )
+    _follow(
+        client,
+        viewer_token,
+        "followed",
+    )
+    rating = _finalize_rating(
+        client,
+        followed_token,
+        101,
+        "Removed Song",
+    )
+    remove_response = client.delete(
+        f"/api/v1/ratings/{rating['ranking']['song_id']}",
+        headers={"Authorization": f"Bearer {followed_token}"},
+    )
+    assert remove_response.status_code == 200
+
+    response = client.get(
+        "/api/v1/feed",
+        headers={"Authorization": f"Bearer {viewer_token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["events"] == []
+
+
+def test_feed_shows_only_latest_rerate_for_same_song(client: TestClient):
+    """Rerating updates the feed item instead of showing old noise for the same actor/song."""
+    viewer_token = _register(
+        client,
+        "viewer@example.com",
+        "viewer",
+    )
+    followed_token = _register(
+        client,
+        "followed@example.com",
+        "followed",
+    )
+    _follow(
+        client,
+        viewer_token,
+        "followed",
+    )
+    _finalize_rating(
+        client,
+        followed_token,
+        101,
+        "Rerated Song",
+    )
+    _finalize_rating(
+        client,
+        followed_token,
+        101,
+        "Rerated Song",
+        "dislike",
+    )
+
+    response = client.get(
+        "/api/v1/feed",
+        headers={"Authorization": f"Bearer {viewer_token}"},
+    )
+
+    assert response.status_code == 200
+    events = response.json()["events"]
+    assert len(events) == 1
+    assert events[0]["event_type"] == "rerated"
+    assert events[0]["new_bucket"] == "dislike"
+
+
+def test_feed_shows_only_new_rating_after_remove_then_rate_again(client: TestClient):
+    """A new rating after removal appears once; the old removed rating stays hidden."""
+    viewer_token = _register(
+        client,
+        "viewer@example.com",
+        "viewer",
+    )
+    followed_token = _register(
+        client,
+        "followed@example.com",
+        "followed",
+    )
+    _follow(
+        client,
+        viewer_token,
+        "followed",
+    )
+    original = _finalize_rating(
+        client,
+        followed_token,
+        101,
+        "Rated Again Song",
+    )
+    remove_response = client.delete(
+        f"/api/v1/ratings/{original['ranking']['song_id']}",
+        headers={"Authorization": f"Bearer {followed_token}"},
+    )
+    assert remove_response.status_code == 200
+    _finalize_rating(
+        client,
+        followed_token,
+        101,
+        "Rated Again Song",
+        "alright",
+    )
+
+    response = client.get(
+        "/api/v1/feed",
+        headers={"Authorization": f"Bearer {viewer_token}"},
+    )
+
+    assert response.status_code == 200
+    events = response.json()["events"]
+    assert len(events) == 1
+    assert events[0]["event_type"] == "rated"
+    assert events[0]["new_bucket"] == "alright"
+
+
+def test_feed_cursor_from_one_user_does_not_leak_into_another_users_feed(client: TestClient):
+    """A valid cursor from one viewer cannot be used to reveal that viewer's scoped feed to another user."""
+    viewer_a_token = _register(
+        client,
+        "viewera@example.com",
+        "viewera",
+    )
+    followed_a_token = _register(
+        client,
+        "followeda@example.com",
+        "followeda",
+    )
+    viewer_b_token = _register(
+        client,
+        "viewerb@example.com",
+        "viewerb",
+    )
+    _follow(
+        client,
+        viewer_a_token,
+        "followeda",
+    )
+    _finalize_rating(
+        client,
+        followed_a_token,
+        101,
+        "A Older Song",
+    )
+    _finalize_rating(
+        client,
+        followed_a_token,
+        202,
+        "A Newer Song",
+        "alright",
+    )
+
+    viewer_a_response = client.get(
+        "/api/v1/feed?limit=1",
+        headers={"Authorization": f"Bearer {viewer_a_token}"},
+    )
+    assert viewer_a_response.status_code == 200
+    cursor = viewer_a_response.json()["next_cursor"]
+    assert cursor is not None
+
+    viewer_b_response = client.get(
+        f"/api/v1/feed?cursor={quote(cursor)}",
+        headers={"Authorization": f"Bearer {viewer_b_token}"},
+    )
+
+    assert viewer_b_response.status_code == 200
+    assert viewer_b_response.json()["events"] == []
+
+
+def test_feed_rate_limit_enforced(client: TestClient):
+    """The feed endpoint returns 429 after 300 requests per minute."""
+    token = _register(
+        client,
+        "viewer@example.com",
+        "viewer",
+    )
+    responses = [
+        client.get(
+            "/api/v1/feed",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        for _ in range(301)
+    ]
+
+    assert responses[-1].status_code == 429
