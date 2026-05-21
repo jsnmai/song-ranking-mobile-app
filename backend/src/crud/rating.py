@@ -32,6 +32,32 @@ def get_user_ranking_by_song(
     ).scalar_one_or_none()
 
 
+def get_user_ranking_by_deezer_id(
+    db: Session,
+    user_id: int,
+    deezer_id: int,
+) -> RankingRow | None:
+    """Return a user's current ranking for one Deezer song, or None."""
+    row = db.execute(
+        select(
+            Ranking,
+            Song,
+        )
+        .join(
+            Song,
+            Song.id == Ranking.song_id,
+        )
+        .where(Ranking.user_id == user_id)
+        .where(Song.deezer_id == deezer_id)
+    ).one_or_none()
+    if row is None:
+        return None
+    return RankingRow(
+        ranking=row[0],
+        song=row[1],
+    )
+
+
 def list_user_bucket_rankings(
     db: Session,
     user_id: int,

@@ -6,6 +6,7 @@ import { useAudioPlayer } from "../useAudioPlayer"
 const mockPlay = jest.fn()
 const mockPause = jest.fn()
 const mockRemove = jest.fn()
+const mockRemoveListener = jest.fn()
 const mockCreatePlayer = jest.fn()
 
 // Capture the status listener so tests can simulate playback events (e.g. didJustFinish).
@@ -27,7 +28,7 @@ beforeEach(() => {
             if (event === "playbackStatusUpdate") {
                 capturedStatusListener = callback
             }
-            return { remove: jest.fn() }
+            return { remove: mockRemoveListener }
         },
     })
 })
@@ -50,8 +51,10 @@ describe("useAudioPlayer", () => {
             rerender({ url: "https://example.com/preview2.mp3" })
         })
 
-        // The useEffect cleanup must have called remove() on the first player.
+        // The useEffect cleanup must have stopped and released the first player.
+        expect(mockPause).toHaveBeenCalledTimes(1)
         expect(mockRemove).toHaveBeenCalledTimes(1)
+        expect(mockRemoveListener).toHaveBeenCalledTimes(1)
         // State resets so the next toggle() starts a fresh player.
         expect(result.current.isPlaying).toBe(false)
     })
@@ -71,6 +74,7 @@ describe("useAudioPlayer", () => {
         act(() => {
             result.current.stop()
         })
+        expect(mockPause).toHaveBeenCalledTimes(1)
         expect(mockRemove).toHaveBeenCalledTimes(1)
 
         // Now previewUrl changes (setSession fires in handleChoice after stop()).
@@ -109,6 +113,20 @@ describe("useAudioPlayer", () => {
         expect(mockPause).toHaveBeenCalledTimes(1)
         expect(mockRemove).not.toHaveBeenCalled()
         expect(result.current.isPlaying).toBe(false)
+    })
+
+    it("pauses and releases the player when unmounted", () => {
+        const { result, unmount } = renderHook(() => useAudioPlayer("https://example.com/preview.mp3"))
+
+        act(() => {
+            result.current.toggle()
+        })
+
+        unmount()
+
+        expect(mockPause).toHaveBeenCalledTimes(1)
+        expect(mockRemove).toHaveBeenCalledTimes(1)
+        expect(mockRemoveListener).toHaveBeenCalledTimes(1)
     })
 
     it("resets isPlaying when the clip finishes", () => {

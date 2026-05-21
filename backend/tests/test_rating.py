@@ -173,6 +173,74 @@ def test_rankings_requires_auth(client: TestClient):
     assert response.status_code == 401
 
 
+def test_ranking_by_deezer_id_requires_auth(client: TestClient):
+    """Looking up a ranking from search without a token returns 401."""
+    response = client.get("/api/v1/rankings/me/by-deezer/123")
+    assert response.status_code == 401
+
+
+def test_ranking_by_deezer_id_returns_current_user_ranking(client: TestClient):
+    """Search can open Song Detail for a song the current user has already rated."""
+    token = _get_token(client)
+    _finalize_rating(
+        client,
+        token,
+        _rating_payload(
+            deezer_id=123,
+            title="Nights",
+        ),
+    )
+
+    response = client.get(
+        "/api/v1/rankings/me/by-deezer/123",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["song"]["deezer_id"] == 123
+    assert body["song"]["title"] == "Nights"
+    assert body["bucket"] == "like"
+
+
+def test_ranking_by_deezer_id_returns_404_for_unrated_song(client: TestClient):
+    """Search can tell the difference between rated and unrated songs."""
+    token = _get_token(client)
+
+    response = client.get(
+        "/api/v1/rankings/me/by-deezer/999",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_ranking_by_deezer_id_is_scoped_to_current_user(client: TestClient):
+    """A user cannot open another user's rating through search-result Deezer IDs."""
+    first_token = _get_token(
+        client,
+        email="first@example.com",
+        username="firstuser",
+    )
+    second_token = _get_token(
+        client,
+        email="second@example.com",
+        username="seconduser",
+    )
+    _finalize_rating(
+        client,
+        first_token,
+        _rating_payload(deezer_id=123),
+    )
+
+    response = client.get(
+        "/api/v1/rankings/me/by-deezer/123",
+        headers={"Authorization": f"Bearer {second_token}"},
+    )
+
+    assert response.status_code == 404
+
+
 def test_finalize_empty_bucket_creates_ranking_and_event(
     client: TestClient,
     db_session: Session,

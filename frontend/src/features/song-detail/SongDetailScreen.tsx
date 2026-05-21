@@ -15,22 +15,30 @@ type SongDetailProps = NativeStackScreenProps<AppStackParamList, "SongDetail">
 
 export default function SongDetailScreen({ navigation, route }: SongDetailProps) {
     const { token } = useAuth()
-    const { ranking } = route.params
+    const isRated = "ranking" in route.params
+    const ranking = isRated ? route.params.ranking : null
+    const song = isRated ? route.params.ranking.song : route.params.song
     const [isRemoving, setIsRemoving] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [previewUrl, setPreviewUrl] = useState<string | null>(null)
     const [isPreviewLoading, setIsPreviewLoading] = useState(true)
-    const { isPlaying, toggle: toggleAudio } = useAudioPlayer(previewUrl)
+    const { isPlaying, toggle: toggleAudio, stop: stopAudio } = useAudioPlayer(previewUrl)
 
     const handleRateAgain = () => {
-        navigation.navigate("BucketSelection", { song: ranking.song })
+        stopAudio()
+        navigation.navigate("BucketSelection", { song })
     }
 
     const handleReorder = () => {
+        stopAudio()
         navigation.navigate("Reorder")
     }
 
     const handleRemovePress = () => {
+        if (ranking === null) {
+            return
+        }
+
         Alert.alert(
             "Remove this song from your rankings? This cannot be undone.",
             undefined,
@@ -49,7 +57,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
     }
 
     const handleConfirmRemove = async () => {
-        if (!token || isRemoving) {
+        if (!token || isRemoving || ranking === null) {
             return
         }
 
@@ -58,6 +66,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
 
         try {
             await removeRating(ranking.song_id, token)
+            stopAudio()
             navigation.navigate("MainTabs", { screen: "Rankings" })
         } catch (err) {
             if (err instanceof ApiError) {
@@ -73,11 +82,26 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
     }
 
     useEffect(() => {
+        return navigation.addListener("blur", () => {
+            stopAudio()
+        })
+    }, [navigation, stopAudio])
+
+    useEffect(() => {
         let isActive = true
+        setIsPreviewLoading(true)
+
+        if (!isRated) {
+            setPreviewUrl(song.preview_url)
+            setIsPreviewLoading(false)
+            return () => {
+                isActive = false
+            }
+        }
 
         async function loadPreviewUrl() {
             try {
-                const url = await fetchPreviewUrl(ranking.song.deezer_id, token ?? "")
+                const url = await fetchPreviewUrl(song.deezer_id, token ?? "")
                 if (isActive) {
                     setPreviewUrl(url)
                 }
@@ -98,24 +122,30 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
         return () => {
             isActive = false
         }
-    }, [ranking.song.deezer_id, token])
+    }, [isRated, song.deezer_id, song.preview_url, token])
 
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity style={styles.closeButton} onPress={() => navigation.goBack()}>
+                <TouchableOpacity
+                    style={styles.closeButton}
+                    onPress={() => {
+                        stopAudio()
+                        navigation.goBack()
+                    }}
+                >
                     <Text style={styles.closeText}>x</Text>
                 </TouchableOpacity>
             </View>
             <View style={styles.content}>
                 <View style={styles.coverFrame}>
-                    {ranking.song.cover_url ? (
-                        <Image source={{ uri: ranking.song.cover_url }} style={styles.cover} />
+                    {song.cover_url ? (
+                        <Image source={{ uri: song.cover_url }} style={styles.cover} />
                     ) : null}
                 </View>
-                <Text style={styles.title} numberOfLines={2}>{ranking.song.title}</Text>
-                <Text style={styles.artist} numberOfLines={1}>{ranking.song.artist}</Text>
-                <Text style={styles.album} numberOfLines={1}>{ranking.song.album}</Text>
+                <Text style={styles.title} numberOfLines={2}>{song.title}</Text>
+                <Text style={styles.artist} numberOfLines={1}>{song.artist}</Text>
+                <Text style={styles.album} numberOfLines={1}>{song.album}</Text>
                 {isPreviewLoading && (
                     <ActivityIndicator style={styles.previewSpinner} color="#fff" />
                 )}
@@ -124,38 +154,44 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                         <Text style={styles.previewButtonText}>{isPlaying ? "Pause Preview" : "Play Preview"}</Text>
                     </TouchableOpacity>
                 )}
-                <View style={styles.stats}>
-                    <View style={styles.statBlock}>
-                        <Text style={styles.statLabel}>Score</Text>
-                        <Text style={styles.statValue}>{ranking.score.toFixed(2)}</Text>
+                {ranking !== null && (
+                    <View style={styles.stats}>
+                        <View style={styles.statBlock}>
+                            <Text style={styles.statLabel}>Score</Text>
+                            <Text style={styles.statValue}>{ranking.score.toFixed(2)}</Text>
+                        </View>
+                        <View style={styles.statBlock}>
+                            <Text style={styles.statLabel}>Bucket</Text>
+                            <BucketBadge bucket={ranking.bucket} />
+                        </View>
+                        <View style={styles.statBlock}>
+                            <Text style={styles.statLabel}>Position</Text>
+                            <Text style={styles.statValue}>#{ranking.position}</Text>
+                        </View>
                     </View>
-                    <View style={styles.statBlock}>
-                        <Text style={styles.statLabel}>Bucket</Text>
-                        <BucketBadge bucket={ranking.bucket} />
-                    </View>
-                    <View style={styles.statBlock}>
-                        <Text style={styles.statLabel}>Position</Text>
-                        <Text style={styles.statValue}>#{ranking.position}</Text>
-                    </View>
-                </View>
+                )}
                 {error !== null && <Text style={styles.errorText}>{error}</Text>}
             </View>
             <View style={styles.actions}>
                 <TouchableOpacity style={styles.primaryButton} onPress={handleRateAgain}>
-                    <Text style={styles.primaryButtonText}>Rate Again</Text>
+                    <Text style={styles.primaryButtonText}>{ranking === null ? "Rate Song" : "Rate Again"}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.secondaryButton} onPress={handleReorder}>
-                    <Text style={styles.secondaryButtonText}>Reorder</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={styles.secondaryButton}
-                    onPress={handleRemovePress}
-                    disabled={isRemoving}
-                >
-                    <Text style={styles.secondaryButtonText}>
-                        {isRemoving ? "Removing..." : "Remove Rating"}
-                    </Text>
-                </TouchableOpacity>
+                {ranking !== null && (
+                    <>
+                        <TouchableOpacity style={styles.secondaryButton} onPress={handleReorder}>
+                            <Text style={styles.secondaryButtonText}>Reorder</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.secondaryButton}
+                            onPress={handleRemovePress}
+                            disabled={isRemoving}
+                        >
+                            <Text style={styles.secondaryButtonText}>
+                                {isRemoving ? "Removing..." : "Remove Rating"}
+                            </Text>
+                        </TouchableOpacity>
+                    </>
+                )}
             </View>
         </View>
     )

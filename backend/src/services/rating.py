@@ -10,6 +10,7 @@ from src.crud.rating import (
     create_ranking,
     create_rating_event,
     delete_ranking,
+    get_user_ranking_by_deezer_id,
     get_user_ranking_by_song,
     list_all_user_rankings_with_songs,
     list_user_bucket_rankings,
@@ -260,6 +261,25 @@ def remove_rating(
     return RatingRemoveResponse(
         rating_event=_rating_event_response(rating_event),
     )
+
+
+def get_my_ranking_by_deezer_id(
+    db: Session,
+    user_id: int,
+    deezer_id: int,
+) -> RankingResponse:
+    """Return one current ranking by provider ID for search-result navigation."""
+    row = get_user_ranking_by_deezer_id(
+        db,
+        user_id,
+        deezer_id,
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Rating not found.",
+        )
+    return _ranking_with_song_response(row)
 
 
 def reorder_rankings(

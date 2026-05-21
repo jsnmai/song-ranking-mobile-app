@@ -9,11 +9,18 @@ from src.pydantic_schemas.rating import (
     RankingListResponse,
     RankingReorderRequest,
     RankingReorderResponse,
+    RankingResponse,
     RatingFinalizeRequest,
     RatingFinalizeResponse,
     RatingRemoveResponse,
 )
-from src.services.rating import finalize_rating, list_my_rankings, remove_rating, reorder_rankings
+from src.services.rating import (
+    finalize_rating,
+    get_my_ranking_by_deezer_id,
+    list_my_rankings,
+    remove_rating,
+    reorder_rankings,
+)
 from src.sqlalchemy_tables.user import User
 
 router = APIRouter(
@@ -82,6 +89,25 @@ def my_rankings(
         user_id=current_user.id,
         limit=limit,
         cursor=cursor,
+    )
+
+
+@router.get(
+    "/rankings/me/by-deezer/{deezer_id}",
+    response_model=RankingResponse,
+)
+@limiter.limit("300/minute")
+def my_ranking_by_deezer_id(
+    request: Request,
+    deezer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RankingResponse:
+    """Return the authenticated user's ranking for a Deezer song."""
+    return get_my_ranking_by_deezer_id(
+        db,
+        user_id=current_user.id,
+        deezer_id=deezer_id,
     )
 
 

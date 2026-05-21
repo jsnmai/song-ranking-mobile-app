@@ -11,7 +11,9 @@ const mockRemoveRating = jest.fn()
 const mockFetchPreviewUrl = jest.fn()
 
 const mockPlay = jest.fn()
+const mockRemove = jest.fn()
 const mockCreatePlayer = jest.fn()
+const mockAddNavigationListener = jest.fn()
 
 jest.mock("expo-audio", () => ({
     createAudioPlayer: (...args: unknown[]) => mockCreatePlayer(...args),
@@ -67,6 +69,7 @@ const ranking: RankingResponse = {
 const navigation = {
     goBack: mockGoBack,
     navigate: mockNavigate,
+    addListener: mockAddNavigationListener,
 }
 
 const route = {
@@ -80,9 +83,10 @@ beforeEach(() => {
     mockCreatePlayer.mockReturnValue({
         play: mockPlay,
         pause: jest.fn(),
-        remove: jest.fn(),
+        remove: mockRemove,
         addListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
     })
+    mockAddNavigationListener.mockReturnValue(jest.fn())
     mockFetchPreviewUrl.mockResolvedValue("https://example.com/preview.mp3")
 })
 
@@ -155,6 +159,38 @@ describe("SongDetailScreen", () => {
         expect(mockCreatePlayer).toHaveBeenCalledWith("https://example.com/preview.mp3")
         expect(mockPlay).toHaveBeenCalledTimes(1)
         expect(screen.getByText("Pause Preview")).toBeTruthy()
+    })
+
+    it("stops preview audio when the screen blurs", async () => {
+        render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
+
+        const playButton = await screen.findByText("Play Preview")
+        act(() => {
+            fireEvent.press(playButton)
+        })
+
+        const blurHandler = mockAddNavigationListener.mock.calls.find((call) => call[0] === "blur")?.[1]
+        expect(blurHandler).toBeDefined()
+        act(() => {
+            blurHandler?.()
+        })
+
+        expect(mockRemove).toHaveBeenCalledTimes(1)
+    })
+
+    it("opens unrated search songs with local preview and Rate Song action", async () => {
+        const unratedRoute = {
+            params: {
+                song: ranking.song,
+            },
+        }
+
+        render(<SongDetailScreen navigation={navigation as never} route={unratedRoute as never} />)
+
+        expect(await screen.findByText("Play Preview")).toBeTruthy()
+        expect(screen.getByText("Rate Song")).toBeTruthy()
+        expect(screen.queryByText("Remove Rating")).toBeNull()
+        expect(mockFetchPreviewUrl).not.toHaveBeenCalled()
     })
 
     it("does not show preview button when fetchPreviewUrl returns null", async () => {

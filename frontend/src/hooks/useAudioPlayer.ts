@@ -13,29 +13,35 @@ export function useAudioPlayer(previewUrl: string | null): AudioPlayerResult {
     const [isPlaying, setIsPlaying] = useState(false)
     // useRef persists the AudioPlayer object across renders without causing re-renders.
     const playerRef = useRef<AudioPlayer | null>(null)
+    const statusSubscriptionRef = useRef<{ remove: () => void } | null>(null)
 
     useEffect(() => {
         // Allow audio to play even when the iOS silent switch is on.
         setAudioModeAsync({ playsInSilentMode: true })
     }, [])
 
-    useEffect(() => {
-        // When previewUrl changes (candidate advances in ComparisonFlow), remove the old player.
-        // remove() is synchronous, so this cleanup is truly sync unlike expo-av's unloadAsync.
-        return () => {
-            playerRef.current?.remove()
-            playerRef.current = null
-            setIsPlaying(false)
-        }
-    }, [previewUrl])
-
     const stop = useCallback(() => {
-        if (playerRef.current !== null) {
-            playerRef.current.remove()
+        const player = playerRef.current
+
+        statusSubscriptionRef.current?.remove()
+        statusSubscriptionRef.current = null
+
+        if (player !== null) {
+            // pause() stops playback immediately; remove() releases the native player object.
+            player.pause()
+            player.remove()
             playerRef.current = null
         }
         setIsPlaying(false)
     }, [])
+
+    useEffect(() => {
+        // When previewUrl changes (candidate advances in ComparisonFlow), remove the old player.
+        // stop() is synchronous, so this cleanup is truly sync unlike expo-av's unloadAsync.
+        return () => {
+            stop()
+        }
+    }, [previewUrl, stop])
 
     const toggle = useCallback(() => {
         if (previewUrl === null) {
@@ -58,7 +64,7 @@ export function useAudioPlayer(previewUrl: string | null): AudioPlayerResult {
 
         // First play — createAudioPlayer and play() are synchronous; native layer buffers internally.
         const player = createAudioPlayer(previewUrl)
-        player.addListener("playbackStatusUpdate", (status) => {
+        statusSubscriptionRef.current = player.addListener("playbackStatusUpdate", (status) => {
             if (status.didJustFinish) {
                 setIsPlaying(false)
             }

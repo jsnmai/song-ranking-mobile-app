@@ -24,6 +24,13 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
     const candidatePlayer = useAudioPlayer(candidatePreviewUrl)
     const targetPlayer = useAudioPlayer(session.target_song.preview_url)
 
+    useEffect(() => {
+        return navigation.addListener("blur", () => {
+            candidatePlayer.stop()
+            targetPlayer.stop()
+        })
+    }, [navigation, candidatePlayer, targetPlayer])
+
     const handleCancel = async () => {
         if (!token || isSubmitting) {
             return

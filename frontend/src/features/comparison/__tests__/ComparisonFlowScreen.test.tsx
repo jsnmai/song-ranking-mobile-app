@@ -9,6 +9,7 @@ const mockReplace = jest.fn()
 const mockFetchPreviewUrl = jest.fn()
 const mockPlay = jest.fn()
 const mockCreatePlayer = jest.fn()
+const mockAddNavigationListener = jest.fn()
 
 jest.mock("expo-audio", () => ({
     createAudioPlayer: (...args: unknown[]) => mockCreatePlayer(...args),
@@ -89,6 +90,7 @@ const session: ComparisonSessionResponse = {
 const navigation = {
     navigate: mockNavigate,
     replace: mockReplace,
+    addListener: mockAddNavigationListener,
 }
 
 const route = {
@@ -105,6 +107,7 @@ beforeEach(() => {
         remove: jest.fn(),
         addListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
     })
+    mockAddNavigationListener.mockReturnValue(jest.fn())
     mockFetchPreviewUrl.mockResolvedValue("https://example.com/fresh-preview.mp3")
 })
 

@@ -10,6 +10,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { ApiError } from "../../api/client"
 import { AppStackParamList, TabParamList } from "../../navigation/types"
 import { useAuth } from "../auth/AuthContext"
+import { getMyRankingByDeezerId } from "../rankings/apiRequests"
 import { searchSongs } from "../search/apiRequests"
 import { SongSearchResult } from "../search/types"
 
@@ -29,10 +30,36 @@ export default function DiscoverScreen() {
     const [query, setQuery] = useState("")
     const [results, setResults] = useState<SongSearchResult[]>([])
     const [isLoading, setIsLoading] = useState(false)
+    const [openingDeezerId, setOpeningDeezerId] = useState<number | null>(null)
     const [error, setError] = useState<string | null>(null)
 
-    const handleSongPress = (song: SongSearchResult) => {
-        navigation.navigate("BucketSelection", { song })
+    const handleSongPress = async (song: SongSearchResult) => {
+        if (!token || openingDeezerId !== null) {
+            return
+        }
+
+        setOpeningDeezerId(song.deezer_id)
+        setError(null)
+
+        try {
+            const ranking = await getMyRankingByDeezerId(song.deezer_id, token)
+            navigation.navigate("SongDetail", { ranking })
+        } catch (err) {
+            if (err instanceof ApiError && err.status === 404) {
+                navigation.navigate("SongDetail", { song })
+                return
+            }
+
+            if (err instanceof ApiError) {
+                setError(err.detail)
+            } else if (err instanceof Error) {
+                setError(err.message)
+            } else {
+                setError("Could not open this song.")
+            }
+        } finally {
+            setOpeningDeezerId(null)
+        }
     }
 
     // Auto-focus the search bar when navigated here via the FAB.
@@ -131,6 +158,7 @@ export default function DiscoverScreen() {
                         key={song.deezer_id}
                         style={styles.resultRow}
                         onPress={() => handleSongPress(song)}
+                        disabled={openingDeezerId !== null}
                         activeOpacity={0.75}
                     >
                         {song.cover_url ? (
@@ -143,6 +171,7 @@ export default function DiscoverScreen() {
                             <Text style={styles.artist} numberOfLines={1}>{song.artist}</Text>
                             <Text style={styles.album} numberOfLines={1}>{song.album}</Text>
                         </View>
+                        {openingDeezerId === song.deezer_id && <ActivityIndicator color="#fff" />}
                     </TouchableOpacity>
                 ))}
             </ScrollView>
