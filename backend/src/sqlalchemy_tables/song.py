@@ -115,7 +115,11 @@ class Song(Base):
         nullable=True,
     )
     # Aggregate statistics across all users (Phase 10). Kept on the songs row so
-    # reads are O(1) without a GROUP BY. Null avg means no ratings exist yet.
+    # reads are O(1) without a GROUP BY. Null sum/avg means no ratings exist yet.
+    global_rating_sum: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
     global_avg_score: Mapped[float | None] = mapped_column(
         Float,
         nullable=True,

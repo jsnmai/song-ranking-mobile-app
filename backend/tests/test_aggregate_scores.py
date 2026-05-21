@@ -1,10 +1,12 @@
 # Integration tests for Phase 10 global aggregate scores on the songs table.
 # Verifies that global_avg_score and global_rating_count are maintained correctly
 # across new ratings, rerates, removals, and reorders.
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from src.crud.song import adjust_song_aggregate, decrement_song_aggregate
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.song import Song
 
@@ -85,6 +87,52 @@ def _get_song(db_session: Session, deezer_id: int = 123) -> Song:
     ).scalar_one()
 
 
+def _get_song_by_id(
+    db_session: Session,
+    song_id: int,
+) -> Song:
+    """Fetch a song row by LISTn's internal song id."""
+    return db_session.execute(
+        select(Song)
+        .where(Song.id == song_id)
+    ).scalar_one()
+
+
+def _assert_aggregate(
+    song: Song,
+    count: int,
+    rating_sum: float | None,
+) -> None:
+    """Assert count/sum/avg invariants for one song aggregate."""
+    assert song.global_rating_count == count
+    if count == 0:
+        assert song.global_rating_sum is None
+        assert song.global_avg_score is None
+        return
+
+    assert rating_sum is not None
+    assert song.global_rating_sum is not None
+    assert abs(song.global_rating_sum - rating_sum) < 0.001
+    assert song.global_avg_score is not None
+    assert abs(song.global_avg_score - (rating_sum / count)) < 0.001
+
+
+def _ranking_scores_by_song_id(
+    client: TestClient,
+    token: str,
+) -> dict[int, float]:
+    """Return the current user's ranking scores keyed by song id."""
+    response = client.get(
+        "/api/v1/rankings/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    return {
+        ranking["song_id"]: ranking["score"]
+        for ranking in response.json()["rankings"]
+    }
+
+
 def test_new_rating_sets_aggregates(
     client: TestClient,
     db_session: Session,
@@ -97,8 +145,11 @@ def test_new_rating_sets_aggregates(
     db_session.expire_all()
     song = _get_song(db_session)
 
-    assert song.global_rating_count == 1
-    assert song.global_avg_score == assigned_score
+    _assert_aggregate(
+        song,
+        1,
+        assigned_score,
+    )
 
 
 def test_second_user_rating_updates_aggregates(
@@ -119,11 +170,53 @@ def test_second_user_rating_updates_aggregates(
     db_session.expire_all()
     song = _get_song(db_session)
 
-    assert song.global_rating_count == 2
+    _assert_aggregate(
+        song,
+        2,
+        score_a + score_b,
+    )
     assert abs(song.global_avg_score - expected_avg) < 0.001
 
 
-def test_rerate_updates_aggregates(
+def test_new_rating_into_non_empty_bucket_updates_shifted_song_aggregates(
+    client: TestClient,
+    db_session: Session,
+):
+    """Inserting into a non-empty bucket adjusts existing songs that shift position."""
+    token = _get_token(client)
+
+    result_a = _finalize(client, token, deezer_id=111, bucket="like")
+    result_b = _finalize(client, token, deezer_id=222, bucket="like", position=1)
+    song_id_a = result_a["ranking"]["song_id"]
+    song_id_b = result_b["ranking"]["song_id"]
+    score_by_song_id = _ranking_scores_by_song_id(
+        client,
+        token,
+    )
+
+    db_session.expire_all()
+    song_a = _get_song_by_id(
+        db_session,
+        song_id_a,
+    )
+    song_b = _get_song_by_id(
+        db_session,
+        song_id_b,
+    )
+
+    _assert_aggregate(
+        song_a,
+        1,
+        score_by_song_id[song_id_a],
+    )
+    _assert_aggregate(
+        song_b,
+        1,
+        score_by_song_id[song_id_b],
+    )
+
+
+def test_rerate_to_different_bucket_updates_aggregates(
     client: TestClient,
     db_session: Session,
 ):
@@ -138,8 +231,81 @@ def test_rerate_updates_aggregates(
     db_session.expire_all()
     song = _get_song(db_session)
 
-    assert song.global_rating_count == 1
-    assert song.global_avg_score == new_score
+    _assert_aggregate(
+        song,
+        1,
+        new_score,
+    )
+
+
+def test_rerate_within_same_bucket_updates_shifted_song_aggregates(
+    client: TestClient,
+    db_session: Session,
+):
+    """Moving an existing ranking within a bucket adjusts every shifted song."""
+    token = _get_token(client)
+
+    result_a = _finalize(client, token, deezer_id=111, bucket="like")
+    result_b = _finalize(client, token, deezer_id=222, bucket="like", position=2)
+    result_c = _finalize(client, token, deezer_id=333, bucket="like", position=3)
+    song_ids = [
+        result_a["ranking"]["song_id"],
+        result_b["ranking"]["song_id"],
+        result_c["ranking"]["song_id"],
+    ]
+
+    _finalize(client, token, deezer_id=333, bucket="like", position=1)
+    score_by_song_id = _ranking_scores_by_song_id(
+        client,
+        token,
+    )
+
+    db_session.expire_all()
+    for song_id in song_ids:
+        _assert_aggregate(
+            _get_song_by_id(
+                db_session,
+                song_id,
+            ),
+            1,
+            score_by_song_id[song_id],
+        )
+
+
+def test_rerate_to_different_bucket_updates_all_shifted_song_aggregates(
+    client: TestClient,
+    db_session: Session,
+):
+    """Moving an existing ranking across buckets adjusts both buckets without changing count."""
+    token = _get_token(client)
+
+    result_a = _finalize(client, token, deezer_id=111, bucket="like")
+    result_b = _finalize(client, token, deezer_id=222, bucket="like", position=2)
+    result_c = _finalize(client, token, deezer_id=333, bucket="dislike")
+    result_d = _finalize(client, token, deezer_id=444, bucket="dislike", position=2)
+    song_ids = [
+        result_a["ranking"]["song_id"],
+        result_b["ranking"]["song_id"],
+        result_c["ranking"]["song_id"],
+        result_d["ranking"]["song_id"],
+    ]
+
+    _finalize(client, token, deezer_id=111, bucket="dislike", position=1)
+    score_by_song_id = _ranking_scores_by_song_id(
+        client,
+        token,
+    )
+
+    db_session.expire_all()
+    for song_id in song_ids:
+        _assert_aggregate(
+            _get_song_by_id(
+                db_session,
+                song_id,
+            ),
+            1,
+            score_by_song_id[song_id],
+        )
 
 
 def test_remove_rating_decrements_aggregates(
@@ -163,8 +329,11 @@ def test_remove_rating_decrements_aggregates(
     db_session.expire_all()
     song = _get_song(db_session)
 
-    assert song.global_rating_count == 1
-    assert abs(song.global_avg_score - score_b) < 0.001
+    _assert_aggregate(
+        song,
+        1,
+        score_b,
+    )
 
 
 def test_remove_last_rating_clears_aggregates(
@@ -184,8 +353,67 @@ def test_remove_last_rating_clears_aggregates(
     db_session.expire_all()
     song = _get_song(db_session)
 
-    assert song.global_rating_count == 0
-    assert song.global_avg_score is None
+    _assert_aggregate(
+        song,
+        0,
+        None,
+    )
+
+
+def test_remove_rating_recomputes_remaining_bucket_song_aggregates(
+    client: TestClient,
+    db_session: Session,
+):
+    """Removing from a multi-song bucket updates aggregates for compacted neighbors."""
+    token = _get_token(client)
+
+    result_a = _finalize(client, token, deezer_id=111, bucket="like")
+    result_b = _finalize(client, token, deezer_id=222, bucket="like", position=2)
+    result_c = _finalize(client, token, deezer_id=333, bucket="like", position=3)
+    song_id_a = result_a["ranking"]["song_id"]
+    song_id_b = result_b["ranking"]["song_id"]
+    song_id_c = result_c["ranking"]["song_id"]
+
+    response = client.delete(
+        f"/api/v1/ratings/{song_id_a}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+
+    score_by_song_id = _ranking_scores_by_song_id(
+        client,
+        token,
+    )
+
+    db_session.expire_all()
+    removed_song = _get_song_by_id(
+        db_session,
+        song_id_a,
+    )
+    remaining_song_b = _get_song_by_id(
+        db_session,
+        song_id_b,
+    )
+    remaining_song_c = _get_song_by_id(
+        db_session,
+        song_id_c,
+    )
+
+    _assert_aggregate(
+        removed_song,
+        0,
+        None,
+    )
+    _assert_aggregate(
+        remaining_song_b,
+        1,
+        score_by_song_id[song_id_b],
+    )
+    _assert_aggregate(
+        remaining_song_c,
+        1,
+        score_by_song_id[song_id_c],
+    )
 
 
 def test_reorder_updates_aggregates_for_all_songs(
@@ -228,10 +456,16 @@ def test_reorder_updates_aggregates_for_all_songs(
     updated_rankings = response.json()["rankings"]
     score_by_song_id = {r["song_id"]: r["score"] for r in updated_rankings}
 
-    assert song_a.global_rating_count == 1
-    assert abs(song_a.global_avg_score - score_by_song_id[song_id_a]) < 0.001
-    assert song_b.global_rating_count == 1
-    assert abs(song_b.global_avg_score - score_by_song_id[song_id_b]) < 0.001
+    _assert_aggregate(
+        song_a,
+        1,
+        score_by_song_id[song_id_a],
+    )
+    _assert_aggregate(
+        song_b,
+        1,
+        score_by_song_id[song_id_b],
+    )
 
 
 def test_reorder_with_bucket_crossing_updates_all_aggregates(
@@ -286,8 +520,11 @@ def test_reorder_with_bucket_crossing_updates_all_aggregates(
         (song_b, song_id_b),
         (song_c, song_id_c),
     ]:
-        assert song_obj.global_rating_count == 1
-        assert abs(song_obj.global_avg_score - score_by_song_id[song_id]) < 0.001
+        _assert_aggregate(
+            song_obj,
+            1,
+            score_by_song_id[song_id],
+        )
 
 
 def test_aggregate_fields_in_rankings_list_response(
@@ -310,6 +547,7 @@ def test_aggregate_fields_in_rankings_list_response(
 
     assert "global_avg_score" in song_data
     assert "global_rating_count" in song_data
+    assert "global_rating_sum" not in song_data
     assert song_data["global_rating_count"] == 1
     assert abs(song_data["global_avg_score"] - expected_score) < 0.001
 
@@ -324,6 +562,7 @@ def test_aggregates_included_in_song_response(
 
     assert "global_avg_score" in song_data
     assert "global_rating_count" in song_data
+    assert "global_rating_sum" not in song_data
     assert song_data["global_rating_count"] == 1
     assert song_data["global_avg_score"] is not None
 
@@ -359,5 +598,79 @@ def test_aggregates_span_all_users_regardless_of_profile_visibility(
     song = _get_song(db_session)
 
     # Both ratings must contribute to the aggregate even though userB is private.
+    assert song.global_rating_sum is not None
+    assert abs(song.global_rating_sum - (score_a + score_b)) < 0.001
     assert song.global_rating_count == 2
     assert abs(song.global_avg_score - expected_avg) < 0.001
+
+
+def test_decrement_song_aggregate_raises_when_count_is_zero(
+    client: TestClient,
+    db_session: Session,
+):
+    """decrement_song_aggregate fails loudly instead of hiding corrupt aggregate state."""
+    token = _get_token(client)
+    result = _finalize(client, token, bucket="like")
+    song_id = result["ranking"]["song_id"]
+
+    response = client.delete(
+        f"/api/v1/ratings/{song_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+
+    with pytest.raises(RuntimeError, match="rating count 0"):
+        decrement_song_aggregate(
+            db_session,
+            song_id,
+            result["ranking"]["score"],
+        )
+
+    db_session.rollback()
+
+
+def test_adjust_song_aggregate_raises_when_count_is_zero(
+    client: TestClient,
+    db_session: Session,
+):
+    """adjust_song_aggregate requires existing aggregate state because the ranking row persists."""
+    token = _get_token(client)
+    result = _finalize(client, token, bucket="like")
+    song_id = result["ranking"]["song_id"]
+
+    response = client.delete(
+        f"/api/v1/ratings/{song_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+
+    with pytest.raises(RuntimeError, match="rating count 0"):
+        adjust_song_aggregate(
+            db_session,
+            song_id,
+            old_score=result["ranking"]["score"],
+            new_score=result["ranking"]["score"],
+        )
+
+    db_session.rollback()
+
+
+def test_adjust_song_aggregate_raises_when_sum_is_null(
+    client: TestClient,
+    db_session: Session,
+):
+    """adjust_song_aggregate rejects a non-empty aggregate with missing sum state."""
+    token = _get_token(client)
+    result = _finalize(client, token, bucket="like")
+    song = _get_song(db_session)
+    song.global_rating_sum = None
+
+    with pytest.raises(RuntimeError, match="null rating sum"):
+        adjust_song_aggregate(
+            db_session,
+            result["ranking"]["song_id"],
+            old_score=result["ranking"]["score"],
+            new_score=result["ranking"]["score"],
+        )
+
+    db_session.rollback()

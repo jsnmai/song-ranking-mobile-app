@@ -116,15 +116,134 @@ def recompute_song_aggregates(
     result = db.execute(
         select(
             func.count(Ranking.id),
+            func.sum(Ranking.score),
             func.avg(Ranking.score),
         )
         .where(Ranking.song_id == song_id)
     ).one()
     count = result[0]
-    avg = result[1]
+    rating_sum = result[1]
+    avg = result[2]
     song.global_rating_count = count
+    song.global_rating_sum = float(rating_sum) if count > 0 else None
     song.global_avg_score = float(avg) if count > 0 else None
     db.flush()
+
+
+def increment_song_aggregate(
+    db: Session,
+    song_id: int,
+    score: float,
+) -> None:
+    """Add one current ranking score to a song's aggregate state without committing."""
+    song = _lock_song_for_aggregate(
+        db,
+        song_id,
+    )
+    count = song.global_rating_count
+    rating_sum = _current_rating_sum(song)
+    new_count = count + 1
+    new_sum = rating_sum + score
+    _apply_aggregate_state(
+        song,
+        count=new_count,
+        rating_sum=new_sum,
+    )
+    db.flush()
+
+
+def decrement_song_aggregate(
+    db: Session,
+    song_id: int,
+    score: float,
+) -> None:
+    """Remove one current ranking score from a song's aggregate state without committing."""
+    song = _lock_song_for_aggregate(
+        db,
+        song_id,
+    )
+    count = song.global_rating_count
+    if count == 0:
+        raise RuntimeError("Cannot decrement song aggregate with rating count 0.")
+    if song.global_rating_sum is None:
+        raise RuntimeError("Cannot decrement song aggregate with null rating sum.")
+
+    new_count = count - 1
+    new_sum = song.global_rating_sum - score
+    _apply_aggregate_state(
+        song,
+        count=new_count,
+        rating_sum=new_sum,
+    )
+    db.flush()
+
+
+def adjust_song_aggregate(
+    db: Session,
+    song_id: int,
+    old_score: float,
+    new_score: float,
+) -> None:
+    """Apply a score delta when a current ranking row persists without committing."""
+    song = _lock_song_for_aggregate(
+        db,
+        song_id,
+    )
+    count = song.global_rating_count
+    if count == 0:
+        raise RuntimeError("Cannot adjust song aggregate with rating count 0.")
+    if song.global_rating_sum is None:
+        raise RuntimeError("Cannot adjust song aggregate with null rating sum.")
+
+    _apply_aggregate_state(
+        song,
+        count=count,
+        rating_sum=song.global_rating_sum - old_score + new_score,
+    )
+    db.flush()
+
+
+def _lock_song_for_aggregate(
+    db: Session,
+    song_id: int,
+) -> Song:
+    """Lock one song row before changing aggregate fields inside the current transaction."""
+    db.flush()
+    return db.execute(
+        select(Song)
+        .where(Song.id == song_id)
+        .with_for_update()
+    ).scalar_one()
+
+
+def _current_rating_sum(
+    song: Song,
+) -> float:
+    """Return the current sum, rejecting corrupt non-empty aggregate state."""
+    if song.global_rating_count == 0:
+        return 0.0
+    if song.global_rating_sum is None:
+        raise RuntimeError("Song aggregate has ratings but null rating sum.")
+    return song.global_rating_sum
+
+
+def _apply_aggregate_state(
+    song: Song,
+    count: int,
+    rating_sum: float,
+) -> None:
+    """Maintain the count/sum/average aggregate invariant on one song row."""
+    if count < 0:
+        raise RuntimeError("Song aggregate rating count cannot be negative.")
+    if count == 0:
+        song.global_rating_count = 0
+        song.global_rating_sum = None
+        song.global_avg_score = None
+        return
+
+    song.global_rating_count = count
+    song.global_rating_sum = rating_sum
+    song.global_avg_score = rating_sum / count
 
 
 def update_musicbrainz_metadata(

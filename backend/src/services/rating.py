@@ -19,7 +19,12 @@ from src.crud.rating import (
     refresh_rating_event,
     refresh_rating_events,
 )
-from src.crud.song import recompute_song_aggregates, upsert_from_deezer
+from src.crud.song import (
+    adjust_song_aggregate,
+    decrement_song_aggregate,
+    increment_song_aggregate,
+    upsert_from_deezer,
+)
 from src.pydantic_schemas.rating import (
     RankingListResponse,
     RankingReorderRequest,
@@ -64,6 +69,16 @@ class FinalizedRatingState:
     ranking: Ranking
     rating_event: RatingEvent
     song: Song
+
+
+@dataclass(frozen=True)
+class RankingPlacementState:
+    """Ranking placement plus before/after score snapshots for aggregate deltas."""
+
+    ranking: Ranking
+    created_ranking: bool
+    old_scores_by_song_id: dict[int, float]
+    new_scores_by_song_id: dict[int, float]
 
 
 def finalize_rating(
@@ -132,7 +147,7 @@ def persist_finalized_rating(
         current_ranking=existing_ranking,
         requested_position=data.position,
     )
-    ranking = _place_ranking(
+    placement = _place_ranking(
         db,
         user_id=user_id,
         song_id=song.id,
@@ -140,9 +155,9 @@ def persist_finalized_rating(
         position=new_position,
         current_ranking=existing_ranking,
     )
-    recompute_song_aggregates(
+    _apply_placement_aggregate_deltas(
         db,
-        song.id,
+        placement,
     )
     rating_event = create_rating_event(
         db,
@@ -150,15 +165,15 @@ def persist_finalized_rating(
         song_id=song.id,
         event_type="rerated" if existing_ranking else "rated",
         previous_bucket=previous_bucket,
-        new_bucket=ranking.bucket,
+        new_bucket=placement.ranking.bucket,
         previous_position=previous_position,
-        new_position=ranking.position,
+        new_position=placement.ranking.position,
         previous_score=previous_score,
-        new_score=ranking.score,
+        new_score=placement.ranking.score,
         note=data.note,
     )
     return FinalizedRatingState(
-        ranking=ranking,
+        ranking=placement.ranking,
         rating_event=rating_event,
         song=song,
     )
@@ -231,17 +246,26 @@ def remove_rating(
             db,
             ranking,
         )
-        _recalculate_bucket(
-            list_user_bucket_rankings(
-                db,
-                user_id,
-                previous_bucket,
-            ),
+        remaining_bucket_rankings = list_user_bucket_rankings(
+            db,
+            user_id,
             previous_bucket,
         )
-        recompute_song_aggregates(
+        old_scores_by_song_id = _score_snapshot(remaining_bucket_rankings)
+        _recalculate_bucket(
+            remaining_bucket_rankings,
+            previous_bucket,
+        )
+        new_scores_by_song_id = _score_snapshot(remaining_bucket_rankings)
+        decrement_song_aggregate(
             db,
             song_id,
+            previous_score,
+        )
+        _apply_score_adjustments(
+            db,
+            old_scores_by_song_id,
+            new_scores_by_song_id,
         )
         rating_event = create_rating_event(
             db,
@@ -343,8 +367,6 @@ def reorder_rankings(
     }
     rating_events = []
 
-    all_reordered_song_ids = [item.song_id for item in data.rankings]
-
     try:
         for bucket, rankings in bucket_rankings.items():
             _recalculate_bucket(
@@ -352,11 +374,18 @@ def reorder_rankings(
                 bucket,
             )
 
-        for reordered_song_id in all_reordered_song_ids:
-            recompute_song_aggregates(
-                db,
-                reordered_song_id,
-            )
+        new_scores_by_song_id = {
+            song_id: row.ranking.score
+            for song_id, row in current_by_song_id.items()
+        }
+        _apply_score_adjustments(
+            db,
+            {
+                song_id: previous["score"]
+                for song_id, previous in previous_state.items()
+            },
+            new_scores_by_song_id,
+        )
 
         for song_id in affected_song_ids:
             ranking = current_by_song_id[song_id].ranking
@@ -506,9 +535,20 @@ def _place_ranking(
     bucket: str,
     position: int,
     current_ranking: Ranking | None,
-) -> Ranking:
+) -> RankingPlacementState:
     """Insert or move a ranking, then compact every affected bucket."""
     old_bucket = current_ranking.bucket if current_ranking else None
+    buckets_to_recalculate = [bucket]
+    if old_bucket is not None and old_bucket != bucket:
+        buckets_to_recalculate.append(old_bucket)
+
+    old_scores_by_song_id = _bucket_score_snapshot(
+        db,
+        user_id,
+        buckets_to_recalculate,
+    )
+    created_ranking = current_ranking is None
+
     if current_ranking is None:
         current_ranking = create_ranking(
             db,
@@ -526,10 +566,7 @@ def _place_ranking(
             score=current_ranking.score,
         )
 
-    buckets_to_recalculate = [bucket]
-    if old_bucket is not None and old_bucket != bucket:
-        buckets_to_recalculate.append(old_bucket)
-
+    new_scores_by_song_id = {}
     for bucket_name in buckets_to_recalculate:
         bucket_rankings = list_user_bucket_rankings(
             db,
@@ -552,8 +589,91 @@ def _place_ranking(
             bucket_rankings,
             bucket_name,
         )
+        new_scores_by_song_id.update(_score_snapshot(bucket_rankings))
 
-    return current_ranking
+    return RankingPlacementState(
+        ranking=current_ranking,
+        created_ranking=created_ranking,
+        old_scores_by_song_id=old_scores_by_song_id,
+        new_scores_by_song_id=new_scores_by_song_id,
+    )
+
+
+def _apply_placement_aggregate_deltas(
+    db: Session,
+    placement: RankingPlacementState,
+) -> None:
+    """Apply aggregate deltas from one finalized rating placement."""
+    excluded_song_ids: set[int] = set()
+    if placement.created_ranking:
+        increment_song_aggregate(
+            db,
+            placement.ranking.song_id,
+            placement.ranking.score,
+        )
+        excluded_song_ids.add(placement.ranking.song_id)
+
+    _apply_score_adjustments(
+        db,
+        placement.old_scores_by_song_id,
+        placement.new_scores_by_song_id,
+        excluded_song_ids=excluded_song_ids,
+    )
+
+
+def _apply_score_adjustments(
+    db: Session,
+    old_scores_by_song_id: dict[int, float],
+    new_scores_by_song_id: dict[int, float],
+    excluded_song_ids: set[int] | None = None,
+) -> None:
+    """Adjust aggregates for rankings that persisted but received new scores."""
+    excluded = excluded_song_ids or set()
+    changed_song_ids = (
+        set(old_scores_by_song_id)
+        & set(new_scores_by_song_id)
+        - excluded
+    )
+    for song_id in sorted(changed_song_ids):
+        old_score = old_scores_by_song_id[song_id]
+        new_score = new_scores_by_song_id[song_id]
+        if old_score != new_score:
+            adjust_song_aggregate(
+                db,
+                song_id,
+                old_score,
+                new_score,
+            )
+
+
+def _bucket_score_snapshot(
+    db: Session,
+    user_id: int,
+    buckets: list[str],
+) -> dict[int, float]:
+    """Return current scores for all rankings in the requested buckets."""
+    scores_by_song_id = {}
+    for bucket in buckets:
+        scores_by_song_id.update(
+            _score_snapshot(
+                list_user_bucket_rankings(
+                    db,
+                    user_id,
+                    bucket,
+                )
+            )
+        )
+    return scores_by_song_id
+
+
+def _score_snapshot(
+    rankings: list[Ranking],
+) -> dict[int, float]:
+    """Return a song_id -> score snapshot for aggregate delta calculation."""
+    return {
+        ranking.song_id: ranking.score
+        for ranking in rankings
+    }
 
 
 def _ordered_with_inserted_position(
