@@ -1,6 +1,7 @@
 // Tests for Comparison Flow audio preview behavior.
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native"
 
+import { chooseComparisonWinner, finalizeComparisonSession } from "../apiRequests"
 import ComparisonFlowScreen from "../ComparisonFlowScreen"
 import { ComparisonSessionResponse } from "../types"
 
@@ -101,6 +102,7 @@ const route = {
 
 beforeEach(() => {
     jest.resetAllMocks()
+    jest.spyOn(Date, "now").mockReturnValue(1000)
     mockCreatePlayer.mockReturnValue({
         play: mockPlay,
         pause: jest.fn(),
@@ -111,9 +113,13 @@ beforeEach(() => {
     mockFetchPreviewUrl.mockResolvedValue("https://example.com/fresh-preview.mp3")
 })
 
+afterEach(() => {
+    jest.restoreAllMocks()
+})
+
 describe("ComparisonFlowScreen", () => {
     it("refreshes the persisted candidate preview URL before playback", async () => {
-        render(<ComparisonFlowScreen navigation={navigation as never} route={route as never} />)
+        const rendered = render(<ComparisonFlowScreen navigation={navigation as never} route={route as never} />)
 
         await waitFor(() => {
             expect(mockFetchPreviewUrl).toHaveBeenCalledWith(999, "test-token")
@@ -126,5 +132,36 @@ describe("ComparisonFlowScreen", () => {
 
         expect(mockCreatePlayer).toHaveBeenCalledWith("https://example.com/fresh-preview.mp3")
         expect(mockPlay).toHaveBeenCalledTimes(1)
+        act(() => {
+            rendered.unmount()
+        })
+    })
+
+    it("sends the decision duration when a comparison choice is made", async () => {
+        const mockChooseComparisonWinner = chooseComparisonWinner as jest.Mock
+        const mockFinalizeComparisonSession = finalizeComparisonSession as jest.Mock
+        mockChooseComparisonWinner.mockResolvedValue({
+            ...session,
+            status: "ready_to_finalize",
+            candidate: null,
+            final_position: 1,
+        })
+        mockFinalizeComparisonSession.mockResolvedValue({
+            result: {
+                ranking: {},
+                rating_event: {},
+            },
+        })
+        const rendered = render(<ComparisonFlowScreen navigation={navigation as never} route={route as never} />)
+
+        jest.spyOn(Date, "now").mockReturnValue(2450)
+        fireEvent.press(screen.getByText("New rating"))
+
+        await waitFor(() => {
+            expect(mockChooseComparisonWinner).toHaveBeenCalledWith("session-123", "target", "test-token", 1450)
+        })
+        act(() => {
+            rendered.unmount()
+        })
     })
 })

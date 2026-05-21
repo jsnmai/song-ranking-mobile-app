@@ -63,11 +63,14 @@ describe("comparison API requests", () => {
     it("records comparison choices through the backend", async () => {
         mockPost.mockResolvedValue({ session_uuid: "abc" })
 
-        await chooseComparisonWinner("abc", "target", "test-token")
+        await chooseComparisonWinner("abc", "target", "test-token", 912)
 
         expect(mockPost).toHaveBeenCalledWith(
             "/api/v1/comparison-sessions/abc/choices",
-            { winner: "target" },
+            {
+                winner: "target",
+                decision_duration_ms: 912,
+            },
             "test-token",
         )
     })

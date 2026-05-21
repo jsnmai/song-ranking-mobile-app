@@ -27,6 +27,10 @@ class ComparisonChoiceRequest(BaseModel):
     """Request body for recording one head-to-head choice."""
 
     winner: ComparisonWinner
+    decision_duration_ms: int | None = Field(
+        default=None,
+        ge=0,
+    )
 
 
 class ComparisonBucketRankingItem(BaseModel):

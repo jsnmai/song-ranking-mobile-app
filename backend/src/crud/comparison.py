@@ -98,6 +98,7 @@ def create_comparison(
     song_a_id: int,
     song_b_id: int,
     winner_id: int,
+    decision_duration_ms: int | None,
     created_at: datetime,
     finalized_at: datetime,
 ) -> Comparison:
@@ -108,6 +109,7 @@ def create_comparison(
         song_a_id=song_a_id,
         song_b_id=song_b_id,
         winner_id=winner_id,
+        decision_duration_ms=decision_duration_ms,
         created_at=created_at,
         finalized_at=finalized_at,
     )

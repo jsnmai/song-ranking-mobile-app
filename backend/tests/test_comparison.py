@@ -201,7 +201,10 @@ def test_comparison_choice_and_finalize_target_wins(
 
     choice_response = client.post(
         f"/api/v1/comparison-sessions/{session['session_uuid']}/choices",
-        json={"winner": "target"},
+        json={
+            "winner": "target",
+            "decision_duration_ms": 1834,
+        },
         headers={"Authorization": f"Bearer {token}"},
     )
     assert choice_response.status_code == 200
@@ -224,6 +227,7 @@ def test_comparison_choice_and_finalize_target_wins(
     assert comparison.song_a_id == existing["ranking"]["song_id"]
     assert comparison.song_b_id == body["result"]["ranking"]["song_id"]
     assert comparison.winner_id == body["result"]["ranking"]["song_id"]
+    assert comparison.decision_duration_ms == 1834
     assert comparison.finalized_at is not None
     assert db_session.scalar(select(func.count()).select_from(ComparisonSession)) == 0
     assert db_session.scalar(select(func.count()).select_from(Ranking)) == 2

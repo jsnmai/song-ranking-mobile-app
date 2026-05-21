@@ -1,5 +1,5 @@
 // Comparison Flow screen — head-to-head binary insertion for one song.
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 // ActivityIndicator is kept for the comparison submission spinner (isSubmitting).
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
@@ -21,6 +21,7 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
     const [error, setError] = useState<string | null>(null)
 
     const [candidatePreviewUrl, setCandidatePreviewUrl] = useState<string | null>(null)
+    const candidateShownAtRef = useRef<number | null>(null)
     const candidatePlayer = useAudioPlayer(candidatePreviewUrl)
     const targetPlayer = useAudioPlayer(session.target_song.preview_url)
 
@@ -68,7 +69,15 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
         setError(null)
 
         try {
-            const nextSession = await chooseComparisonWinner(session.session_uuid, winner, token)
+            const decisionDurationMs = candidateShownAtRef.current === null
+                ? null
+                : Math.max(0, Date.now() - candidateShownAtRef.current)
+            const nextSession = await chooseComparisonWinner(
+                session.session_uuid,
+                winner,
+                token,
+                decisionDurationMs,
+            )
             if (nextSession.status === "ready_to_finalize") {
                 await finalizeReadySession(nextSession)
                 return
@@ -123,6 +132,15 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
             isActive = false
         }
     }, [session.candidate, token])
+
+    useEffect(() => {
+        if (session.candidate === null) {
+            candidateShownAtRef.current = null
+            return
+        }
+
+        candidateShownAtRef.current = Date.now()
+    }, [session.candidate])
 
     return (
         <View style={styles.container}>

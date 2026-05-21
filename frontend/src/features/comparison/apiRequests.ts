@@ -41,10 +41,14 @@ export async function chooseComparisonWinner(
     sessionUuid: string,
     winner: "target" | "candidate",
     token: string,
+    decisionDurationMs: number | null,
 ): Promise<ComparisonSessionResponse> {
     return apiClient.post<ComparisonSessionResponse>(
         `/api/v1/comparison-sessions/${sessionUuid}/choices`,
-        { winner },
+        {
+            winner,
+            decision_duration_ms: decisionDurationMs,
+        },
         token,
     )
 }

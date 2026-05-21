@@ -133,6 +133,7 @@ def record_comparison_choice(
         {
             "candidate_song_id": session.candidate_song_id,
             "winner": data.winner,
+            "decision_duration_ms": data.decision_duration_ms,
             "created_at": now.isoformat(),
         }
     )
@@ -478,6 +479,7 @@ def _write_comparisons(
             song_a_id=candidate_song_id,
             song_b_id=target_song_id,
             winner_id=winner_id,
+            decision_duration_ms=decision.get("decision_duration_ms"),
             created_at=datetime.fromisoformat(decision["created_at"]),
             finalized_at=finalized_at,
         )
