@@ -84,6 +84,21 @@ def _follow(
     assert response.status_code == 200
 
 
+def _reorder_rankings(
+    client: TestClient,
+    token: str,
+    rankings: list[dict],
+) -> dict:
+    """Submit a full ranking reorder payload and return the response body."""
+    response = client.put(
+        "/api/v1/rankings/reorder",
+        json={"rankings": rankings},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    return response.json()
+
+
 def test_feed_requires_auth(client: TestClient):
     """Feed is account-only."""
     response = client.get("/api/v1/feed")
@@ -277,6 +292,62 @@ def test_feed_hides_song_when_latest_event_is_removed(client: TestClient):
         headers={"Authorization": f"Bearer {followed_token}"},
     )
     assert remove_response.status_code == 200
+
+    response = client.get(
+        "/api/v1/feed",
+        headers={"Authorization": f"Bearer {viewer_token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["events"] == []
+
+
+def test_feed_hides_song_when_latest_event_is_reordered(client: TestClient):
+    """Feed hides actor/song pairs whose latest event is ranking maintenance."""
+    viewer_token = _register(
+        client,
+        "viewer@example.com",
+        "viewer",
+    )
+    followed_token = _register(
+        client,
+        "followed@example.com",
+        "followed",
+    )
+    _follow(
+        client,
+        viewer_token,
+        "followed",
+    )
+    like_rating = _finalize_rating(
+        client,
+        followed_token,
+        101,
+        "Moved Like Song",
+        "like",
+    )
+    alright_rating = _finalize_rating(
+        client,
+        followed_token,
+        202,
+        "Moved Okay Song",
+        "alright",
+    )
+
+    _reorder_rankings(
+        client,
+        followed_token,
+        [
+            {
+                "song_id": like_rating["ranking"]["song_id"],
+                "bucket": "alright",
+            },
+            {
+                "song_id": alright_rating["ranking"]["song_id"],
+                "bucket": "like",
+            },
+        ],
+    )
 
     response = client.get(
         "/api/v1/feed",

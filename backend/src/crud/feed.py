@@ -68,6 +68,7 @@ def list_feed_events(
         .where(Follow.follower_id == user_id)
         .where(Profile.is_public.is_(True))
         .where(RatingEvent.event_type != "removed")
+        .where(RatingEvent.event_type != "reordered")
         .where(RatingEvent.new_bucket.is_not(None))
         .where(RatingEvent.new_score.is_not(None))
     )
