@@ -36,6 +36,13 @@ class RatingEvent(Base):
             "song_id",
             "created_at",
         ),
+        Index(
+            "ix_rating_events_user_song_created_at_id",
+            "user_id",
+            "song_id",
+            "created_at",
+            "id",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
