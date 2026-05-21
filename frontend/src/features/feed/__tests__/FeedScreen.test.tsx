@@ -87,6 +87,8 @@ const song = {
     spotify_danceability: null,
     metadata_enriched_at: null,
     spotify_enriched_at: null,
+    global_avg_score: null,
+    global_rating_count: 0,
     created_at: "2026-01-01T00:00:00Z",
 }
 

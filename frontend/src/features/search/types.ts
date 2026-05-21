@@ -11,6 +11,9 @@ export type SongSearchResult = {
     album: string;
     cover_url: string;
     preview_url: string | null;
+    // Aggregate fields present when the song is persisted to the DB; absent for raw search results.
+    global_avg_score?: number | null;
+    global_rating_count?: number;
 }
 
 // Mirrors SongSearchResponse.

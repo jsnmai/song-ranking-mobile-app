@@ -146,6 +146,11 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                 <Text style={styles.title} numberOfLines={2}>{song.title}</Text>
                 <Text style={styles.artist} numberOfLines={1}>{song.artist}</Text>
                 <Text style={styles.album} numberOfLines={1}>{song.album}</Text>
+                {(song.global_rating_count ?? 0) > 0 && (
+                    <Text style={styles.aggregates}>
+                        {song.global_rating_count} {song.global_rating_count === 1 ? "rating" : "ratings"} · avg {song.global_avg_score?.toFixed(2)}
+                    </Text>
+                )}
                 {isPreviewLoading && (
                     <ActivityIndicator style={styles.previewSpinner} color="#fff" />
                 )}
@@ -252,6 +257,11 @@ const styles = StyleSheet.create({
     album: {
         color: "#777",
         fontSize: 14,
+        marginBottom: 8,
+    },
+    aggregates: {
+        color: "#555",
+        fontSize: 13,
         marginBottom: 16,
     },
     previewSpinner: {

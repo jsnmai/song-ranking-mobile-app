@@ -17,6 +17,8 @@ export type PersistedSong = SongSearchResult & {
     spotify_danceability: number | null;
     metadata_enriched_at: string | null;
     spotify_enriched_at: string | null;
+    global_avg_score: number | null;
+    global_rating_count: number;
     created_at: string;
 }
 
