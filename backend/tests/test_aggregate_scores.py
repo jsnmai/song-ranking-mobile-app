@@ -234,6 +234,86 @@ def test_reorder_updates_aggregates_for_all_songs(
     assert abs(song_b.global_avg_score - score_by_song_id[song_id_b]) < 0.001
 
 
+def test_reorder_with_bucket_crossing_updates_all_aggregates(
+    client: TestClient,
+    db_session: Session,
+):
+    """
+    Reordering that crosses bucket boundaries recomputes aggregates for every song
+    in the payload, including songs that only changed position within a bucket.
+
+    After the reorder, song_A moves from like/position-1 to like/position-2 without
+    crossing a bucket boundary. Its score drops from 10.0 to 7.5. If reorder_rankings
+    only recomputed the two bucket-crossers (affected_song_ids), song_A's aggregate
+    would remain stale at 10.0. The all_reordered_song_ids loop must cover it too.
+    """
+    token = _get_token(client)
+
+    # Rate 2 songs into like and 1 into alright.
+    result_a = _finalize(client, token, deezer_id=111, bucket="like")
+    result_b = _finalize(client, token, deezer_id=222, bucket="like", position=2)
+    result_c = _finalize(client, token, deezer_id=333, bucket="alright")
+
+    song_id_a = result_a["ranking"]["song_id"]
+    song_id_b = result_b["ranking"]["song_id"]
+    song_id_c = result_c["ranking"]["song_id"]
+
+    # C (alright → like/1), A (like/1 → like/2, non-crosser), B (like/2 → alright/1).
+    response = client.put(
+        "/api/v1/rankings/reorder",
+        json={
+            "rankings": [
+                {"song_id": song_id_c, "bucket": "like"},
+                {"song_id": song_id_a, "bucket": "like"},
+                {"song_id": song_id_b, "bucket": "alright"},
+            ]
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+
+    db_session.expire_all()
+    song_a = db_session.execute(select(Song).where(Song.id == song_id_a)).scalar_one()
+    song_b = db_session.execute(select(Song).where(Song.id == song_id_b)).scalar_one()
+    song_c = db_session.execute(select(Song).where(Song.id == song_id_c)).scalar_one()
+
+    # Each song has exactly one rater, so global_avg_score must equal its new score.
+    # Derive expected scores from the response rather than hardcoding formula values.
+    score_by_song_id = {r["song_id"]: r["score"] for r in response.json()["rankings"]}
+
+    for song_obj, song_id in [
+        (song_a, song_id_a),
+        (song_b, song_id_b),
+        (song_c, song_id_c),
+    ]:
+        assert song_obj.global_rating_count == 1
+        assert abs(song_obj.global_avg_score - score_by_song_id[song_id]) < 0.001
+
+
+def test_aggregate_fields_in_rankings_list_response(
+    client: TestClient,
+):
+    """GET /rankings/me embeds global_avg_score and global_rating_count in each song object."""
+    token = _get_token(client)
+    finalize_result = _finalize(client, token, bucket="like")
+    expected_score = finalize_result["ranking"]["score"]
+
+    response = client.get(
+        "/api/v1/rankings/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+
+    rankings = response.json()["rankings"]
+    assert len(rankings) == 1
+    song_data = rankings[0]["song"]
+
+    assert "global_avg_score" in song_data
+    assert "global_rating_count" in song_data
+    assert song_data["global_rating_count"] == 1
+    assert abs(song_data["global_avg_score"] - expected_score) < 0.001
+
+
 def test_aggregates_included_in_song_response(
     client: TestClient,
 ):
