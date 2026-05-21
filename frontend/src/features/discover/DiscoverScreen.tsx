@@ -29,7 +29,7 @@ export default function DiscoverScreen() {
     const { token } = useAuth()
     // useRef holds a reference to the TextInput DOM node so we can call .focus() imperatively.
     const searchRef = useRef<TextInput>(null)
-    const [searchMode, setSearchMode] = useState<"songs" | "users">("songs")
+    const [searchMode, setSearchMode] = useState<"songs" | "users">(route.params?.searchMode ?? "songs")
     const [query, setQuery] = useState("")
     const [songResults, setSongResults] = useState<SongSearchResult[]>([])
     const [profileResults, setProfileResults] = useState<Profile[]>([])
@@ -84,11 +84,15 @@ export default function DiscoverScreen() {
     // Auto-focus the search bar when navigated here via the FAB.
     // After focusing, reset the param so a normal tab press later does not re-trigger focus.
     useEffect(() => {
+        if (route.params?.searchMode) {
+            setMode(route.params.searchMode)
+            navigation.setParams({ searchMode: undefined })
+        }
         if (route.params?.focusSearch) {
             searchRef.current?.focus()
             navigation.setParams({ focusSearch: undefined })
         }
-    }, [route.params?.focusSearch, navigation])
+    }, [route.params?.focusSearch, route.params?.searchMode, navigation])
 
     // Debounce means wait for typing to pause before searching, instead of firing one request per keypress.
     useEffect(() => {

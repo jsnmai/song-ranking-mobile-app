@@ -14,7 +14,7 @@ export type TabParamList = {
     FABPlaceholder: undefined;
     // Discover accepts an optional focusSearch param — set to true when navigating via the FAB
     // so the search bar auto-focuses on arrival.
-    Discover: { focusSearch?: boolean } | undefined;
+    Discover: { focusSearch?: boolean; searchMode?: "songs" | "users" } | undefined;
     Profile: undefined;
 }
 

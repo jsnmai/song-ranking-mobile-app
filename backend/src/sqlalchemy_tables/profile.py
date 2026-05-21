@@ -3,7 +3,7 @@
 # All reads and writes go through src/crud/profile.py.
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import DateTime, ForeignKey, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.db.base import Base
@@ -20,6 +20,13 @@ class Profile(Base):
     """
 
     __tablename__ = "profiles"
+    __table_args__ = (
+        Index(
+            "ix_profiles_user_public",
+            "user_id",
+            "is_public",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(

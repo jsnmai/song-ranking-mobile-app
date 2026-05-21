@@ -26,6 +26,12 @@ class RatingEvent(Base):
             "created_at",
         ),
         Index(
+            "ix_rating_events_user_created_at_id",
+            "user_id",
+            "created_at",
+            "id",
+        ),
+        Index(
             "ix_rating_events_song_created_at",
             "song_id",
             "created_at",
