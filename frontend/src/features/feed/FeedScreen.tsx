@@ -9,6 +9,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { ApiError } from "../../api/client"
 import BucketBadge from "../../components/BucketBadge"
 import { AppStackParamList, TabParamList } from "../../navigation/types"
+import { formatRelativeTime } from "../../utils/formatRelativeTime"
 import { useAuth } from "../auth/AuthContext"
 import { RankingResponse } from "../comparison/types"
 import { getMyRankingByDeezerId } from "../rankings/apiRequests"
@@ -128,6 +129,7 @@ export default function FeedScreen() {
             </View>
             <View style={styles.eventText}>
                 <Text style={styles.actor} numberOfLines={1}>@{item.actor_profile.username}</Text>
+                <Text style={styles.timestamp} numberOfLines={1}>{formatRelativeTime(item.created_at)}</Text>
                 <Text style={styles.title} numberOfLines={1}>{item.song.title}</Text>
                 <Text style={styles.artist} numberOfLines={1}>{item.song.artist}</Text>
                 <View style={styles.metaRow}>
@@ -303,6 +305,11 @@ const styles = StyleSheet.create({
     actor: {
         color: "#888",
         fontSize: 13,
+        marginBottom: 2,
+    },
+    timestamp: {
+        color: "#555",
+        fontSize: 12,
         marginBottom: 3,
     },
     title: {

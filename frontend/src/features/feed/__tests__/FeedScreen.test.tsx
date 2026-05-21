@@ -62,6 +62,11 @@ jest.mock("../../rankings/apiRequests", () => ({
     getMyRankingByDeezerId: (...args: unknown[]) => mockGetMyRankingByDeezerId(...args),
 }))
 
+// Plain function — not a jest.fn() — so jest.resetAllMocks() in beforeEach cannot clear it.
+jest.mock("../../../utils/formatRelativeTime", () => ({
+    formatRelativeTime: () => "3 hrs ago",
+}))
+
 const song = {
     id: 42,
     deezer_id: 123,
@@ -154,6 +159,19 @@ describe("FeedScreen", () => {
 
         await waitFor(() => {
             expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { song })
+        })
+    })
+
+    it("shows a formatted relative timestamp below the actor username for each feed event", async () => {
+        mockListMyFeed.mockResolvedValue({
+            events: [feedEvent],
+            next_cursor: null,
+        })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByText("3 hrs ago")).toBeTruthy()
         })
     })
 
