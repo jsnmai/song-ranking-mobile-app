@@ -25,6 +25,25 @@ describe("apiClient", () => {
         })
     })
 
+    it("does not call the unauthorized handler for tokenless 401 requests", async () => {
+        const unauthorizedHandler = jest.fn()
+        setUnauthorizedHandler(unauthorizedHandler)
+        mockFetch.mockResolvedValue({
+            ok: false,
+            status: 401,
+            headers: {
+                get: () => null,
+            },
+            json: async () => ({ detail: "Invalid credentials." }),
+        })
+
+        await expect(apiClient.post("/api/v1/auth/login", {}, undefined)).rejects.toMatchObject({
+            status: 401,
+            detail: "Invalid credentials.",
+        })
+        expect(unauthorizedHandler).not.toHaveBeenCalled()
+    })
+
     it("normalizes FastAPI validation errors before screens render them", async () => {
         mockFetch.mockResolvedValue({
             ok: false,

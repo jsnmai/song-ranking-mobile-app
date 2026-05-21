@@ -4,7 +4,7 @@
 import { createContext, useContext, useEffect, useState } from "react"
 import * as SecureStore from "expo-secure-store"
 
-import { setUnauthorizedHandler } from "../../api/client"
+import { ApiError, setUnauthorizedHandler } from "../../api/client"
 import { KEYS } from "../../constants/keys"
 import { login as loginRequest, me, register as registerRequest } from "./apiRequests"
 import { User } from "./types"
@@ -69,11 +69,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
                 return
             }
             // YES token: validate the token is still accepted by the backend and get the user
-            const currentUser = await me(token)  // me() will throw an error if token is expired/invalid
+            const currentUser = await me(token)  // me() will throw ApiError if token is expired/invalid
             setToken(token)
             setUser(currentUser)
-        } catch {  // only runs if 'try' threw an error. For expired/invalid token
-            await SecureStore.deleteItemAsync(KEYS.JWT_TOKEN)  // delete it so the user sees the login screen
+        } catch (err) {
+            if (err instanceof ApiError && err.status === 401) {
+                await SecureStore.deleteItemAsync(KEYS.JWT_TOKEN)  // delete it so the user sees the login screen
+            }
         } finally {  // always runs whether the try succeeded or the catch fired
             setIsLoading(false)  // make loading spinner disappear
         }

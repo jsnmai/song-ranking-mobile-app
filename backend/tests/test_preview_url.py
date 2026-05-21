@@ -21,6 +21,7 @@ REGISTER_PAYLOAD = {
 FRESH_URL = "https://e-cdns-preview.dzcdn.net/stream/fresh?exp=9999999999&hdnea=token"
 EXPIRED_URL = "https://e-cdns-preview.dzcdn.net/stream/expired?exp=1000000000&hdnea=token"
 REFRESHED_URL = "https://e-cdns-preview.dzcdn.net/stream/refreshed?exp=9999999999&hdnea=token"
+NO_EXP_URL = "https://e-cdns-preview.dzcdn.net/stream/no-exp?hdnea=token"
 
 
 class MockDeezerTrackResponse:
@@ -39,6 +40,42 @@ class MockDeezerTrackResponse:
     def json(self) -> dict:
         """Return the mocked Deezer track payload."""
         return {"preview": self.preview}
+
+
+class MockDeezerStatusErrorResponse:
+    """Response object that simulates httpx non-2xx handling."""
+
+    def raise_for_status(self) -> None:
+        """Simulate httpx raising for a non-200 Deezer response."""
+        raise RuntimeError("Deezer returned 500")
+
+    def json(self) -> dict:
+        """Unused because raise_for_status fails first."""
+        return {}
+
+
+class MockDeezerMalformedJsonResponse:
+    """Response object that simulates invalid JSON from Deezer."""
+
+    def raise_for_status(self) -> None:
+        """Match the httpx response API used by the service."""
+        return None
+
+    def json(self) -> dict:
+        """Simulate a JSON parse failure."""
+        raise ValueError("invalid json")
+
+
+class MockDeezerMissingPreviewResponse:
+    """Response object that simulates a valid Deezer payload without preview."""
+
+    def raise_for_status(self) -> None:
+        """Match the httpx response API used by the service."""
+        return None
+
+    def json(self) -> dict:
+        """Return a payload with no preview key."""
+        return {}
 
 
 def _get_token(client: TestClient) -> str:
@@ -138,6 +175,35 @@ def test_preview_url_calls_deezer_when_expired(
     assert response.json() == {"preview_url": REFRESHED_URL}
 
 
+def test_preview_url_treats_null_expiry_as_expired(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    """A stored URL without an expiry timestamp is refreshed instead of trusted forever."""
+    song = _insert_song(db_session, preview_url=FRESH_URL)
+    song.preview_url_expires_at = None
+    db_session.commit()
+    token = _get_token(client)
+    calls = 0
+
+    def mock_get(url: str, timeout: float) -> MockDeezerTrackResponse:
+        nonlocal calls
+        calls += 1
+        return MockDeezerTrackResponse(REFRESHED_URL)
+
+    monkeypatch.setattr("src.services.song.httpx.get", mock_get)
+
+    response = client.get(
+        "/api/v1/songs/123/preview-url",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"preview_url": REFRESHED_URL}
+    assert calls == 1
+
+
 def test_preview_url_updates_db_after_refresh(
     client: TestClient,
     db_session: Session,
@@ -212,6 +278,112 @@ def test_preview_url_falls_back_to_stored_url_when_deezer_call_fails(
 
     assert response.status_code == 200
     assert response.json() == {"preview_url": EXPIRED_URL}
+
+
+def test_preview_url_falls_back_to_stored_url_when_deezer_returns_non_200(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    """A non-200 Deezer response returns the stored URL instead of surfacing a 500."""
+    _insert_song(db_session, preview_url=EXPIRED_URL)
+    token = _get_token(client)
+
+    def mock_get(url: str, timeout: float) -> MockDeezerStatusErrorResponse:
+        return MockDeezerStatusErrorResponse()
+
+    monkeypatch.setattr("src.services.song.httpx.get", mock_get)
+
+    response = client.get(
+        "/api/v1/songs/123/preview-url",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"preview_url": EXPIRED_URL}
+
+
+def test_preview_url_falls_back_to_stored_url_when_deezer_returns_malformed_json(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    """Malformed Deezer JSON returns the stored URL instead of surfacing a 500."""
+    _insert_song(db_session, preview_url=EXPIRED_URL)
+    token = _get_token(client)
+
+    def mock_get(url: str, timeout: float) -> MockDeezerMalformedJsonResponse:
+        return MockDeezerMalformedJsonResponse()
+
+    monkeypatch.setattr("src.services.song.httpx.get", mock_get)
+
+    response = client.get(
+        "/api/v1/songs/123/preview-url",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"preview_url": EXPIRED_URL}
+
+
+def test_preview_url_stores_null_when_deezer_response_has_no_preview_field(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    """A valid Deezer payload without preview clears the stored preview URL."""
+    _insert_song(db_session, preview_url=EXPIRED_URL)
+    token = _get_token(client)
+
+    def mock_get(url: str, timeout: float) -> MockDeezerMissingPreviewResponse:
+        return MockDeezerMissingPreviewResponse()
+
+    monkeypatch.setattr("src.services.song.httpx.get", mock_get)
+
+    response = client.get(
+        "/api/v1/songs/123/preview-url",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"preview_url": None}
+    db_session.expire_all()
+    song = db_session.execute(
+        select(Song)
+        .where(Song.deezer_id == 123)
+    ).scalar_one()
+    assert song.preview_url is None
+    assert song.preview_url_expires_at is None
+
+
+def test_preview_url_stores_refreshed_url_with_null_expiry_when_exp_token_missing(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    """A refreshed Deezer URL without exp= is stored, with null expiry for later refresh."""
+    _insert_song(db_session, preview_url=EXPIRED_URL)
+    token = _get_token(client)
+
+    def mock_get(url: str, timeout: float) -> MockDeezerTrackResponse:
+        return MockDeezerTrackResponse(NO_EXP_URL)
+
+    monkeypatch.setattr("src.services.song.httpx.get", mock_get)
+
+    response = client.get(
+        "/api/v1/songs/123/preview-url",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"preview_url": NO_EXP_URL}
+    db_session.expire_all()
+    song = db_session.execute(
+        select(Song)
+        .where(Song.deezer_id == 123)
+    ).scalar_one()
+    assert song.preview_url == NO_EXP_URL
+    assert song.preview_url_expires_at is None
 
 
 def test_preview_url_rate_limit_enforced(

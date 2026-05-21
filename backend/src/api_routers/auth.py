@@ -20,7 +20,7 @@ router = APIRouter(
     response_model=RegisterResponse,
     status_code=status.HTTP_201_CREATED,
 )
-@limiter.limit("20/minute")
+@limiter.limit("5/minute")
 def register(
     request: Request,
     data: UserRegister,

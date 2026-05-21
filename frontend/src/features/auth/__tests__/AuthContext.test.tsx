@@ -63,7 +63,7 @@ describe("app launch — checkStoredToken", () => {
 
     it("sets user to null, clears SecureStore, and sets isLoading to false when the stored token is expired", async () => {
         mockGetItemAsync.mockResolvedValue("expired-token")
-        mockMe.mockRejectedValue(new Error("401 Unauthorized"))
+        mockMe.mockRejectedValue(new ApiError(401, "Could not validate credentials.", null))
 
         const { result } = renderHook(() => useAuth(), { wrapper })
 
@@ -73,13 +73,14 @@ describe("app launch — checkStoredToken", () => {
         expect(mockDeleteItemAsync).toHaveBeenCalledWith(KEYS.JWT_TOKEN)
     })
 
-    it("sets isLoading to false even when me() throws — the finally block always runs", async () => {
+    it("keeps the stored token when me() fails with a network error", async () => {
         mockGetItemAsync.mockResolvedValue("some-token")
         mockMe.mockRejectedValue(new Error("network error"))
 
         const { result } = renderHook(() => useAuth(), { wrapper })
 
         await waitFor(() => expect(result.current.isLoading).toBe(false))
+        expect(mockDeleteItemAsync).not.toHaveBeenCalled()
     })
 })
 

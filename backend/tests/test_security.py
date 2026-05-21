@@ -2,8 +2,13 @@
 # Covers token tampering, password boundary values, injection attempts, and rate limiting.
 import base64
 import json
+from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
+from jose import jwt
+
+from src.core.config import settings
+from src.core.security import create_access_token
 
 REGISTER_PAYLOAD = {
     "email": "user@example.com",
@@ -61,6 +66,61 @@ def test_wrong_secret_token_rejected(client: TestClient):
         "/api/v1/auth/me",
         headers={"Authorization": f"Bearer {forged}"},
     )
+    assert response.status_code == 401
+
+
+def test_expired_token_rejected(client: TestClient):
+    """An otherwise valid token with an expired exp claim returns 401."""
+    token = jwt.encode(
+        {
+            "sub": "1",
+            "exp": datetime.now(timezone.utc) - timedelta(minutes=1),
+        },
+        settings.jwt_secret_key,
+        algorithm=settings.jwt_algorithm,
+    )
+
+    response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_signed_token_for_nonexistent_user_rejected(client: TestClient):
+    """A validly signed token for a deleted or nonexistent user returns 401."""
+    token = create_access_token({"sub": "999999"})
+
+    response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_token_missing_sub_rejected(client: TestClient):
+    """A signed token without a user id subject returns 401."""
+    token = create_access_token({})
+
+    response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_token_with_non_integer_sub_rejected(client: TestClient):
+    """A signed token with a non-integer subject returns 401."""
+    token = create_access_token({"sub": "not-an-int"})
+
+    response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
     assert response.status_code == 401
 
 
@@ -169,9 +229,9 @@ def test_login_rate_limit_enforced(client: TestClient):
 
 
 def test_register_rate_limit_enforced(client: TestClient):
-    """The register endpoint returns 429 after 20 requests per minute."""
+    """The register endpoint returns 429 after 5 requests per minute."""
     responses = []
-    for i in range(21):
+    for i in range(6):
         payload = {**REGISTER_PAYLOAD, "email": f"user{i}@example.com", "username": f"user{i}aaa"}
         responses.append(client.post("/api/v1/auth/register", json=payload))
     assert responses[-1].status_code == 429
