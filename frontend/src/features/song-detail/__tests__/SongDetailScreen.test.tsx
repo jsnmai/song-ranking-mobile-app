@@ -195,6 +195,56 @@ describe("SongDetailScreen", () => {
         expect(mockFetchPreviewUrl).not.toHaveBeenCalled()
     })
 
+    it("shows global aggregate score when count and average are present", async () => {
+        const routeWithAggregates = {
+            params: {
+                ranking: {
+                    ...ranking,
+                    song: {
+                        ...ranking.song,
+                        global_avg_score: 8.25,
+                        global_rating_count: 2,
+                    },
+                },
+            },
+        }
+
+        render(
+            <SongDetailScreen
+                navigation={navigation as never}
+                route={routeWithAggregates as never}
+            />,
+        )
+        await act(async () => {})
+
+        expect(screen.getByText("2 ratings · avg 8.25")).toBeTruthy()
+    })
+
+    it("hides global aggregate score when count is present but average is missing", async () => {
+        const routeWithIncompleteAggregates = {
+            params: {
+                ranking: {
+                    ...ranking,
+                    song: {
+                        ...ranking.song,
+                        global_avg_score: null,
+                        global_rating_count: 2,
+                    },
+                },
+            },
+        }
+
+        render(
+            <SongDetailScreen
+                navigation={navigation as never}
+                route={routeWithIncompleteAggregates as never}
+            />,
+        )
+        await act(async () => {})
+
+        expect(screen.queryByText(/avg/)).toBeNull()
+    })
+
     it("does not show preview button when fetchPreviewUrl returns null", async () => {
         mockFetchPreviewUrl.mockResolvedValue(null)
 

@@ -18,6 +18,8 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
     const isRated = "ranking" in route.params
     const ranking = isRated ? route.params.ranking : null
     const song = isRated ? route.params.ranking.song : route.params.song
+    const globalRatingCount = song.global_rating_count ?? 0
+    const globalAvgScore = song.global_avg_score ?? null
     const [isRemoving, setIsRemoving] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -146,9 +148,10 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                 <Text style={styles.title} numberOfLines={2}>{song.title}</Text>
                 <Text style={styles.artist} numberOfLines={1}>{song.artist}</Text>
                 <Text style={styles.album} numberOfLines={1}>{song.album}</Text>
-                {(song.global_rating_count ?? 0) > 0 && (
+                {globalRatingCount > 0 && globalAvgScore !== null && (
                     <Text style={styles.aggregates}>
-                        {song.global_rating_count} {song.global_rating_count === 1 ? "rating" : "ratings"} · avg {song.global_avg_score?.toFixed(2)}
+                        {globalRatingCount} {globalRatingCount === 1 ? "rating" : "ratings"}{" "}
+                        · avg {globalAvgScore.toFixed(2)}
                     </Text>
                 )}
                 {isPreviewLoading && (
