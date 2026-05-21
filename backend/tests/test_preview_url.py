@@ -189,3 +189,44 @@ def test_preview_url_returns_null_when_deezer_has_no_preview(
 
     assert response.status_code == 200
     assert response.json() == {"preview_url": None}
+
+
+def test_preview_url_falls_back_to_stored_url_when_deezer_call_fails(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    """A Deezer outage returns the stored URL instead of surfacing a 500 to the user."""
+    _insert_song(db_session, preview_url=EXPIRED_URL)
+    token = _get_token(client)
+
+    def mock_get(url: str, timeout: float) -> MockDeezerTrackResponse:
+        raise RuntimeError("Deezer unavailable")
+
+    monkeypatch.setattr("src.services.song.httpx.get", mock_get)
+
+    response = client.get(
+        "/api/v1/songs/123/preview-url",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"preview_url": EXPIRED_URL}
+
+
+def test_preview_url_rate_limit_enforced(
+    client: TestClient,
+    db_session: Session,
+):
+    """The preview URL endpoint returns 429 after 60 requests per minute."""
+    _insert_song(db_session, preview_url=FRESH_URL)
+    token = _get_token(client)
+    responses = [
+        client.get(
+            "/api/v1/songs/123/preview-url",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        for _ in range(61)
+    ]
+
+    assert responses[-1].status_code == 429

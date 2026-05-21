@@ -539,6 +539,50 @@ def test_comparison_choice_rejects_arbitrary_winner_value(client: TestClient):
     assert response.status_code == 422
 
 
+def test_comparison_choice_rejects_negative_decision_duration(client: TestClient):
+    """Decision duration must be a non-negative number of milliseconds."""
+    token = _get_token(client)
+    _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=123, title="Nights"),
+    )
+    session = _start_session(client, token)
+
+    response = client.post(
+        f"/api/v1/comparison-sessions/{session['session_uuid']}/choices",
+        json={
+            "winner": "target",
+            "decision_duration_ms": -1,
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_comparison_choice_accepts_large_decision_duration(client: TestClient):
+    """Large durations are accepted; analytics should filter absurd values downstream."""
+    token = _get_token(client)
+    _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=123, title="Nights"),
+    )
+    session = _start_session(client, token)
+
+    response = client.post(
+        f"/api/v1/comparison-sessions/{session['session_uuid']}/choices",
+        json={
+            "winner": "target",
+            "decision_duration_ms": 28800000,
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+
+
 def test_binary_insertion_can_span_multiple_comparisons(client: TestClient):
     """A three-song bucket can require two comparisons before final position is known."""
     token = _get_token(client)
