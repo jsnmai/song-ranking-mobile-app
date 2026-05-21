@@ -75,6 +75,15 @@ def _finalize_rating(
     payload: dict,
 ) -> dict:
     """Finalize a rating and return the response body."""
+    requested_position = payload.get("position")
+    if requested_position is not None:
+        return _finalize_rating_through_comparison(
+            client,
+            token,
+            payload,
+            requested_position,
+        )
+
     response = client.post(
         "/api/v1/ratings/finalize",
         json=payload,
@@ -82,6 +91,45 @@ def _finalize_rating(
     )
     assert response.status_code == 201
     return response.json()
+
+
+def _finalize_rating_through_comparison(
+    client: TestClient,
+    token: str,
+    payload: dict,
+    requested_position: int,
+) -> dict:
+    """Drive the public comparison API until it finalizes the target at the requested position."""
+    response = client.post(
+        "/api/v1/comparison-sessions",
+        json={
+            "song": payload["song"],
+            "bucket": payload["bucket"],
+            "note": payload.get("note"),
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 201
+    session = response.json()
+
+    while session["status"] == "active":
+        candidate_position = session["candidate_index"] + 1
+        winner = "target" if requested_position <= candidate_position else "candidate"
+        choice_response = client.post(
+            f"/api/v1/comparison-sessions/{session['session_uuid']}/choices",
+            json={"winner": winner},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert choice_response.status_code == 200
+        session = choice_response.json()
+
+    assert session["final_position"] == requested_position
+    finalize_response = client.post(
+        f"/api/v1/comparison-sessions/{session['session_uuid']}/finalize",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert finalize_response.status_code == 200
+    return finalize_response.json()["result"]
 
 
 def _positions_for_bucket(
@@ -335,11 +383,11 @@ def test_finalize_second_song_without_position_requires_comparison(
     ) == [1]
 
 
-def test_finalize_second_song_with_position_recalculates_two_song_bucket(
+def test_public_finalize_with_position_is_rejected(
     client: TestClient,
     db_session: Session,
 ):
-    """Phase 5 comparison output can place the second song in a non-empty bucket."""
+    """The public endpoint never accepts client-supplied positions."""
     token = _get_token(client)
     _finalize_rating(
         client,
@@ -347,28 +395,19 @@ def test_finalize_second_song_with_position_recalculates_two_song_bucket(
         _rating_payload(deezer_id=123, title="Nights"),
     )
 
-    body = _finalize_rating(
-        client,
-        token,
-        _rating_payload(deezer_id=456, title="Pink + White", position=2),
+    response = client.post(
+        "/api/v1/ratings/finalize",
+        json=_rating_payload(deezer_id=456, title="Pink + White", position=2),
+        headers={"Authorization": f"Bearer {token}"},
     )
 
-    assert body["ranking"]["position"] == 2
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Positioned rating finalization requires a completed comparison session."
     db_session.expire_all()
-    rows = list(
-        db_session.execute(
-            select(
-                Ranking.position,
-                Ranking.score,
-            )
-            .where(Ranking.bucket == "like")
-            .order_by(Ranking.position.asc())
-        )
-    )
-    assert rows == [
-        (1, BUCKET_SCORE_RANGES["like"]["max"]),
-        (2, BUCKET_SCORE_RANGES["like"]["min"]),
-    ]
+    assert _positions_for_bucket(
+        db_session,
+        "like",
+    ) == [1]
 
 
 def test_two_song_bucket_score_boundaries(
@@ -780,6 +819,7 @@ def test_reorder_crossing_bucket_boundary_writes_reordered_events(
         alright_one["ranking"]["song_id"],
         like_two["ranking"]["song_id"],
     ]
+    comparison_count_before_reorder = db_session.scalar(select(func.count()).select_from(Comparison))
 
     response = _reorder_rankings(
         client,
@@ -822,7 +862,7 @@ def test_reorder_crossing_bucket_boundary_writes_reordered_events(
     assert demoted_event["previous_score"] == _expected_score("like", 2, 2)
     assert demoted_event["new_score"] == _expected_score("alright", 1, 1)
     db_session.expire_all()
-    assert db_session.scalar(select(func.count()).select_from(Comparison)) == 0
+    assert db_session.scalar(select(func.count()).select_from(Comparison)) == comparison_count_before_reorder
 
 
 def test_reorder_cannot_include_another_users_ranking(
@@ -1032,6 +1072,59 @@ def test_reorder_invalid_song_id_fails_safely(
     ).scalar_one()
     assert ranking.position == 1
     assert ranking.bucket == "like"
+
+
+def test_reorder_duplicate_song_ids_returns_400(client: TestClient):
+    """Reorder rejects duplicate songs before applying any ranking changes."""
+    token = _get_token(client)
+    first = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=111, title="Song One"),
+    )
+    _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=222, title="Song Two", position=2),
+    )
+
+    response = _reorder_rankings(
+        client,
+        token,
+        [
+            {"song_id": first["ranking"]["song_id"], "bucket": "like"},
+            {"song_id": first["ranking"]["song_id"], "bucket": "like"},
+        ],
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Reorder payload contains duplicate songs."
+
+
+def test_reorder_missing_current_ranking_returns_400(client: TestClient):
+    """Reorder payloads must include every current ranking exactly once."""
+    token = _get_token(client)
+    first = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=111, title="Song One"),
+    )
+    _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=222, title="Song Two", position=2),
+    )
+
+    response = _reorder_rankings(
+        client,
+        token,
+        [
+            {"song_id": first["ranking"]["song_id"], "bucket": "like"},
+        ],
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Reorder payload must include every current ranking."
 
 
 def test_finalize_same_deezer_song_for_second_user_does_not_modify_first_user(

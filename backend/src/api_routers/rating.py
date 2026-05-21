@@ -1,6 +1,6 @@
 # HTTP layer for rating and ranking endpoints.
 # Routers stay thin: parse auth/input, call services, return typed responses.
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
@@ -41,6 +41,12 @@ def finalize_rating_endpoint(
     current_user: User = Depends(get_current_user),
 ) -> RatingFinalizeResponse:
     """Finalize a rating into the authenticated user's current rankings."""
+    if data.position is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Positioned rating finalization requires a completed comparison session.",
+        )
+
     return finalize_rating(
         db,
         user_id=current_user.id,

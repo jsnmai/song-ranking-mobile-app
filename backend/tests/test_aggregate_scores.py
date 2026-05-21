@@ -70,6 +70,15 @@ def _finalize(
     position: int | None = None,
 ) -> dict:
     """Finalize a rating and return the parsed response body."""
+    if position is not None:
+        return _finalize_through_comparison(
+            client,
+            token,
+            deezer_id,
+            bucket,
+            position,
+        )
+
     response = client.post(
         "/api/v1/ratings/finalize",
         json=_rating_payload(deezer_id, bucket, position),
@@ -77,6 +86,49 @@ def _finalize(
     )
     assert response.status_code == 201
     return response.json()
+
+
+def _finalize_through_comparison(
+    client: TestClient,
+    token: str,
+    deezer_id: int,
+    bucket: str,
+    requested_position: int,
+) -> dict:
+    """Drive the public comparison API until it finalizes the target at the requested position."""
+    payload = _rating_payload(
+        deezer_id,
+        bucket,
+    )
+    response = client.post(
+        "/api/v1/comparison-sessions",
+        json={
+            "song": payload["song"],
+            "bucket": bucket,
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 201
+    session = response.json()
+
+    while session["status"] == "active":
+        candidate_position = session["candidate_index"] + 1
+        winner = "target" if requested_position <= candidate_position else "candidate"
+        choice_response = client.post(
+            f"/api/v1/comparison-sessions/{session['session_uuid']}/choices",
+            json={"winner": winner},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert choice_response.status_code == 200
+        session = choice_response.json()
+
+    assert session["final_position"] == requested_position
+    finalize_response = client.post(
+        f"/api/v1/comparison-sessions/{session['session_uuid']}/finalize",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert finalize_response.status_code == 200
+    return finalize_response.json()["result"]
 
 
 def _get_song(db_session: Session, deezer_id: int = 123) -> Song:

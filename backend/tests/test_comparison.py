@@ -84,6 +84,15 @@ def _finalize_rating(
     payload: dict,
 ) -> dict:
     """Finalize a rating and return the response body."""
+    requested_position = payload.get("position")
+    if requested_position is not None:
+        return _finalize_rating_through_comparison(
+            client,
+            token,
+            payload,
+            requested_position,
+        )
+
     response = client.post(
         "/api/v1/ratings/finalize",
         json=payload,
@@ -91,6 +100,41 @@ def _finalize_rating(
     )
     assert response.status_code == 201
     return response.json()
+
+
+def _finalize_rating_through_comparison(
+    client: TestClient,
+    token: str,
+    payload: dict,
+    requested_position: int,
+) -> dict:
+    """Drive the public comparison API until it finalizes the target at the requested position."""
+    session = _start_session(
+        client,
+        token,
+        deezer_id=payload["song"]["deezer_id"],
+        title=payload["song"]["title"],
+        bucket=payload["bucket"],
+    )
+
+    while session["status"] == "active":
+        candidate_position = session["candidate_index"] + 1
+        winner = "target" if requested_position <= candidate_position else "candidate"
+        choice_response = client.post(
+            f"/api/v1/comparison-sessions/{session['session_uuid']}/choices",
+            json={"winner": winner},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert choice_response.status_code == 200
+        session = choice_response.json()
+
+    assert session["final_position"] == requested_position
+    finalize_response = client.post(
+        f"/api/v1/comparison-sessions/{session['session_uuid']}/finalize",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert finalize_response.status_code == 200
+    return finalize_response.json()["result"]
 
 
 def _start_session(
@@ -637,3 +681,98 @@ def test_binary_insertion_can_span_multiple_comparisons(client: TestClient):
     assert second_choice.status_code == 200
     assert second_choice.json()["status"] == "ready_to_finalize"
     assert second_choice.json()["final_position"] == 2
+
+
+def test_binary_insertion_all_win_path_lands_first(
+    client: TestClient,
+    db_session: Session,
+):
+    """A target that beats every candidate lands at the top of the bucket."""
+    token = _get_token(client)
+    _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=111, title="Song One"),
+    )
+    _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=222, title="Song Two", position=2),
+    )
+    _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=333, title="Song Three", position=3),
+    )
+    comparison_count_before_session = db_session.scalar(select(func.count()).select_from(Comparison))
+    session = _start_session(
+        client,
+        token,
+        deezer_id=444,
+        title="Song Four",
+    )
+
+    while session["status"] == "active":
+        choice_response = client.post(
+            f"/api/v1/comparison-sessions/{session['session_uuid']}/choices",
+            json={"winner": "target"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert choice_response.status_code == 200
+        session = choice_response.json()
+
+    finalize_response = client.post(
+        f"/api/v1/comparison-sessions/{session['session_uuid']}/finalize",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert session["final_position"] == 1
+    assert finalize_response.status_code == 200
+    assert finalize_response.json()["result"]["ranking"]["position"] == 1
+    db_session.expire_all()
+    comparison_count_after_session = db_session.scalar(select(func.count()).select_from(Comparison))
+    assert comparison_count_after_session == comparison_count_before_session + 2
+
+
+def test_binary_insertion_all_lose_path_lands_last(client: TestClient):
+    """A target that loses to every candidate lands below the whole bucket."""
+    token = _get_token(client)
+    _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=111, title="Song One"),
+    )
+    _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=222, title="Song Two", position=2),
+    )
+    _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=333, title="Song Three", position=3),
+    )
+    session = _start_session(
+        client,
+        token,
+        deezer_id=444,
+        title="Song Four",
+    )
+
+    while session["status"] == "active":
+        choice_response = client.post(
+            f"/api/v1/comparison-sessions/{session['session_uuid']}/choices",
+            json={"winner": "candidate"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert choice_response.status_code == 200
+        session = choice_response.json()
+
+    finalize_response = client.post(
+        f"/api/v1/comparison-sessions/{session['session_uuid']}/finalize",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert session["final_position"] == 4
+    assert finalize_response.status_code == 200
+    assert finalize_response.json()["result"]["ranking"]["position"] == 4

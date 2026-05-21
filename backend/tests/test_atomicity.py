@@ -1,9 +1,9 @@
 # Atomicity tests — verify that registration writes both rows or neither.
 # These tests query the database directly after HTTP requests to confirm
 # what was actually stored, independent of what the HTTP response reported.
+from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-from fastapi.testclient import TestClient
 
 from src.crud.profile import get_by_username
 from src.crud.user import get_by_email
