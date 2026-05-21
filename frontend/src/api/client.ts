@@ -4,7 +4,7 @@
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000"  // ?? means use left side if it has a value, otherwise use right side
 
 type ErrorResponseBody = {
-    detail?: string;
+    detail?: unknown;
     request_id?: string;
 }
 
@@ -62,7 +62,7 @@ async function request<ResponseType>(requestMethod: string, path: string, reques
     const data = await parseJsonResponse(response)
     if (!response.ok) {                 // fetch only throws on network failure, not on 4xx/5xx responses — check ok manually
         const requestId = response.headers.get("X-Request-ID") ?? data.request_id ?? null
-        const detail = data.detail ?? "An error occurred."
+        const detail = errorDetailToString(data.detail)
         if (response.status === 401 && requestOptions.token && unauthorizedHandler) {
             await unauthorizedHandler()
         }
@@ -81,6 +81,35 @@ async function parseJsonResponse(response: Response): Promise<ErrorResponseBody 
     } catch {
         return {}
     }
+}
+
+function errorDetailToString(detail: unknown): string {
+    if (typeof detail === "string") {
+        return detail
+    }
+    if (Array.isArray(detail)) {
+        const firstMessage = detail
+            .map((item) => messageFromValidationItem(item))
+            .find((message) => message !== null)
+        return firstMessage ?? "Request validation failed."
+    }
+    const objectMessage = messageFromValidationItem(detail)
+    if (objectMessage !== null) {
+        return objectMessage
+    }
+    return "An error occurred."
+}
+
+function messageFromValidationItem(item: unknown): string | null {
+    if (
+        typeof item === "object"
+        && item !== null
+        && "msg" in item
+        && typeof item.msg === "string"
+    ) {
+        return item.msg
+    }
+    return null
 }
 
 // apiClient is the public interface:
