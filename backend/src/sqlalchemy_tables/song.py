@@ -114,6 +114,17 @@ class Song(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    # Aggregate statistics across all users (Phase 10). Kept on the songs row so
+    # reads are O(1) without a GROUP BY. Null avg means no ratings exist yet.
+    global_avg_score: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    global_rating_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default="0",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

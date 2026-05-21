@@ -3,11 +3,12 @@
 import re
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from src.pydantic_schemas.song import SongCreate
+from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.song import Song
 
 
@@ -91,6 +92,39 @@ def update_preview_url(
     song.preview_url = preview_url
     song.preview_url_expires_at = expires_at
     return song
+
+
+def recompute_song_aggregates(
+    db: Session,
+    song_id: int,
+) -> None:
+    """
+    Recompute global_avg_score and global_rating_count for one song without committing.
+
+    Flushes first so pending ranking score changes are visible to the aggregate query.
+    Locks the songs row for update to prevent concurrent aggregate races when multiple
+    users rate the same song simultaneously.
+    """
+    # Flush any pending ranking changes before querying AVG — autoflush=False means
+    # SQLAlchemy will not do this automatically.
+    db.flush()
+    song = db.execute(
+        select(Song)
+        .where(Song.id == song_id)
+        .with_for_update()
+    ).scalar_one()
+    result = db.execute(
+        select(
+            func.count(Ranking.id),
+            func.avg(Ranking.score),
+        )
+        .where(Ranking.song_id == song_id)
+    ).one()
+    count = result[0]
+    avg = result[1]
+    song.global_rating_count = count
+    song.global_avg_score = float(avg) if count > 0 else None
+    db.flush()
 
 
 def update_musicbrainz_metadata(

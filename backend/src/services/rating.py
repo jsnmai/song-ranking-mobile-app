@@ -19,7 +19,7 @@ from src.crud.rating import (
     refresh_rating_event,
     refresh_rating_events,
 )
-from src.crud.song import upsert_from_deezer
+from src.crud.song import recompute_song_aggregates, upsert_from_deezer
 from src.pydantic_schemas.rating import (
     RankingListResponse,
     RankingReorderRequest,
@@ -140,7 +140,10 @@ def persist_finalized_rating(
         position=new_position,
         current_ranking=existing_ranking,
     )
-    # Phase 10: update songs.global_avg_score and songs.global_rating_count here.
+    recompute_song_aggregates(
+        db,
+        song.id,
+    )
     rating_event = create_rating_event(
         db,
         user_id=user_id,
@@ -235,6 +238,10 @@ def remove_rating(
                 previous_bucket,
             ),
             previous_bucket,
+        )
+        recompute_song_aggregates(
+            db,
+            song_id,
         )
         rating_event = create_rating_event(
             db,
@@ -336,11 +343,19 @@ def reorder_rankings(
     }
     rating_events = []
 
+    all_reordered_song_ids = [item.song_id for item in data.rankings]
+
     try:
         for bucket, rankings in bucket_rankings.items():
             _recalculate_bucket(
                 rankings,
                 bucket,
+            )
+
+        for reordered_song_id in all_reordered_song_ids:
+            recompute_song_aggregates(
+                db,
+                reordered_song_id,
             )
 
         for song_id in affected_song_ids:

@@ -57,4 +57,6 @@ class SongResponse(BaseModel):
     spotify_danceability: float | None
     metadata_enriched_at: datetime | None
     spotify_enriched_at: datetime | None
+    global_avg_score: float | None
+    global_rating_count: int
     created_at: datetime
