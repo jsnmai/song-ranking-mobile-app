@@ -2,7 +2,7 @@
 // Called by screens in features/profile/ — never call apiClient directly from a screen.
 
 import { apiClient } from "../../api/client"
-import { Profile, ProfileBase, ProfileListResponse, ProfileSearchResponse, ProfileSetupRequest } from "./types"
+import { Profile, ProfileBase, ProfileListResponse, ProfileSearchResponse, ProfileSetupRequest, TasteProfileResponse } from "./types"
 
 // Calls GET /api/v1/profile/me
 // Returns the authenticated user's own profile.
@@ -48,4 +48,14 @@ export async function getFollowing(username: string, token: string): Promise<Pro
 // Returns the newly created profile.
 export async function setupProfile(data: ProfileSetupRequest, token: string): Promise<ProfileBase> {
     return apiClient.post<ProfileBase>("/api/v1/profile/setup", data, token)
+}
+
+// Calls GET /api/v1/profile/me/taste
+export async function getMyTasteProfile(token: string): Promise<TasteProfileResponse> {
+    return apiClient.get<TasteProfileResponse>("/api/v1/profile/me/taste", token)
+}
+
+// Calls GET /api/v1/profile/{username}/taste
+export async function getUserTasteProfile(username: string, token: string): Promise<TasteProfileResponse> {
+    return apiClient.get<TasteProfileResponse>(`/api/v1/profile/${username}/taste`, token)
 }

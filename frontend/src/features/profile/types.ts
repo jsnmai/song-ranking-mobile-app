@@ -34,3 +34,48 @@ export type ProfileSetupRequest = {
     display_name: string;
     username: string;
 }
+
+// Mirrors TasteGenreItem in backend/src/pydantic_schemas/profile.py
+export type TasteGenreItem = {
+    name: string;
+    count: number;
+    percentage: number;
+}
+
+// Mirrors TasteArtistItem in backend/src/pydantic_schemas/profile.py
+export type TasteArtistItem = {
+    name: string;
+    count: number;
+}
+
+// Mirrors TasteSection in backend/src/pydantic_schemas/profile.py
+export type TasteSection = {
+    genres: TasteGenreItem[];
+    top_artists: TasteArtistItem[];
+}
+
+// Mirrors TasteBucketSection in backend/src/pydantic_schemas/profile.py
+export type TasteBucketSection = TasteSection & {
+    avg_score: number | null;
+    count: number;
+}
+
+// Mirrors TasteBucketBreakdown in backend/src/pydantic_schemas/profile.py
+export type TasteBucketBreakdown = {
+    like: number;
+    okay: number;
+    dislike: number;
+}
+
+// Mirrors TasteProfileResponse in backend/src/pydantic_schemas/profile.py
+export type TasteProfileResponse = {
+    total_rated: number;
+    avg_score: number | null;
+    bucket_breakdown: TasteBucketBreakdown;
+    overall: TasteSection;
+    by_bucket: {
+        like: TasteBucketSection;
+        okay: TasteBucketSection;
+        dislike: TasteBucketSection;
+    };
+}

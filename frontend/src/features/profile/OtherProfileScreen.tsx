@@ -6,10 +6,12 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack"
 import { ApiError } from "../../api/client"
 import { AppStackParamList } from "../../navigation/types"
 import { useAuth } from "../auth/AuthContext"
-import { followUser, getProfileByUsername, unfollowUser } from "./apiRequests"
-import { Profile } from "./types"
+import { followUser, getProfileByUsername, getUserTasteProfile, unfollowUser } from "./apiRequests"
+import { Profile, TasteProfileResponse } from "./types"
+import TasteTabContent from "./TasteTabContent"
 
 type OtherProfileProps = NativeStackScreenProps<AppStackParamList, "OtherProfile">
+type ProfileTab = "profile" | "taste"
 
 export default function OtherProfileScreen({ navigation, route }: OtherProfileProps) {
     const { token } = useAuth()
@@ -17,7 +19,11 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
     const [profile, setProfile] = useState<Profile | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
-    const [error, setError] = useState<string | null>(null)
+    const [profileError, setProfileError] = useState<string | null>(null)
+    const [taste, setTaste] = useState<TasteProfileResponse | null>(null)
+    const [tasteLoading, setTasteLoading] = useState(false)
+    const [tasteError, setTasteError] = useState<string | null>(null)
+    const [activeTab, setActiveTab] = useState<ProfileTab>("profile")
 
     const openFollowers = () => {
         navigation.navigate("ProfileList", {
@@ -39,7 +45,7 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
         }
 
         setIsSaving(true)
-        setError(null)
+        setProfileError(null)
         try {
             const updatedProfile = profile.is_following
                 ? await unfollowUser(profile.username, token)
@@ -47,11 +53,11 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
             setProfile(updatedProfile)
         } catch (err) {
             if (err instanceof ApiError) {
-                setError(err.detail)
+                setProfileError(err.detail)
             } else if (err instanceof Error) {
-                setError(err.message)
+                setProfileError(err.message)
             } else {
-                setError("Could not update follow state.")
+                setProfileError("Could not update follow state.")
             }
         } finally {
             setIsSaving(false)
@@ -64,17 +70,17 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
                 return
             }
             setIsLoading(true)
-            setError(null)
+            setProfileError(null)
             try {
                 const data = await getProfileByUsername(username, token)
                 setProfile(data)
             } catch (err) {
                 if (err instanceof ApiError) {
-                    setError(err.detail)
+                    setProfileError(err.detail)
                 } else if (err instanceof Error) {
-                    setError(err.message)
+                    setProfileError(err.message)
                 } else {
-                    setError("Failed to load profile.")
+                    setProfileError("Failed to load profile.")
                 }
             } finally {
                 setIsLoading(false)
@@ -83,48 +89,109 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
         fetchProfile()
     }, [token, username])
 
+    useEffect(() => {
+        if (activeTab !== "taste" || !token) {
+            return
+        }
+        async function fetchTaste() {
+            if (!token) {
+                return
+            }
+            setTasteLoading(true)
+            setTasteError(null)
+            try {
+                const data = await getUserTasteProfile(username, token)
+                setTaste(data)
+            } catch (err) {
+                if (err instanceof ApiError) {
+                    setTasteError(err.detail)
+                } else if (err instanceof Error) {
+                    setTasteError(err.message)
+                } else {
+                    setTasteError("Failed to load taste profile.")
+                }
+            } finally {
+                setTasteLoading(false)
+            }
+        }
+        fetchTaste()
+    }, [activeTab, token, username])
+
     return (
         <View style={styles.container}>
-            <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-                <Text style={styles.backText}>Back</Text>
-            </TouchableOpacity>
+            <View style={styles.header}>
+                <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+                    <Text style={styles.backText}>Back</Text>
+                </TouchableOpacity>
 
-            {isLoading ? (
-                <ActivityIndicator color="#fff" />
-            ) : profile ? (
-                <View style={styles.info}>
-                    <Text style={styles.displayName}>{profile.display_name}</Text>
-                    <Text style={styles.username}>@{profile.username}</Text>
-                    <View style={styles.countRow}>
-                        <TouchableOpacity style={styles.countButton} onPress={openFollowers}>
-                            <Text style={styles.countValue}>{profile.follower_count}</Text>
-                            <Text style={styles.countLabel}>Followers</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.countButton} onPress={openFollowing}>
-                            <Text style={styles.countValue}>{profile.following_count}</Text>
-                            <Text style={styles.countLabel}>Following</Text>
-                        </TouchableOpacity>
+                {isLoading ? (
+                    <ActivityIndicator color="#fff" />
+                ) : profile ? (
+                    <View style={styles.info}>
+                        <Text style={styles.displayName}>{profile.display_name}</Text>
+                        <Text style={styles.username}>@{profile.username}</Text>
+                        <View style={styles.countRow}>
+                            <TouchableOpacity style={styles.countButton} onPress={openFollowers}>
+                                <Text style={styles.countValue}>{profile.follower_count}</Text>
+                                <Text style={styles.countLabel}>Followers</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.countButton} onPress={openFollowing}>
+                                <Text style={styles.countValue}>{profile.following_count}</Text>
+                                <Text style={styles.countLabel}>Following</Text>
+                            </TouchableOpacity>
+                        </View>
+                        {!profile.is_own_profile && (
+                            <TouchableOpacity
+                                style={[
+                                    styles.followButton,
+                                    profile.is_following ? styles.followingButton : null,
+                                ]}
+                                onPress={toggleFollow}
+                                disabled={isSaving}
+                            >
+                                <Text style={[styles.followText, profile.is_following ? styles.followingText : null]}>
+                                    {isSaving ? "Saving..." : profile.is_following ? "Following" : "Follow"}
+                                </Text>
+                            </TouchableOpacity>
+                        )}
                     </View>
-                    {!profile.is_own_profile && (
+                ) : (
+                    <Text style={styles.error}>{profileError ?? "Profile not found."}</Text>
+                )}
+
+                {profileError !== null && profile !== null && <Text style={styles.error}>{profileError}</Text>}
+            </View>
+
+            {profile && (
+                <>
+                    <View style={styles.tabBar}>
                         <TouchableOpacity
-                            style={[
-                                styles.followButton,
-                                profile.is_following ? styles.followingButton : null,
-                            ]}
-                            onPress={toggleFollow}
-                            disabled={isSaving}
+                            style={[styles.tabBtn, activeTab === "profile" && styles.tabBtnActive]}
+                            onPress={() => setActiveTab("profile")}
                         >
-                            <Text style={[styles.followText, profile.is_following ? styles.followingText : null]}>
-                                {isSaving ? "Saving..." : profile.is_following ? "Following" : "Follow"}
+                            <Text style={[styles.tabText, activeTab === "profile" && styles.tabTextActive]}>
+                                Profile
                             </Text>
                         </TouchableOpacity>
-                    )}
-                </View>
-            ) : (
-                <Text style={styles.error}>{error ?? "Profile not found."}</Text>
-            )}
+                        <TouchableOpacity
+                            style={[styles.tabBtn, activeTab === "taste" && styles.tabBtnActive]}
+                            onPress={() => setActiveTab("taste")}
+                        >
+                            <Text style={[styles.tabText, activeTab === "taste" && styles.tabTextActive]}>
+                                Taste
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
 
-            {error !== null && profile !== null && <Text style={styles.error}>{error}</Text>}
+                    {activeTab === "taste" && (
+                        <TasteTabContent
+                            taste={taste}
+                            isLoading={tasteLoading}
+                            error={tasteError}
+                        />
+                    )}
+                </>
+            )}
         </View>
     )
 }
@@ -133,16 +200,18 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: "#000",
+    },
+    header: {
         alignItems: "center",
-        justifyContent: "center",
         paddingHorizontal: 24,
+        paddingTop: 60,
+        paddingBottom: 16,
     },
     backButton: {
-        position: "absolute",
-        top: 58,
-        left: 18,
+        alignSelf: "flex-start",
         paddingVertical: 8,
-        paddingHorizontal: 10,
+        paddingHorizontal: 0,
+        marginBottom: 16,
     },
     backText: {
         color: "#fff",
@@ -207,5 +276,29 @@ const styles = StyleSheet.create({
         fontSize: 14,
         marginTop: 20,
         textAlign: "center",
+    },
+    tabBar: {
+        flexDirection: "row",
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: "#333",
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: "#333",
+    },
+    tabBtn: {
+        flex: 1,
+        paddingVertical: 12,
+        alignItems: "center",
+    },
+    tabBtnActive: {
+        borderBottomWidth: 2,
+        borderBottomColor: "#fff",
+    },
+    tabText: {
+        color: "#888",
+        fontSize: 14,
+        fontWeight: "600",
+    },
+    tabTextActive: {
+        color: "#fff",
     },
 })
