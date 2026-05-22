@@ -1,16 +1,18 @@
 # HTTP layer for profile endpoints.
 # Routers are intentionally thin: parse the request, call the service, return the result.
 # All business logic lives in src/services/profile.py.
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
+from src.core.limiter import limiter
 from src.pydantic_schemas.profile import (
     ProfileListResponse,
     ProfileResponse,
     ProfileSearchResponse,
     ProfileSetup,
     ProfileSummaryResponse,
+    TasteProfileResponse,
 )
 from src.services.profile import (
     follow_profile,
@@ -21,6 +23,10 @@ from src.services.profile import (
     search_profiles,
     setup_profile,
     unfollow_profile,
+)
+from src.services.taste import (
+    get_my_taste_profile,
+    get_user_taste_profile_by_username,
 )
 from src.sqlalchemy_tables.user import User
 
@@ -86,6 +92,42 @@ def profile_search(
         db,
         current_user_id=current_user.id,
         query=q,
+    )
+
+
+@router.get(
+    "/me/taste",
+    response_model=TasteProfileResponse,
+)
+@limiter.limit("60/minute")
+def my_taste_profile(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TasteProfileResponse:
+    """Return the authenticated user's taste profile."""
+    return get_my_taste_profile(
+        db,
+        user_id=current_user.id,
+    )
+
+
+@router.get(
+    "/{username}/taste",
+    response_model=TasteProfileResponse,
+)
+@limiter.limit("60/minute")
+def user_taste_profile(
+    request: Request,
+    username: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TasteProfileResponse:
+    """Return a public profile's taste data; 404 for private profiles."""
+    return get_user_taste_profile_by_username(
+        db,
+        current_user_id=current_user.id,
+        username=username,
     )
 
 

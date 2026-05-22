@@ -64,3 +64,58 @@ class ProfileListResponse(BaseModel):
     """Response body for follower and following lists."""
 
     profiles: list[ProfileSummaryResponse]
+
+
+class TasteGenreItem(BaseModel):
+    """One genre entry in a taste profile section."""
+
+    name: str
+    count: int
+    percentage: float
+
+
+class TasteArtistItem(BaseModel):
+    """One artist entry in a taste profile section."""
+
+    name: str
+    count: int
+
+
+class TasteSection(BaseModel):
+    """Genre and artist breakdown for a set of ratings."""
+
+    genres: list[TasteGenreItem]
+    top_artists: list[TasteArtistItem]
+
+
+class TasteBucketSection(TasteSection):
+    """Taste section for one bucket, with bucket-level score and count."""
+
+    avg_score: float | None
+    count: int
+
+
+class TasteBucketBreakdown(BaseModel):
+    """Song counts per bucket."""
+
+    like: int
+    okay: int
+    dislike: int
+
+
+class TasteByBucket(BaseModel):
+    """Taste sections broken down by bucket."""
+
+    like: TasteBucketSection
+    okay: TasteBucketSection
+    dislike: TasteBucketSection
+
+
+class TasteProfileResponse(BaseModel):
+    """Full taste profile response."""
+
+    total_rated: int
+    avg_score: float | None
+    bucket_breakdown: TasteBucketBreakdown
+    overall: TasteSection
+    by_bucket: TasteByBucket
