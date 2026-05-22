@@ -119,3 +119,15 @@ class TasteProfileResponse(BaseModel):
     bucket_breakdown: TasteBucketBreakdown
     overall: TasteSection
     by_bucket: TasteByBucket
+
+
+class CompatibilityResponse(BaseModel):
+    """Response body for GET /profile/{username}/compatibility."""
+
+    has_overlap: bool
+    similarity_score: float | None
+    shared_song_count: int
+    # Formatted at service time from structured snapshot fields.
+    # Never stored pre-formatted in the database.
+    explanation: str
+    is_plus: bool

@@ -79,3 +79,12 @@ export type TasteProfileResponse = {
         dislike: TasteBucketSection;
     };
 }
+
+// Mirrors CompatibilityResponse in backend/src/pydantic_schemas/profile.py
+export type CompatibilityResponse = {
+    has_overlap: boolean;
+    similarity_score: number | null;
+    shared_song_count: number;
+    explanation: string;
+    is_plus: boolean;
+}

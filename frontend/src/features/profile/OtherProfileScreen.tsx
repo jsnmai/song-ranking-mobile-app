@@ -6,8 +6,8 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack"
 import { ApiError } from "../../api/client"
 import { AppStackParamList } from "../../navigation/types"
 import { useAuth } from "../auth/AuthContext"
-import { followUser, getProfileByUsername, getUserTasteProfile, unfollowUser } from "./apiRequests"
-import { Profile, TasteProfileResponse } from "./types"
+import { followUser, getCompatibility, getProfileByUsername, getUserTasteProfile, unfollowUser } from "./apiRequests"
+import { CompatibilityResponse, Profile, TasteProfileResponse } from "./types"
 import TasteTabContent from "./TasteTabContent"
 
 type OtherProfileProps = NativeStackScreenProps<AppStackParamList, "OtherProfile">
@@ -24,6 +24,8 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
     const [tasteLoading, setTasteLoading] = useState(false)
     const [tasteError, setTasteError] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<ProfileTab>("profile")
+    const [compatibility, setCompatibility] = useState<CompatibilityResponse | null>(null)
+    const [compatLoading, setCompatLoading] = useState(false)
 
     const openFollowers = () => {
         navigation.navigate("ProfileList", {
@@ -117,6 +119,28 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
         fetchTaste()
     }, [activeTab, token, username])
 
+    useEffect(() => {
+        if (!token) {
+            return
+        }
+        async function fetchCompatibility() {
+            if (!token) {
+                return
+            }
+            setCompatLoading(true)
+            try {
+                const data = await getCompatibility(username, token)
+                setCompatibility(data)
+            } catch {
+                // 404 (private profile) or network error — silently hide the card
+                setCompatibility(null)
+            } finally {
+                setCompatLoading(false)
+            }
+        }
+        fetchCompatibility()
+    }, [token, username])
+
     return (
         <View style={styles.container}>
             <View style={styles.header}>
@@ -164,6 +188,20 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
 
             {profile && (
                 <>
+                    {!compatLoading && compatibility && (
+                        <View style={styles.compatCard}>
+                            {compatibility.has_overlap ? (
+                                <Text style={styles.compatText}>
+                                    {Math.round(compatibility.similarity_score! * 100)}% taste match · {compatibility.explanation}
+                                </Text>
+                            ) : (
+                                <Text style={styles.compatTextMuted}>
+                                    {compatibility.explanation}
+                                </Text>
+                            )}
+                        </View>
+                    )}
+
                     <View style={styles.tabBar}>
                         <TouchableOpacity
                             style={[styles.tabBtn, activeTab === "profile" && styles.tabBtnActive]}
@@ -275,6 +313,25 @@ const styles = StyleSheet.create({
         color: "#ff6b6b",
         fontSize: 14,
         marginTop: 20,
+        textAlign: "center",
+    },
+    compatCard: {
+        marginHorizontal: 24,
+        marginBottom: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        backgroundColor: "#1a1a1a",
+        borderRadius: 8,
+        alignItems: "center",
+    },
+    compatText: {
+        color: "#fff",
+        fontSize: 13,
+        textAlign: "center",
+    },
+    compatTextMuted: {
+        color: "#888",
+        fontSize: 13,
         textAlign: "center",
     },
     tabBar: {

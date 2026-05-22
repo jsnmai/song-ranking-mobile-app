@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from src.core.dependencies import get_current_user, get_db
 from src.core.limiter import limiter
 from src.pydantic_schemas.profile import (
+    CompatibilityResponse,
     ProfileListResponse,
     ProfileResponse,
     ProfileSearchResponse,
@@ -16,6 +17,7 @@ from src.pydantic_schemas.profile import (
 )
 from src.services.profile import (
     follow_profile,
+    get_compatibility_for_username,
     get_my_profile,
     get_profile_by_username,
     get_profile_followers,
@@ -127,6 +129,25 @@ def user_taste_profile(
     return get_user_taste_profile_by_username(
         db,
         current_user_id=current_user.id,
+        username=username,
+    )
+
+
+@router.get(
+    "/{username}/compatibility",
+    response_model=CompatibilityResponse,
+)
+@limiter.limit("60/minute")
+def profile_compatibility(
+    request: Request,
+    username: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CompatibilityResponse:
+    """Return compatibility score between the requesting user and a public profile."""
+    return get_compatibility_for_username(
+        db,
+        current_user=current_user,
         username=username,
     )
 

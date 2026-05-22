@@ -86,6 +86,21 @@ def get_snapshot(
     ).scalar_one_or_none()
 
 
+def get_snapshot_for_pair(
+    db: Session,
+    user_id_1: int,
+    user_id_2: int,
+    algorithm_version: str,
+) -> UserSimilaritySnapshot | None:
+    """Look up a snapshot for any pair order, enforcing canonical ordering internally."""
+    return get_snapshot(
+        db,
+        min(user_id_1, user_id_2),
+        max(user_id_1, user_id_2),
+        algorithm_version,
+    )
+
+
 def upsert_snapshot(
     db: Session,
     user_a_id: int,

@@ -15,14 +15,19 @@ from src.crud.follow import (
     list_following,
 )
 from src.crud.profile import create_profile, get_by_user_id, get_by_username, search_by_username
+from src.crud.similarity import get_snapshot_for_pair
 from src.pydantic_schemas.profile import (
+    CompatibilityResponse,
     ProfileListResponse,
     ProfileResponse,
     ProfileSearchResponse,
     ProfileSetup,
     ProfileSummaryResponse,
 )
+from src.services.access import is_plus as check_is_plus
 from src.sqlalchemy_tables.profile import Profile
+from src.sqlalchemy_tables.user import User
+from src.sqlalchemy_tables.user_similarity_snapshot import UserSimilaritySnapshot
 
 
 def setup_profile(
@@ -316,4 +321,67 @@ def get_profile_following(
                 profile.user_id,
             )
         ],
+    )
+
+
+_ALGORITHM_VERSION = "v1_cosine"
+
+
+def _build_explanation(snapshot: UserSimilaritySnapshot) -> str:
+    """
+    Format a one-phrase explanation from structured snapshot fields.
+
+    Tries shared artists first, then genres, then falls back to song count.
+    Structured fields are used here — no pre-formatted strings are stored in
+    the database so future display surfaces can format them differently.
+    """
+    if snapshot.shared_top_artists:
+        return f"Both love {snapshot.shared_top_artists[0]}"
+    if snapshot.shared_genres:
+        return f"You both rate {snapshot.shared_genres[0]} highly"
+    return f"You agree on {snapshot.shared_song_count} songs"
+
+
+def get_compatibility_for_username(
+    db: Session,
+    current_user: User,
+    username: str,
+) -> CompatibilityResponse:
+    """
+    Return compatibility data for current_user vs target username.
+
+    404 when the target profile does not exist or is private and the current
+    user is not the owner or a follower — same visibility rule as all other
+    profile sub-endpoints. No snapshot returns 200 with has_overlap=False so
+    the frontend can show the safe state instead of treating it as an error.
+    """
+    target_profile = _get_visible_profile_by_username(
+        db,
+        current_user.id,
+        username,
+    )
+    user_is_plus = check_is_plus(current_user)
+
+    snapshot = get_snapshot_for_pair(
+        db,
+        current_user.id,
+        target_profile.user_id,
+        _ALGORITHM_VERSION,
+    )
+
+    if snapshot is None or snapshot.shared_song_count < 5:
+        return CompatibilityResponse(
+            has_overlap=False,
+            similarity_score=None,
+            shared_song_count=snapshot.shared_song_count if snapshot else 0,
+            explanation="Not enough overlap yet · Rate more songs to compare",
+            is_plus=user_is_plus,
+        )
+
+    return CompatibilityResponse(
+        has_overlap=True,
+        similarity_score=snapshot.similarity_score,
+        shared_song_count=snapshot.shared_song_count,
+        explanation=_build_explanation(snapshot),
+        is_plus=user_is_plus,
     )

@@ -2,7 +2,7 @@
 // Called by screens in features/profile/ — never call apiClient directly from a screen.
 
 import { apiClient } from "../../api/client"
-import { Profile, ProfileBase, ProfileListResponse, ProfileSearchResponse, ProfileSetupRequest, TasteProfileResponse } from "./types"
+import { CompatibilityResponse, Profile, ProfileBase, ProfileListResponse, ProfileSearchResponse, ProfileSetupRequest, TasteProfileResponse } from "./types"
 
 // Calls GET /api/v1/profile/me
 // Returns the authenticated user's own profile.
@@ -58,4 +58,9 @@ export async function getMyTasteProfile(token: string): Promise<TasteProfileResp
 // Calls GET /api/v1/profile/{username}/taste
 export async function getUserTasteProfile(username: string, token: string): Promise<TasteProfileResponse> {
     return apiClient.get<TasteProfileResponse>(`/api/v1/profile/${username}/taste`, token)
+}
+
+// Calls GET /api/v1/profile/{username}/compatibility
+export async function getCompatibility(username: string, token: string): Promise<CompatibilityResponse> {
+    return apiClient.get<CompatibilityResponse>(`/api/v1/profile/${username}/compatibility`, token)
 }
