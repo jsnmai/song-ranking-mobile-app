@@ -62,10 +62,20 @@ web-build/
 # Internal AI context files
 CLAUDE.md
 .claude/
+
 AGENTS.md
 scripts/
 DECISIONS.md
+ARCHITECTURE.md
+FUTURE.md
+PHASES.md
+PRODUCT.md
+.agents/
 
 # Notes
-DOCUMENTATION.md
 FRONTEND_GUIDE.md
+VISUAL_GUIDE.md
+
+pinterest_designs/
+app designs/
+notes/
