@@ -259,4 +259,26 @@ def update_musicbrainz_metadata(
     song.genres_mb = genres_mb
     song.release_year = release_year
     song.metadata_enriched_at = enriched_at
+    song.enrichment_status = "enriched"
+    song.enrichment_attempt_count = (song.enrichment_attempt_count or 0) + 1
+    return song
+
+
+def mark_song_enrichment_no_match(
+    db: Session,
+    song: Song,
+) -> Song:
+    """Record that no confident MusicBrainz match was found without committing."""
+    song.enrichment_status = "no_match"
+    song.enrichment_attempt_count = (song.enrichment_attempt_count or 0) + 1
+    return song
+
+
+def mark_song_enrichment_failed(
+    db: Session,
+    song: Song,
+) -> Song:
+    """Record a temporary enrichment failure without committing."""
+    song.enrichment_status = "failed_temporary"
+    song.enrichment_attempt_count = (song.enrichment_attempt_count or 0) + 1
     return song

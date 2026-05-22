@@ -2,6 +2,8 @@
 # The HTTP client is mocked so tests never call the real MusicBrainz API.
 from datetime import datetime, timezone
 
+import httpx
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -165,6 +167,11 @@ def test_musicbrainz_enrichment_by_isrc_updates_song(
     assert response.release_year == 2016
     assert response.metadata_enriched_at is not None
 
+    song = db_session.get(Song, song_response.id)
+    assert song is not None
+    assert song.enrichment_status == "enriched"
+    assert song.enrichment_attempt_count == 1
+
 
 def test_musicbrainz_fuzzy_match_below_threshold_is_skipped(
     db_session: Session,
@@ -209,6 +216,42 @@ def test_musicbrainz_fuzzy_match_below_threshold_is_skipped(
     assert response.genres_mb is None
     assert response.release_year is None
     assert response.metadata_enriched_at is None
+
+    song = db_session.get(Song, song_response.id)
+    assert song is not None
+    assert song.enrichment_status == "no_match"
+    assert song.enrichment_attempt_count == 1
+
+
+def test_musicbrainz_http_failure_writes_failed_temporary_status(
+    db_session: Session,
+    monkeypatch,
+):
+    """A MusicBrainz HTTP error sets enrichment_status to failed_temporary and re-raises."""
+    song_response = persist_user_touched_song(
+        db_session,
+        _song_payload(),
+    )
+
+    monkeypatch.setattr(
+        "src.services.musicbrainz.httpx.get",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            httpx.ConnectError("simulated failure"),
+        ),
+    )
+    monkeypatch.setattr(
+        "src.services.musicbrainz.time.sleep",
+        lambda seconds: None,
+    )
+
+    with pytest.raises(httpx.ConnectError):
+        enrich_song_metadata(db_session, song_response.id)
+
+    db_session.expire_all()
+    song = db_session.get(Song, song_response.id)
+    assert song is not None
+    assert song.enrichment_status == "failed_temporary"
+    assert song.enrichment_attempt_count == 1
 
 
 def _register_and_get_token(

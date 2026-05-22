@@ -104,6 +104,18 @@ class Song(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    # "pending" | "enriched" | "no_match" | "failed_temporary"
+    # Plain string — no PostgreSQL ENUM — so new statuses need no ALTER TYPE migration.
+    enrichment_status: Mapped[str | None] = mapped_column(
+        String(32),
+        nullable=True,
+        server_default="pending",
+    )
+    enrichment_attempt_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default="0",
+    )
     spotify_enriched_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,

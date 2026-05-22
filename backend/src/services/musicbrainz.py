@@ -6,7 +6,12 @@ from datetime import datetime, timezone
 import httpx
 from sqlalchemy.orm import Session
 
-from src.crud.song import get_by_id, update_musicbrainz_metadata
+from src.crud.song import (
+    get_by_id,
+    mark_song_enrichment_failed,
+    mark_song_enrichment_no_match,
+    update_musicbrainz_metadata,
+)
 from src.pydantic_schemas.song import SongResponse
 
 MUSICBRAINZ_RECORDING_URL = "https://musicbrainz.org/ws/2/recording/"
@@ -40,15 +45,18 @@ def enrich_song_metadata(
     if song.metadata_enriched_at is not None:
         return SongResponse.model_validate(song)
 
-    recording = _find_musicbrainz_recording(
-        isrc=song.isrc,
-        artist=song.artist,
-        title=song.title,
-    )
-    if recording is None:
-        return SongResponse.model_validate(song)
-
     try:
+        recording = _find_musicbrainz_recording(
+            isrc=song.isrc,
+            artist=song.artist,
+            title=song.title,
+        )
+        if recording is None:
+            mark_song_enrichment_no_match(db, song)
+            db.commit()
+            db.refresh(song)
+            return SongResponse.model_validate(song)
+
         enriched_song = update_musicbrainz_metadata(
             db,
             song,
@@ -61,6 +69,14 @@ def enrich_song_metadata(
         db.refresh(enriched_song)
     except Exception:
         db.rollback()
+        # Best-effort status write after rollback. Re-fetch to avoid stale ORM state.
+        try:
+            fresh_song = get_by_id(db, song_id)
+            if fresh_song is not None:
+                mark_song_enrichment_failed(db, fresh_song)
+                db.commit()
+        except Exception:
+            pass
         raise
 
     return SongResponse.model_validate(enriched_song)
