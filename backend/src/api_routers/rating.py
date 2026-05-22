@@ -1,6 +1,6 @@
 # HTTP layer for rating and ranking endpoints.
 # Routers stay thin: parse auth/input, call services, return typed responses.
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
@@ -14,6 +14,7 @@ from src.pydantic_schemas.rating import (
     RatingFinalizeResponse,
     RatingRemoveResponse,
 )
+from src.services.musicbrainz_tasks import enrich_song_metadata_task
 from src.services.rating import (
     finalize_rating,
     get_my_ranking_by_deezer_id,
@@ -37,6 +38,7 @@ router = APIRouter(
 def finalize_rating_endpoint(
     request: Request,
     data: RatingFinalizeRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> RatingFinalizeResponse:
@@ -47,11 +49,16 @@ def finalize_rating_endpoint(
             detail="Positioned rating finalization requires a completed comparison session.",
         )
 
-    return finalize_rating(
+    response = finalize_rating(
         db,
         user_id=current_user.id,
         data=data,
     )
+    background_tasks.add_task(
+        enrich_song_metadata_task,
+        response.ranking.song_id,
+    )
+    return response
 
 
 @router.delete(

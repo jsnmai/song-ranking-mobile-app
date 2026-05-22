@@ -2,6 +2,7 @@
 # The HTTP client is mocked so tests never call the real MusicBrainz API.
 from datetime import datetime, timezone
 
+from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from src.pydantic_schemas.song import SongCreate
@@ -208,3 +209,69 @@ def test_musicbrainz_fuzzy_match_below_threshold_is_skipped(
     assert response.genres_mb is None
     assert response.release_year is None
     assert response.metadata_enriched_at is None
+
+
+def _register_and_get_token(
+    client: TestClient,
+    email: str = "mb@example.com",
+    username: str = "mbuser",
+) -> str:
+    """Register a user and return the JWT from the register response."""
+    response = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "password": "password123",
+            "display_name": "MB User",
+            "username": username,
+        },
+    )
+    return response.json()["access_token"]
+
+
+def _finalize_payload() -> dict:
+    """Return a valid rating finalize request body."""
+    return {
+        "song": {
+            "deezer_id": 9999,
+            "isrc": "USUG11900842",
+            "title": "Nights",
+            "artist": "Frank Ocean",
+            "artist_deezer_id": 456,
+            "album": "Blonde",
+            "cover_url": "https://example.com/cover.jpg",
+            "preview_url": None,
+            "genre_deezer": None,
+        },
+        "bucket": "dislike",
+    }
+
+
+def test_rating_finalize_succeeds_when_musicbrainz_raises(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    """Rating finalize returns 201 even when MusicBrainz enrichment throws an exception."""
+    def fail_enrichment(
+        db: Session,
+        song_id: int,
+    ) -> None:
+        raise RuntimeError("MusicBrainz is down")
+
+    # Patch the reference used inside the background task module so the task's
+    # try/except catches the error and the HTTP response is unaffected.
+    monkeypatch.setattr(
+        "src.services.musicbrainz_tasks.enrich_song_metadata",
+        fail_enrichment,
+    )
+
+    token = _register_and_get_token(client)
+    response = client.post(
+        "/api/v1/ratings/finalize",
+        json=_finalize_payload(),
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["ranking"]["bucket"] == "dislike"

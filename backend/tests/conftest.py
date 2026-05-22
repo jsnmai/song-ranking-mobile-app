@@ -1,6 +1,7 @@
 # Shared pytest fixtures for all backend tests.
 # Sets up a dedicated test database, creates schema once per session,
 # and tears down rows between tests to keep each test isolated.
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -99,6 +100,28 @@ def client() -> TestClient:
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def block_musicbrainz_http(monkeypatch) -> None:
+    """
+    Prevent any real MusicBrainz HTTP calls during tests.
+
+    Rating finalize now triggers best-effort enrichment. Without this guard every
+    test that finalizes a rating would attempt a live network call, making the
+    suite slow and fragile. Individual musicbrainz tests override this fixture by
+    calling monkeypatch.setattr on the same names inside their own test body —
+    the last setattr on the same target wins because they share the same monkeypatch
+    instance.
+    """
+    monkeypatch.setattr(
+        "src.services.musicbrainz.httpx.get",
+        lambda *args, **kwargs: (_ for _ in ()).throw(httpx.ConnectError("MusicBrainz blocked in tests")),
+    )
+    monkeypatch.setattr(
+        "src.services.musicbrainz.time.sleep",
+        lambda seconds: None,
+    )
 
 
 @pytest.fixture

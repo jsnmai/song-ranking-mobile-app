@@ -94,6 +94,9 @@ def finalize_rating(
     3. Recalculate affected bucket scores server-side.
     4. Write one append-only `rating_events` row.
     5. Commit the whole rating write atomically.
+
+    MusicBrainz enrichment is NOT triggered here — the router schedules it as a
+    BackgroundTask after this function returns, so the request thread is never held.
     """
     try:
         finalized_rating = persist_finalized_rating(
@@ -799,3 +802,5 @@ def _build_cursor(
 ) -> str:
     """Build a cursor from the last row in the current page."""
     return f"{ranking.score}:{ranking.id}"
+
+

@@ -1,7 +1,7 @@
 """HTTP layer for comparison-session endpoints."""
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
@@ -19,6 +19,7 @@ from src.services.comparison import (
     record_comparison_choice,
     start_comparison_session,
 )
+from src.services.musicbrainz_tasks import enrich_song_metadata_task
 from src.sqlalchemy_tables.user import User
 
 router = APIRouter(
@@ -76,15 +77,21 @@ def choose_winner(
 def finalize_session(
     request: Request,
     session_uuid: UUID,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ComparisonSessionFinalizeResponse:
     """Finalize a completed comparison session."""
-    return finalize_comparison_session(
+    response = finalize_comparison_session(
         db,
         user_id=current_user.id,
         session_uuid=session_uuid,
     )
+    background_tasks.add_task(
+        enrich_song_metadata_task,
+        response.result.ranking.song_id,
+    )
+    return response
 
 
 @router.delete(
