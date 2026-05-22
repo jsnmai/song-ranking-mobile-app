@@ -1,8 +1,8 @@
 // Profile tab — shows the logged-in user's display name, social counts, logout, and taste profile.
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
-import { useNavigation } from "@react-navigation/native"
+import { useFocusEffect, useNavigation } from "@react-navigation/native"
 
 import { ApiError } from "../../api/client"
 import { AppStackParamList } from "../../navigation/types"
@@ -44,26 +44,28 @@ export default function ProfileScreen() {
         })
     }
 
-    useEffect(() => {
-        async function fetchProfile() {
-            if (!token) {
-                return
-            }
-            try {
-                const data = await getMyProfile(token)
-                setProfile(data)
-            } catch (err) {
-                if (err instanceof ApiError) {
-                    setProfileError(err.detail)
-                } else if (err instanceof Error) {
-                    setProfileError(err.message)
-                } else {
-                    setProfileError("Failed to load profile.")
+    useFocusEffect(
+        useCallback(() => {
+            async function fetchProfile() {
+                if (!token) {
+                    return
+                }
+                try {
+                    const data = await getMyProfile(token)
+                    setProfile(data)
+                } catch (err) {
+                    if (err instanceof ApiError) {
+                        setProfileError(err.detail)
+                    } else if (err instanceof Error) {
+                        setProfileError(err.message)
+                    } else {
+                        setProfileError("Failed to load profile.")
+                    }
                 }
             }
-        }
-        fetchProfile()
-    }, [token])
+            fetchProfile()
+        }, [token])
+    )
 
     useEffect(() => {
         if (activeTab !== "taste" || !token) {
