@@ -22,6 +22,7 @@ from src.services.rating import (
     remove_rating,
     reorder_rankings,
 )
+from src.services.similarity_tasks import refresh_similarity_for_user_task
 from src.sqlalchemy_tables.user import User
 
 router = APIRouter(
@@ -57,6 +58,10 @@ def finalize_rating_endpoint(
     background_tasks.add_task(
         enrich_song_metadata_task,
         response.ranking.song_id,
+    )
+    background_tasks.add_task(
+        refresh_similarity_for_user_task,
+        current_user.id,
     )
     return response
 

@@ -15,6 +15,7 @@ import src.sqlalchemy_tables.ranking  # noqa: F401 — registers Ranking with Ba
 import src.sqlalchemy_tables.rating_event  # noqa: F401 — registers RatingEvent with Base.metadata so Alembic sees the table
 import src.sqlalchemy_tables.comparison_session  # noqa: F401 — registers ComparisonSession with Base.metadata so Alembic sees the table
 import src.sqlalchemy_tables.comparison  # noqa: F401 — registers Comparison with Base.metadata so Alembic sees the table
+import src.sqlalchemy_tables.user_similarity_snapshot  # noqa: F401 — registers UserSimilaritySnapshot with Base.metadata so Alembic sees the table
 # Add a new import here each time a new model file is created.
 
 # this is the Alembic Config object, which provides

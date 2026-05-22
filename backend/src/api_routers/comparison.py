@@ -20,6 +20,7 @@ from src.services.comparison import (
     start_comparison_session,
 )
 from src.services.musicbrainz_tasks import enrich_song_metadata_task
+from src.services.similarity_tasks import refresh_similarity_for_user_task
 from src.sqlalchemy_tables.user import User
 
 router = APIRouter(
@@ -90,6 +91,10 @@ def finalize_session(
     background_tasks.add_task(
         enrich_song_metadata_task,
         response.result.ranking.song_id,
+    )
+    background_tasks.add_task(
+        refresh_similarity_for_user_task,
+        current_user.id,
     )
     return response
 
