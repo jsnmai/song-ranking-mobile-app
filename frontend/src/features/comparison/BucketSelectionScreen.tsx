@@ -1,10 +1,20 @@
 // Bucket Selection screen — user chooses Like / Okay / Dislike before comparison.
-import { useState } from "react"
-import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { useEffect, useState } from "react"
+import {
+    ActivityIndicator,
+    Image,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 
 import { ApiError } from "../../api/client"
+import { useAudioPlayer } from "../../hooks/useAudioPlayer"
 import { AppStackParamList } from "../../navigation/types"
+import { colors, fonts, bucketColor } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
 import { listMyRankings } from "../rankings/apiRequests"
 import { finalizeRating, startComparisonSession } from "./apiRequests"
@@ -12,10 +22,10 @@ import { BucketName } from "./types"
 
 type BucketSelectionProps = NativeStackScreenProps<AppStackParamList, "BucketSelection">
 
-const BUCKETS: { name: BucketName; label: string; description: string }[] = [
-    { name: "like", label: "Like", description: "This belongs near the top." },
-    { name: "alright", label: "Okay", description: "Good, but not a favorite." },
-    { name: "dislike", label: "Dislike", description: "Not for you right now." },
+const BUCKETS: { name: BucketName; label: string; range: string; description: string }[] = [
+    { name: "like", label: "Like", range: "7.5–10.0", description: "This belongs near the top." },
+    { name: "alright", label: "Okay", range: "5.0–7.4", description: "Good, but not a favorite." },
+    { name: "dislike", label: "Dislike", range: "0.0–4.0", description: "Not for you right now." },
 ]
 
 export default function BucketSelectionScreen({ navigation, route }: BucketSelectionProps) {
@@ -23,8 +33,16 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
     const { song } = route.params
     const [selectedBucket, setSelectedBucket] = useState<BucketName | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const { isPlaying, toggle: toggleAudio, stop: stopAudio } = useAudioPlayer(song.preview_url)
+
+    useEffect(() => {
+        return navigation.addListener("blur", () => {
+            stopAudio()
+        })
+    }, [navigation, stopAudio])
 
     const handleClose = () => {
+        stopAudio()
         navigation.goBack()
     }
 
@@ -38,6 +56,7 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
 
         try {
             const requiresComparison = await bucketRequiresComparison(bucket, token)
+            stopAudio()
             if (requiresComparison) {
                 const session = await startComparisonSession(
                     {
@@ -92,39 +111,78 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
-                    <Text style={styles.closeText}>x</Text>
+                <TouchableOpacity
+                    style={styles.closeButton}
+                    onPress={handleClose}
+                    testID="bucket-selection-close"
+                >
+                    <Text style={styles.closeText}>×</Text>
                 </TouchableOpacity>
+                <Text style={styles.headerKicker}>YOUR VERDICT</Text>
+                <View style={styles.headerSpacer} />
             </View>
-            <View style={styles.songHeader}>
-                {song.cover_url ? (
-                    <Image source={{ uri: song.cover_url }} style={styles.cover} />
-                ) : (
-                    <View style={styles.coverPlaceholder} />
-                )}
-                <Text style={styles.title} numberOfLines={2}>{song.title}</Text>
-                <Text style={styles.artist} numberOfLines={1}>{song.artist}</Text>
-            </View>
-            <View style={styles.bucketList}>
-                {BUCKETS.map((bucket) => (
-                    <TouchableOpacity
-                        key={bucket.name}
-                        style={[
-                            styles.bucketButton,
-                            selectedBucket === bucket.name ? styles.bucketButtonSelected : null,
-                        ]}
-                        onPress={() => handleBucketPress(bucket.name)}
-                        disabled={selectedBucket !== null}
-                    >
-                        <View>
-                            <Text style={styles.bucketLabel}>{bucket.label}</Text>
-                            <Text style={styles.bucketDescription}>{bucket.description}</Text>
-                        </View>
-                        {selectedBucket === bucket.name && <ActivityIndicator color="#fff" />}
-                    </TouchableOpacity>
-                ))}
-            </View>
-            {error !== null && <Text style={styles.errorText}>{error}</Text>}
+
+            <ScrollView
+                style={styles.scroll}
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+            >
+                <View style={styles.previewCard}>
+                    <View style={styles.coverFrame}>
+                        {song.cover_url ? (
+                            <Image source={{ uri: song.cover_url }} style={styles.cover} />
+                        ) : null}
+                    </View>
+                    <Text style={styles.title} numberOfLines={2}>{song.title}</Text>
+                    <Text style={styles.artistAlbum} numberOfLines={1}>
+                        {song.artist.toUpperCase()} · {song.album.toUpperCase()}
+                    </Text>
+                    {song.preview_url !== null && (
+                        <TouchableOpacity style={styles.previewButton} onPress={toggleAudio}>
+                            <Text style={styles.previewButtonText}>
+                                {isPlaying ? "Pause Preview" : "Play Preview"}
+                            </Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
+
+                <Text style={styles.sectionKicker}>CHOOSE A BUCKET</Text>
+
+                <View style={styles.stampRow}>
+                    {BUCKETS.map((bucket) => {
+                        const accent = bucketColor(bucket.name)
+                        const isSelected = selectedBucket === bucket.name
+                        const isDisabled = selectedBucket !== null
+
+                        return (
+                            <TouchableOpacity
+                                key={bucket.name}
+                                style={[
+                                    styles.stampCard,
+                                    { borderTopColor: accent },
+                                    isSelected ? { borderColor: accent } : null,
+                                    isDisabled && !isSelected ? styles.stampCardDisabled : null,
+                                ]}
+                                onPress={() => handleBucketPress(bucket.name)}
+                                disabled={isDisabled}
+                                testID={`bucket-${bucket.name}`}
+                            >
+                                <Text style={[styles.stampLabel, { color: accent }]}>{bucket.label}</Text>
+                                <Text style={styles.stampRange}>{bucket.range}</Text>
+                                <Text style={styles.stampDescription}>{bucket.description}</Text>
+                                {isSelected && (
+                                    <ActivityIndicator
+                                        style={styles.stampSpinner}
+                                        color={accent}
+                                    />
+                                )}
+                            </TouchableOpacity>
+                        )
+                    })}
+                </View>
+
+                {error !== null && <Text style={styles.errorText}>{error}</Text>}
+            </ScrollView>
         </View>
     )
 }
@@ -132,12 +190,15 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: "#000",
-        paddingHorizontal: 20,
+        backgroundColor: colors.bg,
     },
     header: {
         paddingTop: 54,
-        alignItems: "flex-end",
+        paddingHorizontal: 20,
+        paddingBottom: 8,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
     },
     closeButton: {
         width: 36,
@@ -145,71 +206,139 @@ const styles = StyleSheet.create({
         borderRadius: 18,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#1a1a1a",
+        backgroundColor: colors.sand,
     },
     closeText: {
-        color: "#fff",
-        fontSize: 18,
+        color: colors.ink,
+        fontSize: 22,
+        lineHeight: 26,
     },
-    songHeader: {
-        alignItems: "center",
+    headerKicker: {
+        fontFamily: fonts.mono,
+        fontSize: 10,
+        letterSpacing: 1.8,
+        color: colors.inkSoft,
+    },
+    headerSpacer: {
+        width: 36,
+    },
+    scroll: {
+        flex: 1,
+    },
+    scrollContent: {
+        paddingHorizontal: 20,
+        paddingBottom: 24,
+    },
+    previewCard: {
+        backgroundColor: colors.paper,
+        borderWidth: 1,
+        borderColor: colors.line,
+        borderRadius: 12,
+        paddingHorizontal: 20,
         paddingTop: 24,
-        paddingBottom: 32,
+        paddingBottom: 20,
+        alignItems: "center",
+        marginBottom: 24,
+    },
+    coverFrame: {
+        width: 104,
+        height: 104,
+        borderRadius: 10,
+        backgroundColor: colors.sand,
+        overflow: "hidden",
+        marginBottom: 16,
     },
     cover: {
-        width: 144,
-        height: 144,
-        borderRadius: 8,
-        marginBottom: 18,
-    },
-    coverPlaceholder: {
-        width: 144,
-        height: 144,
-        borderRadius: 8,
-        marginBottom: 18,
-        backgroundColor: "#1a1a1a",
+        width: "100%",
+        height: "100%",
     },
     title: {
-        color: "#fff",
-        fontSize: 24,
-        fontWeight: "700",
+        fontFamily: fonts.serif,
+        color: colors.ink,
+        fontSize: 22,
         textAlign: "center",
-        marginBottom: 6,
+        marginBottom: 8,
+        lineHeight: 28,
     },
-    artist: {
-        color: "#aaa",
-        fontSize: 16,
+    artistAlbum: {
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 10,
+        letterSpacing: 1.4,
+        textAlign: "center",
+        marginBottom: 16,
     },
-    bucketList: {
-        gap: 12,
-    },
-    bucketButton: {
-        minHeight: 76,
-        borderRadius: 8,
+    previewButton: {
+        height: 36,
+        paddingHorizontal: 22,
+        borderRadius: 999,
         borderWidth: 1,
-        borderColor: "#2a2a2a",
-        backgroundColor: "#111",
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        flexDirection: "row",
+        borderColor: colors.line,
+        backgroundColor: colors.bg,
         alignItems: "center",
-        justifyContent: "space-between",
+        justifyContent: "center",
     },
-    bucketButtonSelected: {
-        borderColor: "#fff",
+    previewButtonText: {
+        fontFamily: fonts.mono,
+        color: colors.ink,
+        fontSize: 12,
+        letterSpacing: 0.6,
     },
-    bucketLabel: {
-        color: "#fff",
-        fontSize: 18,
-        fontWeight: "700",
+    sectionKicker: {
+        fontFamily: fonts.mono,
+        fontSize: 9,
+        letterSpacing: 2,
+        color: colors.inkSoft,
+        textAlign: "center",
+        marginBottom: 14,
+    },
+    stampRow: {
+        flexDirection: "row",
+        gap: 10,
+    },
+    stampCard: {
+        flex: 1,
+        minHeight: 132,
+        backgroundColor: colors.paper,
+        borderWidth: 1,
+        borderColor: colors.line,
+        borderTopWidth: 4,
+        borderRadius: 10,
+        paddingHorizontal: 8,
+        paddingTop: 12,
+        paddingBottom: 10,
+        alignItems: "center",
+    },
+    stampCardDisabled: {
+        opacity: 0.55,
+    },
+    stampLabel: {
+        fontFamily: fonts.serif,
+        fontSize: 17,
+        lineHeight: 22,
         marginBottom: 4,
+        textAlign: "center",
     },
-    bucketDescription: {
-        color: "#888",
-        fontSize: 14,
+    stampRange: {
+        fontFamily: fonts.mono,
+        fontSize: 8,
+        letterSpacing: 0.8,
+        color: colors.inkDim,
+        marginBottom: 8,
+        textAlign: "center",
+    },
+    stampDescription: {
+        fontFamily: fonts.mono,
+        fontSize: 9,
+        lineHeight: 12,
+        color: colors.inkSoft,
+        textAlign: "center",
+    },
+    stampSpinner: {
+        marginTop: 8,
     },
     errorText: {
-        color: "#ff6b6b",
+        color: colors.dislike,
         fontSize: 14,
         marginTop: 18,
         textAlign: "center",
