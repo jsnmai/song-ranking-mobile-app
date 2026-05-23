@@ -2,6 +2,8 @@
 import { useState } from "react"
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
+import DiamondScore from "../../components/DiamondScore"
+import { colors, fonts, bucketColor } from "../../theme"
 import { TasteBucketSection, TasteProfileResponse, TasteSection } from "./types"
 
 const MIN_RATINGS_FOR_GENRES = 10
@@ -20,7 +22,7 @@ export default function TasteTabContent({ taste, isLoading, error }: Props) {
     if (isLoading) {
         return (
             <View style={styles.centered}>
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={colors.clay} />
             </View>
         )
     }
@@ -55,27 +57,40 @@ export default function TasteTabContent({ taste, isLoading, error }: Props) {
             contentContainerStyle={styles.content}
             showsVerticalScrollIndicator={false}
         >
-            <View style={styles.headerRow}>
-                <View style={styles.statBox}>
-                    <Text style={styles.statValue}>{total_rated}</Text>
-                    <Text style={styles.statLabel}>Rated</Text>
+            <View style={styles.summaryCard}>
+                <View style={styles.headerRow}>
+                    <View style={styles.statBox}>
+                        <Text style={styles.statValue}>{total_rated}</Text>
+                        <Text style={styles.statLabel}>RATED</Text>
+                    </View>
+                    <View style={styles.statBox}>
+                        <View style={styles.avgRow}>
+                            <Text style={styles.statValue}>
+                                {avg_score !== null ? avg_score.toFixed(2) : "—"}
+                            </Text>
+                            {avg_score !== null && (
+                                <DiamondScore
+                                    score={avg_score}
+                                    total={5}
+                                    size={7}
+                                    color={colors.clay}
+                                    testID="taste-avg-diamonds"
+                                />
+                            )}
+                        </View>
+                        <Text style={styles.statLabel}>AVG SCORE</Text>
+                    </View>
                 </View>
-                <View style={styles.statBox}>
-                    <Text style={styles.statValue}>
-                        {avg_score !== null ? avg_score.toFixed(2) : "—"}
-                    </Text>
-                    <Text style={styles.statLabel}>Avg Score</Text>
-                </View>
-            </View>
 
-            <View style={styles.bucketRow}>
-                <Text style={styles.bucketText}>
-                    <Text style={styles.bucketLike}>Like {bucket_breakdown.like}</Text>
-                    <Text style={styles.bucketSep}>  ·  </Text>
-                    <Text style={styles.bucketOkay}>Okay {bucket_breakdown.okay}</Text>
-                    <Text style={styles.bucketSep}>  ·  </Text>
-                    <Text style={styles.bucketDislike}>Dislike {bucket_breakdown.dislike}</Text>
-                </Text>
+                <View style={styles.bucketRow}>
+                    <Text style={styles.bucketText}>
+                        <Text style={{ color: bucketColor("like") }}>Like {bucket_breakdown.like}</Text>
+                        <Text style={styles.bucketSep}>  ·  </Text>
+                        <Text style={{ color: bucketColor("alright") }}>Okay {bucket_breakdown.okay}</Text>
+                        <Text style={styles.bucketSep}>  ·  </Text>
+                        <Text style={{ color: bucketColor("dislike") }}>Dislike {bucket_breakdown.dislike}</Text>
+                    </Text>
+                </View>
             </View>
 
             <View style={styles.toggleRow}>
@@ -104,15 +119,15 @@ export default function TasteTabContent({ taste, isLoading, error }: Props) {
             )}
 
             {total_rated < MIN_RATINGS_FOR_GENRES ? (
-                <View style={styles.emptyState}>
+                <View style={styles.emptyCard}>
                     <Text style={styles.emptyTitle}>Rate at least 10 songs to unlock your taste profile</Text>
                     <Text style={styles.emptyCount}>{total_rated} / 10 rated</Text>
                 </View>
             ) : (
                 <>
                     {activeSection.genres.length > 0 && (
-                        <View style={styles.section}>
-                            <Text style={styles.sectionTitle}>Genres</Text>
+                        <View style={styles.sectionCard}>
+                            <Text style={styles.sectionTitle}>GENRES</Text>
                             {activeSection.genres.map((genre) => (
                                 <View key={genre.name} style={styles.genreRow}>
                                     <Text
@@ -139,8 +154,8 @@ export default function TasteTabContent({ taste, isLoading, error }: Props) {
             )}
 
             {activeSection.top_artists.length > 0 && (
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Top Artists</Text>
+                <View style={styles.sectionCard}>
+                    <Text style={styles.sectionTitle}>TOP ARTISTS</Text>
                     {activeSection.top_artists.map((artist) => (
                         <View key={artist.name} style={styles.artistRow}>
                             <Text style={styles.artistName}>{artist.name}</Text>
@@ -153,120 +168,157 @@ export default function TasteTabContent({ taste, isLoading, error }: Props) {
     )
 }
 
+const cardShadow = {
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+}
+
 const styles = StyleSheet.create({
     scroll: {
         flex: 1,
-        backgroundColor: "#000",
+        backgroundColor: colors.bg,
     },
     content: {
-        paddingHorizontal: 24,
+        paddingHorizontal: 16,
         paddingBottom: 40,
-        paddingTop: 20,
+        paddingTop: 16,
     },
     centered: {
         flex: 1,
-        backgroundColor: "#000",
+        backgroundColor: colors.bg,
         alignItems: "center",
         justifyContent: "center",
         paddingTop: 60,
     },
     errorText: {
-        color: "#ff6b6b",
+        color: colors.dislike,
         fontSize: 14,
         textAlign: "center",
+        paddingHorizontal: 24,
+    },
+    summaryCard: {
+        backgroundColor: colors.paper,
+        borderRadius: 14,
+        padding: 18,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: colors.line,
+        ...cardShadow,
     },
     headerRow: {
         flexDirection: "row",
         justifyContent: "center",
         gap: 48,
-        marginBottom: 20,
+        marginBottom: 16,
     },
     statBox: {
         alignItems: "center",
     },
-    statValue: {
-        color: "#fff",
-        fontSize: 28,
-        fontWeight: "700",
+    avgRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
         marginBottom: 4,
     },
+    statValue: {
+        fontFamily: fonts.serif,
+        color: colors.ink,
+        fontSize: 28,
+        lineHeight: 32,
+    },
     statLabel: {
-        color: "#888",
-        fontSize: 13,
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 10,
+        letterSpacing: 1.6,
     },
     bucketRow: {
         alignItems: "center",
-        marginBottom: 24,
     },
     bucketText: {
-        fontSize: 14,
-    },
-    bucketLike: {
-        color: "#4caf50",
-    },
-    bucketOkay: {
-        color: "#ffd54f",
-    },
-    bucketDislike: {
-        color: "#ef5350",
+        fontFamily: fonts.mono,
+        fontSize: 12,
     },
     bucketSep: {
-        color: "#555",
+        color: colors.inkDim,
     },
     toggleRow: {
         flexDirection: "row",
-        marginBottom: 20,
-        borderRadius: 8,
+        marginBottom: 16,
+        borderRadius: 10,
         borderWidth: 1,
-        borderColor: "#333",
+        borderColor: colors.line,
         overflow: "hidden",
+        backgroundColor: colors.paper,
     },
     toggleBtn: {
         flex: 1,
         paddingVertical: 10,
         alignItems: "center",
-        backgroundColor: "#000",
+        backgroundColor: colors.paper,
     },
     toggleBtnActive: {
-        backgroundColor: "#fff",
+        backgroundColor: colors.sand,
     },
     toggleText: {
-        color: "#888",
-        fontSize: 13,
-        fontWeight: "600",
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 12,
+        letterSpacing: 0.4,
     },
     toggleTextActive: {
-        color: "#000",
+        color: colors.ink,
     },
     bucketStatRow: {
         alignItems: "center",
         marginBottom: 16,
     },
     bucketStatText: {
-        color: "#888",
-        fontSize: 13,
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 12,
     },
-    emptyState: {
+    emptyCard: {
+        backgroundColor: colors.paper,
+        borderRadius: 14,
+        paddingVertical: 32,
+        paddingHorizontal: 20,
         alignItems: "center",
-        paddingVertical: 40,
+        borderWidth: 1,
+        borderColor: colors.line,
+        marginBottom: 16,
+        ...cardShadow,
     },
     emptyTitle: {
-        color: "#888",
+        color: colors.inkSoft,
         fontSize: 15,
         textAlign: "center",
         marginBottom: 12,
+        lineHeight: 22,
     },
     emptyCount: {
-        color: "#555",
-        fontSize: 13,
+        fontFamily: fonts.mono,
+        color: colors.inkDim,
+        fontSize: 12,
+        letterSpacing: 0.4,
     },
-    section: {
-        marginBottom: 28,
+    sectionCard: {
+        backgroundColor: colors.paper,
+        borderRadius: 14,
+        padding: 16,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: colors.line,
+        ...cardShadow,
     },
     sectionTitle: {
-        color: "#fff",
-        fontSize: 16,
-        fontWeight: "600",
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 10,
+        letterSpacing: 1.8,
         marginBottom: 12,
     },
     genreRow: {
@@ -274,32 +326,34 @@ const styles = StyleSheet.create({
         justifyContent: "space-between",
         paddingVertical: 8,
         borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: "#222",
+        borderBottomColor: colors.line,
     },
     genreName: {
-        color: "#fff",
+        color: colors.ink,
         fontSize: 15,
     },
     genreNameMuted: {
-        color: "#555",
+        color: colors.inkDim,
     },
     genrePct: {
-        color: "#888",
-        fontSize: 15,
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 13,
     },
     artistRow: {
         flexDirection: "row",
         justifyContent: "space-between",
         paddingVertical: 8,
         borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: "#222",
+        borderBottomColor: colors.line,
     },
     artistName: {
-        color: "#fff",
+        color: colors.ink,
         fontSize: 15,
     },
     artistCount: {
-        color: "#888",
-        fontSize: 15,
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 13,
     },
 })
