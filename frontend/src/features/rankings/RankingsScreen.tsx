@@ -7,23 +7,21 @@ import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 
 import { ApiError } from "../../api/client"
-import BucketBadge from "../../components/BucketBadge"
+import DiamondScore from "../../components/DiamondScore"
 import { AppStackParamList, TabParamList } from "../../navigation/types"
+import { colors, fonts, bucketColor } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
 import { RankingResponse } from "../comparison/types"
 import { listMyRankings } from "./apiRequests"
 
-type RankingsViewMode = "flat" | "grouped" | "separators"
 type RankingsNavigation = CompositeNavigationProp<
     BottomTabNavigationProp<TabParamList, "Rankings">,
     NativeStackNavigationProp<AppStackParamList>
 >
 
 export default function RankingsScreen() {
-    // Navigate to Discover and auto-focus the search bar — same action as tapping the FAB.
     const navigation = useNavigation<RankingsNavigation>()
     const { token } = useAuth()
-    const [viewMode] = useState<RankingsViewMode>("flat")
     const [rankings, setRankings] = useState<RankingResponse[]>([])
     const [nextCursor, setNextCursor] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(false)
@@ -88,9 +86,7 @@ export default function RankingsScreen() {
     }
 
     const renderRanking = ({ item }: { item: RankingResponse }) => {
-        if (viewMode !== "flat") {
-            return null
-        }
+        const accent = bucketColor(item.bucket)
 
         return (
             <TouchableOpacity
@@ -101,20 +97,20 @@ export default function RankingsScreen() {
                 onPress={() => handleRankingPress(item)}
                 activeOpacity={0.8}
             >
+                <Text style={styles.position}>#{item.position}</Text>
                 <View style={styles.coverFrame}>
                     {item.song.cover_url ? (
                         <Image source={{ uri: item.song.cover_url }} style={styles.coverImage} />
                     ) : null}
                 </View>
-                <View style={styles.songText}>
+                <View style={styles.songInfo}>
                     <Text style={styles.title} numberOfLines={1}>{item.song.title}</Text>
                     <Text style={styles.artist} numberOfLines={1}>{item.song.artist}</Text>
-                    <View style={styles.metaRow}>
-                        <BucketBadge bucket={item.bucket} />
-                        <Text style={styles.meta} numberOfLines={1}>#{item.position}</Text>
-                    </View>
                 </View>
-                <Text style={styles.score}>{item.score.toFixed(2)}</Text>
+                <View style={styles.scoreArea}>
+                    <DiamondScore score={item.score} total={5} size={7} color={accent} />
+                    <Text style={[styles.scoreText, { color: accent }]}>{item.score.toFixed(1)}</Text>
+                </View>
             </TouchableOpacity>
         )
     }
@@ -124,7 +120,7 @@ export default function RankingsScreen() {
             return null
         }
 
-        return <ActivityIndicator color="#fff" style={styles.footerSpinner} />
+        return <ActivityIndicator color={colors.clay} style={styles.footerSpinner} />
     }
 
     useFocusEffect(
@@ -136,7 +132,7 @@ export default function RankingsScreen() {
     if (isLoading && rankings.length === 0) {
         return (
             <View style={styles.centerState}>
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={colors.clay} />
             </View>
         )
     }
@@ -166,7 +162,10 @@ export default function RankingsScreen() {
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.heading}>Rankings</Text>
+                <View>
+                    <Text style={styles.kicker}>YOUR LIST</Text>
+                    <Text style={styles.heading}>Rankings</Text>
+                </View>
                 <TouchableOpacity
                     accessibilityRole="button"
                     accessibilityLabel="Reorder rankings"
@@ -194,55 +193,63 @@ export default function RankingsScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: "#000",
+        backgroundColor: colors.bg,
     },
     centerState: {
         flex: 1,
-        backgroundColor: "#000",
+        backgroundColor: colors.bg,
         alignItems: "center",
         justifyContent: "center",
         paddingHorizontal: 24,
     },
     header: {
         paddingTop: 60,
-        paddingHorizontal: 16,
-        paddingBottom: 12,
+        paddingHorizontal: 18,
+        paddingBottom: 14,
         borderBottomWidth: 1,
-        borderBottomColor: "#1f1f1f",
+        borderBottomColor: colors.line,
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
         flexWrap: "wrap",
+        backgroundColor: colors.bg,
+    },
+    kicker: {
+        color: colors.inkSoft,
+        fontSize: 10,
+        fontWeight: "600",
+        letterSpacing: 1.8,
+        marginBottom: 2,
     },
     heading: {
-        color: "#fff",
-        fontSize: 28,
-        fontWeight: "700",
+        color: colors.ink,
+        fontSize: 26,
+        fontFamily: fonts.serif,
     },
     inlineError: {
-        color: "#ff6b6b",
+        color: colors.dislike,
         fontSize: 14,
         marginTop: 8,
         width: "100%",
     },
     reorderButton: {
         paddingVertical: 8,
-        paddingHorizontal: 12,
+        paddingHorizontal: 14,
         borderWidth: 1,
-        borderColor: "#333",
+        borderColor: colors.ink,
         borderRadius: 8,
     },
     reorderButtonText: {
-        color: "#fff",
-        fontSize: 14,
-        fontWeight: "700",
+        color: colors.ink,
+        fontSize: 13,
+        fontWeight: "600",
     },
     listContent: {
-        paddingHorizontal: 16,
+        paddingHorizontal: 18,
         paddingBottom: 24,
     },
     emptyText: {
-        color: "#fff",
+        color: colors.ink,
         fontSize: 18,
         marginBottom: 24,
     },
@@ -250,15 +257,15 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         paddingHorizontal: 32,
         borderWidth: 1,
-        borderColor: "#fff",
+        borderColor: colors.ink,
         borderRadius: 8,
     },
     buttonText: {
-        color: "#fff",
+        color: colors.ink,
         fontSize: 16,
     },
     errorText: {
-        color: "#ff6b6b",
+        color: colors.dislike,
         fontSize: 15,
         marginBottom: 24,
         textAlign: "center",
@@ -266,53 +273,53 @@ const styles = StyleSheet.create({
     rankingRow: {
         flexDirection: "row",
         alignItems: "center",
-        paddingVertical: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 6,
         borderBottomWidth: 1,
-        borderBottomColor: "#1f1f1f",
+        borderBottomColor: colors.line,
+        backgroundColor: colors.paper,
+    },
+    position: {
+        color: colors.inkDim,
+        fontSize: 10,
+        fontFamily: fonts.mono,
+        minWidth: 32,
+        letterSpacing: 0.4,
     },
     coverFrame: {
-        width: 56,
-        height: 56,
+        width: 40,
+        height: 40,
         borderRadius: 6,
-        marginRight: 12,
-        backgroundColor: "#1a1a1a",
+        marginRight: 10,
+        backgroundColor: colors.sand,
         overflow: "hidden",
     },
     coverImage: {
         width: "100%",
         height: "100%",
     },
-    songText: {
+    songInfo: {
         flex: 1,
         minWidth: 0,
     },
     title: {
-        color: "#fff",
-        fontSize: 16,
+        color: colors.ink,
+        fontSize: 14,
         fontWeight: "600",
         marginBottom: 3,
     },
     artist: {
-        color: "#b8b8b8",
-        fontSize: 14,
-        marginBottom: 4,
+        color: colors.inkSoft,
+        fontSize: 12,
     },
-    metaRow: {
-        flexDirection: "row",
+    scoreArea: {
         alignItems: "center",
-        gap: 6,
+        gap: 5,
+        marginLeft: 10,
     },
-    meta: {
-        color: "#777",
+    scoreText: {
         fontSize: 13,
-    },
-    score: {
-        color: "#fff",
-        fontSize: 20,
-        fontWeight: "700",
-        marginLeft: 12,
-        minWidth: 52,
-        textAlign: "right",
+        fontFamily: fonts.mono,
     },
     footerSpinner: {
         marginVertical: 18,
