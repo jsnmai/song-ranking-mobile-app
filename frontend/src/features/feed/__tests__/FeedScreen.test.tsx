@@ -32,12 +32,14 @@ jest.mock("@shopify/flash-list", () => {
     const { View } = require("react-native")
 
     return {
-        FlashList: ({ data, renderItem, keyExtractor }: {
+        FlashList: ({ data, renderItem, keyExtractor, ListHeaderComponent }: {
             data: FeedEvent[];
             renderItem: ({ item }: { item: FeedEvent }) => unknown;
             keyExtractor: (item: FeedEvent) => string;
+            ListHeaderComponent?: React.ReactElement | null;
         }) => (
             <View>
+                {ListHeaderComponent ?? null}
                 {data.map((item) => (
                     <View key={keyExtractor(item)}>
                         {renderItem({ item })}
