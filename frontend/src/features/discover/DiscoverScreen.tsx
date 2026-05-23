@@ -8,7 +8,9 @@ import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 
 import { ApiError } from "../../api/client"
+import StarAvatar from "../../components/StarAvatar"
 import { AppStackParamList, TabParamList } from "../../navigation/types"
+import { colors, fonts } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
 import { searchProfiles } from "../profile/apiRequests"
 import { Profile } from "../profile/types"
@@ -163,26 +165,32 @@ export default function DiscoverScreen() {
 
     return (
         <View style={styles.container}>
-            <View style={styles.searchRow}>
+            <View style={styles.header}>
+                <Text style={styles.kicker}>DISCOVER</Text>
+                <Text style={styles.heading}>Find music</Text>
                 <View style={styles.modeRow}>
                     <TouchableOpacity
                         style={[styles.modeButton, searchMode === "songs" ? styles.activeModeButton : null]}
                         onPress={() => setMode("songs")}
                     >
-                        <Text style={[styles.modeText, searchMode === "songs" ? styles.activeModeText : null]}>Songs</Text>
+                        <Text style={[styles.modeText, searchMode === "songs" ? styles.activeModeText : null]}>
+                            Songs
+                        </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                         style={[styles.modeButton, searchMode === "users" ? styles.activeModeButton : null]}
                         onPress={() => setMode("users")}
                     >
-                        <Text style={[styles.modeText, searchMode === "users" ? styles.activeModeText : null]}>Users</Text>
+                        <Text style={[styles.modeText, searchMode === "users" ? styles.activeModeText : null]}>
+                            Users
+                        </Text>
                     </TouchableOpacity>
                 </View>
                 <TextInput
                     ref={searchRef}
                     style={styles.searchBar}
                     placeholder={searchMode === "songs" ? "Search for a song..." : "Search for a user..."}
-                    placeholderTextColor="#555"
+                    placeholderTextColor={colors.inkDim}
                     value={query}
                     onChangeText={setQuery}
                     autoCapitalize="none"
@@ -194,7 +202,7 @@ export default function DiscoverScreen() {
                 contentContainerStyle={styles.resultsContent}
                 keyboardShouldPersistTaps="handled"
             >
-                {isLoading && <ActivityIndicator color="#fff" style={styles.status} />}
+                {isLoading && <ActivityIndicator color={colors.clay} style={styles.status} />}
                 {!isLoading && error !== null && <Text style={styles.errorText}>{error}</Text>}
                 {!isLoading && error === null && query.trim().length === 0 && (
                     <Text style={styles.emptyText}>
@@ -215,17 +223,19 @@ export default function DiscoverScreen() {
                         disabled={openingDeezerId !== null}
                         activeOpacity={0.75}
                     >
-                        {song.cover_url ? (
-                            <Image source={{ uri: song.cover_url }} style={styles.cover} />
-                        ) : (
-                            <View style={styles.coverPlaceholder} />
-                        )}
-                        <View style={styles.songText}>
+                        <View style={styles.coverFrame}>
+                            {song.cover_url ? (
+                                <Image source={{ uri: song.cover_url }} style={styles.coverImage} />
+                            ) : null}
+                        </View>
+                        <View style={styles.resultText}>
                             <Text style={styles.title} numberOfLines={1}>{song.title}</Text>
                             <Text style={styles.artist} numberOfLines={1}>{song.artist}</Text>
                             <Text style={styles.album} numberOfLines={1}>{song.album}</Text>
                         </View>
-                        {openingDeezerId === song.deezer_id && <ActivityIndicator color="#fff" />}
+                        {openingDeezerId === song.deezer_id && (
+                            <ActivityIndicator color={colors.clay} style={styles.rowSpinner} />
+                        )}
                     </TouchableOpacity>
                 ))}
                 {!isLoading && error === null && searchMode === "users" && profileResults.map((profile) => (
@@ -235,10 +245,12 @@ export default function DiscoverScreen() {
                         onPress={() => handleProfilePress(profile)}
                         activeOpacity={0.75}
                     >
-                        <View style={styles.avatar}>
-                            <Text style={styles.avatarText}>{profile.display_name.slice(0, 1).toUpperCase()}</Text>
-                        </View>
-                        <View style={styles.songText}>
+                        <StarAvatar
+                            initial={(profile.display_name || profile.username).charAt(0)}
+                            outerColor={colors.clay}
+                            size={44}
+                        />
+                        <View style={styles.resultText}>
                             <Text style={styles.title} numberOfLines={1}>{profile.display_name}</Text>
                             <Text style={styles.artist} numberOfLines={1}>@{profile.username}</Text>
                             <Text style={styles.album} numberOfLines={1}>
@@ -252,44 +264,74 @@ export default function DiscoverScreen() {
     )
 }
 
+const cardShadow = {
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+}
+
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: "#000",
+        backgroundColor: colors.bg,
     },
-    searchRow: {
+    header: {
         paddingTop: 60,
         paddingHorizontal: 16,
         paddingBottom: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.line,
+    },
+    kicker: {
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 10,
+        letterSpacing: 1.8,
+        marginBottom: 4,
+    },
+    heading: {
+        fontFamily: fonts.serif,
+        color: colors.ink,
+        fontSize: 32,
+        lineHeight: 36,
+        marginBottom: 16,
     },
     modeRow: {
         flexDirection: "row",
-        backgroundColor: "#111",
-        borderRadius: 8,
+        backgroundColor: colors.paper,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: colors.line,
         padding: 3,
         marginBottom: 12,
+        overflow: "hidden",
     },
     modeButton: {
         flex: 1,
         alignItems: "center",
-        paddingVertical: 8,
-        borderRadius: 6,
+        paddingVertical: 10,
+        borderRadius: 7,
     },
     activeModeButton: {
-        backgroundColor: "#fff",
+        backgroundColor: colors.sand,
     },
     modeText: {
-        color: "#888",
-        fontSize: 14,
-        fontWeight: "700",
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 12,
+        letterSpacing: 0.4,
     },
     activeModeText: {
-        color: "#000",
+        color: colors.ink,
     },
     searchBar: {
-        backgroundColor: "#1a1a1a",
-        color: "#fff",
+        backgroundColor: colors.sand,
+        color: colors.ink,
         borderRadius: 10,
+        borderWidth: 1,
+        borderColor: colors.line,
         paddingHorizontal: 14,
         paddingVertical: 10,
         fontSize: 16,
@@ -299,73 +341,74 @@ const styles = StyleSheet.create({
     },
     resultsContent: {
         paddingHorizontal: 16,
+        paddingTop: 12,
         paddingBottom: 24,
     },
     status: {
         marginTop: 40,
     },
     emptyText: {
-        color: "#777",
+        color: colors.inkDim,
         fontSize: 15,
         marginTop: 40,
         textAlign: "center",
+        paddingHorizontal: 12,
+        lineHeight: 22,
     },
     errorText: {
-        color: "#ff6b6b",
+        color: colors.dislike,
         fontSize: 15,
         marginTop: 40,
         textAlign: "center",
+        paddingHorizontal: 12,
+        lineHeight: 22,
     },
     resultRow: {
         flexDirection: "row",
         alignItems: "center",
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: "#1f1f1f",
+        backgroundColor: colors.paper,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: colors.line,
+        padding: 12,
+        marginBottom: 8,
+        gap: 12,
+        ...cardShadow,
     },
-    cover: {
-        width: 56,
-        height: 56,
-        borderRadius: 6,
-        marginRight: 12,
+    coverFrame: {
+        width: 52,
+        height: 52,
+        borderRadius: 8,
+        backgroundColor: colors.sand,
+        overflow: "hidden",
     },
-    coverPlaceholder: {
-        width: 56,
-        height: 56,
-        borderRadius: 6,
-        marginRight: 12,
-        backgroundColor: "#1a1a1a",
+    coverImage: {
+        width: "100%",
+        height: "100%",
     },
-    avatar: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        marginRight: 12,
-        backgroundColor: "#1f1f1f",
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    avatarText: {
-        color: "#fff",
-        fontSize: 20,
-        fontWeight: "700",
-    },
-    songText: {
+    resultText: {
         flex: 1,
+        minWidth: 0,
     },
     title: {
-        color: "#fff",
+        fontFamily: fonts.serif,
+        color: colors.ink,
         fontSize: 16,
-        fontWeight: "600",
+        lineHeight: 20,
         marginBottom: 3,
     },
     artist: {
-        color: "#b8b8b8",
-        fontSize: 14,
-        marginBottom: 3,
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 13,
+        marginBottom: 2,
     },
     album: {
-        color: "#777",
-        fontSize: 13,
+        fontFamily: fonts.mono,
+        color: colors.inkDim,
+        fontSize: 11,
+    },
+    rowSpinner: {
+        marginLeft: 4,
     },
 })
