@@ -17,6 +17,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack"
 import { ApiError } from "../../api/client"
 import BucketBadge from "../../components/BucketBadge"
 import { AppStackParamList } from "../../navigation/types"
+import { colors, fonts } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
 import { BucketName, RankingResponse } from "../comparison/types"
 import { listMyRankings, reorderRankings } from "./apiRequests"
@@ -141,7 +142,7 @@ export default function ReorderScreen({ navigation }: ReorderScreenProps) {
     if (isLoading) {
         return (
             <View style={styles.centerState}>
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={colors.clay} />
             </View>
         )
     }
@@ -150,11 +151,18 @@ export default function ReorderScreen({ navigation }: ReorderScreenProps) {
         <View style={styles.container}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={handleCancel} disabled={isSaving}>
-                    <Text style={styles.headerAction}>Cancel</Text>
+                    <Text style={styles.headerActionCancel}>Cancel</Text>
                 </TouchableOpacity>
                 <Text style={styles.heading}>Reorder</Text>
                 <TouchableOpacity onPress={handleSave} disabled={isSaving || rankings.length === 0}>
-                    <Text style={styles.headerAction}>{isSaving ? "Saving..." : "Save"}</Text>
+                    <Text
+                        style={[
+                            styles.headerActionSave,
+                            (isSaving || rankings.length === 0) && styles.headerActionSaveDisabled,
+                        ]}
+                    >
+                        {isSaving ? "Saving..." : "Save"}
+                    </Text>
                 </TouchableOpacity>
             </View>
             {error !== null && <Text style={styles.errorText}>{error}</Text>}
@@ -443,36 +451,47 @@ function extractErrorMessage(
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: "#000",
+        backgroundColor: colors.bg,
     },
     centerState: {
         flex: 1,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#000",
+        backgroundColor: colors.bg,
     },
     header: {
         paddingTop: 56,
         paddingHorizontal: 16,
         paddingBottom: 14,
         borderBottomWidth: 1,
-        borderBottomColor: "#1f1f1f",
+        borderBottomColor: colors.line,
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
+        backgroundColor: colors.bg,
     },
     heading: {
-        color: "#fff",
+        fontFamily: fonts.serif,
+        color: colors.ink,
         fontSize: 22,
-        fontWeight: "800",
+        lineHeight: 26,
     },
-    headerAction: {
-        color: "#fff",
+    headerActionCancel: {
+        fontFamily: fonts.mono,
+        color: colors.ink,
         fontSize: 15,
-        fontWeight: "700",
+    },
+    headerActionSave: {
+        fontFamily: fonts.mono,
+        color: colors.clay,
+        fontSize: 15,
+    },
+    headerActionSaveDisabled: {
+        color: colors.inkDim,
     },
     errorText: {
-        color: "#ff6b6b",
+        fontFamily: fonts.mono,
+        color: colors.dislike,
         fontSize: 14,
         paddingHorizontal: 16,
         paddingTop: 12,
@@ -487,15 +506,15 @@ const styles = StyleSheet.create({
         alignItems: "center",
         paddingVertical: 12,
         borderBottomWidth: 1,
-        borderBottomColor: "#1f1f1f",
-        backgroundColor: "#000",
+        borderBottomColor: colors.line,
+        backgroundColor: colors.paper,
     },
     coverFrame: {
         width: 56,
         height: 56,
-        borderRadius: 6,
+        borderRadius: 28,
         marginRight: 12,
-        backgroundColor: "#1a1a1a",
+        backgroundColor: colors.sand,
         overflow: "hidden",
     },
     coverImage: {
@@ -507,18 +526,21 @@ const styles = StyleSheet.create({
         minWidth: 0,
     },
     title: {
-        color: "#fff",
+        fontFamily: fonts.serif,
+        color: colors.ink,
         fontSize: 16,
-        fontWeight: "700",
+        lineHeight: 20,
         marginBottom: 3,
     },
     artist: {
-        color: "#b8b8b8",
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
         fontSize: 14,
         marginBottom: 5,
     },
     dragHandle: {
-        color: "#fff",
+        fontFamily: fonts.mono,
+        color: colors.inkDim,
         fontSize: 28,
         paddingHorizontal: 10,
     },
