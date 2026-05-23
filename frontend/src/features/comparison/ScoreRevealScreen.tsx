@@ -2,13 +2,18 @@
 import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 
+import DiamondScore from "../../components/DiamondScore"
 import { AppStackParamList } from "../../navigation/types"
+import { colors, fonts, bucketColor } from "../../theme"
 
 type ScoreRevealProps = NativeStackScreenProps<AppStackParamList, "ScoreReveal">
 
 export default function ScoreRevealScreen({ navigation, route }: ScoreRevealProps) {
     const { result, isRerate = false } = route.params
     const { ranking } = result
+
+    const accent = bucketColor(ranking.bucket)
+    const bucketLabel = ranking.bucket === "alright" ? "OKAY" : ranking.bucket.toUpperCase()
 
     const handleContinue = () => {
         // TODO: When Rankings supports deep links, scroll to and highlight ranking.song_id.
@@ -24,11 +29,12 @@ export default function ScoreRevealScreen({ navigation, route }: ScoreRevealProp
                     <View style={styles.coverPlaceholder} />
                 )}
                 <Text style={styles.songTitle} numberOfLines={2}>{ranking.song.title}</Text>
-                <Text style={styles.artist} numberOfLines={1}>{ranking.song.artist}</Text>
-                <Text style={styles.score}>{ranking.score.toFixed(2)}</Text>
-                <Text style={styles.context}>
-                    {ranking.bucket.toUpperCase()} · #{ranking.position}
+                <Text style={styles.artist} numberOfLines={1}>
+                    {ranking.song.artist.toUpperCase()}
                 </Text>
+                <DiamondScore score={ranking.score} total={10} size={13} color={accent} />
+                <Text style={[styles.score, { color: accent }]}>{ranking.score.toFixed(2)}</Text>
+                <Text style={styles.context}>{bucketLabel} · #{ranking.position}</Text>
             </View>
             <TouchableOpacity style={styles.button} onPress={handleContinue}>
                 <Text style={styles.buttonText}>Continue</Text>
@@ -40,7 +46,7 @@ export default function ScoreRevealScreen({ navigation, route }: ScoreRevealProp
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: "#000",
+        backgroundColor: colors.bg,
         paddingHorizontal: 24,
         paddingBottom: 42,
     },
@@ -52,50 +58,56 @@ const styles = StyleSheet.create({
     cover: {
         width: 168,
         height: 168,
-        borderRadius: 8,
-        marginBottom: 24,
+        borderRadius: 10,
+        marginBottom: 20,
     },
     coverPlaceholder: {
         width: 168,
         height: 168,
-        borderRadius: 8,
-        marginBottom: 24,
-        backgroundColor: "#1a1a1a",
+        borderRadius: 10,
+        marginBottom: 20,
+        backgroundColor: colors.sand,
     },
     songTitle: {
-        color: "#fff",
+        fontFamily: fonts.serif,
+        color: colors.ink,
         fontSize: 24,
-        fontWeight: "700",
         textAlign: "center",
         marginBottom: 6,
+        lineHeight: 30,
     },
     artist: {
-        color: "#aaa",
-        fontSize: 16,
-        marginBottom: 28,
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 11,
+        letterSpacing: 1.4,
+        textAlign: "center",
+        marginBottom: 24,
     },
     score: {
-        color: "#fff",
-        fontSize: 80,
-        fontWeight: "800",
-        lineHeight: 88,
+        fontFamily: fonts.mono,
+        fontSize: 72,
+        lineHeight: 80,
+        marginTop: 12,
+        marginBottom: 6,
     },
     context: {
-        color: "#777",
-        fontSize: 15,
-        fontWeight: "700",
-        marginTop: 4,
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 12,
+        letterSpacing: 1.4,
     },
     button: {
         height: 52,
-        borderRadius: 8,
-        backgroundColor: "#fff",
+        borderRadius: 999,
+        backgroundColor: colors.clay,
         alignItems: "center",
         justifyContent: "center",
     },
     buttonText: {
-        color: "#000",
-        fontSize: 16,
+        color: "#fff",
+        fontSize: 15,
         fontWeight: "700",
+        letterSpacing: 0.4,
     },
 })
