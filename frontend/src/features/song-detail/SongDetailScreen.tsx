@@ -15,10 +15,13 @@ import { fetchPreviewUrl } from "../songs/apiRequests"
 
 type SongDetailProps = NativeStackScreenProps<AppStackParamList, "SongDetail">
 
-const COVER_SIZE = 200
-const RING_GAP = 8
-const ARC_STROKE_WIDTH = 4
-const RING_SIZE = COVER_SIZE + (RING_GAP + ARC_STROKE_WIDTH) * 2
+// The disc is the circular sand background the album art sits inside.
+// The horseshoe arc wraps the disc with RING_GAP clearance on each side.
+const DISC_SIZE = 200
+const COVER_SIZE = 150
+const RING_GAP = 6
+const ARC_STROKE_WIDTH = 14
+const RING_SIZE = DISC_SIZE + (RING_GAP + ARC_STROKE_WIDTH) * 2
 
 export default function SongDetailScreen({ navigation, route }: SongDetailProps) {
     const { token } = useAuth()
@@ -135,17 +138,19 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
         }
     }, [isRated, song.deezer_id, song.preview_url, token])
 
-    const coverImage = (
-        <View style={styles.coverFrame}>
-            {song.cover_url ? (
-                <Image source={{ uri: song.cover_url }} style={styles.cover} />
-            ) : null}
+    // The album art sits inside a sand circle (disc), which sits inside the horseshoe arc.
+    const discContent = (
+        <View style={styles.disc}>
+            <View style={styles.coverFrame}>
+                {song.cover_url ? (
+                    <Image source={{ uri: song.cover_url }} style={styles.cover} />
+                ) : null}
+            </View>
         </View>
     )
 
     return (
         <View style={styles.container}>
-            {/* Header row: back · kicker · spacer */}
             <View style={styles.header}>
                 <TouchableOpacity
                     style={styles.backButton}
@@ -175,13 +180,14 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                             max={10}
                             size={RING_SIZE}
                             strokeWidth={ARC_STROKE_WIDTH}
+                            sweepDegrees={270}
                             color={accent}
                             testID="song-detail-score-arc"
                         >
-                            {coverImage}
+                            {discContent}
                         </ScoreArc>
                     ) : (
-                        coverImage
+                        discContent
                     )}
                 </View>
 
@@ -203,7 +209,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                     {song.artist.toUpperCase()} · {song.album.toUpperCase()}
                 </Text>
 
-                {/* Score section — rated songs only */}
+                {/* Position and diamond row — rated songs only */}
                 {ranking !== null && (
                     <View style={styles.scoreSection}>
                         <Text style={styles.positionLabel}>
@@ -215,33 +221,71 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                             size={11}
                             color={accent}
                         />
-                        <Text style={[styles.scoreNumber, { color: accent }]}>
-                            {ranking.score.toFixed(1)}
-                        </Text>
                     </View>
                 )}
 
-                {/* Global context — shown when at least one community rating exists */}
-                {globalRatingCount > 0 && globalAvgScore !== null && (
+                {/* IN CONTEXT — three comparison circles, rated songs only */}
+                {ranking !== null && (
                     <>
                         <View style={styles.rule}>
                             <View style={styles.ruleLine} />
                             <Text style={styles.ruleText}>IN CONTEXT</Text>
                             <View style={styles.ruleLine} />
                         </View>
-                        <View style={styles.globalSection}>
-                            <Text style={styles.globalLabel}>GLOBAL AVG</Text>
-                            <DiamondScore
-                                score={globalAvgScore}
-                                total={10}
-                                size={8}
-                                color={colors.inkDim}
-                            />
-                            <Text style={styles.aggregates}>
-                                {globalRatingCount}{" "}
-                                {globalRatingCount === 1 ? "rating" : "ratings"}{" "}
-                                · avg {globalAvgScore.toFixed(2)}
-                            </Text>
+                        <View style={styles.contextCircles}>
+                            {/* GLOBAL */}
+                            <View style={styles.circleItem}>
+                                <Text style={styles.circleLabel}>GLOBAL</Text>
+                                <ScoreArc
+                                    score={globalAvgScore ?? 0}
+                                    max={10}
+                                    size={80}
+                                    strokeWidth={5}
+                                    color={globalAvgScore !== null ? colors.inkDim : colors.sand}
+                                    trackColor={colors.sand}
+                                >
+                                    <Text style={styles.circleScoreSmall}>
+                                        {globalAvgScore !== null ? globalAvgScore.toFixed(1) : "--"}
+                                    </Text>
+                                </ScoreArc>
+                                {globalRatingCount > 0 && (
+                                    <Text style={styles.circleSubLabel}>
+                                        {globalRatingCount === 1 ? "1 rating" : `${globalRatingCount} ratings`}
+                                    </Text>
+                                )}
+                            </View>
+
+                            {/* YOUR RATING */}
+                            <View style={styles.circleItem}>
+                                <Text style={styles.circleLabel}>YOUR RATING</Text>
+                                <ScoreArc
+                                    score={ranking.score}
+                                    max={10}
+                                    size={120}
+                                    strokeWidth={6}
+                                    color={accent}
+                                    trackColor={colors.sand}
+                                >
+                                    <Text style={[styles.circleScoreLarge, { color: accent }]}>
+                                        {ranking.score.toFixed(1)}
+                                    </Text>
+                                </ScoreArc>
+                            </View>
+
+                            {/* FRIENDS — placeholder until backend data exists */}
+                            <View style={styles.circleItem}>
+                                <Text style={styles.circleLabel}>FRIENDS</Text>
+                                <ScoreArc
+                                    score={0}
+                                    max={10}
+                                    size={80}
+                                    strokeWidth={5}
+                                    color={colors.sand}
+                                    trackColor={colors.sand}
+                                >
+                                    <Text style={styles.circleScoreSmall}>--</Text>
+                                </ScoreArc>
+                            </View>
                         </View>
                     </>
                 )}
@@ -251,26 +295,28 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
 
             {/* Actions pinned to the bottom */}
             <View style={styles.actions}>
-                <TouchableOpacity style={styles.primaryButton} onPress={handleRateAgain}>
-                    <Text style={styles.primaryButtonText}>
-                        {ranking === null ? "Rate Song" : "Rate Again"}
-                    </Text>
-                </TouchableOpacity>
-                {ranking !== null && (
-                    <>
-                        <TouchableOpacity style={styles.secondaryButton} onPress={handleReorder}>
+                <View style={styles.actionsRow}>
+                    <TouchableOpacity style={[styles.primaryButton, styles.flex1]} onPress={handleRateAgain}>
+                        <Text style={styles.primaryButtonText}>
+                            {ranking === null ? "Rate Song" : "Rate Again"}
+                        </Text>
+                    </TouchableOpacity>
+                    {ranking !== null && (
+                        <TouchableOpacity style={[styles.secondaryButton, styles.flex1]} onPress={handleReorder}>
                             <Text style={styles.secondaryButtonText}>Reorder</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.removeButton}
-                            onPress={handleRemovePress}
-                            disabled={isRemoving}
-                        >
-                            <Text style={styles.removeButtonText}>
-                                {isRemoving ? "Removing..." : "Remove Rating"}
-                            </Text>
-                        </TouchableOpacity>
-                    </>
+                    )}
+                </View>
+                {ranking !== null && (
+                    <TouchableOpacity
+                        style={styles.removeButton}
+                        onPress={handleRemovePress}
+                        disabled={isRemoving}
+                    >
+                        <Text style={styles.removeButtonText}>
+                            {isRemoving ? "Removing..." : "Remove Rating"}
+                        </Text>
+                    </TouchableOpacity>
                 )}
             </View>
         </View>
@@ -323,8 +369,16 @@ const styles = StyleSheet.create({
     },
     heroContainer: {
         paddingTop: 8,
-        paddingBottom: 20,
+        paddingBottom: 24,
         alignItems: "center",
+    },
+    disc: {
+        width: DISC_SIZE,
+        height: DISC_SIZE,
+        borderRadius: DISC_SIZE / 2,
+        backgroundColor: colors.sand,
+        alignItems: "center",
+        justifyContent: "center",
     },
     coverFrame: {
         width: COVER_SIZE,
@@ -385,11 +439,6 @@ const styles = StyleSheet.create({
         fontSize: 9,
         letterSpacing: 2,
     },
-    scoreNumber: {
-        fontFamily: fonts.mono,
-        fontSize: 32,
-        lineHeight: 36,
-    },
     rule: {
         flexDirection: "row",
         alignItems: "center",
@@ -409,22 +458,38 @@ const styles = StyleSheet.create({
         letterSpacing: 2,
         color: colors.inkSoft,
     },
-    globalSection: {
+    contextCircles: {
+        flexDirection: "row",
+        alignItems: "flex-end",
+        justifyContent: "space-around",
+        width: "100%",
+        marginBottom: 16,
+    },
+    circleItem: {
         alignItems: "center",
-        gap: 8,
-        marginBottom: 8,
+        gap: 6,
     },
-    globalLabel: {
+    circleLabel: {
         fontFamily: fonts.mono,
-        fontSize: 9,
-        letterSpacing: 2,
         color: colors.inkSoft,
+        fontSize: 8,
+        letterSpacing: 1.2,
     },
-    aggregates: {
+    circleSubLabel: {
         fontFamily: fonts.mono,
         color: colors.inkDim,
-        fontSize: 11,
+        fontSize: 9,
         letterSpacing: 0.4,
+    },
+    circleScoreSmall: {
+        fontFamily: fonts.mono,
+        color: colors.inkDim,
+        fontSize: 14,
+    },
+    circleScoreLarge: {
+        fontFamily: fonts.mono,
+        fontSize: 22,
+        lineHeight: 26,
     },
     errorText: {
         color: colors.dislike,
@@ -435,6 +500,13 @@ const styles = StyleSheet.create({
     actions: {
         paddingHorizontal: 20,
         gap: 10,
+    },
+    actionsRow: {
+        flexDirection: "row",
+        gap: 10,
+    },
+    flex1: {
+        flex: 1,
     },
     primaryButton: {
         height: 52,
@@ -450,7 +522,7 @@ const styles = StyleSheet.create({
         letterSpacing: 0.4,
     },
     secondaryButton: {
-        height: 48,
+        height: 52,
         borderRadius: 999,
         borderWidth: 1,
         borderColor: colors.line,

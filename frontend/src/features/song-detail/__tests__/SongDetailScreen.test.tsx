@@ -217,7 +217,7 @@ describe("SongDetailScreen", () => {
         )
         await act(async () => {})
 
-        expect(screen.getByText("2 ratings · avg 8.25")).toBeTruthy()
+        expect(screen.getByText("2 ratings")).toBeTruthy()
     })
 
     it("hides global aggregate score when count is present but average is missing", async () => {
