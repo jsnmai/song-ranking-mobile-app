@@ -7,6 +7,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack"
 import { ApiError } from "../../api/client"
 import { useAudioPlayer } from "../../hooks/useAudioPlayer"
 import { AppStackParamList } from "../../navigation/types"
+import { colors, fonts } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
 import { fetchPreviewUrl } from "../songs/apiRequests"
 import { cancelComparisonSession, chooseComparisonWinner, finalizeComparisonSession } from "./apiRequests"
@@ -146,7 +147,7 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
         <View style={styles.container}>
             <View style={styles.header}>
                 <TouchableOpacity style={styles.closeButton} onPress={handleCancel} disabled={isSubmitting}>
-                    <Text style={styles.closeText}>x</Text>
+                    <Text style={styles.closeText}>×</Text>
                 </TouchableOpacity>
                 <Text style={styles.counter}>#{session.comparison_count + 1}</Text>
             </View>
@@ -175,7 +176,7 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
                     </TouchableOpacity>
                 )}
                 <TouchableOpacity
-                    style={[styles.songCard, styles.targetCard]}
+                    style={styles.songCard}
                     onPress={() => handleChoice("target")}
                     disabled={isSubmitting}
                     activeOpacity={0.85}
@@ -195,7 +196,7 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
                     )}
                 </TouchableOpacity>
             </View>
-            {isSubmitting && <ActivityIndicator color="#fff" style={styles.loading} />}
+            {isSubmitting && <ActivityIndicator color={colors.clay} style={styles.loading} />}
             {error !== null && <Text style={styles.errorText}>{error}</Text>}
         </View>
     )
@@ -229,7 +230,7 @@ function PreviewButton({ isPlaying, onPress }: { isPlaying: boolean; onPress: ()
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: "#000",
+        backgroundColor: colors.bg,
         paddingHorizontal: 20,
     },
     header: {
@@ -244,21 +245,23 @@ const styles = StyleSheet.create({
         borderRadius: 18,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#1a1a1a",
+        backgroundColor: colors.sand,
     },
     closeText: {
-        color: "#fff",
-        fontSize: 18,
+        color: colors.ink,
+        fontSize: 22,
+        lineHeight: 26,
     },
     counter: {
-        color: "#777",
-        fontSize: 14,
-        fontWeight: "700",
+        fontFamily: fonts.mono,
+        color: colors.inkDim,
+        fontSize: 12,
+        letterSpacing: 0.8,
     },
     prompt: {
-        color: "#fff",
+        fontFamily: fonts.serif,
+        color: colors.ink,
         fontSize: 22,
-        fontWeight: "700",
         textAlign: "center",
         marginTop: 24,
         marginBottom: 20,
@@ -270,16 +273,13 @@ const styles = StyleSheet.create({
     songCard: {
         flex: 1,
         minHeight: 220,
-        borderRadius: 8,
+        borderRadius: 12,
         borderWidth: 1,
-        borderColor: "#2a2a2a",
-        backgroundColor: "#111",
+        borderColor: colors.line,
+        backgroundColor: colors.paper,
         alignItems: "center",
         justifyContent: "center",
         padding: 16,
-    },
-    targetCard: {
-        borderColor: "#444",
     },
     cover: {
         width: 124,
@@ -292,49 +292,55 @@ const styles = StyleSheet.create({
         height: 124,
         borderRadius: 8,
         marginBottom: 14,
-        backgroundColor: "#1d1d1d",
+        backgroundColor: colors.sand,
     },
     songTitle: {
-        color: "#fff",
+        fontFamily: fonts.serif,
+        color: colors.ink,
         fontSize: 19,
-        fontWeight: "700",
         textAlign: "center",
         marginBottom: 5,
     },
     songArtist: {
-        color: "#aaa",
-        fontSize: 15,
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 11,
+        letterSpacing: 1.2,
         textAlign: "center",
         marginBottom: 8,
     },
     scoreText: {
-        color: "#777",
-        fontSize: 13,
+        fontFamily: fonts.mono,
+        color: colors.inkDim,
+        fontSize: 12,
     },
     newText: {
-        color: "#888",
-        fontSize: 13,
-        fontWeight: "700",
+        fontFamily: fonts.mono,
+        color: colors.inkDim,
+        fontSize: 12,
     },
     previewButton: {
         marginTop: 10,
         height: 32,
         paddingHorizontal: 16,
         borderRadius: 16,
-        backgroundColor: "#fff",
+        borderWidth: 1,
+        borderColor: colors.line,
+        backgroundColor: colors.bg,
         alignItems: "center",
         justifyContent: "center",
     },
     previewButtonText: {
-        color: "#000",
-        fontSize: 13,
-        fontWeight: "700",
+        fontFamily: fonts.mono,
+        color: colors.ink,
+        fontSize: 12,
+        letterSpacing: 0.4,
     },
     loading: {
         marginVertical: 12,
     },
     errorText: {
-        color: "#ff6b6b",
+        color: colors.dislike,
         fontSize: 14,
         marginVertical: 12,
         textAlign: "center",
