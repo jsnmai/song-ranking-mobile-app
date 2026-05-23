@@ -4,7 +4,9 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 
 import { ApiError } from "../../api/client"
+import StarAvatar from "../../components/StarAvatar"
 import { AppStackParamList } from "../../navigation/types"
+import { colors, fonts } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
 import { getFollowers, getFollowing } from "./apiRequests"
 import { Profile } from "./types"
@@ -18,6 +20,7 @@ export default function ProfileListScreen({ navigation, route }: ProfileListProp
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const title = listType === "followers" ? "Followers" : "Following"
+    const kicker = listType === "followers" ? "FOLLOWERS" : "FOLLOWING"
 
     const openProfile = (profile: Profile) => {
         if (profile.is_own_profile) {
@@ -60,12 +63,13 @@ export default function ProfileListScreen({ navigation, route }: ProfileListProp
                 <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
                     <Text style={styles.backText}>Back</Text>
                 </TouchableOpacity>
+                <Text style={styles.kicker}>{kicker}</Text>
                 <Text style={styles.heading}>{title}</Text>
                 <Text style={styles.subheading}>@{username}</Text>
             </View>
 
             {isLoading ? (
-                <ActivityIndicator color="#fff" style={styles.status} />
+                <ActivityIndicator color={colors.clay} style={styles.status} />
             ) : error ? (
                 <Text style={styles.error}>{error}</Text>
             ) : profiles.length === 0 ? (
@@ -79,12 +83,18 @@ export default function ProfileListScreen({ navigation, route }: ProfileListProp
                             onPress={() => openProfile(profile)}
                             activeOpacity={0.75}
                         >
-                            <View style={styles.avatar}>
-                                <Text style={styles.avatarText}>{profile.display_name.slice(0, 1).toUpperCase()}</Text>
-                            </View>
+                            <StarAvatar
+                                initial={(profile.display_name || profile.username).charAt(0)}
+                                outerColor={colors.clay}
+                                size={44}
+                            />
                             <View style={styles.profileText}>
-                                <Text style={styles.displayName} numberOfLines={1}>{profile.display_name}</Text>
-                                <Text style={styles.username} numberOfLines={1}>@{profile.username}</Text>
+                                <Text style={styles.displayName} numberOfLines={1}>
+                                    {profile.display_name}
+                                </Text>
+                                <Text style={styles.username} numberOfLines={1}>
+                                    @{profile.username}
+                                </Text>
                             </View>
                         </TouchableOpacity>
                     ))}
@@ -97,88 +107,100 @@ export default function ProfileListScreen({ navigation, route }: ProfileListProp
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: "#000",
+        backgroundColor: colors.bg,
     },
     header: {
-        paddingTop: 58,
+        paddingTop: 60,
         paddingHorizontal: 18,
-        paddingBottom: 18,
+        paddingBottom: 16,
         borderBottomWidth: 1,
-        borderBottomColor: "#1f1f1f",
+        borderBottomColor: colors.line,
     },
     backButton: {
         alignSelf: "flex-start",
         paddingVertical: 8,
-        marginBottom: 12,
+        marginBottom: 8,
     },
     backText: {
-        color: "#fff",
-        fontSize: 16,
+        fontFamily: fonts.mono,
+        color: colors.ink,
+        fontSize: 14,
+        letterSpacing: 0.4,
+    },
+    kicker: {
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 10,
+        letterSpacing: 1.8,
+        marginBottom: 4,
     },
     heading: {
-        color: "#fff",
-        fontSize: 26,
-        fontWeight: "700",
+        fontFamily: fonts.serif,
+        color: colors.ink,
+        fontSize: 28,
+        lineHeight: 32,
         marginBottom: 4,
     },
     subheading: {
-        color: "#888",
-        fontSize: 15,
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 14,
     },
     status: {
         marginTop: 42,
     },
     error: {
-        color: "#ff6b6b",
+        color: colors.dislike,
         fontSize: 15,
         marginTop: 42,
         textAlign: "center",
+        paddingHorizontal: 24,
     },
     empty: {
-        color: "#777",
+        color: colors.inkDim,
         fontSize: 15,
         marginTop: 42,
         textAlign: "center",
+        paddingHorizontal: 24,
     },
     list: {
         flex: 1,
     },
     listContent: {
-        paddingHorizontal: 18,
+        paddingHorizontal: 16,
+        paddingTop: 12,
         paddingBottom: 24,
     },
     row: {
         flexDirection: "row",
         alignItems: "center",
-        paddingVertical: 14,
-        borderBottomWidth: 1,
-        borderBottomColor: "#1f1f1f",
-    },
-    avatar: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: "#1f1f1f",
-        alignItems: "center",
-        justifyContent: "center",
-        marginRight: 12,
-    },
-    avatarText: {
-        color: "#fff",
-        fontSize: 18,
-        fontWeight: "700",
+        backgroundColor: colors.paper,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: colors.line,
+        padding: 14,
+        marginBottom: 8,
+        gap: 12,
+        shadowColor: "#000",
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: 2,
     },
     profileText: {
         flex: 1,
+        minWidth: 0,
     },
     displayName: {
-        color: "#fff",
+        fontFamily: fonts.serif,
+        color: colors.ink,
         fontSize: 16,
-        fontWeight: "600",
+        lineHeight: 20,
         marginBottom: 3,
     },
     username: {
-        color: "#888",
-        fontSize: 14,
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 13,
     },
 })
