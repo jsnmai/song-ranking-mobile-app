@@ -33,9 +33,10 @@ def _rating_payload(
     deezer_id: int,
     title: str,
     bucket: str = "like",
+    note: str | None = None,
 ) -> dict:
     """Return a finalize-rating payload shaped like a user-touched Deezer song."""
-    return {
+    payload = {
         "song": {
             "deezer_id": deezer_id,
             "isrc": "USUG11900842",
@@ -49,6 +50,9 @@ def _rating_payload(
         },
         "bucket": bucket,
     }
+    if note is not None:
+        payload["note"] = note
+    return payload
 
 
 def _finalize_rating(
@@ -57,6 +61,7 @@ def _finalize_rating(
     deezer_id: int,
     title: str,
     bucket: str = "like",
+    note: str | None = None,
 ) -> dict:
     """Finalize a rating and return the response body."""
     response = client.post(
@@ -65,6 +70,7 @@ def _finalize_rating(
             deezer_id,
             title,
             bucket,
+            note,
         ),
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -255,6 +261,83 @@ def test_feed_hides_private_profiles(client: TestClient, db_session: Session):
     ).scalar_one()
     profile.is_public = False
     profile.visibility = "only_me"
+    db_session.commit()
+
+    response = client.get(
+        "/api/v1/feed",
+        headers={"Authorization": f"Bearer {viewer_token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["events"] == []
+
+
+def test_feed_includes_visible_rating_note(client: TestClient):
+    """Feed returns notes only with visible rating activity."""
+    viewer_token = _register(
+        client,
+        "viewer@example.com",
+        "viewer",
+    )
+    followed_token = _register(
+        client,
+        "followed@example.com",
+        "followed",
+    )
+    _follow(
+        client,
+        viewer_token,
+        "followed",
+    )
+    _finalize_rating(
+        client,
+        followed_token,
+        501,
+        "Noted Feed Song",
+        note="This score has a note.",
+    )
+
+    response = client.get(
+        "/api/v1/feed",
+        headers={"Authorization": f"Bearer {viewer_token}"},
+    )
+
+    assert response.status_code == 200
+    events = response.json()["events"]
+    assert len(events) == 1
+    assert events[0]["note"] == "This score has a note."
+
+
+def test_feed_hides_rating_note_after_visibility_change(client: TestClient, db_session: Session):
+    """Notes disappear with their rating events when visibility changes retroactively."""
+    viewer_token = _register(
+        client,
+        "viewer@example.com",
+        "viewer",
+    )
+    followed_token = _register(
+        client,
+        "followed@example.com",
+        "followed",
+    )
+    _follow(
+        client,
+        viewer_token,
+        "followed",
+    )
+    _finalize_rating(
+        client,
+        followed_token,
+        502,
+        "Hidden Note Song",
+        note="This should disappear.",
+    )
+    profile = db_session.execute(
+        select(Profile)
+        .where(Profile.username == "followed")
+    ).scalar_one()
+    profile.visibility = "only_me"
+    profile.is_public = False
     db_session.commit()
 
     response = client.get(

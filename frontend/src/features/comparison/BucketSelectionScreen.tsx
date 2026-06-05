@@ -6,6 +6,7 @@ import {
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from "react-native"
@@ -32,6 +33,7 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
     const { token } = useAuth()
     const { song } = route.params
     const [selectedBucket, setSelectedBucket] = useState<BucketName | null>(null)
+    const [note, setNote] = useState("")
     const [error, setError] = useState<string | null>(null)
     const { isPlaying, toggle: toggleAudio, stop: stopAudio } = useAudioPlayer(song.preview_url)
 
@@ -56,13 +58,14 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
 
         try {
             const requiresComparison = await bucketRequiresComparison(bucket, token)
+            const ratingNote = note.trim().length > 0 ? note : undefined
+            const ratingRequest = ratingNote === undefined
+                ? { song, bucket }
+                : { song, bucket, note: ratingNote }
             stopAudio()
             if (requiresComparison) {
                 const session = await startComparisonSession(
-                    {
-                        song,
-                        bucket,
-                    },
+                    ratingRequest,
                     token,
                 )
                 navigation.replace("ComparisonFlow", { session })
@@ -70,10 +73,7 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
             }
 
             const result = await finalizeRating(
-                {
-                    song,
-                    bucket,
-                },
+                ratingRequest,
                 token,
             )
             navigation.replace("ScoreReveal", { result })
@@ -144,6 +144,24 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
                             </Text>
                         </TouchableOpacity>
                     )}
+                </View>
+
+                <View style={styles.noteBlock}>
+                    <View style={styles.noteLabelRow}>
+                        <Text style={styles.noteKicker}>ADD A NOTE</Text>
+                        <Text style={styles.noteOptional}>Optional</Text>
+                    </View>
+                    <TextInput
+                        value={note}
+                        onChangeText={setNote}
+                        multiline
+                        maxLength={280}
+                        editable={selectedBucket === null}
+                        placeholder="What made this score?"
+                        placeholderTextColor={colors.inkSoft}
+                        style={styles.noteInput}
+                    />
+                    <Text style={styles.noteCounter}>{note.length}/280</Text>
                 </View>
 
                 <Text style={styles.sectionKicker}>CHOOSE A BUCKET</Text>
@@ -283,6 +301,48 @@ const styles = StyleSheet.create({
         color: colors.ink,
         fontSize: 12,
         letterSpacing: 0.6,
+    },
+    noteBlock: {
+        marginBottom: 22,
+    },
+    noteLabelRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+    },
+    noteKicker: {
+        fontFamily: fonts.mono,
+        fontSize: 9,
+        letterSpacing: 2,
+        color: colors.inkSoft,
+        marginBottom: 10,
+    },
+    noteOptional: {
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 10,
+        letterSpacing: 0.8,
+        marginBottom: 10,
+    },
+    noteInput: {
+        minHeight: 86,
+        borderWidth: 1,
+        borderColor: colors.line,
+        borderRadius: 8,
+        backgroundColor: colors.paper,
+        color: colors.ink,
+        fontSize: 15,
+        lineHeight: 20,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        textAlignVertical: "top",
+    },
+    noteCounter: {
+        alignSelf: "flex-end",
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 10,
+        marginTop: 6,
     },
     sectionKicker: {
         fontFamily: fonts.mono,

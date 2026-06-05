@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from src.pydantic_schemas.rating import BucketName, RankingResponse, RatingFinalizeResponse
 from src.pydantic_schemas.song import SongCreate
@@ -21,6 +21,15 @@ class ComparisonSessionStartRequest(BaseModel):
         default=None,
         max_length=280,
     )
+
+    @field_validator("note")
+    @classmethod
+    def note_strip(cls, value: str | None) -> str | None:
+        """Store optional notes as trimmed text, or null when blank."""
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
 
 
 class ComparisonChoiceRequest(BaseModel):

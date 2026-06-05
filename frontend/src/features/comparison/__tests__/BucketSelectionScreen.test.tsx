@@ -165,6 +165,24 @@ describe("BucketSelectionScreen", () => {
         expect(mockStartComparisonSession).not.toHaveBeenCalled()
     })
 
+    it("sends an optional note with the finalized rating", async () => {
+        render(<BucketSelectionScreen navigation={navigation as never} route={buildRoute() as never} />)
+
+        fireEvent.changeText(screen.getByPlaceholderText("What made this score?"), "  Hovering all week.  ")
+        fireEvent.press(screen.getByTestId("bucket-like"))
+
+        await waitFor(() => {
+            expect(mockFinalizeRating).toHaveBeenCalledWith(
+                {
+                    song: baseSong,
+                    bucket: "like",
+                    note: "  Hovering all week.  ",
+                },
+                "test-token",
+            )
+        })
+    })
+
     it("non-empty bucket starts comparison and replaces to ComparisonFlow", async () => {
         mockListMyRankings.mockResolvedValue({
             rankings: [

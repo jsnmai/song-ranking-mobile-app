@@ -316,6 +316,51 @@ def test_finalize_empty_bucket_creates_ranking_and_event(
     assert db_session.scalar(select(func.count()).select_from(RatingEvent)) == 1
 
 
+def test_rating_note_is_trimmed(client: TestClient):
+    """Rating notes are stored without leading or trailing whitespace."""
+    token = _get_token(client)
+
+    body = _finalize_rating(
+        client,
+        token,
+        _rating_payload(note="   first heard this on a walk   "),
+    )
+
+    assert body["rating_event"]["note"] == "first heard this on a walk"
+
+
+def test_empty_rating_note_normalizes_to_null(client: TestClient):
+    """Whitespace-only notes do not create visible empty note content."""
+    token = _get_token(client)
+
+    body = _finalize_rating(
+        client,
+        token,
+        _rating_payload(note="   "),
+    )
+
+    assert body["rating_event"]["note"] is None
+
+
+def test_rating_note_does_not_affect_score(client: TestClient):
+    """Notes are user-authored text only and do not affect server-calculated score."""
+    token = _get_token(client)
+
+    without_note = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=301, title="No Note", note=None),
+    )
+    with_note = _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=302, title="With Note", bucket="alright", note="I have thoughts."),
+    )
+
+    assert without_note["ranking"]["score"] == BUCKET_SCORE_RANGES["like"]["midpoint"]
+    assert with_note["ranking"]["score"] == BUCKET_SCORE_RANGES["alright"]["midpoint"]
+
+
 def test_finalize_rating_success_includes_request_id_header(client: TestClient):
     """Successful rating responses include a request correlation ID."""
     token = _get_token(client)

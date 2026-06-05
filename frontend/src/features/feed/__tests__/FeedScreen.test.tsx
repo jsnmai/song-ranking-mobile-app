@@ -8,6 +8,7 @@ import { FeedEvent } from "../types"
 
 const mockNavigate = jest.fn()
 const mockListMyFeed = jest.fn()
+const mockReportRatingEvent = jest.fn()
 const mockGetMyRankingByDeezerId = jest.fn()
 
 jest.mock("@react-navigation/native", () => {
@@ -58,6 +59,7 @@ jest.mock("../../auth/AuthContext", () => ({
 
 jest.mock("../apiRequests", () => ({
     listMyFeed: (...args: unknown[]) => mockListMyFeed(...args),
+    reportRatingEvent: (...args: unknown[]) => mockReportRatingEvent(...args),
 }))
 
 jest.mock("../../rankings/apiRequests", () => ({
@@ -126,6 +128,17 @@ const ranking: RankingResponse = {
 
 beforeEach(() => {
     jest.resetAllMocks()
+    mockReportRatingEvent.mockResolvedValue({
+        id: 1,
+        reporter_user_id: 1,
+        reported_user_id: 4,
+        target_type: "rating_note",
+        target_id: 9,
+        reason: "spam",
+        details: null,
+        status: "open",
+        created_at: "2026-01-01T00:00:00Z",
+    })
 })
 
 describe("FeedScreen", () => {
@@ -177,6 +190,50 @@ describe("FeedScreen", () => {
 
         await waitFor(() => {
             expect(screen.getByText("3 hrs ago")).toBeTruthy()
+        })
+    })
+
+    it("renders visible rating notes", async () => {
+        mockListMyFeed.mockResolvedValue({
+            events: [{ ...feedEvent, note: "It doesn't lift, it hovers." }],
+            next_cursor: null,
+        })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByText("It doesn't lift, it hovers.")).toBeTruthy()
+            expect(screen.getByText("Report note")).toBeTruthy()
+        })
+    })
+
+    it("submits report-note reports with reason and details", async () => {
+        mockListMyFeed.mockResolvedValue({
+            events: [{ ...feedEvent, note: "This note needs review." }],
+            next_cursor: null,
+        })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByText("Report note")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByText("Report note"))
+        fireEvent.press(screen.getByText("Spam"))
+        fireEvent.changeText(screen.getByPlaceholderText("Add context for review."), "Repeated spam.")
+        fireEvent.press(screen.getByText("Submit report"))
+
+        await waitFor(() => {
+            expect(mockReportRatingEvent).toHaveBeenCalledWith(
+                9,
+                {
+                    target_type: "rating_note",
+                    reason: "spam",
+                    details: "Repeated spam.",
+                },
+                "test-token",
+            )
+            expect(screen.getByText("Thanks. We'll review this report.")).toBeTruthy()
         })
     })
 

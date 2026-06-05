@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.pydantic_schemas.song import SongCreate, SongResponse
 
@@ -23,6 +23,15 @@ class RatingFinalizeRequest(BaseModel):
         default=None,
         max_length=280,
     )
+
+    @field_validator("note")
+    @classmethod
+    def note_strip(cls, value: str | None) -> str | None:
+        """Store optional notes as trimmed text, or null when blank."""
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
 
 
 class RankingResponse(BaseModel):
