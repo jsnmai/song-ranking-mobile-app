@@ -18,7 +18,7 @@ type ProfileTab = "profile" | "taste"
 
 export default function ProfileScreen() {
     const navigation = useNavigation<ProfileNavigationProp>()
-    const { token, logout } = useAuth()
+    const { token } = useAuth()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [profileError, setProfileError] = useState<string | null>(null)
     const [taste, setTaste] = useState<TasteProfileResponse | null>(null)
@@ -44,6 +44,10 @@ export default function ProfileScreen() {
             username: profile.username,
             listType: "following",
         })
+    }
+
+    const openSettings = () => {
+        navigation.navigate("Settings")
     }
 
     useFocusEffect(
@@ -104,7 +108,12 @@ export default function ProfileScreen() {
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.kicker}>YOUR PROFILE</Text>
+                <View style={styles.headerRow}>
+                    <Text style={styles.kicker}>YOUR PROFILE</Text>
+                    <TouchableOpacity style={styles.settingsButton} onPress={openSettings}>
+                        <Text style={styles.settingsText}>Settings</Text>
+                    </TouchableOpacity>
+                </View>
 
                 {profile ? (
                     <View style={styles.info}>
@@ -133,10 +142,6 @@ export default function ProfileScreen() {
                 ) : (
                     <ActivityIndicator color={colors.clay} style={styles.loader} />
                 )}
-
-                <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-                    <Text style={styles.logoutText}>Log Out</Text>
-                </TouchableOpacity>
             </View>
 
             <View style={styles.tabBar}>
@@ -165,6 +170,20 @@ export default function ProfileScreen() {
                     error={tasteError}
                 />
             )}
+            {activeTab === "profile" && profile && (
+                <View style={styles.profilePanel}>
+                    <TouchableOpacity style={styles.settingsCard} onPress={openSettings}>
+                        <View>
+                            <Text style={styles.sectionKicker}>ACCOUNT</Text>
+                            <Text style={styles.settingsTitle}>Privacy and settings</Text>
+                            <Text style={styles.settingsCopy}>
+                                Visibility: {visibilityLabel(profile.visibility)}
+                            </Text>
+                        </View>
+                        <Text style={styles.chevron}>›</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
         </View>
     )
 }
@@ -180,13 +199,32 @@ const styles = StyleSheet.create({
         paddingTop: 60,
         paddingBottom: 16,
     },
+    headerRow: {
+        alignItems: "center",
+        flexDirection: "row",
+        justifyContent: "space-between",
+        marginBottom: 16,
+        width: "100%",
+    },
     kicker: {
         fontFamily: fonts.mono,
         color: colors.inkSoft,
         fontSize: 10,
         letterSpacing: 1.8,
-        marginBottom: 16,
-        alignSelf: "flex-start",
+    },
+    settingsButton: {
+        borderWidth: 1,
+        borderColor: colors.line,
+        borderRadius: 8,
+        backgroundColor: colors.paper,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+    },
+    settingsText: {
+        fontFamily: fonts.mono,
+        color: colors.ink,
+        fontSize: 11,
+        letterSpacing: 0.4,
     },
     info: {
         alignItems: "center",
@@ -256,20 +294,6 @@ const styles = StyleSheet.create({
         marginBottom: 24,
         textAlign: "center",
     },
-    logoutButton: {
-        paddingVertical: 12,
-        paddingHorizontal: 32,
-        borderWidth: 1,
-        borderColor: colors.ink,
-        borderRadius: 8,
-        backgroundColor: colors.paper,
-    },
-    logoutText: {
-        fontFamily: fonts.mono,
-        color: colors.ink,
-        fontSize: 13,
-        letterSpacing: 0.4,
-    },
     tabBar: {
         flexDirection: "row",
         borderTopWidth: 1,
@@ -277,6 +301,45 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: colors.line,
         backgroundColor: colors.bg,
+    },
+    profilePanel: {
+        paddingHorizontal: 18,
+        paddingVertical: 18,
+    },
+    settingsCard: {
+        alignItems: "center",
+        backgroundColor: colors.paper,
+        borderColor: colors.line,
+        borderRadius: 8,
+        borderWidth: 1,
+        flexDirection: "row",
+        justifyContent: "space-between",
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+    },
+    sectionKicker: {
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 10,
+        letterSpacing: 1.6,
+        marginBottom: 6,
+    },
+    settingsTitle: {
+        fontFamily: fonts.serif,
+        color: colors.ink,
+        fontSize: 20,
+        lineHeight: 24,
+    },
+    settingsCopy: {
+        color: colors.inkSoft,
+        fontSize: 13,
+        lineHeight: 18,
+        marginTop: 4,
+    },
+    chevron: {
+        color: colors.inkSoft,
+        fontSize: 30,
+        lineHeight: 32,
     },
     tabBtn: {
         flex: 1,
@@ -297,3 +360,13 @@ const styles = StyleSheet.create({
         color: colors.ink,
     },
 })
+
+function visibilityLabel(visibility: Profile["visibility"]): string {
+    if (visibility === "friends_only") {
+        return "Friends only"
+    }
+    if (visibility === "only_me") {
+        return "Only me"
+    }
+    return "Public"
+}

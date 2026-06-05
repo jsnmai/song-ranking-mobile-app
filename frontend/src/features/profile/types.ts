@@ -2,12 +2,15 @@
 // These mirror the Pydantic schemas in backend/src/pydantic_schemas/profile.py.
 
 // Mirrors ProfileResponse in backend/src/pydantic_schemas/profile.py
+export type ProfileVisibility = "public" | "friends_only" | "only_me"
+
 export type ProfileBase = {
     id: number;
     user_id: number;
     username: string;
     display_name: string;
     is_public: boolean;
+    visibility: ProfileVisibility;
     created_at: string;
 }
 
@@ -17,6 +20,8 @@ export type Profile = ProfileBase & {
     following_count: number;
     is_following: boolean;
     is_own_profile: boolean;
+    can_view_taste: boolean;
+    is_blocked: boolean;
 }
 
 // Mirrors ProfileSearchResponse in backend/src/pydantic_schemas/profile.py
@@ -26,6 +31,10 @@ export type ProfileSearchResponse = {
 
 // Mirrors ProfileListResponse in backend/src/pydantic_schemas/profile.py
 export type ProfileListResponse = {
+    profiles: Profile[];
+}
+
+export type BlockedProfileListResponse = {
     profiles: Profile[];
 }
 

@@ -2,7 +2,17 @@
 // Called by screens in features/profile/ — never call apiClient directly from a screen.
 
 import { apiClient } from "../../api/client"
-import { CompatibilityResponse, Profile, ProfileBase, ProfileListResponse, ProfileSearchResponse, ProfileSetupRequest, TasteProfileResponse } from "./types"
+import {
+    BlockedProfileListResponse,
+    CompatibilityResponse,
+    Profile,
+    ProfileBase,
+    ProfileListResponse,
+    ProfileSearchResponse,
+    ProfileSetupRequest,
+    ProfileVisibility,
+    TasteProfileResponse,
+} from "./types"
 
 // Calls GET /api/v1/profile/me
 // Returns the authenticated user's own profile.
@@ -48,6 +58,29 @@ export async function getFollowing(username: string, token: string): Promise<Pro
 // Returns the newly created profile.
 export async function setupProfile(data: ProfileSetupRequest, token: string): Promise<ProfileBase> {
     return apiClient.post<ProfileBase>("/api/v1/profile/setup", data, token)
+}
+
+// Calls PUT /api/v1/profile/me/visibility
+export async function updateMyVisibility(
+    visibility: ProfileVisibility,
+    token: string,
+): Promise<Profile> {
+    return apiClient.put<Profile>("/api/v1/profile/me/visibility", { visibility }, token)
+}
+
+// Calls GET /api/v1/profile/me/blocked
+export async function getBlockedProfiles(token: string): Promise<BlockedProfileListResponse> {
+    return apiClient.get<BlockedProfileListResponse>("/api/v1/profile/me/blocked", token)
+}
+
+// Calls POST /api/v1/profile/{username}/block
+export async function blockUser(username: string, token: string): Promise<Profile> {
+    return apiClient.post<Profile>(`/api/v1/profile/${username}/block`, {}, token)
+}
+
+// Calls DELETE /api/v1/profile/{username}/block
+export async function unblockUser(username: string, token: string): Promise<Profile> {
+    return apiClient.delete<Profile>(`/api/v1/profile/${username}/block`, token)
 }
 
 // Calls GET /api/v1/profile/me/taste

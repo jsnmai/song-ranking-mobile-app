@@ -13,6 +13,8 @@ const mockGetCompatibility = jest.fn()
 const mockGetUserTasteProfile = jest.fn()
 const mockFollowUser = jest.fn()
 const mockUnfollowUser = jest.fn()
+const mockBlockUser = jest.fn()
+const mockUnblockUser = jest.fn()
 
 jest.mock("../../auth/AuthContext", () => ({
     useAuth: () => ({
@@ -26,6 +28,8 @@ jest.mock("../apiRequests", () => ({
     getUserTasteProfile: (...args: unknown[]) => mockGetUserTasteProfile(...args),
     followUser: (...args: unknown[]) => mockFollowUser(...args),
     unfollowUser: (...args: unknown[]) => mockUnfollowUser(...args),
+    blockUser: (...args: unknown[]) => mockBlockUser(...args),
+    unblockUser: (...args: unknown[]) => mockUnblockUser(...args),
 }))
 
 const profile: Profile = {
@@ -34,11 +38,14 @@ const profile: Profile = {
     username: "maya",
     display_name: "Maya",
     is_public: true,
+    visibility: "public",
     created_at: "2026-01-01T00:00:00Z",
     follower_count: 12,
     following_count: 8,
     is_following: false,
     is_own_profile: false,
+    can_view_taste: true,
+    is_blocked: false,
 }
 
 const compatOverlap: CompatibilityResponse = {
@@ -129,5 +136,21 @@ describe("OtherProfileScreen compatibility card", () => {
             expect(screen.getByText("Taste")).toBeTruthy()
             expect(screen.getByText(/78% taste match/)).toBeTruthy()
         })
+    })
+
+    it("shows a friends-only state when taste is hidden but shell is visible", async () => {
+        mockGetProfileByUsername.mockResolvedValue({
+            ...profile,
+            visibility: "friends_only",
+            can_view_taste: false,
+        })
+
+        render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
+
+        await waitFor(() => {
+            expect(screen.getByText("This user shares taste with friends only.")).toBeTruthy()
+            expect(screen.getByText("Follow each other to compare taste.")).toBeTruthy()
+        })
+        expect(mockGetCompatibility).not.toHaveBeenCalled()
     })
 })

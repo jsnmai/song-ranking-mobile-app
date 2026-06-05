@@ -107,6 +107,7 @@ const feedEvent: FeedEvent = {
         username: "maya",
         display_name: "Maya",
         is_public: true,
+        visibility: "public",
         created_at: "2026-01-01T00:00:00Z",
     },
     song,

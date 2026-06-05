@@ -1,23 +1,29 @@
 // Tests for the profile API request wrappers.
 import {
+    blockUser,
     followUser,
+    getBlockedProfiles,
     getFollowers,
     getFollowing,
     getMyProfile,
     getProfileByUsername,
     searchProfiles,
     setupProfile,
+    unblockUser,
     unfollowUser,
+    updateMyVisibility,
 } from "../apiRequests"
 
 const mockGet = jest.fn()
 const mockPost = jest.fn()
+const mockPut = jest.fn()
 const mockDelete = jest.fn()
 
 jest.mock("../../../api/client", () => ({
     apiClient: {
         get: (...args: unknown[]) => mockGet(...args),
         post: (...args: unknown[]) => mockPost(...args),
+        put: (...args: unknown[]) => mockPut(...args),
         delete: (...args: unknown[]) => mockDelete(...args),
     },
 }))
@@ -96,5 +102,31 @@ describe("profile API requests", () => {
             },
             "test-token",
         )
+    })
+
+    it("updates profile visibility", async () => {
+        mockPut.mockResolvedValue({ username: "jasonmai" })
+
+        await updateMyVisibility("friends_only", "test-token")
+
+        expect(mockPut).toHaveBeenCalledWith(
+            "/api/v1/profile/me/visibility",
+            { visibility: "friends_only" },
+            "test-token",
+        )
+    })
+
+    it("gets blocked profiles and blocks/unblocks users", async () => {
+        mockGet.mockResolvedValue({ profiles: [] })
+        mockPost.mockResolvedValue({ username: "jasonmai" })
+        mockDelete.mockResolvedValue({ username: "jasonmai" })
+
+        await getBlockedProfiles("test-token")
+        await blockUser("jasonmai", "test-token")
+        await unblockUser("jasonmai", "test-token")
+
+        expect(mockGet).toHaveBeenCalledWith("/api/v1/profile/me/blocked", "test-token")
+        expect(mockPost).toHaveBeenCalledWith("/api/v1/profile/jasonmai/block", {}, "test-token")
+        expect(mockDelete).toHaveBeenCalledWith("/api/v1/profile/jasonmai/block", "test-token")
     })
 })

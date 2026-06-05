@@ -1,10 +1,13 @@
 # Tests for the local dev demo seed script guards and idempotency.
+from datetime import datetime, timezone
+
 import pytest
 from sqlalchemy import func, select
 
-from scripts.demo_seed_data import DEMO_ACCOUNTS, DEMO_EMAIL_DOMAIN, demo_email
+from scripts.demo_seed_data import DEMO_ACCOUNTS, DEMO_EMAIL_DOMAIN, DEMO_PASSWORD, demo_email
 from scripts.seed_dev_demo import (
     SeedAbortedError,
+    assert_required_schema,
     assert_safe_database_url,
     assert_seed_environment,
     is_legacy_demo_email,
@@ -13,6 +16,7 @@ from scripts.seed_dev_demo import (
 )
 from src.core.security import hash_password
 from src.crud.user import create_user_with_profile
+from src.sqlalchemy_tables.block import Block
 from src.sqlalchemy_tables.follow import Follow
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
@@ -41,17 +45,31 @@ def test_assert_safe_database_url_rejects_production_host() -> None:
 
 
 def test_demo_accounts_use_demo_listn_dev_domain() -> None:
-    """Demo emails must use the login-valid @demo.listn.dev domain."""
-    assert DEMO_EMAIL_DOMAIN == "@demo.listn.dev"
+    """Demo emails must use a memorable domain accepted by email validation."""
+    assert DEMO_EMAIL_DOMAIN == "@listn.demo"
     for account in DEMO_ACCOUNTS:
         assert account.email.endswith(DEMO_EMAIL_DOMAIN)
         assert account.email == demo_email(account.username)
+        assert not account.email.startswith("demo_")
+
+
+def test_demo_accounts_cover_visibility_states() -> None:
+    """Seeded accounts cover public, friends-only, and only-me manual testing."""
+    visibility_by_username = {account.username: account.visibility for account in DEMO_ACCOUNTS}
+
+    assert visibility_by_username["demo_power"] == "public"
+    assert visibility_by_username["demo_friends_only"] == "friends_only"
+    assert visibility_by_username["demo_private"] == "only_me"
 
 
 def test_is_legacy_demo_email_only_matches_known_demo_usernames() -> None:
     """Legacy cleanup is scoped to seeded demo usernames on @listn.test."""
     assert is_legacy_demo_email("demo_power@listn.test") is True
-    assert is_legacy_demo_email("demo_power@demo.listn.dev") is False
+    assert is_legacy_demo_email("power@listn.test") is True
+    assert is_legacy_demo_email("power@listn.dev") is True
+    assert is_legacy_demo_email("power@listn.demo") is False
+    assert is_legacy_demo_email("power@demo.listn.dev") is True
+    assert is_legacy_demo_email("power@li.test") is True
     assert is_legacy_demo_email("other_user@listn.test") is False
 
 
@@ -62,23 +80,32 @@ def test_purge_legacy_demo_users_removes_listn_test_demo_only(
     legacy = create_user_with_profile(
         db_session,
         email="demo_power@listn.test",
-        hashed_password=hash_password("listn1234"),
+        hashed_password=hash_password(DEMO_PASSWORD),
         username="legacy_demo_power",
         display_name="Legacy Demo Power",
+        age_verified_13_plus=True,
+        age_verified_at=datetime.now(timezone.utc),
+        age_gate_version="test-13-plus-v1",
     )
     current = create_user_with_profile(
         db_session,
         email=demo_email("demo_power"),
-        hashed_password=hash_password("listn1234"),
+        hashed_password=hash_password(DEMO_PASSWORD),
         username="demo_power",
         display_name="Demo Power",
+        age_verified_13_plus=True,
+        age_verified_at=datetime.now(timezone.utc),
+        age_gate_version="test-13-plus-v1",
     )
     outsider = create_user_with_profile(
         db_session,
         email="other_user@listn.test",
-        hashed_password=hash_password("listn1234"),
+        hashed_password=hash_password(DEMO_PASSWORD),
         username="other_user_test",
         display_name="Other User",
+        age_verified_13_plus=True,
+        age_verified_at=datetime.now(timezone.utc),
+        age_gate_version="test-13-plus-v1",
     )
     db_session.commit()
     legacy_id = legacy.id
@@ -102,6 +129,11 @@ def test_assert_safe_database_url_rejects_unknown_host() -> None:
     """Only local docker/dev hosts are allowed."""
     with pytest.raises(SeedAbortedError, match="host"):
         assert_safe_database_url("postgresql+psycopg2://postgres:postgres@prod.internal:5432/listn")
+
+
+def test_assert_required_schema_accepts_migrated_test_db(db_session) -> None:
+    """Seed preflight accepts the migrated test schema."""
+    assert_required_schema(db_session)
 
 
 def test_seed_demo_data_is_idempotent(
@@ -141,6 +173,8 @@ def test_seed_demo_data_is_idempotent(
 
     power_id = first.user_ids_by_username["demo_power"]
     feed_id = first.user_ids_by_username["demo_feed"]
+    friends_only_id = first.user_ids_by_username["demo_friends_only"]
+    blocked_id = first.user_ids_by_username["demo_blocked"]
     follow_count = db_session.execute(
         select(func.count())
         .select_from(Follow)
@@ -153,6 +187,23 @@ def test_seed_demo_data_is_idempotent(
     ).scalar_one()
     assert follow_count >= 5
     assert feed_follow_count >= 5
+
+    profiles = db_session.execute(
+        select(Profile).where(Profile.user_id.in_(demo_user_ids)),
+    ).scalars()
+    visibility_by_username = {profile.username: profile.visibility for profile in profiles}
+    for account in DEMO_ACCOUNTS:
+        assert visibility_by_username[account.username] == account.visibility
+
+    friends_only_profile = db_session.get(Profile, friends_only_id)
+    blocked_edges = db_session.execute(
+        select(func.count())
+        .select_from(Block)
+        .where(Block.blocker_id == power_id, Block.blocked_id == blocked_id),
+    ).scalar_one()
+    assert friends_only_profile is not None
+    assert friends_only_profile.visibility == "friends_only"
+    assert blocked_edges == 1
 
 
 def _demo_counts(
@@ -173,6 +224,13 @@ def _demo_counts(
             Follow.follower_id.in_(demo_user_ids) | Follow.following_id.in_(demo_user_ids),
         ),
     ).scalar_one()
+    block_count = db_session.execute(
+        select(func.count())
+        .select_from(Block)
+        .where(
+            Block.blocker_id.in_(demo_user_ids) | Block.blocked_id.in_(demo_user_ids),
+        ),
+    ).scalar_one()
     snapshot_count = db_session.execute(
         select(func.count())
         .select_from(UserSimilaritySnapshot)
@@ -189,5 +247,6 @@ def _demo_counts(
         "rankings": ranking_count,
         "rating_events": event_count,
         "follows": follow_count,
+        "blocks": block_count,
         "snapshots": snapshot_count,
     }

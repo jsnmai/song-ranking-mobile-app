@@ -82,11 +82,14 @@ const profile = {
     username: "jasonmai",
     display_name: "Jason Mai",
     is_public: true,
+    visibility: "public",
     created_at: "2026-01-01T00:00:00Z",
     follower_count: 12,
     following_count: 8,
     is_following: false,
     is_own_profile: false,
+    can_view_taste: true,
+    is_blocked: false,
 }
 
 beforeEach(() => {

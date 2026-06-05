@@ -8,12 +8,16 @@ import { RegisterResponse, Token, User } from "./types"
 // Creates user + profile atomically in a single backend transaction.
 // Returns the JWT alongside the new user — no separate login call needed.
 export async function register(
+    birthdate: string,
     email: string,
     password: string,
     display_name: string,
     username: string,
 ): Promise<RegisterResponse> {
-    return apiClient.post<RegisterResponse>("/api/v1/auth/register", { email, password, display_name, username })
+    return apiClient.post<RegisterResponse>(
+        "/api/v1/auth/register",
+        { birthdate, email, password, display_name, username },
+    )
 }
 
 // Calls POST /api/v1/auth/login

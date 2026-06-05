@@ -9,7 +9,15 @@ import StarAvatar from "../../components/StarAvatar"
 import { AppStackParamList } from "../../navigation/types"
 import { colors, fonts } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
-import { followUser, getCompatibility, getProfileByUsername, getUserTasteProfile, unfollowUser } from "./apiRequests"
+import {
+    blockUser,
+    followUser,
+    getCompatibility,
+    getProfileByUsername,
+    getUserTasteProfile,
+    unblockUser,
+    unfollowUser,
+} from "./apiRequests"
 import { CompatibilityResponse, Profile, TasteProfileResponse } from "./types"
 import TasteTabContent from "./TasteTabContent"
 
@@ -80,6 +88,33 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
         }
     }
 
+    const toggleBlock = async () => {
+        if (!token || !profile || profile.is_own_profile || isSaving) {
+            return
+        }
+
+        setIsSaving(true)
+        setProfileError(null)
+        try {
+            const updatedProfile = profile.is_blocked
+                ? await unblockUser(profile.username, token)
+                : await blockUser(profile.username, token)
+            setProfile(updatedProfile)
+            setCompatibility(null)
+            setTaste(null)
+        } catch (err) {
+            if (err instanceof ApiError) {
+                setProfileError(err.detail)
+            } else if (err instanceof Error) {
+                setProfileError(err.message)
+            } else {
+                setProfileError("Could not update block state.")
+            }
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
     useEffect(() => {
         async function fetchProfile() {
             if (!token) {
@@ -106,7 +141,7 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
     }, [token, username])
 
     useEffect(() => {
-        if (activeTab !== "taste" || !token) {
+        if (activeTab !== "taste" || !token || !profile || !profile.can_view_taste) {
             return
         }
         async function fetchTaste() {
@@ -131,10 +166,10 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
             }
         }
         fetchTaste()
-    }, [activeTab, token, username])
+    }, [activeTab, profile, token, username])
 
     useEffect(() => {
-        if (!token) {
+        if (!token || !profile || !profile.can_view_taste) {
             return
         }
         async function fetchCompatibility() {
@@ -153,7 +188,7 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
             }
         }
         fetchCompatibility()
-    }, [token, username])
+    }, [profile, token, username])
 
     const profileInitial = profile
         ? (profile.display_name || profile.username).charAt(0).toUpperCase()
@@ -191,18 +226,29 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
                             </TouchableOpacity>
                         </View>
                         {!profile.is_own_profile && (
-                            <TouchableOpacity
-                                style={[
-                                    styles.followButton,
-                                    profile.is_following ? styles.followingButton : null,
-                                ]}
-                                onPress={toggleFollow}
-                                disabled={isSaving}
-                            >
-                                <Text style={[styles.followText, profile.is_following ? styles.followingText : null]}>
-                                    {isSaving ? "Saving..." : profile.is_following ? "Following" : "Follow"}
-                                </Text>
-                            </TouchableOpacity>
+                            <View style={styles.actionRow}>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.followButton,
+                                        profile.is_following ? styles.followingButton : null,
+                                    ]}
+                                    onPress={toggleFollow}
+                                    disabled={isSaving}
+                                >
+                                    <Text style={[styles.followText, profile.is_following ? styles.followingText : null]}>
+                                        {isSaving ? "Saving..." : profile.is_following ? "Following" : "Follow"}
+                                    </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.blockButton, profile.is_blocked ? styles.unblockButton : null]}
+                                    onPress={toggleBlock}
+                                    disabled={isSaving}
+                                >
+                                    <Text style={[styles.blockText, profile.is_blocked ? styles.unblockText : null]}>
+                                        {profile.is_blocked ? "Unblock" : "Block"}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
                         )}
                     </View>
                 ) : (
@@ -214,7 +260,24 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
 
             {profile && (
                 <>
-                    {!compatLoading && compatibility && (
+                    {!profile.can_view_taste && (
+                        <View style={styles.privateCard}>
+                            <Text style={styles.privateTitle}>
+                                {profile.visibility === "friends_only"
+                                    ? "This user shares taste with friends only."
+                                    : "This profile is private."
+                                }
+                            </Text>
+                            <Text style={styles.privateText}>
+                                {profile.visibility === "friends_only"
+                                    ? "Follow each other to compare taste."
+                                    : "No visible ratings yet."
+                                }
+                            </Text>
+                        </View>
+                    )}
+
+                    {profile.can_view_taste && !compatLoading && compatibility && (
                         <View style={styles.compatCard} testID="compatibility-card">
                             {compatibility.has_overlap ? (
                                 <>
@@ -273,11 +336,28 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
                     </View>
 
                     {activeTab === "taste" && (
-                        <TasteTabContent
-                            taste={taste}
-                            isLoading={tasteLoading}
-                            error={tasteError}
-                        />
+                        profile.can_view_taste ? (
+                            <TasteTabContent
+                                taste={taste}
+                                isLoading={tasteLoading}
+                                error={tasteError}
+                            />
+                        ) : (
+                            <View style={styles.privateCard}>
+                                <Text style={styles.privateTitle}>
+                                    {profile.visibility === "friends_only"
+                                        ? "This user shares taste with friends only."
+                                        : "This profile is private."
+                                    }
+                                </Text>
+                                <Text style={styles.privateText}>
+                                    {profile.visibility === "friends_only"
+                                        ? "Follow each other to compare taste."
+                                        : "No visible ratings yet."
+                                    }
+                                </Text>
+                            </View>
+                        )
                     )}
                 </>
             )}
@@ -398,6 +478,32 @@ const styles = StyleSheet.create({
     followingText: {
         color: colors.ink,
     },
+    actionRow: {
+        flexDirection: "row",
+        gap: 8,
+    },
+    blockButton: {
+        minWidth: 96,
+        alignItems: "center",
+        paddingVertical: 12,
+        paddingHorizontal: 18,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: colors.dislike,
+        backgroundColor: colors.paper,
+    },
+    unblockButton: {
+        borderColor: colors.ink,
+    },
+    blockText: {
+        fontFamily: fonts.mono,
+        color: colors.dislike,
+        fontSize: 13,
+        letterSpacing: 0.4,
+    },
+    unblockText: {
+        color: colors.ink,
+    },
     error: {
         color: colors.dislike,
         fontSize: 14,
@@ -419,6 +525,28 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         shadowOffset: { width: 0, height: 2 },
         elevation: 2,
+    },
+    privateCard: {
+        marginHorizontal: 16,
+        marginBottom: 12,
+        paddingVertical: 16,
+        paddingHorizontal: 16,
+        backgroundColor: colors.paper,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: colors.line,
+    },
+    privateTitle: {
+        fontFamily: fonts.serif,
+        color: colors.ink,
+        fontSize: 20,
+        lineHeight: 24,
+        marginBottom: 6,
+    },
+    privateText: {
+        color: colors.inkSoft,
+        fontSize: 14,
+        lineHeight: 20,
     },
     compatKicker: {
         fontFamily: fonts.mono,

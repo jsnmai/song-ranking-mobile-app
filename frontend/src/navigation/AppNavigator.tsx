@@ -20,6 +20,7 @@ import DiscoverScreen from "../features/discover/DiscoverScreen"
 import OtherProfileScreen from "../features/profile/OtherProfileScreen"
 import ProfileListScreen from "../features/profile/ProfileListScreen"
 import ProfileScreen from "../features/profile/ProfileScreen"
+import SettingsScreen from "../features/profile/SettingsScreen"
 import SongDetailScreen from "../features/song-detail/SongDetailScreen"
 
 const Tab = createBottomTabNavigator<TabParamList>()
@@ -85,6 +86,7 @@ export default function AppNavigator() {
             <Stack.Screen name="SongDetail" component={SongDetailScreen} />
             <Stack.Screen name="OtherProfile" component={OtherProfileScreen} />
             <Stack.Screen name="ProfileList" component={ProfileListScreen} />
+            <Stack.Screen name="Settings" component={SettingsScreen} />
             {/* change presentation to 'modal' to try as bottom sheet */}
             <Stack.Screen name="Reorder" component={ReorderScreen} />
             <Stack.Screen name="BucketSelection" component={BucketSelectionScreen} />

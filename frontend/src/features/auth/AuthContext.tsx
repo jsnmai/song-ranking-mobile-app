@@ -15,7 +15,13 @@ type AuthContextType = {
     token: string | null;   // the raw JWT — available if screens ever need to call authenticated endpoints directly
     isLoading: boolean;     // true while checking the stored token on app launch
     login: (email: string, password: string) => Promise<void>;
-    register: (email: string, password: string, display_name: string, username: string) => Promise<void>;
+    register: (
+        birthdate: string,
+        email: string,
+        password: string,
+        display_name: string,
+        username: string,
+    ) => Promise<void>;
     logout: () => Promise<void>;
 }
 // Create the actual context box. Starts empty: (null)
@@ -42,6 +48,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     const register = async (
+        birthdate: string,
         email: string,
         password: string,
         display_name: string,
@@ -49,7 +56,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     ): Promise<void> => {
         // The register endpoint returns a JWT alongside the new user in one response —
         // no separate login or /me call needed after registration.
-        const response = await registerRequest(email, password, display_name, username)
+        const response = await registerRequest(birthdate, email, password, display_name, username)
         await SecureStore.setItemAsync(KEYS.JWT_TOKEN, response.access_token)
         setToken(response.access_token)
         setUser(response.user)

@@ -145,7 +145,7 @@ describe("register()", () => {
         await waitFor(() => expect(result.current.isLoading).toBe(false))
 
         await act(async () => {
-            await result.current.register("user@example.com", "password123", "Test User", "testuser")
+            await result.current.register("2000-01-01", "user@example.com", "password123", "Test User", "testuser")
         })
 
         expect(result.current.user).toEqual(MOCK_USER)

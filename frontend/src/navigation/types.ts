@@ -23,6 +23,7 @@ export type AppStackParamList = {
     SongDetail: { ranking: RankingResponse } | { song: SongSearchResult };
     OtherProfile: { username: string };
     ProfileList: { username: string; listType: "followers" | "following" };
+    Settings: undefined;
     Reorder: undefined;
     BucketSelection: { song: SongSearchResult };
     ComparisonFlow: { session: ComparisonSessionResponse };
