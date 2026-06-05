@@ -1,5 +1,6 @@
 """Business logic for ratings, rankings, and rating events."""
 from dataclasses import dataclass
+from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -127,6 +128,8 @@ def persist_finalized_rating(
     db: Session,
     user_id: int,
     data: RatingFinalizeRequest,
+    source: str = "direct",
+    comparison_session_uuid: UUID | None = None,
 ) -> FinalizedRatingState:
     """
     Write ranking and rating_event rows without committing.
@@ -177,6 +180,8 @@ def persist_finalized_rating(
         previous_score=previous_score,
         new_score=placement.ranking.score,
         note=data.note,
+        source=source,
+        comparison_session_uuid=comparison_session_uuid,
     )
     return FinalizedRatingState(
         ranking=placement.ranking,
@@ -285,6 +290,7 @@ def remove_rating(
             previous_score=previous_score,
             new_score=None,
             note=None,
+            source="remove",
         )
         db.commit()
         refresh_rating_event(
@@ -409,6 +415,7 @@ def reorder_rankings(
                     previous_score=previous["score"],
                     new_score=ranking.score,
                     note=None,
+                    source="reorder",
                     event_metadata=event_metadata,
                 )
             )

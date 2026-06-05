@@ -2,6 +2,7 @@
 from fastapi.testclient import TestClient
 from httpx import Response
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.services.rating import BUCKET_SCORE_RANGES
@@ -312,8 +313,34 @@ def test_finalize_empty_bucket_creates_ranking_and_event(
     assert body["rating_event"]["new_position"] == 1
     assert body["rating_event"]["new_score"] == BUCKET_SCORE_RANGES["like"]["midpoint"]
     assert body["rating_event"]["note"] == "first heard this on a walk"
+    assert body["rating_event"]["source"] == "direct"
+    assert body["rating_event"]["comparison_session_uuid"] is None
     assert db_session.scalar(select(func.count()).select_from(Ranking)) == 1
     assert db_session.scalar(select(func.count()).select_from(RatingEvent)) == 1
+
+
+def test_rating_event_source_is_constrained(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    """Future archive/event code cannot persist arbitrary source strings."""
+    token = _get_token(client)
+    _finalize_rating(
+        client,
+        token,
+        _rating_payload(),
+    )
+    db_session.expire_all()
+    event = db_session.execute(select(RatingEvent)).scalar_one()
+
+    event.source = "archive"
+
+    try:
+        db_session.commit()
+    except IntegrityError:
+        db_session.rollback()
+    else:
+        raise AssertionError("Invalid rating event source should fail the database constraint.")
 
 
 def test_rating_note_is_trimmed(client: TestClient):
@@ -627,6 +654,8 @@ def test_remove_rating_deletes_ranking_compacts_bucket_and_writes_removed_event(
     assert body["rating_event"]["new_bucket"] is None
     assert body["rating_event"]["new_position"] is None
     assert body["rating_event"]["new_score"] is None
+    assert body["rating_event"]["source"] == "remove"
+    assert body["rating_event"]["comparison_session_uuid"] is None
     db_session.expire_all()
     assert _positions_for_bucket(
         db_session,
@@ -886,6 +915,8 @@ def test_reorder_crossing_bucket_boundary_writes_reordered_events(
     assert set(events_by_song_id) == set(affected_song_ids)
     for event in body["rating_events"]:
         assert event["event_type"] == "reordered"
+        assert event["source"] == "reorder"
+        assert event["comparison_session_uuid"] is None
         assert event["event_metadata"] == {
             "session_type": "reorder",
             "songs_affected": 2,

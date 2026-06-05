@@ -2,6 +2,7 @@
 # Services own scoring decisions; this module owns all SQLAlchemy reads/writes.
 from dataclasses import dataclass
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
@@ -207,6 +208,8 @@ def create_rating_event(
     previous_score: float | None,
     new_score: float | None,
     note: str | None,
+    source: str | None,
+    comparison_session_uuid: UUID | None = None,
     event_metadata: dict[str, Any] | None = None,
 ) -> RatingEvent:
     """Create an append-only rating event without committing."""
@@ -221,6 +224,8 @@ def create_rating_event(
         previous_score=previous_score,
         new_score=new_score,
         note=note,
+        source=source,
+        comparison_session_uuid=comparison_session_uuid,
         event_metadata=event_metadata,
     )
     db.add(event)

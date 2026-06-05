@@ -214,6 +214,8 @@ def finalize_comparison_session(
                 position=session.final_position,
                 note=session.note,
             ),
+            source="comparison",
+            comparison_session_uuid=session.session_uuid,
         )
         finalized_at = datetime.now(timezone.utc)
         _write_comparisons(
@@ -469,7 +471,7 @@ def _write_comparisons(
     finalized_at: datetime,
 ) -> None:
     """Persist all temporary decisions as append-only comparison rows."""
-    for decision in session.decisions or []:
+    for index, decision in enumerate(session.decisions or [], start=1):
         candidate_song_id = int(decision["candidate_song_id"])
         winner_id = target_song_id if decision["winner"] == "target" else candidate_song_id
         create_comparison(
@@ -479,6 +481,8 @@ def _write_comparisons(
             song_a_id=candidate_song_id,
             song_b_id=target_song_id,
             winner_id=winner_id,
+            bucket=session.bucket,
+            comparison_index_in_session=index,
             decision_duration_ms=decision.get("decision_duration_ms"),
             created_at=datetime.fromisoformat(decision["created_at"]),
             finalized_at=finalized_at,

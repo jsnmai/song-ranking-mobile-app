@@ -1,10 +1,11 @@
 # SQLAlchemy model for the `rating_events` table.
 # Append-only product history for ratings, removals, and future rerates/reorders.
+import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, func
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, func
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.db.base import Base
@@ -42,6 +43,20 @@ class RatingEvent(Base):
             "song_id",
             "created_at",
             "id",
+        ),
+        Index(
+            "ix_rating_events_comparison_session_uuid",
+            "comparison_session_uuid",
+        ),
+        Index(
+            "ix_rating_events_user_source_created_at",
+            "user_id",
+            "source",
+            "created_at",
+        ),
+        CheckConstraint(
+            "source IS NULL OR source IN ('direct', 'comparison', 'remove', 'reorder')",
+            name="ck_rating_events_source",
         ),
     )
 
@@ -84,6 +99,14 @@ class RatingEvent(Base):
     )
     note: Mapped[str | None] = mapped_column(
         String(280),
+        nullable=True,
+    )
+    source: Mapped[str | None] = mapped_column(
+        String(30),
+        nullable=True,
+    )
+    comparison_session_uuid: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
         nullable=True,
     )
     event_metadata: Mapped[dict[str, Any] | None] = mapped_column(

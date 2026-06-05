@@ -44,6 +44,8 @@ export type RatingEventResponse = {
     previous_score: number | null;
     new_score: number | null;
     note: string | null;
+    source: "direct" | "comparison" | "remove" | "reorder" | null;
+    comparison_session_uuid: string | null;
     event_metadata: Record<string, unknown> | null;
     created_at: string;
 }

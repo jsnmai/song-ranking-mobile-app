@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.sqlalchemy_tables.comparison import Comparison
@@ -267,16 +268,56 @@ def test_comparison_choice_and_finalize_target_wins(
     assert body["result"]["ranking"]["position"] == 1
     assert body["result"]["ranking"]["score"] == 10.0
     assert body["result"]["rating_event"]["event_type"] == "rated"
+    assert body["result"]["rating_event"]["source"] == "comparison"
+    assert body["result"]["rating_event"]["comparison_session_uuid"] == session["session_uuid"]
     db_session.expire_all()
     comparison = db_session.execute(select(Comparison)).scalar_one()
     assert comparison.song_a_id == existing["ranking"]["song_id"]
     assert comparison.song_b_id == body["result"]["ranking"]["song_id"]
     assert comparison.winner_id == body["result"]["ranking"]["song_id"]
+    assert comparison.bucket == "like"
+    assert comparison.comparison_index_in_session == 1
     assert comparison.decision_duration_ms == 1834
     assert comparison.finalized_at is not None
     assert db_session.scalar(select(func.count()).select_from(ComparisonSession)) == 0
     assert db_session.scalar(select(func.count()).select_from(Ranking)) == 2
     assert db_session.scalar(select(func.count()).select_from(RatingEvent)) == 2
+
+
+def test_comparison_index_in_session_is_constrained_positive(
+    client: TestClient,
+    db_session: Session,
+):
+    """Comparison receipts use stable one-based indexes within a finalized session."""
+    token = _get_token(client)
+    _finalize_rating(
+        client,
+        token,
+        _rating_payload(deezer_id=123, title="Nights"),
+    )
+    session = _start_session(client, token)
+    choice_response = client.post(
+        f"/api/v1/comparison-sessions/{session['session_uuid']}/choices",
+        json={"winner": "target"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert choice_response.status_code == 200
+    finalize_response = client.post(
+        f"/api/v1/comparison-sessions/{session['session_uuid']}/finalize",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert finalize_response.status_code == 200
+    db_session.expire_all()
+    comparison = db_session.execute(select(Comparison)).scalar_one()
+
+    comparison.comparison_index_in_session = 0
+
+    try:
+        db_session.commit()
+    except IntegrityError:
+        db_session.rollback()
+    else:
+        raise AssertionError("Comparison index should be null or one-based.")
 
 
 def test_comparison_choice_candidate_wins_places_target_below(client: TestClient):
@@ -733,6 +774,19 @@ def test_binary_insertion_all_win_path_lands_first(
     db_session.expire_all()
     comparison_count_after_session = db_session.scalar(select(func.count()).select_from(Comparison))
     assert comparison_count_after_session == comparison_count_before_session + 2
+    comparisons = db_session.execute(
+        select(Comparison)
+        .where(Comparison.session_uuid == session["session_uuid"])
+        .order_by(Comparison.comparison_index_in_session)
+    ).scalars().all()
+    assert [
+        comparison.comparison_index_in_session
+        for comparison in comparisons
+    ] == [1, 2]
+    assert {
+        comparison.bucket
+        for comparison in comparisons
+    } == {"like"}
 
 
 def test_binary_insertion_all_lose_path_lands_last(client: TestClient):

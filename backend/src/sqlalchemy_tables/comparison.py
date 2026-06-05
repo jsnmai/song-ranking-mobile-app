@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -28,6 +28,19 @@ class Comparison(Base):
             "ix_comparisons_session_uuid",
             "session_uuid",
         ),
+        Index(
+            "ix_comparisons_session_index",
+            "session_uuid",
+            "comparison_index_in_session",
+        ),
+        CheckConstraint(
+            "bucket IS NULL OR bucket IN ('like', 'alright', 'dislike')",
+            name="ck_comparisons_bucket",
+        ),
+        CheckConstraint(
+            "comparison_index_in_session IS NULL OR comparison_index_in_session >= 1",
+            name="ck_comparisons_index_positive",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -50,6 +63,14 @@ class Comparison(Base):
     winner_id: Mapped[int] = mapped_column(
         ForeignKey("songs.id"),
         nullable=False,
+    )
+    bucket: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+    )
+    comparison_index_in_session: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
     )
     decision_duration_ms: Mapped[int | None] = mapped_column(
         Integer,

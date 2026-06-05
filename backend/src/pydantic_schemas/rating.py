@@ -1,6 +1,7 @@
 # Pydantic schemas for rating and ranking endpoints.
 from datetime import datetime
 from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -8,6 +9,7 @@ from src.pydantic_schemas.song import SongCreate, SongResponse
 
 BucketName = Literal["like", "alright", "dislike"]
 RatingEventType = Literal["rated", "rerated", "removed", "reordered"]
+RatingEventSource = Literal["direct", "comparison", "remove", "reorder"]
 
 
 class RatingFinalizeRequest(BaseModel):
@@ -64,6 +66,8 @@ class RatingEventResponse(BaseModel):
     previous_score: float | None
     new_score: float | None
     note: str | None
+    source: RatingEventSource | None = None
+    comparison_session_uuid: UUID | None = None
     event_metadata: dict[str, Any] | None = None
     created_at: datetime
 
