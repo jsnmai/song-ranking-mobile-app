@@ -73,7 +73,7 @@ export default function SettingsScreen({ navigation }: SettingsProps) {
         setIsDeleting(true)
         setError(null)
         try {
-            await deleteAccount()
+            await deleteAccount(deleteConfirmation)
         } catch (err) {
             setError(errorMessage(err, "Could not delete account."))
             setIsDeleting(false)

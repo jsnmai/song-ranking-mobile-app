@@ -12,6 +12,7 @@ from src.sqlalchemy_tables.follow import Follow
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
+from src.sqlalchemy_tables.report import Report
 from src.sqlalchemy_tables.song import Song
 from src.sqlalchemy_tables.user import User
 from src.sqlalchemy_tables.user_similarity_snapshot import UserSimilaritySnapshot
@@ -94,6 +95,18 @@ def test_delete_me_removes_user_owned_data_and_recomputes_song_aggregates(
         headers={"Authorization": f"Bearer {remaining_token}"},
     )
     assert follow_response.status_code == 200
+    reported_by_deleting_response = client.post(
+        "/api/v1/profile/remaining/report",
+        json={"reason": "other"},
+        headers={"Authorization": f"Bearer {deleting_token}"},
+    )
+    assert reported_by_deleting_response.status_code == 201
+    reported_deleting_response = client.post(
+        "/api/v1/profile/deleteme/report",
+        json={"reason": "spam"},
+        headers={"Authorization": f"Bearer {remaining_token}"},
+    )
+    assert reported_deleting_response.status_code == 201
     block_response = client.post(
         "/api/v1/profile/remaining/block",
         headers={"Authorization": f"Bearer {deleting_token}"},
@@ -146,8 +159,10 @@ def test_delete_me_removes_user_owned_data_and_recomputes_song_aggregates(
     )
     db_session.commit()
 
-    response = client.delete(
+    response = client.request(
+        "DELETE",
         "/api/v1/auth/me",
+        json={"confirmation": "DELETE"},
         headers={"Authorization": f"Bearer {deleting_token}"},
     )
 
@@ -196,6 +211,15 @@ def test_delete_me_removes_user_owned_data_and_recomputes_song_aggregates(
             )
         )
     ).scalar_one() == 0
+    reports = db_session.execute(
+        select(Report)
+        .order_by(Report.id)
+    ).scalars().all()
+    assert len(reports) == 2
+    assert reports[0].reporter_user_id is None
+    assert reports[0].reported_user_id == remaining_user_id
+    assert reports[1].reporter_user_id == remaining_user_id
+    assert reports[1].reported_user_id is None
 
     db_session.refresh(shared_song)
     db_session.refresh(deleted_only_song)
@@ -236,6 +260,49 @@ def test_delete_me_removes_user_owned_data_and_recomputes_song_aggregates(
 
 def test_delete_me_requires_authentication(client: TestClient) -> None:
     """Anonymous callers cannot delete an account."""
-    response = client.delete("/api/v1/auth/me")
+    response = client.request("DELETE", "/api/v1/auth/me", json={"confirmation": "DELETE"})
 
     assert response.status_code == 401
+
+
+def test_delete_me_rejects_wrong_confirmation(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    """Wrong deletion confirmation leaves the account intact."""
+    token, user_id = _register(client, "keep-me@example.com", "keepme")
+
+    response = client.request(
+        "DELETE",
+        "/api/v1/auth/me",
+        json={"confirmation": "NOPE"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 400
+    assert db_session.execute(
+        select(func.count())
+        .select_from(User)
+        .where(User.id == user_id)
+    ).scalar_one() == 1
+
+
+def test_delete_me_requires_confirmation_body(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    """Missing deletion confirmation leaves the account intact."""
+    token, user_id = _register(client, "missing-confirm@example.com", "missingconfirm")
+
+    response = client.request(
+        "DELETE",
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+    assert db_session.execute(
+        select(func.count())
+        .select_from(User)
+        .where(User.id == user_id)
+    ).scalar_one() == 1

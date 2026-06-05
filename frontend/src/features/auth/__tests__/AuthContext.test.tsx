@@ -147,10 +147,10 @@ describe("deleteAccount()", () => {
         await waitFor(() => expect(result.current.user).toEqual(MOCK_USER))
 
         await act(async () => {
-            await result.current.deleteAccount()
+            await result.current.deleteAccount("DELETE")
         })
 
-        expect(mockDeleteAccountRequest).toHaveBeenCalledWith("valid-token")
+        expect(mockDeleteAccountRequest).toHaveBeenCalledWith("valid-token", "DELETE")
         expect(result.current.user).toBeNull()
         expect(result.current.token).toBeNull()
         expect(mockDeleteItemAsync).toHaveBeenCalledWith(KEYS.JWT_TOKEN)
@@ -165,7 +165,7 @@ describe("deleteAccount()", () => {
         await waitFor(() => expect(result.current.user).toEqual(MOCK_USER))
 
         await act(async () => {
-            await expect(result.current.deleteAccount()).rejects.toThrow("delete failed")
+            await expect(result.current.deleteAccount("DELETE")).rejects.toThrow("delete failed")
         })
 
         expect(result.current.user).toEqual(MOCK_USER)

@@ -1,12 +1,19 @@
 # HTTP layer for authentication endpoints.
 # Routers are intentionally thin: parse the request, call the service, return the result.
 # All business logic lives in src/services/auth.py.
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
 from src.core.limiter import limiter
-from src.pydantic_schemas.user import RegisterResponse, Token, UserLogin, UserRegister, UserResponse
+from src.pydantic_schemas.user import (
+    AccountDeleteRequest,
+    RegisterResponse,
+    Token,
+    UserLogin,
+    UserRegister,
+    UserResponse,
+)
 from src.services.auth import delete_current_user, login_user, register_user
 from src.sqlalchemy_tables.user import User
 
@@ -82,10 +89,16 @@ def me(current_user: User = Depends(get_current_user)) -> UserResponse:
     status_code=status.HTTP_204_NO_CONTENT,
 )
 def delete_me(
+    data: AccountDeleteRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Response:
     """Delete the authenticated account and its row-level user-owned data."""
+    if data.confirmation != "DELETE":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Type DELETE to confirm account deletion.",
+        )
     delete_current_user(
         db,
         current_user,

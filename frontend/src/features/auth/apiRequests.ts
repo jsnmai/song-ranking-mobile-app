@@ -35,6 +35,6 @@ export async function me(token: string): Promise<User> {
 
 // Calls DELETE /api/v1/auth/me
 // Permanently deletes the authenticated account and user-owned data.
-export async function deleteAccount(token: string): Promise<void> {
-    await apiClient.delete<void>("/api/v1/auth/me", token)
+export async function deleteAccount(token: string, confirmation: string): Promise<void> {
+    await apiClient.delete<void>("/api/v1/auth/me", token, { confirmation })
 }

@@ -14,6 +14,12 @@ class UserLogin(BaseModel):
     )
 
 
+class AccountDeleteRequest(BaseModel):
+    """Request body for deleting the authenticated account."""
+
+    confirmation: str
+
+
 class UserRegister(BaseModel):
     """Request body for POST /auth/register."""
     birthdate: date

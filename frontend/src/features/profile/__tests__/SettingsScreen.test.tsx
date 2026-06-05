@@ -117,7 +117,7 @@ describe("SettingsScreen", () => {
         fireEvent.press(screen.getByText("Delete"))
 
         await waitFor(() => {
-            expect(mockDeleteAccount).toHaveBeenCalledTimes(1)
+            expect(mockDeleteAccount).toHaveBeenCalledWith("DELETE")
         })
     })
 

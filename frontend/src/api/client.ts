@@ -124,7 +124,7 @@ export const apiClient = {
     async put<ResponseType>(path: string, body: unknown, token?: string): Promise<ResponseType> {
         return request<ResponseType>("PUT", path, { body, token })
     },
-    async delete<ResponseType>(path: string, token?: string): Promise<ResponseType> {
-        return request<ResponseType>("DELETE", path, { token })
+    async delete<ResponseType>(path: string, token?: string, body?: unknown): Promise<ResponseType> {
+        return request<ResponseType>("DELETE", path, { token, body })
     },
 }

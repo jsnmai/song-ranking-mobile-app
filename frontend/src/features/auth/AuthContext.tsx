@@ -27,7 +27,7 @@ type AuthContextType = {
         display_name: string,
         username: string,
     ) => Promise<void>;
-    deleteAccount: () => Promise<void>;
+    deleteAccount: (confirmation: string) => Promise<void>;
     logout: () => Promise<void>;
 }
 // Create the actual context box. Starts empty: (null)
@@ -74,11 +74,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setToken(null)
     }
 
-    const deleteAccount = async () => {
+    const deleteAccount = async (confirmation: string) => {
         if (!token) {
             throw new Error("You must be logged in to delete your account.")
         }
-        await deleteAccountRequest(token)
+        await deleteAccountRequest(token, confirmation)
         await logout()
     }
 
