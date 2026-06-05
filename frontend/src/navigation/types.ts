@@ -24,6 +24,7 @@ export type AppStackParamList = {
     OtherProfile: { username: string };
     ProfileList: { username: string; listType: "followers" | "following" };
     Settings: undefined;
+    LegalPlaceholder: { kind: "support" | "privacy" | "terms" | "guidelines" };
     Reorder: undefined;
     BucketSelection: { song: SongSearchResult };
     ComparisonFlow: { session: ComparisonSessionResponse };

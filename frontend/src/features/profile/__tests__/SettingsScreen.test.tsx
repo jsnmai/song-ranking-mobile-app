@@ -5,6 +5,7 @@ import SettingsScreen from "../SettingsScreen"
 import { Profile } from "../types"
 
 const mockGoBack = jest.fn()
+const mockNavigate = jest.fn()
 const mockLogout = jest.fn()
 const mockDeleteAccount = jest.fn()
 const mockGetMyProfile = jest.fn()
@@ -54,6 +55,7 @@ const blockedProfile: Profile = {
 
 const navigationProp = {
     goBack: mockGoBack,
+    navigate: mockNavigate,
 } as never
 
 beforeEach(() => {
@@ -72,8 +74,28 @@ describe("SettingsScreen", () => {
         await waitFor(() => {
             expect(screen.getByText("PRIVACY")).toBeTruthy()
             expect(screen.getByText("BLOCKED USERS")).toBeTruthy()
+            expect(screen.getByText("ACCOUNT")).toBeTruthy()
+            expect(screen.getByText("HELP & LEGAL")).toBeTruthy()
             expect(screen.getByText("Demo Blocked")).toBeTruthy()
+            expect(screen.getByText("Log Out")).toBeTruthy()
+            expect(screen.getByText("Delete account")).toBeTruthy()
         })
+    })
+
+    it.each([
+        ["Support", "support"],
+        ["Privacy Policy", "privacy"],
+        ["Terms", "terms"],
+        ["Community Guidelines", "guidelines"],
+    ])("opens %s from Help & Legal", async (label, kind) => {
+        render(<SettingsScreen navigation={navigationProp} route={{} as never} />)
+
+        await waitFor(() => {
+            expect(screen.getByText(label)).toBeTruthy()
+        })
+        fireEvent.press(screen.getByText(label))
+
+        expect(mockNavigate).toHaveBeenCalledWith("LegalPlaceholder", { kind })
     })
 
     it("updates profile visibility", async () => {

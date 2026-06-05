@@ -18,6 +18,16 @@ const VISIBILITY_OPTIONS: readonly [ProfileVisibility, string][] = [
     ["only_me", "Only me"],
 ]
 
+const HELP_LEGAL_ROWS: readonly {
+    label: string;
+    kind: "support" | "privacy" | "terms" | "guidelines";
+}[] = [
+    { label: "Support", kind: "support" },
+    { label: "Privacy Policy", kind: "privacy" },
+    { label: "Terms", kind: "terms" },
+    { label: "Community Guidelines", kind: "guidelines" },
+]
+
 export default function SettingsScreen({ navigation }: SettingsProps) {
     const { token, deleteAccount, logout } = useAuth()
     const [profile, setProfile] = useState<Profile | null>(null)
@@ -210,7 +220,9 @@ export default function SettingsScreen({ navigation }: SettingsProps) {
                                             <Text style={styles.cancelDeleteText}>Cancel</Text>
                                         </TouchableOpacity>
                                         <TouchableOpacity
-                                            accessibilityState={{ disabled: deleteConfirmation !== "DELETE" || isDeleting }}
+                                            accessibilityState={{
+                                                disabled: deleteConfirmation !== "DELETE" || isDeleting,
+                                            }}
                                             style={[
                                                 styles.confirmDeleteButton,
                                                 (deleteConfirmation !== "DELETE" || isDeleting)
@@ -227,6 +239,20 @@ export default function SettingsScreen({ navigation }: SettingsProps) {
                                 </View>
                             )}
                         </View>
+                    </View>
+
+                    <View style={styles.section}>
+                        <Text style={styles.sectionKicker}>HELP & LEGAL</Text>
+                        {HELP_LEGAL_ROWS.map((row) => (
+                            <TouchableOpacity
+                                key={row.kind}
+                                style={styles.legalRow}
+                                onPress={() => navigation.navigate("LegalPlaceholder", { kind: row.kind })}
+                            >
+                                <Text style={styles.legalRowText}>{row.label}</Text>
+                                <Text style={styles.legalRowArrow}>{">"}</Text>
+                            </TouchableOpacity>
+                        ))}
                     </View>
                 </>
             )}
@@ -468,6 +494,25 @@ const styles = StyleSheet.create({
         fontFamily: fonts.mono,
         color: colors.paper,
         fontSize: 12,
+    },
+    legalRow: {
+        alignItems: "center",
+        backgroundColor: colors.paper,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.line,
+        flexDirection: "row",
+        justifyContent: "space-between",
+        paddingVertical: 14,
+        paddingHorizontal: 12,
+    },
+    legalRowText: {
+        color: colors.ink,
+        fontSize: 15,
+    },
+    legalRowArrow: {
+        color: colors.inkSoft,
+        fontSize: 20,
+        lineHeight: 22,
     },
     error: {
         color: colors.dislike,
