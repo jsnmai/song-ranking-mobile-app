@@ -1,6 +1,6 @@
 // Settings holds account-level controls that should not crowd the Profile identity surface.
 import { useEffect, useState } from "react"
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 
 import { ApiError } from "../../api/client"
@@ -19,11 +19,14 @@ const VISIBILITY_OPTIONS: readonly [ProfileVisibility, string][] = [
 ]
 
 export default function SettingsScreen({ navigation }: SettingsProps) {
-    const { token, logout } = useAuth()
+    const { token, deleteAccount, logout } = useAuth()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [blockedProfiles, setBlockedProfiles] = useState<Profile[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [visibilitySaving, setVisibilitySaving] = useState<ProfileVisibility | null>(null)
+    const [deleteConfirmation, setDeleteConfirmation] = useState("")
+    const [isDeleteOpen, setIsDeleteOpen] = useState(false)
+    const [isDeleting, setIsDeleting] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
     const changeVisibility = async (visibility: ProfileVisibility) => {
@@ -52,6 +55,28 @@ export default function SettingsScreen({ navigation }: SettingsProps) {
             setBlockedProfiles((profiles) => profiles.filter((item) => item.username !== username))
         } catch (err) {
             setError(errorMessage(err, "Could not unblock user."))
+        }
+    }
+
+    const closeDeleteAccount = () => {
+        if (isDeleting) {
+            return
+        }
+        setIsDeleteOpen(false)
+        setDeleteConfirmation("")
+    }
+
+    const confirmDeleteAccount = async () => {
+        if (deleteConfirmation !== "DELETE" || isDeleting) {
+            return
+        }
+        setIsDeleting(true)
+        setError(null)
+        try {
+            await deleteAccount()
+        } catch (err) {
+            setError(errorMessage(err, "Could not delete account."))
+            setIsDeleting(false)
         }
     }
 
@@ -147,6 +172,61 @@ export default function SettingsScreen({ navigation }: SettingsProps) {
                         <TouchableOpacity style={styles.logoutButton} onPress={logout}>
                             <Text style={styles.logoutText}>Log Out</Text>
                         </TouchableOpacity>
+                        <View style={styles.deleteBlock}>
+                            <TouchableOpacity
+                                style={styles.deleteOpenButton}
+                                onPress={() => {
+                                    setError(null)
+                                    setIsDeleteOpen(true)
+                                }}
+                            >
+                                <Text style={styles.deleteOpenText}>Delete account</Text>
+                            </TouchableOpacity>
+
+                            {isDeleteOpen && (
+                                <View style={styles.deletePanel}>
+                                    <Text style={styles.deleteTitle}>Delete account?</Text>
+                                    <Text style={styles.deleteCopy}>
+                                        This removes your profile, rankings, ratings, comparisons, follows, blocks,
+                                        and feed activity. Songs remain in LISTn only as catalog metadata.
+                                    </Text>
+                                    <Text style={styles.deleteInstruction}>Type DELETE to confirm.</Text>
+                                    <TextInput
+                                        value={deleteConfirmation}
+                                        onChangeText={setDeleteConfirmation}
+                                        autoCapitalize="characters"
+                                        autoCorrect={false}
+                                        editable={!isDeleting}
+                                        placeholder="DELETE"
+                                        placeholderTextColor={colors.inkSoft}
+                                        style={styles.deleteInput}
+                                    />
+                                    <View style={styles.deleteActions}>
+                                        <TouchableOpacity
+                                            style={styles.cancelDeleteButton}
+                                            onPress={closeDeleteAccount}
+                                            disabled={isDeleting}
+                                        >
+                                            <Text style={styles.cancelDeleteText}>Cancel</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            accessibilityState={{ disabled: deleteConfirmation !== "DELETE" || isDeleting }}
+                                            style={[
+                                                styles.confirmDeleteButton,
+                                                (deleteConfirmation !== "DELETE" || isDeleting)
+                                                    && styles.confirmDeleteButtonDisabled,
+                                            ]}
+                                            onPress={confirmDeleteAccount}
+                                            disabled={deleteConfirmation !== "DELETE" || isDeleting}
+                                        >
+                                            <Text style={styles.confirmDeleteText}>
+                                                {isDeleting ? "Deleting..." : "Delete"}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            )}
+                        </View>
                     </View>
                 </>
             )}
@@ -299,6 +379,95 @@ const styles = StyleSheet.create({
         color: colors.ink,
         fontSize: 13,
         letterSpacing: 0.4,
+    },
+    deleteBlock: {
+        marginTop: 12,
+    },
+    deleteOpenButton: {
+        alignItems: "center",
+        borderWidth: 1,
+        borderColor: colors.dislike,
+        borderRadius: 8,
+        backgroundColor: colors.paper,
+        paddingVertical: 12,
+        paddingHorizontal: 32,
+    },
+    deleteOpenText: {
+        fontFamily: fonts.mono,
+        color: colors.dislike,
+        fontSize: 13,
+        letterSpacing: 0.4,
+    },
+    deletePanel: {
+        borderWidth: 1,
+        borderColor: colors.dislike,
+        borderRadius: 8,
+        backgroundColor: colors.paper,
+        marginTop: 12,
+        padding: 14,
+    },
+    deleteTitle: {
+        fontFamily: fonts.serif,
+        color: colors.ink,
+        fontSize: 22,
+        lineHeight: 26,
+        marginBottom: 8,
+    },
+    deleteCopy: {
+        color: colors.inkSoft,
+        fontSize: 14,
+        lineHeight: 20,
+        marginBottom: 12,
+    },
+    deleteInstruction: {
+        fontFamily: fonts.mono,
+        color: colors.ink,
+        fontSize: 11,
+        letterSpacing: 0.6,
+        marginBottom: 8,
+    },
+    deleteInput: {
+        borderWidth: 1,
+        borderColor: colors.line,
+        borderRadius: 8,
+        color: colors.ink,
+        fontFamily: fonts.mono,
+        fontSize: 14,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        marginBottom: 12,
+    },
+    deleteActions: {
+        flexDirection: "row",
+        gap: 10,
+    },
+    cancelDeleteButton: {
+        alignItems: "center",
+        borderWidth: 1,
+        borderColor: colors.ink,
+        borderRadius: 8,
+        flex: 1,
+        paddingVertical: 10,
+    },
+    cancelDeleteText: {
+        fontFamily: fonts.mono,
+        color: colors.ink,
+        fontSize: 12,
+    },
+    confirmDeleteButton: {
+        alignItems: "center",
+        borderRadius: 8,
+        backgroundColor: colors.dislike,
+        flex: 1,
+        paddingVertical: 10,
+    },
+    confirmDeleteButtonDisabled: {
+        opacity: 0.45,
+    },
+    confirmDeleteText: {
+        fontFamily: fonts.mono,
+        color: colors.paper,
+        fontSize: 12,
     },
     error: {
         color: colors.dislike,

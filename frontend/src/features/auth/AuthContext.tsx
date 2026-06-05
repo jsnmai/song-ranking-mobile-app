@@ -6,7 +6,12 @@ import * as SecureStore from "expo-secure-store"
 
 import { ApiError, setUnauthorizedHandler } from "../../api/client"
 import { KEYS } from "../../constants/keys"
-import { login as loginRequest, me, register as registerRequest } from "./apiRequests"
+import {
+    deleteAccount as deleteAccountRequest,
+    login as loginRequest,
+    me,
+    register as registerRequest,
+} from "./apiRequests"
 import { User } from "./types"
 
 // The shape of everything this context contains - a user, a JWT token, a loading flag, and 3 functions.
@@ -22,6 +27,7 @@ type AuthContextType = {
         display_name: string,
         username: string,
     ) => Promise<void>;
+    deleteAccount: () => Promise<void>;
     logout: () => Promise<void>;
 }
 // Create the actual context box. Starts empty: (null)
@@ -68,6 +74,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setToken(null)
     }
 
+    const deleteAccount = async () => {
+        if (!token) {
+            throw new Error("You must be logged in to delete your account.")
+        }
+        await deleteAccountRequest(token)
+        await logout()
+    }
+
     const checkStoredToken = async () => {
         try {
             const token = await SecureStore.getItemAsync(KEYS.JWT_TOKEN)
@@ -102,7 +116,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }, []) 
 
     return (
-        <AuthContext.Provider value={{ user, token, isLoading, login, register, logout }}>
+        <AuthContext.Provider value={{ user, token, isLoading, login, register, deleteAccount, logout }}>
             {children}
         </AuthContext.Provider>
     )

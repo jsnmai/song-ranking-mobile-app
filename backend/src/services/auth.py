@@ -8,9 +8,18 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.core.security import create_access_token, hash_password, verify_password
+from src.crud.account_deletion import (
+    delete_profile_for_user,
+    delete_similarity_snapshots_for_user,
+    delete_social_rows_for_user,
+    delete_taste_history_for_user,
+    list_ranked_song_ids_for_user,
+)
 from src.crud.profile import get_by_username
+from src.crud.song import recompute_song_aggregates
 from src.crud.user import create_user_with_profile, get_by_email
 from src.pydantic_schemas.user import RegisterResponse, Token, UserRegister, UserResponse
+from src.sqlalchemy_tables.user import User
 
 AGE_GATE_VERSION = "2026-06-13-plus-v1"
 MINIMUM_AGE = 13
@@ -130,3 +139,51 @@ def login_user(
 
     token = create_access_token({"sub": str(user.id)})
     return Token(access_token=token)
+
+
+def delete_current_user(
+    db: Session,
+    current_user: User,
+) -> None:
+    """
+    Delete the authenticated user's account and row-level taste history.
+
+    MVP deletion intentionally removes identifiable ratings and comparisons
+    instead of anonymizing row-level taste. Song metadata stays because songs
+    are catalog data, and aggregate scores are recomputed from remaining users.
+    """
+    user_id = current_user.id
+    affected_song_ids = list_ranked_song_ids_for_user(
+        db,
+        user_id,
+    )
+
+    try:
+        delete_similarity_snapshots_for_user(
+            db,
+            user_id,
+        )
+        delete_taste_history_for_user(
+            db,
+            user_id,
+        )
+        delete_social_rows_for_user(
+            db,
+            user_id,
+        )
+        delete_profile_for_user(
+            db,
+            user_id,
+        )
+
+        for song_id in sorted(affected_song_ids):
+            recompute_song_aggregates(
+                db,
+                song_id,
+            )
+
+        db.delete(current_user)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise

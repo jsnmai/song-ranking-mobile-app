@@ -6,7 +6,12 @@ import * as SecureStore from "expo-secure-store"
 
 import { ApiError, apiClient } from "../../../api/client"
 import { AuthProvider, useAuth } from "../AuthContext"
-import { login as loginRequest, me, register as registerRequest } from "../apiRequests"
+import {
+    deleteAccount as deleteAccountRequest,
+    login as loginRequest,
+    me,
+    register as registerRequest,
+} from "../apiRequests"
 import { KEYS } from "../../../constants/keys"
 
 jest.mock("expo-secure-store", () => ({
@@ -16,6 +21,7 @@ jest.mock("expo-secure-store", () => ({
 }))
 
 jest.mock("../apiRequests", () => ({
+    deleteAccount: jest.fn(),
     login: jest.fn(),
     me: jest.fn(),
     register: jest.fn(),
@@ -26,6 +32,7 @@ const mockSetItemAsync = jest.mocked(SecureStore.setItemAsync)
 const mockDeleteItemAsync = jest.mocked(SecureStore.deleteItemAsync)
 const mockMe = jest.mocked(me)
 const mockRegisterRequest = jest.mocked(registerRequest)
+const mockDeleteAccountRequest = jest.mocked(deleteAccountRequest)
 const mockFetch = jest.fn()
 
 const wrapper = ({ children }: { children: ReactNode }) => (
@@ -125,6 +132,45 @@ describe("logout()", () => {
         expect(result.current.user).toBeNull()
         expect(result.current.token).toBeNull()
         expect(mockDeleteItemAsync).toHaveBeenCalledWith(KEYS.JWT_TOKEN)
+    })
+})
+
+// --- deleteAccount() ---
+
+describe("deleteAccount()", () => {
+    it("calls the backend and clears auth state after account deletion succeeds", async () => {
+        mockGetItemAsync.mockResolvedValue("valid-token")
+        mockMe.mockResolvedValue(MOCK_USER)
+        mockDeleteAccountRequest.mockResolvedValue()
+
+        const { result } = renderHook(() => useAuth(), { wrapper })
+        await waitFor(() => expect(result.current.user).toEqual(MOCK_USER))
+
+        await act(async () => {
+            await result.current.deleteAccount()
+        })
+
+        expect(mockDeleteAccountRequest).toHaveBeenCalledWith("valid-token")
+        expect(result.current.user).toBeNull()
+        expect(result.current.token).toBeNull()
+        expect(mockDeleteItemAsync).toHaveBeenCalledWith(KEYS.JWT_TOKEN)
+    })
+
+    it("keeps auth state when account deletion fails", async () => {
+        mockGetItemAsync.mockResolvedValue("valid-token")
+        mockMe.mockResolvedValue(MOCK_USER)
+        mockDeleteAccountRequest.mockRejectedValue(new Error("delete failed"))
+
+        const { result } = renderHook(() => useAuth(), { wrapper })
+        await waitFor(() => expect(result.current.user).toEqual(MOCK_USER))
+
+        await act(async () => {
+            await expect(result.current.deleteAccount()).rejects.toThrow("delete failed")
+        })
+
+        expect(result.current.user).toEqual(MOCK_USER)
+        expect(result.current.token).toBe("valid-token")
+        expect(mockDeleteItemAsync).not.toHaveBeenCalled()
     })
 })
 

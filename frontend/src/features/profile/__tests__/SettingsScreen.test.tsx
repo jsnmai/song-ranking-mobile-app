@@ -6,6 +6,7 @@ import { Profile } from "../types"
 
 const mockGoBack = jest.fn()
 const mockLogout = jest.fn()
+const mockDeleteAccount = jest.fn()
 const mockGetMyProfile = jest.fn()
 const mockGetBlockedProfiles = jest.fn()
 const mockUpdateMyVisibility = jest.fn()
@@ -14,6 +15,7 @@ const mockUnblockUser = jest.fn()
 jest.mock("../../auth/AuthContext", () => ({
     useAuth: () => ({
         token: "test-token",
+        deleteAccount: mockDeleteAccount,
         logout: mockLogout,
     }),
 }))
@@ -60,6 +62,7 @@ beforeEach(() => {
     mockGetBlockedProfiles.mockResolvedValue({ profiles: [blockedProfile] })
     mockUpdateMyVisibility.mockResolvedValue({ ...profile, visibility: "friends_only" })
     mockUnblockUser.mockResolvedValue({ ...blockedProfile, is_blocked: false })
+    mockDeleteAccount.mockResolvedValue(undefined)
 })
 
 describe("SettingsScreen", () => {
@@ -97,6 +100,41 @@ describe("SettingsScreen", () => {
         await waitFor(() => {
             expect(mockUnblockUser).toHaveBeenCalledWith("demo_blocked", "test-token")
             expect(screen.queryByText("Demo Blocked")).toBeNull()
+        })
+    })
+
+    it("requires DELETE before deleting the account", async () => {
+        render(<SettingsScreen navigation={navigationProp} route={{} as never} />)
+
+        await waitFor(() => {
+            expect(screen.getByText("Delete account")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByText("Delete account"))
+        fireEvent.press(screen.getByText("Delete"))
+        expect(mockDeleteAccount).not.toHaveBeenCalled()
+
+        fireEvent.changeText(screen.getByPlaceholderText("DELETE"), "DELETE")
+        fireEvent.press(screen.getByText("Delete"))
+
+        await waitFor(() => {
+            expect(mockDeleteAccount).toHaveBeenCalledTimes(1)
+        })
+    })
+
+    it("shows an error and keeps the session when account deletion fails", async () => {
+        mockDeleteAccount.mockRejectedValue(new Error("Could not delete right now."))
+        render(<SettingsScreen navigation={navigationProp} route={{} as never} />)
+
+        await waitFor(() => {
+            expect(screen.getByText("Delete account")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByText("Delete account"))
+        fireEvent.changeText(screen.getByPlaceholderText("DELETE"), "DELETE")
+        fireEvent.press(screen.getByText("Delete"))
+
+        await waitFor(() => {
+            expect(screen.getByText("Could not delete right now.")).toBeTruthy()
+            expect(mockLogout).not.toHaveBeenCalled()
         })
     })
 })
