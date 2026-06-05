@@ -22,11 +22,14 @@ from src.crud.follow import (
     list_following,
 )
 from src.crud.profile import create_profile, get_by_user_id, get_by_username, search_by_username
+from src.crud.report import create_report
 from src.crud.similarity import get_snapshot_for_pair
 from src.pydantic_schemas.profile import (
     BlockedProfileListResponse,
     CompatibilityResponse,
     ProfileListResponse,
+    ProfileReportCreate,
+    ProfileReportResponse,
     ProfileResponse,
     ProfileSearchResponse,
     ProfileSetup,
@@ -503,6 +506,43 @@ def unblock_profile(
         current_user_id,
         profile,
     )
+
+
+def report_profile(
+    db: Session,
+    current_user_id: int,
+    username: str,
+    data: ProfileReportCreate,
+) -> ProfileReportResponse:
+    """Create a private safety report for a visible profile shell."""
+    profile = _get_profile_shell_by_username(
+        db,
+        current_user_id,
+        username,
+    )
+    if profile.user_id == current_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot report yourself.",
+        )
+
+    try:
+        report = create_report(
+            db,
+            reporter_user_id=current_user_id,
+            reported_user_id=profile.user_id,
+            target_type=data.target_type,
+            target_id=None,
+            reason=data.reason,
+            details=data.details,
+        )
+        db.commit()
+        db.refresh(report)
+    except Exception:
+        db.rollback()
+        raise
+
+    return ProfileReportResponse.model_validate(report)
 
 
 def get_my_blocked_profiles(

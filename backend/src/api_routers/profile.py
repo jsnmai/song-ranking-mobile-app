@@ -10,6 +10,8 @@ from src.pydantic_schemas.profile import (
     BlockedProfileListResponse,
     CompatibilityResponse,
     ProfileListResponse,
+    ProfileReportCreate,
+    ProfileReportResponse,
     ProfileResponse,
     ProfileSearchResponse,
     ProfileSetup,
@@ -26,6 +28,7 @@ from src.services.profile import (
     get_profile_by_username,
     get_profile_followers,
     get_profile_following,
+    report_profile,
     search_profiles,
     setup_profile,
     unblock_profile,
@@ -238,6 +241,28 @@ def profile_unblock(
         db,
         current_user_id=current_user.id,
         username=username,
+    )
+
+
+@router.post(
+    "/{username}/report",
+    response_model=ProfileReportResponse,
+    status_code=201,
+)
+@limiter.limit("5/minute")
+def profile_report(
+    request: Request,
+    username: str,
+    data: ProfileReportCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProfileReportResponse:
+    """Create a private report for another user's profile."""
+    return report_profile(
+        db,
+        current_user_id=current_user.id,
+        username=username,
+        data=data,
     )
 
 

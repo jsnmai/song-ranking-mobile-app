@@ -7,6 +7,7 @@ import {
     getFollowing,
     getMyProfile,
     getProfileByUsername,
+    reportUser,
     searchProfiles,
     setupProfile,
     unblockUser,
@@ -128,5 +129,29 @@ describe("profile API requests", () => {
         expect(mockGet).toHaveBeenCalledWith("/api/v1/profile/me/blocked", "test-token")
         expect(mockPost).toHaveBeenCalledWith("/api/v1/profile/jasonmai/block", {}, "test-token")
         expect(mockDelete).toHaveBeenCalledWith("/api/v1/profile/jasonmai/block", "test-token")
+    })
+
+    it("reports a user profile", async () => {
+        mockPost.mockResolvedValue({ id: 1, status: "open" })
+
+        await reportUser(
+            "jasonmai",
+            {
+                target_type: "profile",
+                reason: "spam",
+                details: "Suspicious profile activity.",
+            },
+            "test-token",
+        )
+
+        expect(mockPost).toHaveBeenCalledWith(
+            "/api/v1/profile/jasonmai/report",
+            {
+                target_type: "profile",
+                reason: "spam",
+                details: "Suspicious profile activity.",
+            },
+            "test-token",
+        )
     })
 })

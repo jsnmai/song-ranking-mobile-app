@@ -1,6 +1,6 @@
 // OtherProfile shows another user's public profile and the follow/unfollow action.
 import { useEffect, useState } from "react"
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 
 import { ApiError } from "../../api/client"
@@ -15,14 +15,25 @@ import {
     getCompatibility,
     getProfileByUsername,
     getUserTasteProfile,
+    reportUser,
     unblockUser,
     unfollowUser,
 } from "./apiRequests"
-import { CompatibilityResponse, Profile, TasteProfileResponse } from "./types"
+import { CompatibilityResponse, Profile, ReportReason, TasteProfileResponse } from "./types"
 import TasteTabContent from "./TasteTabContent"
 
 type OtherProfileProps = NativeStackScreenProps<AppStackParamList, "OtherProfile">
 type ProfileTab = "profile" | "taste"
+
+const REPORT_REASONS: readonly { value: ReportReason; label: string }[] = [
+    { value: "harassment", label: "Harassment" },
+    { value: "hate_or_abuse", label: "Hate or abuse" },
+    { value: "impersonation", label: "Impersonation" },
+    { value: "inappropriate_content", label: "Inappropriate content" },
+    { value: "spam", label: "Spam" },
+    { value: "under_13", label: "Under 13" },
+    { value: "other", label: "Other" },
+]
 
 function compatibilityAccent(similarityScore: number): string {
     const percent = Math.round(similarityScore * 100)
@@ -48,6 +59,12 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
     const [activeTab, setActiveTab] = useState<ProfileTab>("profile")
     const [compatibility, setCompatibility] = useState<CompatibilityResponse | null>(null)
     const [compatLoading, setCompatLoading] = useState(false)
+    const [isReportOpen, setIsReportOpen] = useState(false)
+    const [reportReason, setReportReason] = useState<ReportReason | null>(null)
+    const [reportDetails, setReportDetails] = useState("")
+    const [isReporting, setIsReporting] = useState(false)
+    const [reportError, setReportError] = useState<string | null>(null)
+    const [reportSuccess, setReportSuccess] = useState(false)
 
     const openFollowers = () => {
         navigation.navigate("ProfileList", {
@@ -112,6 +129,56 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
             }
         } finally {
             setIsSaving(false)
+        }
+    }
+
+    const openReport = () => {
+        setIsReportOpen(true)
+        setReportSuccess(false)
+        setReportError(null)
+    }
+
+    const closeReport = () => {
+        if (isReporting) {
+            return
+        }
+        setIsReportOpen(false)
+        setReportReason(null)
+        setReportDetails("")
+        setReportError(null)
+    }
+
+    const submitReport = async () => {
+        if (!token || !profile || reportReason === null || isReporting) {
+            return
+        }
+
+        setIsReporting(true)
+        setReportError(null)
+        try {
+            await reportUser(
+                profile.username,
+                {
+                    target_type: "profile",
+                    reason: reportReason,
+                    details: reportDetails,
+                },
+                token,
+            )
+            setReportSuccess(true)
+            setIsReportOpen(false)
+            setReportReason(null)
+            setReportDetails("")
+        } catch (err) {
+            if (err instanceof ApiError) {
+                setReportError(err.detail)
+            } else if (err instanceof Error) {
+                setReportError(err.message)
+            } else {
+                setReportError("Could not submit report.")
+            }
+        } finally {
+            setIsReporting(false)
         }
     }
 
@@ -226,28 +293,106 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
                             </TouchableOpacity>
                         </View>
                         {!profile.is_own_profile && (
-                            <View style={styles.actionRow}>
+                            <View style={styles.actions}>
+                                <View style={styles.actionRow}>
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.followButton,
+                                            profile.is_following ? styles.followingButton : null,
+                                        ]}
+                                        onPress={toggleFollow}
+                                        disabled={isSaving}
+                                    >
+                                        <Text style={[
+                                            styles.followText,
+                                            profile.is_following ? styles.followingText : null,
+                                        ]}>
+                                            {isSaving ? "Saving..." : profile.is_following ? "Following" : "Follow"}
+                                        </Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[styles.blockButton, profile.is_blocked ? styles.unblockButton : null]}
+                                        onPress={toggleBlock}
+                                        disabled={isSaving}
+                                    >
+                                        <Text style={[styles.blockText, profile.is_blocked ? styles.unblockText : null]}>
+                                            {profile.is_blocked ? "Unblock" : "Block"}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
                                 <TouchableOpacity
-                                    style={[
-                                        styles.followButton,
-                                        profile.is_following ? styles.followingButton : null,
-                                    ]}
-                                    onPress={toggleFollow}
-                                    disabled={isSaving}
+                                    style={styles.reportButton}
+                                    onPress={openReport}
+                                    disabled={isReporting}
                                 >
-                                    <Text style={[styles.followText, profile.is_following ? styles.followingText : null]}>
-                                        {isSaving ? "Saving..." : profile.is_following ? "Following" : "Follow"}
-                                    </Text>
+                                    <Text style={styles.reportButtonText}>Report user</Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={[styles.blockButton, profile.is_blocked ? styles.unblockButton : null]}
-                                    onPress={toggleBlock}
-                                    disabled={isSaving}
-                                >
-                                    <Text style={[styles.blockText, profile.is_blocked ? styles.unblockText : null]}>
-                                        {profile.is_blocked ? "Unblock" : "Block"}
-                                    </Text>
-                                </TouchableOpacity>
+                                {reportSuccess && (
+                                    <Text style={styles.reportSuccess}>Thanks. We'll review this report.</Text>
+                                )}
+                                {isReportOpen && (
+                                    <View style={styles.reportPanel}>
+                                        <Text style={styles.reportTitle}>Report user</Text>
+                                        <Text style={styles.reportLabel}>Why are you reporting this user?</Text>
+                                        <View style={styles.reasonGrid}>
+                                            {REPORT_REASONS.map((reason) => (
+                                                <TouchableOpacity
+                                                    key={reason.value}
+                                                    style={[
+                                                        styles.reasonButton,
+                                                        reportReason === reason.value && styles.reasonButtonActive,
+                                                    ]}
+                                                    onPress={() => setReportReason(reason.value)}
+                                                    disabled={isReporting}
+                                                >
+                                                    <Text style={[
+                                                        styles.reasonText,
+                                                        reportReason === reason.value && styles.reasonTextActive,
+                                                    ]}>
+                                                        {reason.label}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </View>
+                                        <Text style={styles.reportLabel}>Add details, optional</Text>
+                                        <TextInput
+                                            value={reportDetails}
+                                            onChangeText={setReportDetails}
+                                            editable={!isReporting}
+                                            multiline
+                                            maxLength={1000}
+                                            placeholder="Add context for review."
+                                            placeholderTextColor={colors.inkSoft}
+                                            style={styles.reportInput}
+                                        />
+                                        {reportError !== null && (
+                                            <Text style={styles.reportError}>{reportError}</Text>
+                                        )}
+                                        <View style={styles.reportActions}>
+                                            <TouchableOpacity
+                                                style={styles.cancelReportButton}
+                                                onPress={closeReport}
+                                                disabled={isReporting}
+                                            >
+                                                <Text style={styles.cancelReportText}>Cancel</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                accessibilityState={{ disabled: reportReason === null || isReporting }}
+                                                style={[
+                                                    styles.submitReportButton,
+                                                    (reportReason === null || isReporting)
+                                                        && styles.submitReportButtonDisabled,
+                                                ]}
+                                                onPress={submitReport}
+                                                disabled={reportReason === null || isReporting}
+                                            >
+                                                <Text style={styles.submitReportText}>
+                                                    {isReporting ? "Submitting..." : "Submit report"}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                )}
                             </View>
                         )}
                     </View>
@@ -478,6 +623,10 @@ const styles = StyleSheet.create({
     followingText: {
         color: colors.ink,
     },
+    actions: {
+        alignItems: "center",
+        width: "100%",
+    },
     actionRow: {
         flexDirection: "row",
         gap: 8,
@@ -503,6 +652,124 @@ const styles = StyleSheet.create({
     },
     unblockText: {
         color: colors.ink,
+    },
+    reportButton: {
+        marginTop: 10,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+    },
+    reportButtonText: {
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 11,
+        letterSpacing: 0.6,
+    },
+    reportSuccess: {
+        color: colors.like,
+        fontSize: 13,
+        marginTop: 8,
+        textAlign: "center",
+    },
+    reportPanel: {
+        width: "100%",
+        backgroundColor: colors.paper,
+        borderWidth: 1,
+        borderColor: colors.line,
+        borderRadius: 8,
+        marginTop: 12,
+        padding: 14,
+    },
+    reportTitle: {
+        fontFamily: fonts.serif,
+        color: colors.ink,
+        fontSize: 22,
+        lineHeight: 26,
+        marginBottom: 10,
+    },
+    reportLabel: {
+        fontFamily: fonts.mono,
+        color: colors.ink,
+        fontSize: 11,
+        letterSpacing: 0.6,
+        marginBottom: 8,
+    },
+    reasonGrid: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        gap: 8,
+        marginBottom: 14,
+    },
+    reasonButton: {
+        borderWidth: 1,
+        borderColor: colors.line,
+        borderRadius: 8,
+        backgroundColor: colors.bg,
+        paddingVertical: 8,
+        paddingHorizontal: 10,
+    },
+    reasonButtonActive: {
+        borderColor: colors.ink,
+        backgroundColor: colors.ink,
+    },
+    reasonText: {
+        fontFamily: fonts.mono,
+        color: colors.ink,
+        fontSize: 11,
+    },
+    reasonTextActive: {
+        color: colors.paper,
+    },
+    reportInput: {
+        minHeight: 88,
+        borderWidth: 1,
+        borderColor: colors.line,
+        borderRadius: 8,
+        color: colors.ink,
+        fontSize: 14,
+        lineHeight: 20,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        textAlignVertical: "top",
+        marginBottom: 10,
+    },
+    reportError: {
+        color: colors.dislike,
+        fontSize: 13,
+        lineHeight: 18,
+        marginBottom: 10,
+        textAlign: "center",
+    },
+    reportActions: {
+        flexDirection: "row",
+        gap: 10,
+    },
+    cancelReportButton: {
+        alignItems: "center",
+        borderWidth: 1,
+        borderColor: colors.ink,
+        borderRadius: 8,
+        flex: 1,
+        paddingVertical: 10,
+    },
+    cancelReportText: {
+        fontFamily: fonts.mono,
+        color: colors.ink,
+        fontSize: 12,
+    },
+    submitReportButton: {
+        alignItems: "center",
+        borderRadius: 8,
+        backgroundColor: colors.clay,
+        flex: 1,
+        paddingVertical: 10,
+    },
+    submitReportButtonDisabled: {
+        opacity: 0.45,
+    },
+    submitReportText: {
+        fontFamily: fonts.mono,
+        color: colors.paper,
+        fontSize: 12,
     },
     error: {
         color: colors.dislike,

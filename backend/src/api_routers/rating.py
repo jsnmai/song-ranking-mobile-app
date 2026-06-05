@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
 from src.core.limiter import limiter
+from src.pydantic_schemas.profile import ProfileReportResponse, RatingEventReportCreate
 from src.pydantic_schemas.rating import (
     RankingListResponse,
     RankingReorderRequest,
@@ -21,6 +22,7 @@ from src.services.rating import (
     list_my_rankings,
     remove_rating,
     reorder_rankings,
+    report_rating_event,
 )
 from src.services.similarity_tasks import refresh_similarity_for_user_task
 from src.sqlalchemy_tables.user import User
@@ -144,5 +146,27 @@ def reorder_rankings_endpoint(
     return reorder_rankings(
         db,
         user_id=current_user.id,
+        data=data,
+    )
+
+
+@router.post(
+    "/rating-events/{rating_event_id}/report",
+    response_model=ProfileReportResponse,
+    status_code=201,
+)
+@limiter.limit("5/minute")
+def report_rating_event_endpoint(
+    request: Request,
+    rating_event_id: int,
+    data: RatingEventReportCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProfileReportResponse:
+    """Create a private report for a visible rating event or note."""
+    return report_rating_event(
+        db,
+        current_user_id=current_user.id,
+        rating_event_id=rating_event_id,
         data=data,
     )

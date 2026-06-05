@@ -8,6 +8,8 @@ import {
     Profile,
     ProfileBase,
     ProfileListResponse,
+    ProfileReportRequest,
+    ProfileReportResponse,
     ProfileSearchResponse,
     ProfileSetupRequest,
     ProfileVisibility,
@@ -81,6 +83,15 @@ export async function blockUser(username: string, token: string): Promise<Profil
 // Calls DELETE /api/v1/profile/{username}/block
 export async function unblockUser(username: string, token: string): Promise<Profile> {
     return apiClient.delete<Profile>(`/api/v1/profile/${username}/block`, token)
+}
+
+// Calls POST /api/v1/profile/{username}/report
+export async function reportUser(
+    username: string,
+    data: ProfileReportRequest,
+    token: string,
+): Promise<ProfileReportResponse> {
+    return apiClient.post<ProfileReportResponse>(`/api/v1/profile/${username}/report`, data, token)
 }
 
 // Calls GET /api/v1/profile/me/taste

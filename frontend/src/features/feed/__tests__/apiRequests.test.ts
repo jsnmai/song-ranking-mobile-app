@@ -1,11 +1,13 @@
 // Tests for the feed API request wrapper.
-import { listMyFeed } from "../apiRequests"
+import { listMyFeed, reportRatingEvent } from "../apiRequests"
 
 const mockGet = jest.fn()
+const mockPost = jest.fn()
 
 jest.mock("../../../api/client", () => ({
     apiClient: {
         get: (...args: unknown[]) => mockGet(...args),
+        post: (...args: unknown[]) => mockPost(...args),
     },
 }))
 
@@ -29,6 +31,30 @@ describe("feed API requests", () => {
 
         expect(mockGet).toHaveBeenCalledWith(
             "/api/v1/feed?cursor=2026-01-01T00%3A00%3A00%2B00%3A00%7C7",
+            "test-token",
+        )
+    })
+
+    it("reports a visible rating note", async () => {
+        mockPost.mockResolvedValue({ id: 1, status: "open" })
+
+        await reportRatingEvent(
+            9,
+            {
+                target_type: "rating_note",
+                reason: "spam",
+                details: "Repeated spam.",
+            },
+            "test-token",
+        )
+
+        expect(mockPost).toHaveBeenCalledWith(
+            "/api/v1/rating-events/9/report",
+            {
+                target_type: "rating_note",
+                reason: "spam",
+                details: "Repeated spam.",
+            },
             "test-token",
         )
     })

@@ -3,6 +3,16 @@
 
 // Mirrors ProfileResponse in backend/src/pydantic_schemas/profile.py
 export type ProfileVisibility = "public" | "friends_only" | "only_me"
+export type ReportTargetType = "user" | "profile" | "rating_event" | "rating_note"
+export type ReportReason =
+    | "harassment"
+    | "hate_or_abuse"
+    | "impersonation"
+    | "inappropriate_content"
+    | "spam"
+    | "under_13"
+    | "other"
+export type ReportStatus = "open" | "reviewed" | "actioned" | "dismissed"
 
 export type ProfileBase = {
     id: number;
@@ -42,6 +52,24 @@ export type BlockedProfileListResponse = {
 export type ProfileSetupRequest = {
     display_name: string;
     username: string;
+}
+
+export type ProfileReportRequest = {
+    target_type?: ReportTargetType;
+    reason: ReportReason;
+    details?: string | null;
+}
+
+export type ProfileReportResponse = {
+    id: number;
+    reporter_user_id: number | null;
+    reported_user_id: number | null;
+    target_type: ReportTargetType;
+    target_id: number | null;
+    reason: ReportReason;
+    details: string | null;
+    status: ReportStatus;
+    created_at: string;
 }
 
 // Mirrors TasteGenreItem in backend/src/pydantic_schemas/profile.py

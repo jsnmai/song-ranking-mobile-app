@@ -34,12 +34,79 @@ class ProfileSetup(BaseModel):
 
 
 ProfileVisibility = Literal["public", "friends_only", "only_me"]
+ReportTargetType = Literal["user", "profile", "rating_event", "rating_note"]
+ReportReason = Literal[
+    "harassment",
+    "hate_or_abuse",
+    "impersonation",
+    "inappropriate_content",
+    "spam",
+    "under_13",
+    "other",
+]
+ReportStatus = Literal["open", "reviewed", "actioned", "dismissed"]
 
 
 class ProfileVisibilityUpdate(BaseModel):
     """Request body for updating the authenticated user's taste visibility."""
 
     visibility: ProfileVisibility
+
+
+class ProfileReportCreate(BaseModel):
+    """Request body for reporting a user/profile."""
+
+    target_type: Literal["user", "profile"] = "profile"
+    reason: ReportReason
+    details: str | None = Field(
+        default=None,
+        max_length=1000,
+    )
+
+    @field_validator("details")
+    @classmethod
+    def details_strip(cls, value: str | None) -> str | None:
+        """Store optional details as trimmed text, or null when blank."""
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
+
+class RatingEventReportCreate(BaseModel):
+    """Request body for reporting a visible rating event or rating note."""
+
+    target_type: Literal["rating_event", "rating_note"] = "rating_event"
+    reason: ReportReason
+    details: str | None = Field(
+        default=None,
+        max_length=1000,
+    )
+
+    @field_validator("details")
+    @classmethod
+    def details_strip(cls, value: str | None) -> str | None:
+        """Store optional details as trimmed text, or null when blank."""
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
+
+class ProfileReportResponse(BaseModel):
+    """Response body after creating a private safety report."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    reporter_user_id: int | None
+    reported_user_id: int | None
+    target_type: ReportTargetType
+    target_id: int | None
+    reason: ReportReason
+    details: str | None
+    status: ReportStatus
+    created_at: datetime
 
 
 class ProfileResponse(BaseModel):

@@ -19,12 +19,14 @@ from src.crud.rating import (
     refresh_rating_event,
     refresh_rating_events,
 )
+from src.crud.report import create_report, get_rating_event_for_report
 from src.crud.song import (
     adjust_song_aggregate,
     decrement_song_aggregate,
     increment_song_aggregate,
     upsert_from_deezer,
 )
+from src.pydantic_schemas.profile import ProfileReportResponse, RatingEventReportCreate
 from src.pydantic_schemas.rating import (
     RankingListResponse,
     RankingReorderRequest,
@@ -36,6 +38,7 @@ from src.pydantic_schemas.rating import (
     RatingRemoveResponse,
 )
 from src.pydantic_schemas.song import SongResponse
+from src.services.access import can_view_profile, can_view_taste
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
 from src.sqlalchemy_tables.song import Song
@@ -470,6 +473,69 @@ def list_my_rankings(
     )
 
 
+def report_rating_event(
+    db: Session,
+    current_user_id: int,
+    rating_event_id: int,
+    data: RatingEventReportCreate,
+) -> ProfileReportResponse:
+    """Create a private safety report for a visible rating event or note."""
+    row = get_rating_event_for_report(
+        db,
+        rating_event_id,
+    )
+    if (
+        row is None
+        or row.event.event_type in {"removed", "reordered"}
+        or row.event.new_bucket is None
+        or row.event.new_score is None
+        or not can_view_profile(
+            db,
+            current_user_id,
+            row.owner_profile.user_id,
+        )
+        or not can_view_taste(
+            db,
+            current_user_id,
+            row.owner_profile,
+        )
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Rating event not found.",
+        )
+
+    if row.event.user_id == current_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot report your own rating.",
+        )
+
+    if data.target_type == "rating_note" and row.event.note is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Rating note not found.",
+        )
+
+    try:
+        report = create_report(
+            db,
+            reporter_user_id=current_user_id,
+            reported_user_id=row.event.user_id,
+            target_type=data.target_type,
+            target_id=row.event.id,
+            reason=data.reason,
+            details=data.details,
+        )
+        db.commit()
+        db.refresh(report)
+    except Exception:
+        db.rollback()
+        raise
+
+    return ProfileReportResponse.model_validate(report)
+
+
 def _validate_reorder_song_ids(
     current_song_ids: set[int],
     submitted_song_ids: list[int],
@@ -802,5 +868,3 @@ def _build_cursor(
 ) -> str:
     """Build a cursor from the last row in the current page."""
     return f"{ranking.score}:{ranking.id}"
-
-

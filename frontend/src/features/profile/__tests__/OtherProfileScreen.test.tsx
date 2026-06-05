@@ -1,5 +1,5 @@
 // Tests for the compatibility card on OtherProfileScreen.
-import { render, screen, waitFor } from "@testing-library/react-native"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react-native"
 
 import { ApiError } from "../../../api/client"
 import OtherProfileScreen from "../OtherProfileScreen"
@@ -15,6 +15,7 @@ const mockFollowUser = jest.fn()
 const mockUnfollowUser = jest.fn()
 const mockBlockUser = jest.fn()
 const mockUnblockUser = jest.fn()
+const mockReportUser = jest.fn()
 
 jest.mock("../../auth/AuthContext", () => ({
     useAuth: () => ({
@@ -30,6 +31,7 @@ jest.mock("../apiRequests", () => ({
     unfollowUser: (...args: unknown[]) => mockUnfollowUser(...args),
     blockUser: (...args: unknown[]) => mockBlockUser(...args),
     unblockUser: (...args: unknown[]) => mockUnblockUser(...args),
+    reportUser: (...args: unknown[]) => mockReportUser(...args),
 }))
 
 const profile: Profile = {
@@ -77,6 +79,10 @@ beforeEach(() => {
     jest.resetAllMocks()
     mockGetProfileByUsername.mockResolvedValue(profile)
     mockGetCompatibility.mockResolvedValue(compatNoOverlap)
+    mockReportUser.mockResolvedValue({
+        id: 1,
+        status: "open",
+    })
 })
 
 describe("OtherProfileScreen compatibility card", () => {
@@ -152,5 +158,64 @@ describe("OtherProfileScreen compatibility card", () => {
             expect(screen.getByText("Follow each other to compare taste.")).toBeTruthy()
         })
         expect(mockGetCompatibility).not.toHaveBeenCalled()
+    })
+
+    it("shows Report user on other profiles and submits a report with details", async () => {
+        render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
+
+        await waitFor(() => {
+            expect(screen.getByText("Report user")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByText("Report user"))
+        fireEvent.press(screen.getByText("Submit report"))
+        expect(mockReportUser).not.toHaveBeenCalled()
+
+        fireEvent.press(screen.getByText("Spam"))
+        fireEvent.changeText(screen.getByPlaceholderText("Add context for review."), "Repeated promo links.")
+        fireEvent.press(screen.getByText("Submit report"))
+
+        await waitFor(() => {
+            expect(mockReportUser).toHaveBeenCalledWith(
+                "maya",
+                {
+                    target_type: "profile",
+                    reason: "spam",
+                    details: "Repeated promo links.",
+                },
+                "test-token",
+            )
+            expect(screen.getByText("Thanks. We'll review this report.")).toBeTruthy()
+        })
+    })
+
+    it("shows a report error without pretending success", async () => {
+        mockReportUser.mockRejectedValue(new Error("Could not submit report."))
+        render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
+
+        await waitFor(() => {
+            expect(screen.getByText("Report user")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByText("Report user"))
+        fireEvent.press(screen.getByText("Other"))
+        fireEvent.press(screen.getByText("Submit report"))
+
+        await waitFor(() => {
+            expect(screen.getByText("Could not submit report.")).toBeTruthy()
+        })
+        expect(screen.queryByText("Thanks. We'll review this report.")).toBeNull()
+    })
+
+    it("does not show Report user for own profile state", async () => {
+        mockGetProfileByUsername.mockResolvedValue({
+            ...profile,
+            is_own_profile: true,
+        })
+
+        render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
+
+        await waitFor(() => {
+            expect(screen.getByText("Maya")).toBeTruthy()
+        })
+        expect(screen.queryByText("Report user")).toBeNull()
     })
 })
