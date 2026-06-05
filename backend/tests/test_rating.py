@@ -19,6 +19,7 @@ def _register_payload(
     return {
         "email": email,
         "password": "password123",
+        "birthdate": "2000-01-01",
         "display_name": username.title(),
         "username": username,
     }

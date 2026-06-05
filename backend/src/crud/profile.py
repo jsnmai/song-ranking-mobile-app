@@ -37,12 +37,11 @@ def search_by_username(
     query: str,
     limit: int = 20,
 ) -> list[Profile]:
-    """Return public profiles whose username or display name matches the search query."""
+    """Return profiles whose username or display name matches the search query."""
     pattern = f"%{query.lower()}%"
     return list(
         db.execute(
             select(Profile)
-            .where(Profile.is_public.is_(True))
             .where(
                 Profile.username.ilike(pattern)
                 | Profile.display_name.ilike(pattern)

@@ -21,6 +21,7 @@ def _register(
         json={
             "email": email,
             "password": "password123",
+            "birthdate": "2000-01-01",
             "display_name": "Test User",
             "username": username,
         },
@@ -62,6 +63,7 @@ def _make_private(
     """Set a user's profile to private via the test database."""
     profile = db.query(Profile).filter(Profile.user_id == user_id).one()
     profile.is_public = False
+    profile.visibility = "only_me"
     db.commit()
 
 

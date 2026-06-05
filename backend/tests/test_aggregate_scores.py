@@ -19,6 +19,7 @@ def _register_payload(
     return {
         "email": email,
         "password": "password123",
+        "birthdate": "2000-01-01",
         "display_name": username.title(),
         "username": username,
     }
@@ -582,10 +583,9 @@ def test_reorder_with_bucket_crossing_updates_all_aggregates(
 def test_aggregate_fields_in_rankings_list_response(
     client: TestClient,
 ):
-    """GET /rankings/me embeds global_avg_score and global_rating_count in each song object."""
+    """GET /rankings/me embeds count but hides low-sample global_avg_score in each song object."""
     token = _get_token(client)
-    finalize_result = _finalize(client, token, bucket="like")
-    expected_score = finalize_result["ranking"]["score"]
+    _finalize(client, token, bucket="like")
 
     response = client.get(
         "/api/v1/rankings/me",
@@ -601,13 +601,40 @@ def test_aggregate_fields_in_rankings_list_response(
     assert "global_rating_count" in song_data
     assert "global_rating_sum" not in song_data
     assert song_data["global_rating_count"] == 1
-    assert abs(song_data["global_avg_score"] - expected_score) < 0.001
+    assert song_data["global_avg_score"] is None
+
+
+def test_global_average_response_shows_score_at_threshold(
+    client: TestClient,
+    db_session: Session,
+):
+    """Song responses show global_avg_score once the configured minimum sample is reached."""
+    token = _get_token(client)
+    result = _finalize(client, token, bucket="like")
+    song_id = result["ranking"]["song"]["id"]
+
+    song = db_session.get(Song, song_id)
+    assert song is not None
+    song.global_rating_count = 20
+    song.global_rating_sum = 160.0
+    song.global_avg_score = 8.0
+    db_session.commit()
+
+    response = client.get(
+        "/api/v1/rankings/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+
+    song_data = response.json()["rankings"][0]["song"]
+    assert song_data["global_rating_count"] == 20
+    assert song_data["global_avg_score"] == 8.0
 
 
 def test_aggregates_included_in_song_response(
     client: TestClient,
 ):
-    """The finalize-rating response includes global_avg_score and global_rating_count on the song."""
+    """The finalize-rating response hides low-sample global_avg_score but includes count."""
     token = _get_token(client)
     result = _finalize(client, token, bucket="like")
     song_data = result["ranking"]["song"]
@@ -616,7 +643,7 @@ def test_aggregates_included_in_song_response(
     assert "global_rating_count" in song_data
     assert "global_rating_sum" not in song_data
     assert song_data["global_rating_count"] == 1
-    assert song_data["global_avg_score"] is not None
+    assert song_data["global_avg_score"] is None
 
 
 def test_aggregates_span_all_users_regardless_of_profile_visibility(

@@ -26,6 +26,11 @@ class Profile(Base):
             "user_id",
             "is_public",
         ),
+        Index(
+            "ix_profiles_user_visibility",
+            "user_id",
+            "visibility",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -46,6 +51,12 @@ class Profile(Base):
     is_public: Mapped[bool] = mapped_column(
         nullable=False,
         default=True,  # profiles are public by default
+    )
+    visibility: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="public",
+        server_default="public",
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

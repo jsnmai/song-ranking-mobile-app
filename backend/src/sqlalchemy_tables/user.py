@@ -3,7 +3,7 @@
 # All reads and writes go through src/crud/user.py.
 from datetime import datetime
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import Boolean, DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.db.base import Base
@@ -35,6 +35,20 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(
         String(60),
         nullable=False,  # bcrypt output is always exactly 60 chars
+    )
+    age_verified_13_plus: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
+    age_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    age_gate_version: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

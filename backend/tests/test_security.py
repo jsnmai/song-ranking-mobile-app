@@ -13,6 +13,7 @@ from src.core.security import create_access_token
 REGISTER_PAYLOAD = {
     "email": "user@example.com",
     "password": "password123",
+    "birthdate": "2000-01-01",
     "display_name": "Test User",
     "username": "testuser",
 }

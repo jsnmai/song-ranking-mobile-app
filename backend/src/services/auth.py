@@ -1,6 +1,8 @@
 # Business logic for authentication.
 # All decisions about what constitutes a valid registration or login live here.
 # The router calls these functions; this layer calls the crud layer for data access.
+from datetime import date, datetime, timezone
+
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -9,6 +11,9 @@ from src.core.security import create_access_token, hash_password, verify_passwor
 from src.crud.profile import get_by_username
 from src.crud.user import create_user_with_profile, get_by_email
 from src.pydantic_schemas.user import RegisterResponse, Token, UserRegister, UserResponse
+
+AGE_GATE_VERSION = "2026-06-13-plus-v1"
+MINIMUM_AGE = 13
 
 
 def register_user(
@@ -28,6 +33,12 @@ def register_user(
     The psycopg2 error string contains the column name, so the right 409 message
     is returned (username vs email) even when two requests slip through simultaneously.
     """
+    if not _is_at_least_13(data.birthdate):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="LISTn is only available for users 13 and older.",
+        )
+
     if get_by_email(db, data.email):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -47,6 +58,9 @@ def register_user(
             hashed_password=hashed,
             username=data.username,  # already lowercased by the Pydantic validator
             display_name=data.display_name,
+            age_verified_13_plus=True,
+            age_verified_at=datetime.now(timezone.utc),
+            age_gate_version=AGE_GATE_VERSION,
         )
         db.commit()
         db.refresh(user)
@@ -72,6 +86,17 @@ def register_user(
         access_token=token,
         user=UserResponse.model_validate(user),
     )
+
+
+def _is_at_least_13(
+    birthdate: date,
+) -> bool:
+    """Return whether the birthdate is at least 13 years old today."""
+    today = date.today()
+    age = today.year - birthdate.year
+    if (today.month, today.day) < (birthdate.month, birthdate.day):
+        age -= 1
+    return age >= MINIMUM_AGE
 
 
 def login_user(

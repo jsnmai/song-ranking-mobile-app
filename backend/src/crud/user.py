@@ -1,6 +1,8 @@
 # Database access layer for the users table.
 # All SQL queries for users live here. Nothing outside this module should
 # construct a SQLAlchemy query against the users table directly.
+from datetime import datetime
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -36,6 +38,9 @@ def create_user_with_profile(
     hashed_password: str,
     username: str,
     display_name: str,
+    age_verified_13_plus: bool,
+    age_verified_at: datetime,
+    age_gate_version: str,
 ) -> User:
     """
     Stage a user row and a profile row in the current database transaction.
@@ -48,6 +53,9 @@ def create_user_with_profile(
     user = User(
         email=email,
         hashed_password=hashed_password,
+        age_verified_13_plus=age_verified_13_plus,
+        age_verified_at=age_verified_at,
+        age_gate_version=age_gate_version,
     )
     db.add(user)
     db.flush()  # populates user.id without committing

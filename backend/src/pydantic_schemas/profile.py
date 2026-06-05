@@ -1,6 +1,7 @@
 # Pydantic schemas for profile request bodies and response payloads.
 import re
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -32,6 +33,15 @@ class ProfileSetup(BaseModel):
         return value.strip()
 
 
+ProfileVisibility = Literal["public", "friends_only", "only_me"]
+
+
+class ProfileVisibilityUpdate(BaseModel):
+    """Request body for updating the authenticated user's taste visibility."""
+
+    visibility: ProfileVisibility
+
+
 class ProfileResponse(BaseModel):
     """Response body for any endpoint that returns a profile."""
 
@@ -42,6 +52,7 @@ class ProfileResponse(BaseModel):
     username: str
     display_name: str
     is_public: bool
+    visibility: ProfileVisibility
     created_at: datetime
 
 
@@ -52,6 +63,14 @@ class ProfileSummaryResponse(ProfileResponse):
     following_count: int
     is_following: bool
     is_own_profile: bool
+    can_view_taste: bool
+    is_blocked: bool
+
+
+class BlockedProfileListResponse(BaseModel):
+    """Response body for blocked profile settings."""
+
+    profiles: list[ProfileSummaryResponse]
 
 
 class ProfileSearchResponse(BaseModel):

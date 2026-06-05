@@ -16,6 +16,7 @@ def _register(
         json={
             "email": email,
             "password": "password123",
+            "birthdate": "2000-01-01",
             "display_name": "Test User",
             "username": username,
         },
@@ -222,6 +223,7 @@ def test_private_profile_taste_returns_404(
     profile = db_session.query(Profile).filter(Profile.username == "privateuser").first()
     assert profile is not None
     profile.is_public = False
+    profile.visibility = "only_me"
     db_session.commit()
 
     response = _get_taste(client, token_b, username="privateuser")

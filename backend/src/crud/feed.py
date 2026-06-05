@@ -4,8 +4,9 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import and_, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
+from src.sqlalchemy_tables.block import Block
 from src.sqlalchemy_tables.follow import Follow
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.rating_event import RatingEvent
@@ -29,6 +30,9 @@ def list_feed_events(
     cursor_id: int | None = None,
 ) -> list[FeedEventRow]:
     """Return feed events from users followed by the current user."""
+    mutual_follow = aliased(Follow)
+    viewer_blocks_actor = aliased(Block)
+    actor_blocks_viewer = aliased(Block)
     latest_event_ids = (
         select(RatingEvent.id)
         .distinct(
@@ -57,6 +61,27 @@ def list_feed_events(
             Follow,
             Follow.following_id == RatingEvent.user_id,
         )
+        .outerjoin(
+            mutual_follow,
+            and_(
+                mutual_follow.follower_id == RatingEvent.user_id,
+                mutual_follow.following_id == user_id,
+            ),
+        )
+        .outerjoin(
+            viewer_blocks_actor,
+            and_(
+                viewer_blocks_actor.blocker_id == user_id,
+                viewer_blocks_actor.blocked_id == RatingEvent.user_id,
+            ),
+        )
+        .outerjoin(
+            actor_blocks_viewer,
+            and_(
+                actor_blocks_viewer.blocker_id == RatingEvent.user_id,
+                actor_blocks_viewer.blocked_id == user_id,
+            ),
+        )
         .join(
             Profile,
             Profile.user_id == RatingEvent.user_id,
@@ -66,7 +91,17 @@ def list_feed_events(
             Song.id == RatingEvent.song_id,
         )
         .where(Follow.follower_id == user_id)
-        .where(Profile.is_public.is_(True))
+        .where(
+            or_(
+                Profile.visibility == "public",
+                and_(
+                    Profile.visibility == "friends_only",
+                    mutual_follow.id.is_not(None),
+                ),
+            )
+        )
+        .where(viewer_blocks_actor.id.is_(None))
+        .where(actor_blocks_viewer.id.is_(None))
         .where(RatingEvent.event_type != "removed")
         .where(RatingEvent.event_type != "reordered")
         .where(RatingEvent.new_bucket.is_not(None))

@@ -20,6 +20,7 @@ def _register(
         json={
             "email": email,
             "password": "password123",
+            "birthdate": "2000-01-01",
             "display_name": display_name if display_name is not None else username.title(),
             "username": username,
         },
@@ -253,6 +254,7 @@ def test_feed_hides_private_profiles(client: TestClient, db_session: Session):
         .where(Profile.username == "privateuser")
     ).scalar_one()
     profile.is_public = False
+    profile.visibility = "only_me"
     db_session.commit()
 
     response = client.get(

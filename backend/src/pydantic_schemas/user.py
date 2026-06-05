@@ -1,6 +1,6 @@
 # Pydantic schemas define the shapes of request bodies and response payloads.
 import re
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -16,6 +16,7 @@ class UserLogin(BaseModel):
 
 class UserRegister(BaseModel):
     """Request body for POST /auth/register."""
+    birthdate: date
     email: EmailStr
     password: str = Field(
         min_length=8,

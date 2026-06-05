@@ -1,7 +1,9 @@
 # Pydantic schemas for durable song metadata.
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+GLOBAL_AVG_MIN_RATINGS = 20
 
 
 class SongCreate(BaseModel):
@@ -60,3 +62,10 @@ class SongResponse(BaseModel):
     global_avg_score: float | None
     global_rating_count: int
     created_at: datetime
+
+    @model_validator(mode="after")
+    def hide_low_sample_global_average(self) -> "SongResponse":
+        """Expose counts early, but hide confident aggregate scores until the sample is meaningful."""
+        if self.global_rating_count < GLOBAL_AVG_MIN_RATINGS:
+            self.global_avg_score = None
+        return self

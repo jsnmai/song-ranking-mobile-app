@@ -7,24 +7,30 @@ from sqlalchemy.orm import Session
 from src.core.dependencies import get_current_user, get_db
 from src.core.limiter import limiter
 from src.pydantic_schemas.profile import (
+    BlockedProfileListResponse,
     CompatibilityResponse,
     ProfileListResponse,
     ProfileResponse,
     ProfileSearchResponse,
     ProfileSetup,
     ProfileSummaryResponse,
+    ProfileVisibilityUpdate,
     TasteProfileResponse,
 )
 from src.services.profile import (
+    block_profile,
     follow_profile,
     get_compatibility_for_username,
+    get_my_blocked_profiles,
     get_my_profile,
     get_profile_by_username,
     get_profile_followers,
     get_profile_following,
     search_profiles,
     setup_profile,
+    unblock_profile,
     unfollow_profile,
+    update_my_visibility,
 )
 from src.services.taste import (
     get_my_taste_profile,
@@ -71,6 +77,23 @@ def profile_setup(
     Requires a valid JWT — the user must be registered and logged in first.
     """
     return setup_profile(
+        db,
+        user_id=current_user.id,
+        data=data,
+    )
+
+
+@router.put(
+    "/me/visibility",
+    response_model=ProfileSummaryResponse,
+)
+def profile_visibility(
+    data: ProfileVisibilityUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProfileSummaryResponse:
+    """Update the authenticated user's taste visibility."""
+    return update_my_visibility(
         db,
         user_id=current_user.id,
         data=data,
@@ -153,6 +176,21 @@ def profile_compatibility(
 
 
 @router.get(
+    "/me/blocked",
+    response_model=BlockedProfileListResponse,
+)
+def profile_blocked(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BlockedProfileListResponse:
+    """Return profiles blocked by the authenticated user."""
+    return get_my_blocked_profiles(
+        db,
+        current_user_id=current_user.id,
+    )
+
+
+@router.get(
     "/{username}",
     response_model=ProfileSummaryResponse,
 )
@@ -161,8 +199,42 @@ def profile_by_username(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ProfileSummaryResponse:
-    """Return a public profile by username."""
+    """Return a visible profile shell by username."""
     return get_profile_by_username(
+        db,
+        current_user_id=current_user.id,
+        username=username,
+    )
+
+
+@router.post(
+    "/{username}/block",
+    response_model=ProfileSummaryResponse,
+)
+def profile_block(
+    username: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProfileSummaryResponse:
+    """Block another user."""
+    return block_profile(
+        db,
+        current_user_id=current_user.id,
+        username=username,
+    )
+
+
+@router.delete(
+    "/{username}/block",
+    response_model=ProfileSummaryResponse,
+)
+def profile_unblock(
+    username: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProfileSummaryResponse:
+    """Unblock another user."""
+    return unblock_profile(
         db,
         current_user_id=current_user.id,
         username=username,

@@ -2,12 +2,18 @@
 # Tests run against a real test database (listn_test) with no mocking —
 # each test exercises the full stack from HTTP through service to database.
 from fastapi.testclient import TestClient
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from src.sqlalchemy_tables.profile import Profile
+from src.sqlalchemy_tables.user import User
 
 # Shared payload used by tests that need a registered user.
 # Defined once so that any change to required fields is updated in one place.
 REGISTER_PAYLOAD = {
     "email": "user@example.com",
     "password": "password123",
+    "birthdate": "2000-01-01",
     "display_name": "Test User",
     "username": "testuser",
 }
@@ -24,6 +30,38 @@ def test_register_success(client: TestClient):
     assert "id" in body["user"]
     assert "created_at" in body["user"]
     assert "hashed_password" not in body["user"]
+
+
+def test_register_stores_age_verification_metadata(client: TestClient, db_session: Session):
+    """Successful registration stores only 13+ verification metadata, not birthdate."""
+    response = client.post("/api/v1/auth/register", json=REGISTER_PAYLOAD)
+    assert response.status_code == 201
+
+    user = db_session.execute(
+        select(User)
+        .where(User.email == "user@example.com")
+    ).scalar_one()
+    assert user.age_verified_13_plus is True
+    assert user.age_verified_at is not None
+    assert user.age_gate_version is not None
+    assert not hasattr(user, "birthdate")
+
+
+def test_register_rejects_under_13_and_creates_no_account(client: TestClient, db_session: Session):
+    """Under-13 users are rejected before user or profile rows are created."""
+    payload = {
+        **REGISTER_PAYLOAD,
+        "birthdate": "2020-01-01",
+    }
+
+    response = client.post("/api/v1/auth/register", json=payload)
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "LISTn is only available for users 13 and older."
+    user_count = db_session.execute(select(func.count()).select_from(User)).scalar_one()
+    profile_count = db_session.execute(select(func.count()).select_from(Profile)).scalar_one()
+    assert user_count == 0
+    assert profile_count == 0
 
 
 def test_register_duplicate_email(client: TestClient):

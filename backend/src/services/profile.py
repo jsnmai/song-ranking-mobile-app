@@ -5,6 +5,13 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from src.crud.block import (
+    create_block,
+    delete_block,
+    get_block,
+    has_block_between,
+    list_blocked_profiles,
+)
 from src.crud.follow import (
     count_followers,
     count_following,
@@ -17,13 +24,16 @@ from src.crud.follow import (
 from src.crud.profile import create_profile, get_by_user_id, get_by_username, search_by_username
 from src.crud.similarity import get_snapshot_for_pair
 from src.pydantic_schemas.profile import (
+    BlockedProfileListResponse,
     CompatibilityResponse,
     ProfileListResponse,
     ProfileResponse,
     ProfileSearchResponse,
     ProfileSetup,
     ProfileSummaryResponse,
+    ProfileVisibilityUpdate,
 )
+from src.services.access import can_view_profile, can_view_taste
 from src.services.access import is_plus as check_is_plus
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.user import User
@@ -83,6 +93,14 @@ def _build_profile_summary(
 ) -> ProfileSummaryResponse:
     """Return a profile plus counts and current-user relationship state."""
     base = ProfileResponse.model_validate(profile)
+    is_blocked = (
+        current_user_id != profile.user_id
+        and has_block_between(
+            db,
+            current_user_id,
+            profile.user_id,
+        )
+    )
     return ProfileSummaryResponse(
         **base.model_dump(),
         follower_count=count_followers(
@@ -99,22 +117,52 @@ def _build_profile_summary(
             profile.user_id,
         ) is not None,
         is_own_profile=current_user_id == profile.user_id,
+        can_view_taste=can_view_taste(
+            db,
+            current_user_id,
+            profile,
+        ),
+        is_blocked=is_blocked,
     )
 
 
-def _get_visible_profile_by_username(
+def _get_profile_shell_by_username(
     db: Session,
     current_user_id: int,
     username: str,
 ) -> Profile:
-    """Return a public profile by username, allowing the owner to view their own private profile."""
+    """Return a minimal profile shell unless the profile is missing or blocked."""
     profile = get_by_username(
         db,
         username,
     )
-    if not profile or (
-        not profile.is_public
-        and profile.user_id != current_user_id
+    if not profile or not can_view_profile(
+        db,
+        current_user_id,
+        profile.user_id,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Profile not found.",
+        )
+    return profile
+
+
+def _get_taste_visible_profile_by_username(
+    db: Session,
+    current_user_id: int,
+    username: str,
+) -> Profile:
+    """Return a profile when the current viewer may see taste-bearing data."""
+    profile = _get_profile_shell_by_username(
+        db,
+        current_user_id,
+        username,
+    )
+    if not can_view_taste(
+        db,
+        current_user_id,
+        profile,
     ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -149,8 +197,8 @@ def get_profile_by_username(
     current_user_id: int,
     username: str,
 ) -> ProfileSummaryResponse:
-    """Return another user's public profile, including follow state for the current user."""
-    profile = _get_visible_profile_by_username(
+    """Return another user's minimal profile shell, including follow state for the current user."""
+    profile = _get_profile_shell_by_username(
         db,
         current_user_id,
         username,
@@ -180,7 +228,44 @@ def search_profiles(
                 profile,
             )
             for profile in profiles
+            if can_view_profile(
+                db,
+                current_user_id,
+                profile.user_id,
+            )
         ],
+    )
+
+
+def update_my_visibility(
+    db: Session,
+    user_id: int,
+    data: ProfileVisibilityUpdate,
+) -> ProfileSummaryResponse:
+    """Update the current user's taste visibility."""
+    profile = get_by_user_id(
+        db,
+        user_id,
+    )
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Profile not found.",
+        )
+
+    profile.visibility = data.visibility
+    profile.is_public = data.visibility == "public"
+    try:
+        db.commit()
+        db.refresh(profile)
+    except Exception:
+        db.rollback()
+        raise
+
+    return _build_profile_summary(
+        db,
+        user_id,
+        profile,
     )
 
 
@@ -189,8 +274,8 @@ def follow_profile(
     current_user_id: int,
     username: str,
 ) -> ProfileSummaryResponse:
-    """Follow a public profile by username; duplicate follows are idempotent."""
-    profile = _get_visible_profile_by_username(
+    """Follow a visible profile shell by username; duplicate follows are idempotent."""
+    profile = _get_profile_shell_by_username(
         db,
         current_user_id,
         username,
@@ -237,8 +322,8 @@ def unfollow_profile(
     current_user_id: int,
     username: str,
 ) -> ProfileSummaryResponse:
-    """Unfollow a public profile by username; missing follows are idempotent."""
-    profile = _get_visible_profile_by_username(
+    """Unfollow a visible profile shell by username; missing follows are idempotent."""
+    profile = _get_profile_shell_by_username(
         db,
         current_user_id,
         username,
@@ -277,8 +362,8 @@ def get_profile_followers(
     current_user_id: int,
     username: str,
 ) -> ProfileListResponse:
-    """Return the follower list for a public profile."""
-    profile = _get_visible_profile_by_username(
+    """Return the follower list for a visible profile shell."""
+    profile = _get_profile_shell_by_username(
         db,
         current_user_id,
         username,
@@ -294,6 +379,11 @@ def get_profile_followers(
                 db,
                 profile.user_id,
             )
+            if can_view_profile(
+                db,
+                current_user_id,
+                follower_profile.user_id,
+            )
         ],
     )
 
@@ -303,8 +393,8 @@ def get_profile_following(
     current_user_id: int,
     username: str,
 ) -> ProfileListResponse:
-    """Return the following list for a public profile."""
-    profile = _get_visible_profile_by_username(
+    """Return the following list for a visible profile shell."""
+    profile = _get_profile_shell_by_username(
         db,
         current_user_id,
         username,
@@ -319,6 +409,117 @@ def get_profile_following(
             for following_profile in list_following(
                 db,
                 profile.user_id,
+            )
+            if can_view_profile(
+                db,
+                current_user_id,
+                following_profile.user_id,
+            )
+        ],
+    )
+
+
+def block_profile(
+    db: Session,
+    current_user_id: int,
+    username: str,
+) -> ProfileSummaryResponse:
+    """Block another user by username; duplicate blocks are idempotent."""
+    profile = get_by_username(
+        db,
+        username,
+    )
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Profile not found.",
+        )
+    if profile.user_id == current_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot block yourself.",
+        )
+
+    existing = get_block(
+        db,
+        current_user_id,
+        profile.user_id,
+    )
+    if not existing:
+        try:
+            create_block(
+                db,
+                current_user_id,
+                profile.user_id,
+            )
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+        except Exception:
+            db.rollback()
+            raise
+
+    return _build_profile_summary(
+        db,
+        current_user_id,
+        profile,
+    )
+
+
+def unblock_profile(
+    db: Session,
+    current_user_id: int,
+    username: str,
+) -> ProfileSummaryResponse:
+    """Unblock another user by username; missing blocks are idempotent."""
+    profile = get_by_username(
+        db,
+        username,
+    )
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Profile not found.",
+        )
+
+    block = get_block(
+        db,
+        current_user_id,
+        profile.user_id,
+    )
+    if block:
+        try:
+            delete_block(
+                db,
+                block,
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+
+    return _build_profile_summary(
+        db,
+        current_user_id,
+        profile,
+    )
+
+
+def get_my_blocked_profiles(
+    db: Session,
+    current_user_id: int,
+) -> BlockedProfileListResponse:
+    """Return profiles blocked by the current user."""
+    return BlockedProfileListResponse(
+        profiles=[
+            _build_profile_summary(
+                db,
+                current_user_id,
+                profile,
+            )
+            for profile in list_blocked_profiles(
+                db,
+                current_user_id,
             )
         ],
     )
@@ -350,12 +551,11 @@ def get_compatibility_for_username(
     """
     Return compatibility data for current_user vs target username.
 
-    404 when the target profile does not exist or is private and the current
-    user is not the owner or a follower — same visibility rule as all other
-    profile sub-endpoints. No snapshot returns 200 with has_overlap=False so
-    the frontend can show the safe state instead of treating it as an error.
+    404 when the target profile does not exist or taste visibility blocks the
+    current viewer. No snapshot returns 200 with has_overlap=False so the
+    frontend can show the safe state instead of treating it as an error.
     """
-    target_profile = _get_visible_profile_by_username(
+    target_profile = _get_taste_visible_profile_by_username(
         db,
         current_user.id,
         username,

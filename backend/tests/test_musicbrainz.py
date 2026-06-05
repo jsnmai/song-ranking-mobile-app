@@ -265,6 +265,7 @@ def _register_and_get_token(
         json={
             "email": email,
             "password": "password123",
+            "birthdate": "2000-01-01",
             "display_name": "MB User",
             "username": username,
         },

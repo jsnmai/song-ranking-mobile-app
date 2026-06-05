@@ -15,6 +15,7 @@ from src.pydantic_schemas.profile import (
     TasteProfileResponse,
     TasteSection,
 )
+from src.services.access import can_view_profile, can_view_taste
 
 _TOP_ARTIST_LIMIT = 5
 
@@ -34,15 +35,24 @@ def get_user_taste_profile_by_username(
     username: str,
 ) -> TasteProfileResponse:
     """
-    Return the taste profile for a public profile by username.
+    Return the taste profile for a visible profile by username.
 
-    Returns 404 for private profiles — taste data is not anonymised, so
-    visibility follows the same rule as profile and feed access.
+    Returns 404 for missing, blocked, or taste-hidden profiles — taste data
+    is not anonymised, so it follows the central visibility rule.
     """
     profile = get_by_username(db, username)
-    if not profile or (
-        not profile.is_public
-        and profile.user_id != current_user_id
+    if (
+        not profile
+        or not can_view_profile(
+            db,
+            current_user_id,
+            profile.user_id,
+        )
+        or not can_view_taste(
+            db,
+            current_user_id,
+            profile,
+        )
     ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
