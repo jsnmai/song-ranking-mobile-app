@@ -12,6 +12,8 @@ import { colors, fonts, bucketColor } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
 import { removeRating } from "../rankings/apiRequests"
 import { fetchPreviewUrl } from "../songs/apiRequests"
+import { getSavedSongStatus, removeSavedSong, saveSong } from "../saved-songs/apiRequests"
+import { SavedSong } from "../saved-songs/types"
 
 type SongDetailProps = NativeStackScreenProps<AppStackParamList, "SongDetail">
 
@@ -34,6 +36,9 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
     const [error, setError] = useState<string | null>(null)
     const [previewUrl, setPreviewUrl] = useState<string | null>(null)
     const [isPreviewLoading, setIsPreviewLoading] = useState(true)
+    const [savedSong, setSavedSong] = useState<SavedSong | null>(null)
+    const [isSavedStatusLoading, setIsSavedStatusLoading] = useState(true)
+    const [isSavedUpdating, setIsSavedUpdating] = useState(false)
     const { isPlaying, toggle: toggleAudio, stop: stopAudio } = useAudioPlayer(previewUrl)
 
     const accent = ranking ? bucketColor(ranking.bucket) : colors.clay
@@ -95,6 +100,34 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
         }
     }
 
+    const handleSavedToggle = async () => {
+        if (!token || isSavedUpdating) {
+            return
+        }
+
+        setIsSavedUpdating(true)
+        setError(null)
+        try {
+            if (savedSong === null) {
+                const saved = await saveSong(song, "song_detail", token)
+                setSavedSong(saved)
+            } else {
+                await removeSavedSong(savedSong.song.id, token)
+                setSavedSong(null)
+            }
+        } catch (err) {
+            if (err instanceof ApiError) {
+                setError(err.detail)
+            } else if (err instanceof Error) {
+                setError(err.message)
+            } else {
+                setError("Could not update saved state.")
+            }
+        } finally {
+            setIsSavedUpdating(false)
+        }
+    }
+
     useEffect(() => {
         return navigation.addListener("blur", () => {
             stopAudio()
@@ -137,6 +170,35 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
             isActive = false
         }
     }, [isRated, song.deezer_id, song.preview_url, token])
+
+    useEffect(() => {
+        let isActive = true
+        async function loadSavedState() {
+            if (!token) {
+                setIsSavedStatusLoading(false)
+                return
+            }
+            setIsSavedStatusLoading(true)
+            try {
+                const response = await getSavedSongStatus(song.deezer_id, token)
+                if (isActive) {
+                    setSavedSong(response.save)
+                }
+            } catch (err) {
+                if (isActive) {
+                    setError(err instanceof ApiError ? err.detail : "Could not load saved state.")
+                }
+            } finally {
+                if (isActive) {
+                    setIsSavedStatusLoading(false)
+                }
+            }
+        }
+        loadSavedState()
+        return () => {
+            isActive = false
+        }
+    }, [song.deezer_id, token])
 
     // The album art sits inside a sand circle (disc), which sits inside the horseshoe arc.
     const discContent = (
@@ -299,6 +361,22 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                         </TouchableOpacity>
                     )}
                 </View>
+                <TouchableOpacity
+                    accessibilityRole="button"
+                    style={styles.saveButton}
+                    onPress={handleSavedToggle}
+                    disabled={isSavedStatusLoading || isSavedUpdating}
+                >
+                    <Text style={styles.saveButtonText}>
+                        {isSavedStatusLoading
+                            ? "Checking saved state..."
+                            : isSavedUpdating
+                                ? "Updating..."
+                                : savedSong === null
+                                    ? "Save"
+                                    : "Remove from Saved Songs"}
+                    </Text>
+                </TouchableOpacity>
                 {ranking !== null && (
                     <TouchableOpacity
                         style={styles.removeButton}
@@ -543,6 +621,20 @@ const styles = StyleSheet.create({
         borderColor: colors.line,
         alignItems: "center",
         justifyContent: "center",
+    },
+    saveButton: {
+        height: 48,
+        borderRadius: 999,
+        borderWidth: 1,
+        borderColor: colors.clay,
+        backgroundColor: colors.paper,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    saveButtonText: {
+        color: colors.clay,
+        fontSize: 14,
+        fontWeight: "600",
     },
     removeButtonText: {
         color: colors.dislike,

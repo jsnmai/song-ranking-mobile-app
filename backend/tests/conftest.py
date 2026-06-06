@@ -15,6 +15,7 @@ import src.sqlalchemy_tables.profile  # noqa: F401 — registers Profile with Ba
 import src.sqlalchemy_tables.ranking  # noqa: F401 — registers Ranking with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.rating_event  # noqa: F401 — registers RatingEvent with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.report  # noqa: F401 — registers Report with Base.metadata so create_all() creates the table
+import src.sqlalchemy_tables.saved_song  # noqa: F401 — registers SavedSong with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.song  # noqa: F401 — registers Song with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.user  # noqa: F401 — registers User with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.user_similarity_snapshot  # noqa: F401 — registers UserSimilaritySnapshot with Base.metadata so create_all() creates the table

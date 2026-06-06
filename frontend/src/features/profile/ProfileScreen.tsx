@@ -50,6 +50,10 @@ export default function ProfileScreen() {
         navigation.navigate("Settings")
     }
 
+    const openSavedSongs = () => {
+        navigation.navigate("SavedSongs")
+    }
+
     useFocusEffect(
         useCallback(() => {
             async function fetchProfile() {
@@ -175,7 +179,17 @@ export default function ProfileScreen() {
                     error={tasteError}
                 />
             )}
-            {activeTab === "profile" && <View style={styles.profilePanel} />}
+            {activeTab === "profile" && (
+                <View style={styles.profilePanel}>
+                    <TouchableOpacity style={styles.savedSongsCard} onPress={openSavedSongs}>
+                        <View>
+                            <Text style={styles.savedSongsTitle}>Saved Songs</Text>
+                            <Text style={styles.savedSongsCopy}>Songs saved for later. Private, free, and unlimited.</Text>
+                        </View>
+                        <Text style={styles.savedSongsArrow}>→</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
         </View>
     )
 }
@@ -312,6 +326,33 @@ const styles = StyleSheet.create({
     profilePanel: {
         paddingHorizontal: 18,
         paddingVertical: 18,
+    },
+    savedSongsCard: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        borderWidth: 1,
+        borderColor: colors.line,
+        borderRadius: 12,
+        backgroundColor: colors.paper,
+        padding: 14,
+    },
+    savedSongsTitle: {
+        fontFamily: fonts.serif,
+        color: colors.ink,
+        fontSize: 20,
+        lineHeight: 24,
+    },
+    savedSongsCopy: {
+        color: colors.inkSoft,
+        fontSize: 11,
+        marginTop: 3,
+        maxWidth: 260,
+    },
+    savedSongsArrow: {
+        color: colors.clay,
+        fontSize: 20,
+        marginLeft: 12,
     },
     tabBtn: {
         flex: 1,

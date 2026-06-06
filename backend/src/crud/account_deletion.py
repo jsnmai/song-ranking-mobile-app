@@ -10,6 +10,7 @@ from src.sqlalchemy_tables.follow import Follow
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
+from src.sqlalchemy_tables.saved_song import SavedSong
 from src.sqlalchemy_tables.user_similarity_snapshot import UserSimilaritySnapshot
 
 
@@ -46,7 +47,11 @@ def delete_taste_history_for_user(
     db: Session,
     user_id: int,
 ) -> None:
-    """Remove row-level rankings, rating events, comparisons, and active sessions."""
+    """Remove row-level Saved Songs, rankings, rating events, comparisons, and active sessions."""
+    db.execute(
+        delete(SavedSong)
+        .where(SavedSong.user_id == user_id)
+    )
     db.execute(
         delete(ComparisonSession)
         .where(ComparisonSession.user_id == user_id)

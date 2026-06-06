@@ -14,6 +14,7 @@ from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
 from src.sqlalchemy_tables.report import Report
+from src.sqlalchemy_tables.saved_song import SavedSong
 from src.sqlalchemy_tables.song import Song
 from src.sqlalchemy_tables.user import User
 from src.sqlalchemy_tables.user_similarity_snapshot import UserSimilaritySnapshot
@@ -134,6 +135,13 @@ def test_delete_me_removes_user_owned_data_and_recomputes_song_aggregates(
         )
     )
     db_session.add(
+        SavedSong(
+            user_id=deleting_user_id,
+            song_id=deleted_only_song.id,
+            source="song_detail",
+        )
+    )
+    db_session.add(
         ComparisonSession(
             session_uuid=uuid.uuid4(),
             user_id=deleting_user_id,
@@ -190,6 +198,7 @@ def test_delete_me_removes_user_owned_data_and_recomputes_song_aggregates(
     assert _count_user_rows(db_session, RatingEvent, deleting_user_id) == 0
     assert _count_user_rows(db_session, Comparison, deleting_user_id) == 0
     assert _count_user_rows(db_session, ComparisonSession, deleting_user_id) == 0
+    assert _count_user_rows(db_session, SavedSong, deleting_user_id) == 0
     assert db_session.execute(
         select(func.count())
         .select_from(Follow)

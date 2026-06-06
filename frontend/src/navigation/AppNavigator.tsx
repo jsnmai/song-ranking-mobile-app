@@ -24,6 +24,7 @@ import ProfileListScreen from "../features/profile/ProfileListScreen"
 import ProfileScreen from "../features/profile/ProfileScreen"
 import SettingsScreen from "../features/profile/SettingsScreen"
 import SongDetailScreen from "../features/song-detail/SongDetailScreen"
+import SavedSongsScreen from "../features/saved-songs/SavedSongsScreen"
 
 const Tab = createBottomTabNavigator<TabParamList>()
 const Stack = createNativeStackNavigator<AppStackParamList>()
@@ -93,6 +94,7 @@ export default function AppNavigator() {
             {/* change presentation to 'modal' to try as bottom sheet */}
             <Stack.Screen name="Reorder" component={ReorderScreen} />
             <Stack.Screen name="VersusHistory" component={VersusHistoryScreen} />
+            <Stack.Screen name="SavedSongs" component={SavedSongsScreen} />
             <Stack.Screen name="BucketSelection" component={BucketSelectionScreen} />
             <Stack.Screen name="ComparisonFlow" component={ComparisonFlowScreen} />
             <Stack.Screen name="ScoreReveal" component={ScoreRevealScreen} />

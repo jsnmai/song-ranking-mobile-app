@@ -9,6 +9,9 @@ const mockGoBack = jest.fn()
 const mockNavigate = jest.fn()
 const mockRemoveRating = jest.fn()
 const mockFetchPreviewUrl = jest.fn()
+const mockGetSavedSongStatus = jest.fn()
+const mockRemoveSavedSong = jest.fn()
+const mockSaveSong = jest.fn()
 
 const mockPlay = jest.fn()
 const mockRemove = jest.fn()
@@ -32,6 +35,12 @@ jest.mock("../../rankings/apiRequests", () => ({
 
 jest.mock("../../songs/apiRequests", () => ({
     fetchPreviewUrl: (...args: unknown[]) => mockFetchPreviewUrl(...args),
+}))
+
+jest.mock("../../saved-songs/apiRequests", () => ({
+    getSavedSongStatus: (...args: unknown[]) => mockGetSavedSongStatus(...args),
+    removeSavedSong: (...args: unknown[]) => mockRemoveSavedSong(...args),
+    saveSong: (...args: unknown[]) => mockSaveSong(...args),
 }))
 
 const ranking: RankingResponse = {
@@ -90,6 +99,7 @@ beforeEach(() => {
     })
     mockAddNavigationListener.mockReturnValue(jest.fn())
     mockFetchPreviewUrl.mockResolvedValue("https://example.com/preview.mp3")
+    mockGetSavedSongStatus.mockResolvedValue({ is_saved: false, save: null })
 })
 
 describe("SongDetailScreen", () => {
@@ -252,5 +262,60 @@ describe("SongDetailScreen", () => {
         await act(async () => {})
 
         expect(screen.queryByText("Play Preview")).toBeNull()
+    })
+
+    it("shows Save for an unsaved song and updates after saving", async () => {
+        mockSaveSong.mockResolvedValue({
+            id: 8,
+            source: "song_detail",
+            saved_at: "2026-01-01T00:00:00Z",
+            song: ranking.song,
+            ranking,
+        })
+
+        render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
+
+        fireEvent.press(await screen.findByText("Save"))
+
+        await waitFor(() => {
+            expect(mockSaveSong).toHaveBeenCalledWith(ranking.song, "song_detail", "test-token")
+        })
+        expect(await screen.findByText("Remove from Saved Songs")).toBeTruthy()
+    })
+
+    it("shows saved state and removes without affecting rating actions", async () => {
+        mockGetSavedSongStatus.mockResolvedValue({
+            is_saved: true,
+            save: {
+                id: 8,
+                source: "song_detail",
+                saved_at: "2026-01-01T00:00:00Z",
+                song: ranking.song,
+                ranking,
+            },
+        })
+        mockRemoveSavedSong.mockResolvedValue({ song_id: ranking.song.id, removed: true })
+
+        render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
+
+        fireEvent.press(await screen.findByText("Remove from Saved Songs"))
+
+        await waitFor(() => {
+            expect(mockRemoveSavedSong).toHaveBeenCalledWith(ranking.song.id, "test-token")
+        })
+        expect(await screen.findByText("Save")).toBeTruthy()
+        expect(screen.getByText("Rate Again")).toBeTruthy()
+    })
+
+    it("shows save failure and does not claim the song is saved", async () => {
+        mockSaveSong.mockRejectedValue(new Error("Could not save song."))
+
+        render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
+
+        fireEvent.press(await screen.findByText("Save"))
+
+        expect(await screen.findByText("Could not save song.")).toBeTruthy()
+        expect(screen.getByText("Save")).toBeTruthy()
+        expect(screen.queryByText("Remove from Saved Songs")).toBeNull()
     })
 })

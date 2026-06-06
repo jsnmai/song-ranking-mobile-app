@@ -1,23 +1,23 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config, pool
 
-from alembic import context
-
-from src.core.config import settings
-from src.db.base import Base
-import src.sqlalchemy_tables.user  # noqa: F401 — registers User with Base.metadata so Alembic sees the table
-import src.sqlalchemy_tables.profile  # noqa: F401 — registers Profile with Base.metadata so Alembic sees the table
-import src.sqlalchemy_tables.follow  # noqa: F401 — registers Follow with Base.metadata so Alembic sees the table
 import src.sqlalchemy_tables.block  # noqa: F401 — registers Block with Base.metadata so Alembic sees the table
-import src.sqlalchemy_tables.song  # noqa: F401 — registers Song with Base.metadata so Alembic sees the table
+import src.sqlalchemy_tables.comparison  # noqa: F401 — registers Comparison with Base.metadata so Alembic sees the table
+import src.sqlalchemy_tables.comparison_session  # noqa: F401 — registers ComparisonSession with Base.metadata so Alembic sees the table
+import src.sqlalchemy_tables.follow  # noqa: F401 — registers Follow with Base.metadata so Alembic sees the table
+import src.sqlalchemy_tables.profile  # noqa: F401 — registers Profile with Base.metadata so Alembic sees the table
 import src.sqlalchemy_tables.ranking  # noqa: F401 — registers Ranking with Base.metadata so Alembic sees the table
 import src.sqlalchemy_tables.rating_event  # noqa: F401 — registers RatingEvent with Base.metadata so Alembic sees the table
-import src.sqlalchemy_tables.comparison_session  # noqa: F401 — registers ComparisonSession with Base.metadata so Alembic sees the table
-import src.sqlalchemy_tables.comparison  # noqa: F401 — registers Comparison with Base.metadata so Alembic sees the table
-import src.sqlalchemy_tables.user_similarity_snapshot  # noqa: F401 — registers UserSimilaritySnapshot with Base.metadata so Alembic sees the table
 import src.sqlalchemy_tables.report  # noqa: F401 — registers Report with Base.metadata so Alembic sees the table
+import src.sqlalchemy_tables.saved_song  # noqa: F401 — registers SavedSong with Base.metadata so Alembic sees the table
+import src.sqlalchemy_tables.song  # noqa: F401 — registers Song with Base.metadata so Alembic sees the table
+import src.sqlalchemy_tables.user  # noqa: F401 — registers User with Base.metadata so Alembic sees the table
+import src.sqlalchemy_tables.user_similarity_snapshot  # noqa: F401 — registers UserSimilaritySnapshot with Base.metadata so Alembic sees the table
+from alembic import context
+from src.core.config import settings
+from src.db.base import Base
+
 # Add a new import here each time a new model file is created.
 
 # this is the Alembic Config object, which provides
