@@ -32,15 +32,15 @@ jest.mock("@shopify/flash-list", () => {
     return {
         FlashList: ({ data, renderItem, keyExtractor, ListHeaderComponent }: {
             data: RankingResponse[];
-            renderItem: ({ item }: { item: RankingResponse }) => unknown;
+            renderItem: ({ item, index }: { item: RankingResponse; index: number }) => unknown;
             keyExtractor: (item: RankingResponse) => string;
             ListHeaderComponent?: React.ReactElement | null;
         }) => (
             <View>
                 {ListHeaderComponent ?? null}
-                {data.map((item) => (
+                {data.map((item, index) => (
                     <View key={keyExtractor(item)}>
-                        {renderItem({ item })}
+                        {renderItem({ item, index })}
                     </View>
                 ))}
             </View>
@@ -112,7 +112,7 @@ describe("RankingsScreen", () => {
         render(<RankingsScreen />)
 
         await waitFor(() => {
-            expect(screen.getByText("Nights")).toBeTruthy()
+            expect(screen.getAllByText("Nights").length).toBeGreaterThan(0)
         })
         fireEvent.press(screen.getByTestId("ranking-row-7"))
 
@@ -128,7 +128,7 @@ describe("RankingsScreen", () => {
         render(<RankingsScreen />)
 
         await waitFor(() => {
-            expect(screen.getByText("Nights")).toBeTruthy()
+            expect(screen.getAllByText("Nights").length).toBeGreaterThan(0)
         })
         fireEvent.press(screen.getByText("Reorder"))
 

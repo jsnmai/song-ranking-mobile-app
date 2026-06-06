@@ -138,7 +138,14 @@ export default function RankingsScreen() {
         const accent = bucketColor(anchor.bucket)
         return (
             <View style={styles.anchorCard}>
-                <Text style={styles.anchorLabel}>{label}</Text>
+                <Text
+                    style={styles.anchorLabel}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.75}
+                >
+                    {label}
+                </Text>
                 <View style={styles.anchorContent}>
                     <View style={styles.anchorCover}>
                         {anchor.song.cover_url ? (
@@ -162,7 +169,6 @@ export default function RankingsScreen() {
     const renderListHeader = () => {
         const orbitItems = rankings.slice(0, Math.min(ORBIT_COUNT, rankings.length))
         const n = orbitItems.length
-        const listItems = rankings.slice(ORBIT_COUNT)
 
         return (
             <View>
@@ -199,7 +205,7 @@ export default function RankingsScreen() {
                         return (
                             <TouchableOpacity
                                 key={item.id}
-                                testID={`ranking-row-${item.id}`}
+                                testID={`ranking-orbit-${item.id}`}
                                 accessibilityRole="button"
                                 accessibilityLabel={`Open ${item.song.title} details`}
                                 onPress={() => handleRankingPress(item)}
@@ -285,7 +291,7 @@ export default function RankingsScreen() {
                 <View style={styles.anchorsSection}>
                     <Text style={styles.anchorsTitle}>Anchors</Text>
                     <Text style={styles.anchorsCopy}>
-                        Your calibration points for what Like, Okay, and Dislike feel like.
+                        Your calibration points.
                     </Text>
                     <View style={styles.anchorGrid}>
                         {ANCHOR_DEFS.map((anchorDef) => (
@@ -300,21 +306,17 @@ export default function RankingsScreen() {
                     </View>
                 </View>
 
-                {/* List separator — only shown when there are songs below the orbit */}
-                {listItems.length > 0 && (
-                    <View style={styles.separator}>
-                        <Text style={styles.separatorRange}>
-                            {ORBIT_COUNT + 1} — {rankings.length}
-                        </Text>
-                        <Text style={styles.separatorRight}>full list →</Text>
-                    </View>
-                )}
+                <View style={styles.separator}>
+                    <Text style={styles.separatorRange}>1 — {rankings.length}</Text>
+                    <Text style={styles.separatorRight}>full list →</Text>
+                </View>
             </View>
         )
     }
 
-    const renderRanking = ({ item }: { item: RankingResponse }) => {
+    const renderRanking = ({ item, index }: { item: RankingResponse; index: number }) => {
         const accent = bucketColor(item.bucket)
+        const displayRank = index + 1
 
         return (
             <TouchableOpacity
@@ -325,7 +327,7 @@ export default function RankingsScreen() {
                 onPress={() => handleRankingPress(item)}
                 activeOpacity={0.8}
             >
-                <Text style={styles.position}>{item.position}</Text>
+                <Text style={styles.position}>{displayRank}</Text>
                 <View style={styles.coverFrame}>
                     {item.song.cover_url ? (
                         <Image source={{ uri: item.song.cover_url }} style={styles.coverImage} />
@@ -394,7 +396,7 @@ export default function RankingsScreen() {
         <View style={styles.container}>
             {error !== null && <Text style={styles.inlineError}>{error}</Text>}
             <FlashList
-                data={rankings.slice(ORBIT_COUNT)}
+                data={rankings}
                 renderItem={renderRanking}
                 keyExtractor={(item) => item.id.toString()}
                 onEndReached={handleLoadMore}
@@ -434,7 +436,7 @@ const styles = StyleSheet.create({
         paddingTop: 8,
     },
     header: {
-        paddingTop: 60,
+        paddingTop: 84,
         paddingHorizontal: 18,
         paddingBottom: 8,
         flexDirection: "row",
@@ -576,30 +578,31 @@ const styles = StyleSheet.create({
         minWidth: 0,
     },
     anchorCard: {
-        minHeight: 128,
+        height: 178,
         borderWidth: 1,
         borderColor: colors.line,
         backgroundColor: colors.paper,
-        padding: 10,
+        paddingHorizontal: 9,
+        paddingVertical: 12,
         borderRadius: 8,
     },
     anchorLabel: {
         fontFamily: fonts.mono,
         color: colors.clay,
-        fontSize: 9,
-        letterSpacing: 1.2,
+        fontSize: 8,
+        letterSpacing: 0.8,
         marginBottom: 8,
     },
     anchorContent: {
         alignItems: "center",
     },
     anchorCover: {
-        width: 42,
-        height: 42,
-        borderRadius: 21,
+        width: 52,
+        height: 52,
+        borderRadius: 26,
         backgroundColor: colors.sand,
         overflow: "hidden",
-        marginBottom: 7,
+        marginBottom: 9,
     },
     anchorCoverImage: {
         width: "100%",
@@ -623,7 +626,7 @@ const styles = StyleSheet.create({
     },
     anchorMetaRow: {
         alignItems: "center",
-        marginTop: 8,
+        marginTop: 10,
     },
     anchorScore: {
         fontFamily: fonts.serif,
