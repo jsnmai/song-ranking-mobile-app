@@ -154,7 +154,7 @@ describe("FeedScreen", () => {
         await waitFor(() => {
             expect(screen.getByText("Nights")).toBeTruthy()
         })
-        fireEvent.press(screen.getByTestId("feed-row-9"))
+        fireEvent.press(screen.getByTestId("feed-song-9"))
 
         await waitFor(() => {
             expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
@@ -173,11 +173,28 @@ describe("FeedScreen", () => {
         await waitFor(() => {
             expect(screen.getByText("Nights")).toBeTruthy()
         })
-        fireEvent.press(screen.getByTestId("feed-row-9"))
+        fireEvent.press(screen.getByTestId("feed-song-9"))
 
         await waitFor(() => {
             expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { song })
         })
+    })
+
+    it("opens the actor profile when the feed actor row is tapped", async () => {
+        mockListMyFeed.mockResolvedValue({
+            events: [feedEvent],
+            next_cursor: null,
+        })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByText("Nights")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("feed-actor-9"))
+
+        expect(mockNavigate).toHaveBeenCalledWith("OtherProfile", { username: "maya" })
+        expect(mockGetMyRankingByDeezerId).not.toHaveBeenCalled()
     })
 
     it("shows a formatted relative timestamp below the actor username for each feed event", async () => {

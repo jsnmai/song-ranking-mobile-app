@@ -33,6 +33,7 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
     const { token } = useAuth()
     const { song } = route.params
     const [selectedBucket, setSelectedBucket] = useState<BucketName | null>(null)
+    const [isSubmitting, setIsSubmitting] = useState(false)
     const [note, setNote] = useState("")
     const [error, setError] = useState<string | null>(null)
     const { isPlaying, toggle: toggleAudio, stop: stopAudio } = useAudioPlayer(song.preview_url)
@@ -48,20 +49,28 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
         navigation.goBack()
     }
 
-    const handleBucketPress = async (bucket: BucketName) => {
-        if (!token || selectedBucket !== null) {
+    const handleBucketPress = (bucket: BucketName) => {
+        if (isSubmitting) {
             return
         }
 
         setSelectedBucket(bucket)
         setError(null)
+    }
 
+    const handleContinue = async () => {
+        if (!token || selectedBucket === null || isSubmitting) {
+            return
+        }
+
+        setIsSubmitting(true)
+        setError(null)
         try {
-            const requiresComparison = await bucketRequiresComparison(bucket, token)
+            const requiresComparison = await bucketRequiresComparison(selectedBucket, token)
             const ratingNote = note.trim().length > 0 ? note : undefined
             const ratingRequest = ratingNote === undefined
-                ? { song, bucket }
-                : { song, bucket, note: ratingNote }
+                ? { song, bucket: selectedBucket }
+                : { song, bucket: selectedBucket, note: ratingNote }
             stopAudio()
             if (requiresComparison) {
                 const session = await startComparisonSession(
@@ -85,7 +94,8 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
             } else {
                 setError("Could not rate this song.")
             }
-            setSelectedBucket(null)
+        } finally {
+            setIsSubmitting(false)
         }
     }
 
@@ -156,7 +166,7 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
                         onChangeText={setNote}
                         multiline
                         maxLength={280}
-                        editable={selectedBucket === null}
+                        editable={!isSubmitting}
                         placeholder="What made this score?"
                         placeholderTextColor={colors.inkSoft}
                         style={styles.noteInput}
@@ -170,7 +180,7 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
                     {BUCKETS.map((bucket) => {
                         const accent = bucketColor(bucket.name)
                         const isSelected = selectedBucket === bucket.name
-                        const isDisabled = selectedBucket !== null
+                        const isDisabled = isSubmitting
 
                         return (
                             <TouchableOpacity
@@ -188,7 +198,7 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
                                 <Text style={[styles.stampLabel, { color: accent }]}>{bucket.label}</Text>
                                 <Text style={styles.stampRange}>{bucket.range}</Text>
                                 <Text style={styles.stampDescription}>{bucket.description}</Text>
-                                {isSelected && (
+                                {isSelected && isSubmitting && (
                                     <ActivityIndicator
                                         style={styles.stampSpinner}
                                         color={accent}
@@ -200,6 +210,21 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
                 </View>
 
                 {error !== null && <Text style={styles.errorText}>{error}</Text>}
+
+                <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: selectedBucket === null || isSubmitting }}
+                    style={[
+                        styles.continueButton,
+                        (selectedBucket === null || isSubmitting) && styles.continueButtonDisabled,
+                    ]}
+                    onPress={handleContinue}
+                    disabled={selectedBucket === null || isSubmitting}
+                >
+                    <Text style={styles.continueButtonText}>
+                        {isSubmitting ? "Working..." : "Continue"}
+                    </Text>
+                </TouchableOpacity>
             </ScrollView>
         </View>
     )
@@ -396,6 +421,23 @@ const styles = StyleSheet.create({
     },
     stampSpinner: {
         marginTop: 8,
+    },
+    continueButton: {
+        height: 52,
+        borderRadius: 999,
+        backgroundColor: colors.clay,
+        alignItems: "center",
+        justifyContent: "center",
+        marginTop: 20,
+    },
+    continueButtonDisabled: {
+        backgroundColor: colors.sand,
+    },
+    continueButtonText: {
+        color: "#fff",
+        fontSize: 15,
+        fontWeight: "700",
+        letterSpacing: 0.4,
     },
     errorText: {
         color: colors.dislike,

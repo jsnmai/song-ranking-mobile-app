@@ -146,6 +146,7 @@ describe("BucketSelectionScreen", () => {
         render(<BucketSelectionScreen navigation={navigation as never} route={buildRoute() as never} />)
 
         fireEvent.press(screen.getByTestId("bucket-like"))
+        fireEvent.press(screen.getByText("Continue"))
 
         await waitFor(() => {
             expect(mockFinalizeRating).toHaveBeenCalledWith(
@@ -170,6 +171,7 @@ describe("BucketSelectionScreen", () => {
 
         fireEvent.changeText(screen.getByPlaceholderText("What made this score?"), "  Hovering all week.  ")
         fireEvent.press(screen.getByTestId("bucket-like"))
+        fireEvent.press(screen.getByText("Continue"))
 
         await waitFor(() => {
             expect(mockFinalizeRating).toHaveBeenCalledWith(
@@ -226,6 +228,7 @@ describe("BucketSelectionScreen", () => {
         render(<BucketSelectionScreen navigation={navigation as never} route={buildRoute() as never} />)
 
         fireEvent.press(screen.getByTestId("bucket-like"))
+        fireEvent.press(screen.getByText("Continue"))
 
         await waitFor(() => {
             expect(mockStartComparisonSession).toHaveBeenCalledWith(
@@ -246,10 +249,12 @@ describe("BucketSelectionScreen", () => {
         render(<BucketSelectionScreen navigation={navigation as never} route={buildRoute() as never} />)
 
         fireEvent.press(screen.getByTestId("bucket-dislike"))
+        fireEvent.press(screen.getByText("Continue"))
 
         expect(await screen.findByText("Bucket unavailable")).toBeTruthy()
 
         fireEvent.press(screen.getByTestId("bucket-like"))
+        fireEvent.press(screen.getByText("Continue"))
         await waitFor(() => {
             expect(mockFinalizeRating).toHaveBeenCalledTimes(2)
         })

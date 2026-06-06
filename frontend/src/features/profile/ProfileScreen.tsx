@@ -125,6 +125,11 @@ export default function ProfileScreen() {
                         />
                         <Text style={styles.displayName}>{profile.display_name}</Text>
                         <Text style={styles.username}>@{profile.username}</Text>
+                        <View style={styles.visibilityPill}>
+                            <Text style={styles.visibilityText}>
+                                Visibility: {visibilityLabel(profile.visibility)}
+                            </Text>
+                        </View>
                         <View style={styles.countCard}>
                             <TouchableOpacity style={styles.countButton} onPress={openFollowers}>
                                 <Text style={styles.countValue}>{profile.follower_count}</Text>
@@ -170,20 +175,7 @@ export default function ProfileScreen() {
                     error={tasteError}
                 />
             )}
-            {activeTab === "profile" && profile && (
-                <View style={styles.profilePanel}>
-                    <TouchableOpacity style={styles.settingsCard} onPress={openSettings}>
-                        <View>
-                            <Text style={styles.sectionKicker}>ACCOUNT</Text>
-                            <Text style={styles.settingsTitle}>Privacy and settings</Text>
-                            <Text style={styles.settingsCopy}>
-                                Visibility: {visibilityLabel(profile.visibility)}
-                            </Text>
-                        </View>
-                        <Text style={styles.chevron}>›</Text>
-                    </TouchableOpacity>
-                </View>
-            )}
+            {activeTab === "profile" && <View style={styles.profilePanel} />}
         </View>
     )
 }
@@ -247,7 +239,22 @@ const styles = StyleSheet.create({
         fontFamily: fonts.mono,
         color: colors.inkSoft,
         fontSize: 14,
+        marginBottom: 8,
+    },
+    visibilityPill: {
+        borderWidth: 1,
+        borderColor: colors.line,
+        borderRadius: 999,
+        backgroundColor: colors.paper,
+        paddingVertical: 5,
+        paddingHorizontal: 10,
         marginBottom: 16,
+    },
+    visibilityText: {
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 9,
+        letterSpacing: 0.6,
     },
     countCard: {
         flexDirection: "row",
@@ -305,41 +312,6 @@ const styles = StyleSheet.create({
     profilePanel: {
         paddingHorizontal: 18,
         paddingVertical: 18,
-    },
-    settingsCard: {
-        alignItems: "center",
-        backgroundColor: colors.paper,
-        borderColor: colors.line,
-        borderRadius: 8,
-        borderWidth: 1,
-        flexDirection: "row",
-        justifyContent: "space-between",
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-    },
-    sectionKicker: {
-        fontFamily: fonts.mono,
-        color: colors.inkSoft,
-        fontSize: 10,
-        letterSpacing: 1.6,
-        marginBottom: 6,
-    },
-    settingsTitle: {
-        fontFamily: fonts.serif,
-        color: colors.ink,
-        fontSize: 20,
-        lineHeight: 24,
-    },
-    settingsCopy: {
-        color: colors.inkSoft,
-        fontSize: 13,
-        lineHeight: 18,
-        marginTop: 4,
-    },
-    chevron: {
-        color: colors.inkSoft,
-        fontSize: 30,
-        lineHeight: 32,
     },
     tabBtn: {
         flex: 1,

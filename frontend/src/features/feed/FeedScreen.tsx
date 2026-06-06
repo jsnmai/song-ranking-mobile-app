@@ -109,7 +109,15 @@ export default function FeedScreen() {
         })
     }
 
-    const handleFeedPress = async (event: FeedEvent) => {
+    const handleActorPress = (event: FeedEvent) => {
+        if (reportingEventId !== null) {
+            return
+        }
+
+        navigation.navigate("OtherProfile", { username: event.actor_profile.username })
+    }
+
+    const handleSongPress = async (event: FeedEvent) => {
         if (!token || openingEventId !== null || reportingEventId !== null) {
             return
         }
@@ -276,16 +284,18 @@ export default function FeedScreen() {
         const actionLabel = _eventLabel(item.event_type)
 
         return (
-            <TouchableOpacity
-                accessibilityRole="button"
-                accessibilityLabel={`Open ${item.song.title} details`}
+            <View
                 testID={`feed-row-${item.id}`}
                 style={styles.card}
-                onPress={() => handleFeedPress(item)}
-                activeOpacity={0.9}
-                disabled={openingEventId !== null}
             >
-                <View style={styles.actorRow}>
+                <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open ${displayName}'s profile`}
+                    style={styles.actorRow}
+                    onPress={() => handleActorPress(item)}
+                    activeOpacity={0.75}
+                    testID={`feed-actor-${item.id}`}
+                >
                     <StarAvatar initial={initial} outerColor={accent} size={36} />
                     <View style={styles.actorText}>
                         <Text style={styles.actorName}>{displayName}</Text>
@@ -295,9 +305,17 @@ export default function FeedScreen() {
                         </View>
                     </View>
                     <Text style={styles.dots}>···</Text>
-                </View>
+                </TouchableOpacity>
 
-                <View style={styles.songRow}>
+                <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open ${item.song.title} details`}
+                    style={styles.songRow}
+                    onPress={() => handleSongPress(item)}
+                    activeOpacity={0.85}
+                    disabled={openingEventId !== null}
+                    testID={`feed-song-${item.id}`}
+                >
                     <View style={styles.coverFrame}>
                         {item.song.cover_url ? (
                             <Image source={{ uri: item.song.cover_url }} style={styles.coverImage} />
@@ -322,7 +340,7 @@ export default function FeedScreen() {
                             </Text>
                         </ScoreArc>
                     </View>
-                </View>
+                </TouchableOpacity>
 
                 {item.note !== null && (
                     <View style={styles.noteBlock}>
@@ -409,7 +427,7 @@ export default function FeedScreen() {
                 {openingEventId === item.id && (
                     <ActivityIndicator color={colors.clay} style={styles.cardSpinner} />
                 )}
-            </TouchableOpacity>
+            </View>
         )
     }
 

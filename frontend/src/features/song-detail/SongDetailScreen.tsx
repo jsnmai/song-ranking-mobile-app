@@ -161,9 +161,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                 >
                     <Text style={styles.backText}>‹</Text>
                 </TouchableOpacity>
-                <Text style={styles.headerKicker}>
-                    {isRated ? "SONG DETAILS" : ""}
-                </Text>
+                <Text style={styles.headerKicker}>SONG DETAILS</Text>
                 {/* Spacer mirrors back button width so kicker stays centered. */}
                 <View style={styles.headerSpacer} />
             </View>
@@ -174,21 +172,17 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                 showsVerticalScrollIndicator={false}
             >
                 <View style={styles.heroContainer}>
-                    {isRated && ranking !== null ? (
-                        <ScoreArc
-                            score={ranking.score}
-                            max={10}
-                            size={RING_SIZE}
-                            strokeWidth={ARC_STROKE_WIDTH}
-                            sweepDegrees={270}
-                            color={accent}
-                            testID="song-detail-score-arc"
-                        >
-                            {discContent}
-                        </ScoreArc>
-                    ) : (
-                        discContent
-                    )}
+                    <ScoreArc
+                        score={ranking?.score ?? 0}
+                        max={10}
+                        size={RING_SIZE}
+                        strokeWidth={ARC_STROKE_WIDTH}
+                        sweepDegrees={270}
+                        color={ranking !== null ? accent : colors.sand}
+                        testID="song-detail-score-arc"
+                    >
+                        {discContent}
+                    </ScoreArc>
                 </View>
 
                 {/* Audio preview */}
@@ -209,86 +203,84 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                     {song.artist.toUpperCase()} · {song.album.toUpperCase()}
                 </Text>
 
-                {/* Position and diamond row — rated songs only */}
-                {ranking !== null && (
-                    <View style={styles.scoreSection}>
+                <View style={styles.scoreSection}>
+                    {ranking !== null && (
                         <Text style={styles.positionLabel}>
                             POSITION #{ranking.position}
                         </Text>
+                    )}
+                    {ranking !== null ? (
                         <DiamondScore
                             score={ranking.score}
                             total={10}
                             size={11}
                             color={accent}
                         />
+                    ) : (
+                        <Text style={styles.unratedLabel}>NOT RATED YET</Text>
+                    )}
+                </View>
+
+                <View style={styles.rule}>
+                    <View style={styles.ruleLine} />
+                    <Text style={styles.ruleText}>IN CONTEXT</Text>
+                    <View style={styles.ruleLine} />
+                </View>
+                <View style={styles.contextCircles}>
+                    <View style={styles.circleItem}>
+                        <Text style={styles.circleLabel}>GLOBAL</Text>
+                        <ScoreArc
+                            score={globalAvgScore ?? 0}
+                            max={10}
+                            size={80}
+                            strokeWidth={5}
+                            color={globalAvgScore !== null ? colors.inkDim : colors.sand}
+                            trackColor={colors.sand}
+                        >
+                            <Text style={styles.circleScoreSmall}>
+                                {globalAvgScore !== null ? globalAvgScore.toFixed(1) : "--"}
+                            </Text>
+                        </ScoreArc>
+                        {globalRatingCount > 0 && (
+                            <Text style={styles.circleSubLabel}>
+                                {globalRatingCount === 1 ? "1 rating" : `${globalRatingCount} ratings`}
+                            </Text>
+                        )}
                     </View>
-                )}
 
-                {/* IN CONTEXT — three comparison circles, rated songs only */}
-                {ranking !== null && (
-                    <>
-                        <View style={styles.rule}>
-                            <View style={styles.ruleLine} />
-                            <Text style={styles.ruleText}>IN CONTEXT</Text>
-                            <View style={styles.ruleLine} />
-                        </View>
-                        <View style={styles.contextCircles}>
-                            {/* GLOBAL */}
-                            <View style={styles.circleItem}>
-                                <Text style={styles.circleLabel}>GLOBAL</Text>
-                                <ScoreArc
-                                    score={globalAvgScore ?? 0}
-                                    max={10}
-                                    size={80}
-                                    strokeWidth={5}
-                                    color={globalAvgScore !== null ? colors.inkDim : colors.sand}
-                                    trackColor={colors.sand}
-                                >
-                                    <Text style={styles.circleScoreSmall}>
-                                        {globalAvgScore !== null ? globalAvgScore.toFixed(1) : "--"}
-                                    </Text>
-                                </ScoreArc>
-                                {globalRatingCount > 0 && (
-                                    <Text style={styles.circleSubLabel}>
-                                        {globalRatingCount === 1 ? "1 rating" : `${globalRatingCount} ratings`}
-                                    </Text>
-                                )}
-                            </View>
+                    <View style={styles.circleItem}>
+                        <Text style={styles.circleLabel}>YOUR RATING</Text>
+                        <ScoreArc
+                            score={ranking?.score ?? 0}
+                            max={10}
+                            size={120}
+                            strokeWidth={6}
+                            color={ranking !== null ? accent : colors.sand}
+                            trackColor={colors.sand}
+                        >
+                            <Text style={[
+                                styles.circleScoreLarge,
+                                ranking !== null ? { color: accent } : styles.circleScoreMissing,
+                            ]}>
+                                {ranking !== null ? ranking.score.toFixed(1) : "--"}
+                            </Text>
+                        </ScoreArc>
+                    </View>
 
-                            {/* YOUR RATING */}
-                            <View style={styles.circleItem}>
-                                <Text style={styles.circleLabel}>YOUR RATING</Text>
-                                <ScoreArc
-                                    score={ranking.score}
-                                    max={10}
-                                    size={120}
-                                    strokeWidth={6}
-                                    color={accent}
-                                    trackColor={colors.sand}
-                                >
-                                    <Text style={[styles.circleScoreLarge, { color: accent }]}>
-                                        {ranking.score.toFixed(1)}
-                                    </Text>
-                                </ScoreArc>
-                            </View>
-
-                            {/* FRIENDS — placeholder until backend data exists */}
-                            <View style={styles.circleItem}>
-                                <Text style={styles.circleLabel}>FRIENDS</Text>
-                                <ScoreArc
-                                    score={0}
-                                    max={10}
-                                    size={80}
-                                    strokeWidth={5}
-                                    color={colors.sand}
-                                    trackColor={colors.sand}
-                                >
-                                    <Text style={styles.circleScoreSmall}>--</Text>
-                                </ScoreArc>
-                            </View>
-                        </View>
-                    </>
-                )}
+                    <View style={styles.circleItem}>
+                        <Text style={styles.circleLabel}>FRIENDS</Text>
+                        <ScoreArc
+                            score={0}
+                            max={10}
+                            size={80}
+                            strokeWidth={5}
+                            color={colors.sand}
+                            trackColor={colors.sand}
+                        >
+                            <Text style={styles.circleScoreSmall}>--</Text>
+                        </ScoreArc>
+                    </View>
+                </View>
 
                 {error !== null && <Text style={styles.errorText}>{error}</Text>}
             </ScrollView>
@@ -439,6 +431,12 @@ const styles = StyleSheet.create({
         fontSize: 9,
         letterSpacing: 2,
     },
+    unratedLabel: {
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 10,
+        letterSpacing: 1.4,
+    },
     rule: {
         flexDirection: "row",
         alignItems: "center",
@@ -490,6 +488,9 @@ const styles = StyleSheet.create({
         fontFamily: fonts.mono,
         fontSize: 22,
         lineHeight: 26,
+    },
+    circleScoreMissing: {
+        color: colors.inkDim,
     },
     errorText: {
         color: colors.dislike,
