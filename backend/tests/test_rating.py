@@ -223,6 +223,12 @@ def test_rankings_requires_auth(client: TestClient):
     assert response.status_code == 401
 
 
+def test_ranking_anchors_require_auth(client: TestClient):
+    """Fetching anchors without a token returns 401."""
+    response = client.get("/api/v1/rankings/me/anchors")
+    assert response.status_code == 401
+
+
 def test_ranking_by_deezer_id_requires_auth(client: TestClient):
     """Looking up a ranking from search without a token returns 401."""
     response = client.get("/api/v1/rankings/me/by-deezer/123")
@@ -289,6 +295,105 @@ def test_ranking_by_deezer_id_is_scoped_to_current_user(client: TestClient):
     )
 
     assert response.status_code == 404
+
+
+def test_ranking_anchors_return_bucket_calibration_points(client: TestClient):
+    """Anchors derive top Like, lower-middle Okay, and lowest Dislike from current Rankings."""
+    token = _get_token(client)
+    _finalize_rating(client, token, _rating_payload(deezer_id=1001, title="Like One"))
+    _finalize_rating(client, token, _rating_payload(deezer_id=1002, title="Like Two", position=2))
+    _finalize_rating(client, token, _rating_payload(deezer_id=2001, title="Okay One", bucket="alright"))
+    _finalize_rating(client, token, _rating_payload(deezer_id=2002, title="Okay Two", bucket="alright", position=2))
+    _finalize_rating(client, token, _rating_payload(deezer_id=2003, title="Okay Three", bucket="alright", position=3))
+    _finalize_rating(client, token, _rating_payload(deezer_id=2004, title="Okay Four", bucket="alright", position=4))
+    _finalize_rating(client, token, _rating_payload(deezer_id=3001, title="Dislike One", bucket="dislike"))
+    _finalize_rating(client, token, _rating_payload(deezer_id=3002, title="Dislike Two", bucket="dislike", position=2))
+
+    response = client.get(
+        "/api/v1/rankings/me/anchors",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["top_like"]["song"]["title"] == "Like One"
+    assert body["top_like"]["position"] == 1
+    assert body["median_okay"]["song"]["title"] == "Okay Two"
+    assert body["median_okay"]["position"] == 2
+    assert body["lowest_dislike"]["song"]["title"] == "Dislike Two"
+    assert body["lowest_dislike"]["position"] == 2
+
+
+def test_ranking_anchors_use_true_middle_for_odd_okay_count(client: TestClient):
+    """Median Okay uses the true middle item when the bucket count is odd."""
+    token = _get_token(client)
+    _finalize_rating(client, token, _rating_payload(deezer_id=2001, title="Okay One", bucket="alright"))
+    _finalize_rating(client, token, _rating_payload(deezer_id=2002, title="Okay Two", bucket="alright", position=2))
+    _finalize_rating(client, token, _rating_payload(deezer_id=2003, title="Okay Three", bucket="alright", position=3))
+
+    response = client.get(
+        "/api/v1/rankings/me/anchors",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["median_okay"]["song"]["title"] == "Okay Two"
+
+
+def test_ranking_anchors_return_null_for_missing_buckets(client: TestClient):
+    """Missing buckets return null anchors instead of synthetic placeholders."""
+    token = _get_token(client)
+    _finalize_rating(client, token, _rating_payload(deezer_id=1001, title="Like One"))
+
+    response = client.get(
+        "/api/v1/rankings/me/anchors",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["top_like"]["song"]["title"] == "Like One"
+    assert body["median_okay"] is None
+    assert body["lowest_dislike"] is None
+
+
+def test_ranking_anchors_update_after_ranking_changes(client: TestClient):
+    """Anchors are derived at read time from current Rankings."""
+    token = _get_token(client)
+    first = _finalize_rating(client, token, _rating_payload(deezer_id=1001, title="Like One"))
+    _finalize_rating(client, token, _rating_payload(deezer_id=1002, title="Like Two", position=2))
+
+    remove_response = client.delete(
+        f"/api/v1/ratings/{first['ranking']['song_id']}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert remove_response.status_code == 200
+    response = client.get(
+        "/api/v1/rankings/me/anchors",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["top_like"]["song"]["title"] == "Like Two"
+
+
+def test_ranking_anchors_are_current_user_only(client: TestClient):
+    """The anchors endpoint never accepts or returns another user's anchor data."""
+    first_token = _get_token(client, email="first@example.com", username="firstuser")
+    second_token = _get_token(client, email="second@example.com", username="seconduser")
+    _finalize_rating(client, first_token, _rating_payload(deezer_id=1001, title="First User Like"))
+
+    response = client.get(
+        "/api/v1/rankings/me/anchors",
+        headers={"Authorization": f"Bearer {second_token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "top_like": None,
+        "median_okay": None,
+        "lowest_dislike": None,
+    }
 
 
 def test_finalize_empty_bucket_creates_ranking_and_event(

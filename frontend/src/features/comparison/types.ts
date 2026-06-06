@@ -64,6 +64,12 @@ export type RankingListResponse = {
     next_cursor: string | null;
 }
 
+export type RankingAnchorsResponse = {
+    top_like: RankingResponse | null;
+    median_okay: RankingResponse | null;
+    lowest_dislike: RankingResponse | null;
+}
+
 export type RankingReorderItem = {
     song_id: number;
     bucket: BucketName;

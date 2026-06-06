@@ -12,8 +12,8 @@ import ScoreArc from "../../components/ScoreArc"
 import { AppStackParamList, TabParamList } from "../../navigation/types"
 import { colors, fonts, bucketColor } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
-import { RankingResponse } from "../comparison/types"
-import { listMyRankings } from "./apiRequests"
+import { BucketName, RankingAnchorsResponse, RankingResponse } from "../comparison/types"
+import { getMyRankingAnchors, listMyRankings } from "./apiRequests"
 
 type RankingsNavigation = CompositeNavigationProp<
     BottomTabNavigationProp<TabParamList, "Rankings">,
@@ -29,11 +29,26 @@ const DIAL_SWEEP_DEG = 288                       // total arc covered by all sat
 const ORBIT_COVER_BASE = 60                      // #1 cover diameter
 const ORBIT_COVER_STEP = 5                       // shrink per rank step
 const CENTER_RING_SIZE = 108                     // center count circle
+const EMPTY_ANCHORS: RankingAnchorsResponse = {
+    top_like: null,
+    median_okay: null,
+    lowest_dislike: null,
+}
+const ANCHOR_DEFS: readonly {
+    key: keyof RankingAnchorsResponse;
+    label: string;
+    empty: string;
+}[] = [
+    { key: "top_like", label: "Top Like", empty: "No Like ratings yet." },
+    { key: "median_okay", label: "Median Okay", empty: "No Okay ratings yet." },
+    { key: "lowest_dislike", label: "Lowest Dislike", empty: "No Dislike ratings yet." },
+]
 
 export default function RankingsScreen() {
     const navigation = useNavigation<RankingsNavigation>()
     const { token } = useAuth()
     const [rankings, setRankings] = useState<RankingResponse[]>([])
+    const [anchors, setAnchors] = useState<RankingAnchorsResponse>(EMPTY_ANCHORS)
     const [nextCursor, setNextCursor] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(false)
     const [isLoadingMore, setIsLoadingMore] = useState(false)
@@ -57,7 +72,9 @@ export default function RankingsScreen() {
         try {
             const response = await listMyRankings(token, cursor ?? undefined)
             if (shouldReplace) {
+                const anchorResponse = await getMyRankingAnchors(token)
                 setRankings(response.rankings)
+                setAnchors(anchorResponse)
             } else {
                 setRankings((currentRankings) => [...currentRankings, ...response.rankings])
             }
@@ -102,6 +119,43 @@ export default function RankingsScreen() {
         }
 
         return <ActivityIndicator color={colors.clay} style={styles.footerSpinner} />
+    }
+
+    const renderAnchor = (
+        label: string,
+        anchor: RankingResponse | null,
+        emptyText: string,
+    ) => {
+        if (anchor === null) {
+            return (
+                <View style={styles.anchorCard}>
+                    <Text style={styles.anchorLabel}>{label}</Text>
+                    <Text style={styles.anchorEmpty}>{emptyText}</Text>
+                </View>
+            )
+        }
+
+        const accent = bucketColor(anchor.bucket)
+        return (
+            <View style={styles.anchorCard}>
+                <Text style={styles.anchorLabel}>{label}</Text>
+                <View style={styles.anchorContent}>
+                    <View style={styles.anchorCover}>
+                        {anchor.song.cover_url ? (
+                            <Image source={{ uri: anchor.song.cover_url }} style={styles.anchorCoverImage} />
+                        ) : null}
+                    </View>
+                    <View style={styles.anchorText}>
+                        <Text style={styles.anchorTitle} numberOfLines={1}>{anchor.song.title}</Text>
+                        <Text style={styles.anchorArtist} numberOfLines={1}>{anchor.song.artist}</Text>
+                    </View>
+                </View>
+                <View style={styles.anchorMetaRow}>
+                    <Text style={[styles.anchorScore, { color: accent }]}>{anchor.score.toFixed(1)}</Text>
+                    <Text style={styles.anchorBucket}>{bucketLabel(anchor.bucket)} · #{anchor.position}</Text>
+                </View>
+            </View>
+        )
     }
 
     // Renders the orbit constellation + list separator as the FlashList header.
@@ -228,6 +282,24 @@ export default function RankingsScreen() {
                     </View>
                 </View>
 
+                <View style={styles.anchorsSection}>
+                    <Text style={styles.anchorsTitle}>Anchors</Text>
+                    <Text style={styles.anchorsCopy}>
+                        Your calibration points for what Like, Okay, and Dislike feel like.
+                    </Text>
+                    <View style={styles.anchorGrid}>
+                        {ANCHOR_DEFS.map((anchorDef) => (
+                            <View key={anchorDef.key} style={styles.anchorGridItem}>
+                                {renderAnchor(
+                                    anchorDef.label,
+                                    anchors[anchorDef.key],
+                                    anchorDef.empty,
+                                )}
+                            </View>
+                        ))}
+                    </View>
+                </View>
+
                 {/* List separator — only shown when there are songs below the orbit */}
                 {listItems.length > 0 && (
                     <View style={styles.separator}>
@@ -334,6 +406,13 @@ export default function RankingsScreen() {
             />
         </View>
     )
+}
+
+function bucketLabel(bucket: BucketName): string {
+    if (bucket === "alright") {
+        return "Okay"
+    }
+    return bucket.charAt(0).toUpperCase() + bucket.slice(1)
 }
 
 const styles = StyleSheet.create({
@@ -467,6 +546,103 @@ const styles = StyleSheet.create({
         fontFamily: fonts.mono,
         fontSize: 10,
         color: colors.inkSoft,
+    },
+    anchorsSection: {
+        paddingHorizontal: 18,
+        paddingBottom: 14,
+        borderTopWidth: 1,
+        borderTopColor: colors.line,
+    },
+    anchorsTitle: {
+        fontFamily: fonts.serif,
+        color: colors.ink,
+        fontSize: 24,
+        lineHeight: 28,
+        marginTop: 14,
+    },
+    anchorsCopy: {
+        color: colors.inkSoft,
+        fontSize: 12,
+        lineHeight: 17,
+        marginTop: 2,
+        marginBottom: 10,
+    },
+    anchorGrid: {
+        flexDirection: "row",
+        gap: 8,
+    },
+    anchorGridItem: {
+        flex: 1,
+        minWidth: 0,
+    },
+    anchorCard: {
+        minHeight: 128,
+        borderWidth: 1,
+        borderColor: colors.line,
+        backgroundColor: colors.paper,
+        padding: 10,
+        borderRadius: 8,
+    },
+    anchorLabel: {
+        fontFamily: fonts.mono,
+        color: colors.clay,
+        fontSize: 9,
+        letterSpacing: 1.2,
+        marginBottom: 8,
+    },
+    anchorContent: {
+        alignItems: "center",
+    },
+    anchorCover: {
+        width: 42,
+        height: 42,
+        borderRadius: 21,
+        backgroundColor: colors.sand,
+        overflow: "hidden",
+        marginBottom: 7,
+    },
+    anchorCoverImage: {
+        width: "100%",
+        height: "100%",
+    },
+    anchorText: {
+        width: "100%",
+    },
+    anchorTitle: {
+        color: colors.ink,
+        fontSize: 12,
+        fontWeight: "600",
+        textAlign: "center",
+    },
+    anchorArtist: {
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 9,
+        textAlign: "center",
+        marginTop: 2,
+    },
+    anchorMetaRow: {
+        alignItems: "center",
+        marginTop: 8,
+    },
+    anchorScore: {
+        fontFamily: fonts.serif,
+        fontSize: 20,
+        lineHeight: 23,
+    },
+    anchorBucket: {
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 8,
+        letterSpacing: 0.6,
+        marginTop: 1,
+        textAlign: "center",
+    },
+    anchorEmpty: {
+        color: colors.inkSoft,
+        fontSize: 12,
+        lineHeight: 16,
+        marginTop: 8,
     },
     // List rows
     listContent: {

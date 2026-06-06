@@ -92,6 +92,14 @@ class RankingListResponse(BaseModel):
     next_cursor: str | None
 
 
+class RankingAnchorsResponse(BaseModel):
+    """Current user's derived Rankings calibration points."""
+
+    top_like: RankingResponse | None
+    median_okay: RankingResponse | None
+    lowest_dislike: RankingResponse | None
+
+
 class RankingReorderItem(BaseModel):
     """One row in a full-list reorder request."""
 

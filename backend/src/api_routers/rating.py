@@ -7,6 +7,7 @@ from src.core.dependencies import get_current_user, get_db
 from src.core.limiter import limiter
 from src.pydantic_schemas.profile import ProfileReportResponse, RatingEventReportCreate
 from src.pydantic_schemas.rating import (
+    RankingAnchorsResponse,
     RankingListResponse,
     RankingReorderRequest,
     RankingReorderResponse,
@@ -18,6 +19,7 @@ from src.pydantic_schemas.rating import (
 from src.services.musicbrainz_tasks import enrich_song_metadata_task
 from src.services.rating import (
     finalize_rating,
+    get_my_ranking_anchors,
     get_my_ranking_by_deezer_id,
     list_my_rankings,
     remove_rating,
@@ -109,6 +111,23 @@ def my_rankings(
         user_id=current_user.id,
         limit=limit,
         cursor=cursor,
+    )
+
+
+@router.get(
+    "/rankings/me/anchors",
+    response_model=RankingAnchorsResponse,
+)
+@limiter.limit("300/minute")
+def my_ranking_anchors(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RankingAnchorsResponse:
+    """Return the authenticated user's derived Rankings calibration points."""
+    return get_my_ranking_anchors(
+        db,
+        user_id=current_user.id,
     )
 
 

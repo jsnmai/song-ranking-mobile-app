@@ -6,6 +6,7 @@ import { RankingResponse } from "../../comparison/types"
 
 const mockNavigate = jest.fn()
 const mockListMyRankings = jest.fn()
+const mockGetMyRankingAnchors = jest.fn()
 
 jest.mock("@react-navigation/native", () => {
     const actual = jest.requireActual("@react-navigation/native")
@@ -54,6 +55,7 @@ jest.mock("../../auth/AuthContext", () => ({
 }))
 
 jest.mock("../apiRequests", () => ({
+    getMyRankingAnchors: (...args: unknown[]) => mockGetMyRankingAnchors(...args),
     listMyRankings: (...args: unknown[]) => mockListMyRankings(...args),
 }))
 
@@ -93,6 +95,11 @@ const ranking: RankingResponse = {
 
 beforeEach(() => {
     jest.resetAllMocks()
+    mockGetMyRankingAnchors.mockResolvedValue({
+        top_like: null,
+        median_okay: null,
+        lowest_dislike: null,
+    })
 })
 
 describe("RankingsScreen", () => {
@@ -126,5 +133,44 @@ describe("RankingsScreen", () => {
         fireEvent.press(screen.getByText("Reorder"))
 
         expect(mockNavigate).toHaveBeenCalledWith("Reorder")
+    })
+
+    it("renders populated and missing Anchors", async () => {
+        mockListMyRankings.mockResolvedValue({
+            rankings: [ranking],
+            next_cursor: null,
+        })
+        mockGetMyRankingAnchors.mockResolvedValue({
+            top_like: ranking,
+            median_okay: null,
+            lowest_dislike: {
+                ...ranking,
+                id: 8,
+                song_id: 43,
+                bucket: "dislike",
+                position: 1,
+                score: 2.0,
+                song: {
+                    ...ranking.song,
+                    id: 43,
+                    deezer_id: 124,
+                    title: "Bad Song",
+                    artist: "The Skips",
+                },
+            },
+        })
+
+        render(<RankingsScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByText("Anchors")).toBeTruthy()
+        })
+        expect(screen.getByText("Top Like")).toBeTruthy()
+        expect(screen.getByText("Median Okay")).toBeTruthy()
+        expect(screen.getByText("Lowest Dislike")).toBeTruthy()
+        expect(screen.getAllByText("Nights").length).toBeGreaterThan(0)
+        expect(screen.getByText("Bad Song")).toBeTruthy()
+        expect(screen.getByText("No Okay ratings yet.")).toBeTruthy()
+        expect(mockGetMyRankingAnchors).toHaveBeenCalledWith("test-token")
     })
 })

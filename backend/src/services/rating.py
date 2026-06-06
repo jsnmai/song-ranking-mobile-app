@@ -15,6 +15,7 @@ from src.crud.rating import (
     get_user_ranking_by_song,
     list_all_user_rankings_with_songs,
     list_user_bucket_rankings,
+    list_user_bucket_rankings_with_songs,
     list_user_rankings_with_songs,
     refresh_ranking_event_pair,
     refresh_rating_event,
@@ -29,6 +30,7 @@ from src.crud.song import (
 )
 from src.pydantic_schemas.profile import ProfileReportResponse, RatingEventReportCreate
 from src.pydantic_schemas.rating import (
+    RankingAnchorsResponse,
     RankingListResponse,
     RankingReorderRequest,
     RankingReorderResponse,
@@ -477,6 +479,34 @@ def list_my_rankings(
             for row in page_rows
         ],
         next_cursor=next_cursor,
+    )
+
+
+def get_my_ranking_anchors(
+    db: Session,
+    user_id: int,
+) -> RankingAnchorsResponse:
+    """Return derived current-user calibration points from existing Rankings rows."""
+    like_rows = list_user_bucket_rankings_with_songs(
+        db,
+        user_id,
+        "like",
+    )
+    okay_rows = list_user_bucket_rankings_with_songs(
+        db,
+        user_id,
+        "alright",
+    )
+    dislike_rows = list_user_bucket_rankings_with_songs(
+        db,
+        user_id,
+        "dislike",
+    )
+
+    return RankingAnchorsResponse(
+        top_like=_ranking_with_song_response(like_rows[0]) if like_rows else None,
+        median_okay=_ranking_with_song_response(okay_rows[(len(okay_rows) - 1) // 2]) if okay_rows else None,
+        lowest_dislike=_ranking_with_song_response(dislike_rows[-1]) if dislike_rows else None,
     )
 
 

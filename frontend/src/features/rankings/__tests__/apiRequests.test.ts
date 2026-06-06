@@ -1,5 +1,11 @@
 // Tests for the rankings API request wrappers.
-import { getMyRankingByDeezerId, listMyRankings, removeRating, reorderRankings } from "../apiRequests"
+import {
+    getMyRankingAnchors,
+    getMyRankingByDeezerId,
+    listMyRankings,
+    removeRating,
+    reorderRankings,
+} from "../apiRequests"
 
 const mockGet = jest.fn()
 const mockPut = jest.fn()
@@ -40,6 +46,14 @@ describe("rankings API requests", () => {
         await getMyRankingByDeezerId(123, "test-token")
 
         expect(mockGet).toHaveBeenCalledWith("/api/v1/rankings/me/by-deezer/123", "test-token")
+    })
+
+    it("gets current user's ranking anchors through the backend", async () => {
+        mockGet.mockResolvedValue({ top_like: null, median_okay: null, lowest_dislike: null })
+
+        await getMyRankingAnchors("test-token")
+
+        expect(mockGet).toHaveBeenCalledWith("/api/v1/rankings/me/anchors", "test-token")
     })
 
     it("removes ratings through the backend rating endpoint", async () => {

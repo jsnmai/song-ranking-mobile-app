@@ -246,6 +246,10 @@ def test_delete_me_removes_user_owned_data_and_recomputes_song_aggregates(
         "/api/v1/auth/me",
         headers={"Authorization": f"Bearer {deleting_token}"},
     )
+    anchors_response = client.get(
+        "/api/v1/rankings/me/anchors",
+        headers={"Authorization": f"Bearer {deleting_token}"},
+    )
     login_response = client.post(
         "/api/v1/auth/login",
         json={"email": "delete-me@example.com", "password": "password123"},
@@ -255,6 +259,7 @@ def test_delete_me_removes_user_owned_data_and_recomputes_song_aggregates(
     assert feed_response.json()["events"] == []
     assert profile_response.status_code == 404
     assert me_response.status_code == 401
+    assert anchors_response.status_code == 401
     assert login_response.status_code == 401
 
 

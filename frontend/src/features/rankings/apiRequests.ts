@@ -2,6 +2,7 @@
 
 import { apiClient } from "../../api/client"
 import {
+    RankingAnchorsResponse,
     RankingListResponse,
     RankingReorderItem,
     RankingReorderResponse,
@@ -15,6 +16,10 @@ export async function listMyRankings(
 ): Promise<RankingListResponse> {
     const path = cursor ? `/api/v1/rankings/me?cursor=${encodeURIComponent(cursor)}` : "/api/v1/rankings/me"
     return apiClient.get<RankingListResponse>(path, token)
+}
+
+export async function getMyRankingAnchors(token: string): Promise<RankingAnchorsResponse> {
+    return apiClient.get<RankingAnchorsResponse>("/api/v1/rankings/me/anchors", token)
 }
 
 export async function getMyRankingByDeezerId(

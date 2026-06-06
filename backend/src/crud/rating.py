@@ -78,6 +78,37 @@ def list_user_bucket_rankings(
     )
 
 
+def list_user_bucket_rankings_with_songs(
+    db: Session,
+    user_id: int,
+    bucket: str,
+) -> list[RankingRow]:
+    """Return one user's bucket rankings with song metadata ordered by position."""
+    rows = db.execute(
+        select(
+            Ranking,
+            Song,
+        )
+        .join(
+            Song,
+            Song.id == Ranking.song_id,
+        )
+        .where(Ranking.user_id == user_id)
+        .where(Ranking.bucket == bucket)
+        .order_by(
+            Ranking.position.asc(),
+            Ranking.id.asc(),
+        )
+    ).all()
+    return [
+        RankingRow(
+            ranking=row[0],
+            song=row[1],
+        )
+        for row in rows
+    ]
+
+
 def list_all_user_rankings_with_songs(
     db: Session,
     user_id: int,
