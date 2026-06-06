@@ -135,6 +135,22 @@ describe("RankingsScreen", () => {
         expect(mockNavigate).toHaveBeenCalledWith("Reorder")
     })
 
+    it("renders the Versus History entry point and navigates to it", async () => {
+        mockListMyRankings.mockResolvedValue({
+            rankings: [ranking],
+            next_cursor: null,
+        })
+
+        render(<RankingsScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByText("See your recent head-to-head decisions")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByLabelText("Open Versus History"))
+
+        expect(mockNavigate).toHaveBeenCalledWith("VersusHistory")
+    })
+
     it("renders populated and missing Anchors", async () => {
         mockListMyRankings.mockResolvedValue({
             rankings: [ranking],

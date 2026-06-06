@@ -1,5 +1,6 @@
 # Integration tests for authenticated account deletion.
 import uuid
+from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 from sqlalchemy import func, or_, select
@@ -129,6 +130,7 @@ def test_delete_me_removes_user_owned_data_and_recomputes_song_aggregates(
             song_a_id=shared_song.id,
             song_b_id=deleted_only_song.id,
             winner_id=shared_song.id,
+            finalized_at=datetime.now(timezone.utc),
         )
     )
     db_session.add(
@@ -158,6 +160,13 @@ def test_delete_me_removes_user_owned_data_and_recomputes_song_aggregates(
         )
     )
     db_session.commit()
+
+    history_response = client.get(
+        "/api/v1/rankings/me/versus-history",
+        headers={"Authorization": f"Bearer {deleting_token}"},
+    )
+    assert history_response.status_code == 200
+    assert len(history_response.json()["receipts"]) == 1
 
     response = client.request(
         "DELETE",

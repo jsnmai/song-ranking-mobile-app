@@ -1,0 +1,355 @@
+"""Constants and layout for the local dev demo seed script."""
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+
+DEMO_PASSWORD = "demo1234"
+DEMO_EMAIL_DOMAIN = "@listn.demo"
+LEGACY_DEMO_EMAIL_DOMAINS = ("@listn.dev", "@listn.test", "@demo.listn.dev", "@li.test")
+DEMO_DEEZER_ID_START = 9_000_001
+DEMO_DEEZER_ID_END = 9_000_030
+ALGORITHM_VERSION = "v1_cosine"
+
+# Shared songs used for compatibility pairs (power / friend / opposite / newbie overlap).
+SHARED_COMPAT_DEEZER_IDS = list(range(DEMO_DEEZER_ID_START, DEMO_DEEZER_ID_START + 8))
+
+ALLOWED_DB_HOSTS = frozenset({"localhost", "127.0.0.1", "db"})
+ALLOWED_DB_NAMES = frozenset({"listn", "listn_test"})
+PRODUCTION_URL_DENYLIST = (
+    "amazonaws.com",
+    "rds.amazonaws",
+    "railway.app",
+    "render.com",
+    "supabase.co",
+    "neon.tech",
+    "planetscale",
+    "azure.com",
+    "googleusercontent",
+    "heroku.com",
+)
+
+
+@dataclass(frozen=True)
+class DemoAccountSpec:
+    """One deterministic demo user and profile."""
+
+    email: str
+    username: str
+    display_name: str
+    visibility: str
+
+    @property
+    def is_public(self) -> bool:
+        """Compatibility bridge for old seed assertions while visibility is the source of truth."""
+        return self.visibility == "public"
+
+
+@dataclass(frozen=True)
+class RankingSeedSpec:
+    """One ranking row: bucket-local position; score is derived at seed time."""
+
+    deezer_id: int
+    bucket: str
+    position: int
+
+
+@dataclass(frozen=True)
+class RatingEventSeedSpec:
+    """One feed-visible rating event."""
+
+    deezer_id: int
+    bucket: str
+    position: int
+    hours_ago: float
+
+
+@dataclass(frozen=True)
+class ComparisonSeedSpec:
+    """One finalized Versus History receipt for a demo account."""
+
+    session_key: str
+    song_a_deezer_id: int
+    song_b_deezer_id: int
+    winner_deezer_id: int
+    bucket: str
+    comparison_index_in_session: int
+    decision_duration_ms: int | None
+    hours_ago: float
+
+
+def demo_email(username: str) -> str:
+    """Build the canonical demo account email for a seeded username."""
+    local_part = username.removeprefix("demo_")
+    return f"{local_part}{DEMO_EMAIL_DOMAIN}"
+
+
+DEMO_ACCOUNTS: tuple[DemoAccountSpec, ...] = (
+    DemoAccountSpec(demo_email("demo_empty"), "demo_empty", "Demo Empty", "public"),
+    DemoAccountSpec(demo_email("demo_newbie"), "demo_newbie", "Demo Newbie", "public"),
+    DemoAccountSpec(demo_email("demo_power"), "demo_power", "Demo Power", "public"),
+    DemoAccountSpec(demo_email("demo_friend"), "demo_friend", "Demo Friend", "public"),
+    DemoAccountSpec(demo_email("demo_opposite"), "demo_opposite", "Demo Opposite", "public"),
+    DemoAccountSpec(demo_email("demo_private"), "demo_private", "Demo Only Me", "only_me"),
+    DemoAccountSpec(demo_email("demo_friends_only"), "demo_friends_only", "Demo Friends Only", "friends_only"),
+    DemoAccountSpec(demo_email("demo_blocked"), "demo_blocked", "Demo Blocked", "public"),
+    DemoAccountSpec(demo_email("demo_feed"), "demo_feed", "Demo Feed", "public"),
+    DemoAccountSpec(demo_email("demo_orbit_a"), "demo_orbit_a", "Demo Orbit A", "public"),
+    DemoAccountSpec(demo_email("demo_orbit_b"), "demo_orbit_b", "Demo Orbit B", "public"),
+)
+
+DEMO_USERNAMES = frozenset(account.username for account in DEMO_ACCOUNTS)
+
+# Anti-correlated cross-bucket pattern on shared songs (cosine ~0.40 vs power).
+_POWER_SHARED_RANKINGS: tuple[RankingSeedSpec, ...] = (
+    RankingSeedSpec(9_000_001, "like", 1),
+    RankingSeedSpec(9_000_002, "dislike", 1),
+    RankingSeedSpec(9_000_003, "like", 2),
+    RankingSeedSpec(9_000_004, "dislike", 2),
+    RankingSeedSpec(9_000_005, "like", 3),
+    RankingSeedSpec(9_000_006, "dislike", 3),
+    RankingSeedSpec(9_000_007, "like", 4),
+    RankingSeedSpec(9_000_008, "dislike", 4),
+)
+
+_OPPOSITE_SHARED_RANKINGS: tuple[RankingSeedSpec, ...] = (
+    # Bottom of dislike / top of like buckets on shared songs for low v1_cosine (~0.41).
+    RankingSeedSpec(9_000_001, "dislike", 4),
+    RankingSeedSpec(9_000_002, "like", 4),
+    RankingSeedSpec(9_000_003, "dislike", 4),
+    RankingSeedSpec(9_000_004, "like", 4),
+    RankingSeedSpec(9_000_005, "dislike", 4),
+    RankingSeedSpec(9_000_006, "like", 4),
+    RankingSeedSpec(9_000_007, "dislike", 4),
+    RankingSeedSpec(9_000_008, "like", 4),
+)
+
+# Extra ranked songs for demo_power beyond the compatibility set.
+_POWER_EXTRA_RANKINGS: tuple[RankingSeedSpec, ...] = (
+    RankingSeedSpec(9_000_009, "like", 5),
+    RankingSeedSpec(9_000_010, "like", 6),
+    RankingSeedSpec(9_000_011, "like", 7),
+    RankingSeedSpec(9_000_012, "alright", 1),
+    RankingSeedSpec(9_000_013, "alright", 2),
+    RankingSeedSpec(9_000_014, "alright", 3),
+    RankingSeedSpec(9_000_015, "dislike", 5),
+    RankingSeedSpec(9_000_016, "dislike", 6),
+    RankingSeedSpec(9_000_017, "like", 8),
+    RankingSeedSpec(9_000_018, "like", 9),
+    RankingSeedSpec(9_000_019, "alright", 4),
+    RankingSeedSpec(9_000_020, "dislike", 7),
+)
+
+_POWER_ALL_RANKINGS = _POWER_SHARED_RANKINGS + _POWER_EXTRA_RANKINGS
+
+RANKINGS_BY_USERNAME: dict[str, tuple[RankingSeedSpec, ...]] = {
+    "demo_empty": (),
+    "demo_newbie": (
+        RankingSeedSpec(9_000_001, "like", 1),
+        RankingSeedSpec(9_000_002, "alright", 1),
+        RankingSeedSpec(9_000_021, "like", 2),
+    ),
+    "demo_power": _POWER_ALL_RANKINGS,
+    # Mirror power exactly so shared-song scores match for v1_cosine (> 0.9).
+    "demo_friend": _POWER_ALL_RANKINGS,
+    "demo_opposite": _OPPOSITE_SHARED_RANKINGS
+    + (
+        RankingSeedSpec(9_000_024, "dislike", 5),
+        RankingSeedSpec(9_000_025, "like", 5),
+    ),
+    "demo_private": (
+        RankingSeedSpec(9_000_026, "like", 1),
+        RankingSeedSpec(9_000_027, "alright", 1),
+    ),
+    "demo_friends_only": (
+        RankingSeedSpec(9_000_001, "like", 1),
+        RankingSeedSpec(9_000_003, "like", 2),
+        RankingSeedSpec(9_000_005, "like", 3),
+        RankingSeedSpec(9_000_007, "alright", 1),
+        RankingSeedSpec(9_000_009, "dislike", 1),
+    ),
+    "demo_blocked": (
+        RankingSeedSpec(9_000_020, "like", 1),
+        RankingSeedSpec(9_000_021, "like", 2),
+        RankingSeedSpec(9_000_022, "alright", 1),
+    ),
+    "demo_feed": (
+        RankingSeedSpec(9_000_028, "like", 1),
+        RankingSeedSpec(9_000_029, "like", 2),
+        RankingSeedSpec(9_000_030, "alright", 1),
+        RankingSeedSpec(9_000_009, "like", 3),
+        RankingSeedSpec(9_000_010, "alright", 2),
+        RankingSeedSpec(9_000_011, "dislike", 1),
+    ),
+    "demo_orbit_a": (
+        RankingSeedSpec(9_000_012, "like", 1),
+        RankingSeedSpec(9_000_013, "like", 2),
+        RankingSeedSpec(9_000_014, "alright", 1),
+        RankingSeedSpec(9_000_015, "dislike", 1),
+    ),
+    "demo_orbit_b": (
+        RankingSeedSpec(9_000_016, "like", 1),
+        RankingSeedSpec(9_000_017, "like", 2),
+        RankingSeedSpec(9_000_018, "alright", 1),
+        RankingSeedSpec(9_000_019, "dislike", 1),
+    ),
+}
+
+# follower_username -> following_username
+FOLLOW_EDGES: tuple[tuple[str, str], ...] = (
+    ("demo_power", "demo_feed"),
+    ("demo_power", "demo_friend"),
+    ("demo_power", "demo_opposite"),
+    ("demo_power", "demo_newbie"),
+    ("demo_power", "demo_orbit_a"),
+    ("demo_power", "demo_orbit_b"),
+    ("demo_power", "demo_private"),
+    ("demo_power", "demo_friends_only"),
+    ("demo_power", "demo_blocked"),
+    ("demo_feed", "demo_power"),
+    ("demo_feed", "demo_friend"),
+    ("demo_feed", "demo_opposite"),
+    ("demo_feed", "demo_newbie"),
+    ("demo_feed", "demo_orbit_a"),
+    ("demo_feed", "demo_orbit_b"),
+    ("demo_feed", "demo_friends_only"),
+    ("demo_friends_only", "demo_power"),
+    ("demo_blocked", "demo_power"),
+)
+
+# blocker_username -> blocked_username
+BLOCK_EDGES: tuple[tuple[str, str], ...] = (
+    ("demo_power", "demo_blocked"),
+)
+
+# Rating events for feed actors (username, specs). hours_ago relative to seed anchor.
+def _feed_events(
+    username: str,
+    specs: tuple[RatingEventSeedSpec, ...],
+) -> tuple[tuple[str, RatingEventSeedSpec], ...]:
+    return tuple((username, spec) for spec in specs)
+
+
+FEED_EVENT_SPECS: tuple[tuple[str, RatingEventSeedSpec], ...] = (
+    *_feed_events(
+        "demo_feed",
+        (
+            RatingEventSeedSpec(9_000_028, "like", 1, 0.5),
+            RatingEventSeedSpec(9_000_029, "like", 2, 1.0),
+            RatingEventSeedSpec(9_000_030, "alright", 1, 2.0),
+            RatingEventSeedSpec(9_000_009, "like", 3, 3.0),
+        ),
+    ),
+    *_feed_events(
+        "demo_friend",
+        (
+            RatingEventSeedSpec(9_000_001, "like", 1, 0.25),
+            RatingEventSeedSpec(9_000_003, "like", 2, 1.5),
+            RatingEventSeedSpec(9_000_005, "like", 3, 4.0),
+        ),
+    ),
+    *_feed_events(
+        "demo_opposite",
+        (
+            RatingEventSeedSpec(9_000_001, "dislike", 4, 0.75),
+            RatingEventSeedSpec(9_000_002, "like", 4, 2.5),
+            RatingEventSeedSpec(9_000_004, "like", 4, 5.0),
+        ),
+    ),
+    *_feed_events(
+        "demo_newbie",
+        (
+            RatingEventSeedSpec(9_000_001, "like", 1, 1.25),
+            RatingEventSeedSpec(9_000_002, "alright", 1, 6.0),
+        ),
+    ),
+    *_feed_events(
+        "demo_friends_only",
+        (
+            RatingEventSeedSpec(9_000_001, "like", 1, 1.1),
+            RatingEventSeedSpec(9_000_009, "dislike", 1, 5.5),
+        ),
+    ),
+    *_feed_events(
+        "demo_blocked",
+        (
+            RatingEventSeedSpec(9_000_020, "like", 1, 0.2),
+            RatingEventSeedSpec(9_000_022, "alright", 1, 4.75),
+        ),
+    ),
+    *_feed_events(
+        "demo_orbit_a",
+        (
+            RatingEventSeedSpec(9_000_012, "like", 1, 0.4),
+            RatingEventSeedSpec(9_000_013, "like", 2, 2.25),
+            RatingEventSeedSpec(9_000_014, "alright", 1, 3.5),
+        ),
+    ),
+    *_feed_events(
+        "demo_orbit_b",
+        (
+            RatingEventSeedSpec(9_000_016, "like", 1, 0.6),
+            RatingEventSeedSpec(9_000_017, "like", 2, 1.75),
+            RatingEventSeedSpec(9_000_018, "alright", 1, 4.5),
+        ),
+    ),
+    *_feed_events(
+        "demo_power",
+        (
+            RatingEventSeedSpec(9_000_009, "like", 5, 7.0),
+        ),
+    ),
+)
+
+COMPARISON_SPECS_BY_USERNAME: dict[str, tuple[ComparisonSeedSpec, ...]] = {
+    "demo_power": (
+        ComparisonSeedSpec("power-like-1", 9_000_003, 9_000_009, 9_000_003, "like", 1, 1450, 0.75),
+        ComparisonSeedSpec("power-like-1", 9_000_003, 9_000_005, 9_000_003, "like", 2, 2300, 0.75),
+        ComparisonSeedSpec("power-okay-1", 9_000_012, 9_000_014, 9_000_012, "alright", 1, None, 26.0),
+        ComparisonSeedSpec("power-dislike-1", 9_000_016, 9_000_008, 9_000_008, "dislike", 1, 890, 74.0),
+        ComparisonSeedSpec("power-like-older", 9_000_010, 9_000_017, 9_000_010, "like", 1, 4100, 170.0),
+    ),
+}
+
+COMPATIBILITY_PAIRS: tuple[tuple[str, str], ...] = (
+    ("demo_power", "demo_friend"),
+    ("demo_power", "demo_opposite"),
+)
+
+
+def _artist_for_deezer_id(deezer_id: int) -> str:
+    artists = ("Frank Ocean", "Kendrick Lamar", "Taylor Swift", "Bon Iver", "SZA")
+    return artists[(deezer_id - DEMO_DEEZER_ID_START) % len(artists)]
+
+
+def _genre_for_deezer_id(deezer_id: int) -> str:
+    genres = ("Rock", "Hip-Hop", "Pop", "R&B", "Indie")
+    return genres[(deezer_id - DEMO_DEEZER_ID_START) % len(genres)]
+
+
+SONG_CATALOG: tuple[dict[str, object], ...] = tuple(
+    {
+        "deezer_id": deezer_id,
+        "title": f"Demo Track {deezer_id - DEMO_DEEZER_ID_START + 1:02d}",
+        "artist": _artist_for_deezer_id(deezer_id),
+        "album": "LISTn Demo Sessions",
+        "genre_deezer": _genre_for_deezer_id(deezer_id),
+        "preview_url": (
+            f"https://example.com/demo-preview-{deezer_id}.mp3"
+            if deezer_id % 3 != 0
+            else None
+        ),
+    }
+    for deezer_id in range(DEMO_DEEZER_ID_START, DEMO_DEEZER_ID_END + 1)
+)
+
+
+def feed_anchor_now() -> datetime:
+    """Anchor feed timestamps near the current UTC moment so Feed 'today' UI populates."""
+    return datetime.now(timezone.utc).replace(microsecond=0)
+
+
+def event_created_at(
+    anchor: datetime,
+    hours_ago: float,
+) -> datetime:
+    """Return a created_at offset from the feed anchor."""
+    return anchor - timedelta(hours=hours_ago)

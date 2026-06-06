@@ -16,6 +16,7 @@ import ScoreRevealScreen from "../features/comparison/ScoreRevealScreen"
 import FeedScreen from "../features/feed/FeedScreen"
 import RankingsScreen from "../features/rankings/RankingsScreen"
 import ReorderScreen from "../features/rankings/ReorderScreen"
+import VersusHistoryScreen from "../features/rankings/VersusHistoryScreen"
 import DiscoverScreen from "../features/discover/DiscoverScreen"
 import LegalPlaceholderScreen from "../features/profile/LegalPlaceholderScreen"
 import OtherProfileScreen from "../features/profile/OtherProfileScreen"
@@ -91,6 +92,7 @@ export default function AppNavigator() {
             <Stack.Screen name="LegalPlaceholder" component={LegalPlaceholderScreen} />
             {/* change presentation to 'modal' to try as bottom sheet */}
             <Stack.Screen name="Reorder" component={ReorderScreen} />
+            <Stack.Screen name="VersusHistory" component={VersusHistoryScreen} />
             <Stack.Screen name="BucketSelection" component={BucketSelectionScreen} />
             <Stack.Screen name="ComparisonFlow" component={ComparisonFlowScreen} />
             <Stack.Screen name="ScoreReveal" component={ScoreRevealScreen} />

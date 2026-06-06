@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse, Response
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from src.api_routers import auth, comparison, feed, profile, rating, search, song
+from src.api_routers import auth, comparison, comparison_history, feed, profile, rating, search, song
 from src.core.config import settings
 from src.core.limiter import limiter
 
@@ -100,6 +100,10 @@ app.include_router(
 )
 app.include_router(
     comparison.router,
+    prefix="/api/v1",
+)
+app.include_router(
+    comparison_history.router,
     prefix="/api/v1",
 )
 app.include_router(

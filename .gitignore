@@ -65,6 +65,10 @@ CLAUDE.md
 
 AGENTS.md
 scripts/
+!backend/scripts/
+backend/scripts/*
+!backend/scripts/demo_seed_data.py
+!backend/scripts/seed_dev_demo.py
 DECISIONS.md
 ARCHITECTURE.md
 FUTURE.md

@@ -9,6 +9,7 @@ import {
     RankingResponse,
     RatingRemoveResponse,
 } from "../comparison/types"
+import { ComparisonHistoryListResponse } from "./types"
 
 export async function listMyRankings(
     token: string,
@@ -20,6 +21,10 @@ export async function listMyRankings(
 
 export async function getMyRankingAnchors(token: string): Promise<RankingAnchorsResponse> {
     return apiClient.get<RankingAnchorsResponse>("/api/v1/rankings/me/anchors", token)
+}
+
+export async function listMyVersusHistory(token: string): Promise<ComparisonHistoryListResponse> {
+    return apiClient.get<ComparisonHistoryListResponse>("/api/v1/rankings/me/versus-history", token)
 }
 
 export async function getMyRankingByDeezerId(

@@ -4,7 +4,13 @@ from datetime import datetime, timezone
 import pytest
 from sqlalchemy import func, select
 
-from scripts.demo_seed_data import DEMO_ACCOUNTS, DEMO_EMAIL_DOMAIN, DEMO_PASSWORD, demo_email
+from scripts.demo_seed_data import (
+    COMPARISON_SPECS_BY_USERNAME,
+    DEMO_ACCOUNTS,
+    DEMO_EMAIL_DOMAIN,
+    DEMO_PASSWORD,
+    demo_email,
+)
 from scripts.seed_dev_demo import (
     SeedAbortedError,
     assert_required_schema,
@@ -17,6 +23,7 @@ from scripts.seed_dev_demo import (
 from src.core.security import hash_password
 from src.crud.user import create_user_with_profile
 from src.sqlalchemy_tables.block import Block
+from src.sqlalchemy_tables.comparison import Comparison
 from src.sqlalchemy_tables.follow import Follow
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
@@ -204,6 +211,19 @@ def test_seed_demo_data_is_idempotent(
     assert friends_only_profile is not None
     assert friends_only_profile.visibility == "friends_only"
     assert blocked_edges == 1
+    power_comparisons = db_session.execute(
+        select(Comparison)
+        .where(Comparison.user_id == power_id)
+        .order_by(
+            Comparison.finalized_at.desc(),
+            Comparison.comparison_index_in_session,
+        ),
+    ).scalars().all()
+    assert len(power_comparisons) == len(COMPARISON_SPECS_BY_USERNAME["demo_power"])
+    assert all(comparison.finalized_at is not None for comparison in power_comparisons)
+    assert {comparison.bucket for comparison in power_comparisons} == {"like", "alright", "dislike"}
+    assert any(comparison.decision_duration_ms is None for comparison in power_comparisons)
+    assert any(comparison.decision_duration_ms is not None for comparison in power_comparisons)
 
 
 def _demo_counts(
@@ -216,6 +236,9 @@ def _demo_counts(
     ).scalar_one()
     event_count = db_session.execute(
         select(func.count()).select_from(RatingEvent).where(RatingEvent.user_id.in_(demo_user_ids)),
+    ).scalar_one()
+    comparison_count = db_session.execute(
+        select(func.count()).select_from(Comparison).where(Comparison.user_id.in_(demo_user_ids)),
     ).scalar_one()
     follow_count = db_session.execute(
         select(func.count())
@@ -246,6 +269,7 @@ def _demo_counts(
         "profiles": profile_count,
         "rankings": ranking_count,
         "rating_events": event_count,
+        "comparisons": comparison_count,
         "follows": follow_count,
         "blocks": block_count,
         "snapshots": snapshot_count,

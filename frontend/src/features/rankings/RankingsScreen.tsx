@@ -113,6 +113,10 @@ export default function RankingsScreen() {
         navigation.navigate("Reorder")
     }
 
+    const handleVersusHistoryPress = () => {
+        navigation.navigate("VersusHistory")
+    }
+
     const renderFooter = () => {
         if (!isLoadingMore) {
             return null
@@ -306,6 +310,20 @@ export default function RankingsScreen() {
                     </View>
                 </View>
 
+                <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Open Versus History"
+                    style={styles.versusHistoryCard}
+                    onPress={handleVersusHistoryPress}
+                    activeOpacity={0.8}
+                >
+                    <View>
+                        <Text style={styles.versusHistoryTitle}>Versus History</Text>
+                        <Text style={styles.versusHistoryCopy}>See your recent head-to-head decisions</Text>
+                    </View>
+                    <Text style={styles.versusHistoryArrow}>→</Text>
+                </TouchableOpacity>
+
                 <View style={styles.separator}>
                     <Text style={styles.separatorRange}>1 — {rankings.length}</Text>
                     <Text style={styles.separatorRight}>full list →</Text>
@@ -387,6 +405,9 @@ export default function RankingsScreen() {
                 <Text style={styles.emptyText}>Rate your first song</Text>
                 <TouchableOpacity style={styles.button} onPress={handleRateFirstSong}>
                     <Text style={styles.buttonText}>Find a song</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.emptyHistoryButton} onPress={handleVersusHistoryPress}>
+                    <Text style={styles.emptyHistoryText}>Versus History</Text>
                 </TouchableOpacity>
             </View>
         )
@@ -647,6 +668,34 @@ const styles = StyleSheet.create({
         lineHeight: 16,
         marginTop: 8,
     },
+    versusHistoryCard: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginHorizontal: 18,
+        marginBottom: 16,
+        padding: 14,
+        borderWidth: 1,
+        borderColor: colors.line,
+        borderRadius: 10,
+        backgroundColor: colors.paper,
+    },
+    versusHistoryTitle: {
+        fontFamily: fonts.serif,
+        color: colors.ink,
+        fontSize: 18,
+        lineHeight: 22,
+    },
+    versusHistoryCopy: {
+        color: colors.inkSoft,
+        fontSize: 11,
+        marginTop: 3,
+    },
+    versusHistoryArrow: {
+        color: colors.clay,
+        fontSize: 20,
+        marginLeft: 12,
+    },
     // List rows
     listContent: {
         paddingBottom: 24,
@@ -725,6 +774,16 @@ const styles = StyleSheet.create({
     buttonText: {
         color: colors.ink,
         fontSize: 16,
+    },
+    emptyHistoryButton: {
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        marginTop: 8,
+    },
+    emptyHistoryText: {
+        color: colors.clay,
+        fontFamily: fonts.mono,
+        fontSize: 13,
     },
     errorText: {
         color: colors.dislike,

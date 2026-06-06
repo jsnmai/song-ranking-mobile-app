@@ -26,6 +26,7 @@ export type AppStackParamList = {
     Settings: undefined;
     LegalPlaceholder: { kind: "support" | "privacy" | "terms" | "guidelines" };
     Reorder: undefined;
+    VersusHistory: undefined;
     BucketSelection: { song: SongSearchResult };
     ComparisonFlow: { session: ComparisonSessionResponse };
     ScoreReveal: { result: RatingFinalizeResponse; isRerate?: boolean };
