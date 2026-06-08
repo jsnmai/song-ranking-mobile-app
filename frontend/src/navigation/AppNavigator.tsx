@@ -9,12 +9,13 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { useNavigation } from "@react-navigation/native"
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
 
-import { AppStackParamList, TabParamList } from "./types"
+import { AppStackParamList, RankingsStackParamList, TabParamList } from "./types"
 import BucketSelectionScreen from "../features/comparison/BucketSelectionScreen"
 import ComparisonFlowScreen from "../features/comparison/ComparisonFlowScreen"
 import ScoreRevealScreen from "../features/comparison/ScoreRevealScreen"
 import FeedScreen from "../features/feed/FeedScreen"
 import RankingsScreen from "../features/rankings/RankingsScreen"
+import FullRankingsScreen from "../features/rankings/FullRankingsScreen"
 import ReorderScreen from "../features/rankings/ReorderScreen"
 import VersusHistoryScreen from "../features/rankings/VersusHistoryScreen"
 import DiscoverScreen from "../features/discover/DiscoverScreen"
@@ -28,6 +29,7 @@ import SavedSongsScreen from "../features/saved-songs/SavedSongsScreen"
 
 const Tab = createBottomTabNavigator<TabParamList>()
 const Stack = createNativeStackNavigator<AppStackParamList>()
+const RankingsStack = createNativeStackNavigator<RankingsStackParamList>()
 
 // FABButton is the center action button — visually floats above the tab bar.
 // Not a tab: it always navigates to Discover with focusSearch:true.
@@ -54,6 +56,15 @@ function FABPlaceholderScreen() {
     return <View style={{ flex: 1, backgroundColor: "#000" }} />
 }
 
+function RankingsNavigator() {
+    return (
+        <RankingsStack.Navigator screenOptions={{ headerShown: false }}>
+            <RankingsStack.Screen name="RankingsOverview" component={RankingsScreen} />
+            <RankingsStack.Screen name="FullRankings" component={FullRankingsScreen} />
+        </RankingsStack.Navigator>
+    )
+}
+
 function MainTabs() {
     return (
         <Tab.Navigator
@@ -65,7 +76,7 @@ function MainTabs() {
             }}
         >
             <Tab.Screen name="Feed" component={FeedScreen} />
-            <Tab.Screen name="Rankings" component={RankingsScreen} />
+            <Tab.Screen name="Rankings" component={RankingsNavigator} />
             <Tab.Screen
                 name="FABPlaceholder"
                 component={FABPlaceholderScreen}

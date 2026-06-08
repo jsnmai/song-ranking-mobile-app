@@ -10,12 +10,17 @@ import { SongSearchResult } from "../features/search/types"
 // `undefined` means the tab can be navigated to without passing any params.
 export type TabParamList = {
     Feed: undefined;
-    Rankings: undefined;
+    Rankings: NavigatorScreenParams<RankingsStackParamList> | undefined;
     FABPlaceholder: undefined;
     // Discover accepts an optional focusSearch param — set to true when navigating via the FAB
     // so the search bar auto-focuses on arrival.
     Discover: { focusSearch?: boolean; searchMode?: "songs" | "users" } | undefined;
     Profile: undefined;
+}
+
+export type RankingsStackParamList = {
+    RankingsOverview: undefined;
+    FullRankings: undefined;
 }
 
 export type AppStackParamList = {

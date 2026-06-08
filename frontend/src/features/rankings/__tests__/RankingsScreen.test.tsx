@@ -103,7 +103,20 @@ beforeEach(() => {
 })
 
 describe("RankingsScreen", () => {
-    it("navigates to SongDetail with the full ranking when a row is tapped", async () => {
+    it("opens the full Rankings and filter screen", async () => {
+        mockListMyRankings.mockResolvedValue({
+            rankings: [ranking],
+            next_cursor: null,
+        })
+
+        render(<RankingsScreen />)
+
+        fireEvent.press(await screen.findByLabelText("View All / Filter Rankings"))
+
+        expect(mockNavigate).toHaveBeenCalledWith("FullRankings")
+    })
+
+    it("navigates to SongDetail with the full ranking when an orbit song is tapped", async () => {
         mockListMyRankings.mockResolvedValue({
             rankings: [ranking],
             next_cursor: null,
@@ -114,7 +127,7 @@ describe("RankingsScreen", () => {
         await waitFor(() => {
             expect(screen.getAllByText("Nights").length).toBeGreaterThan(0)
         })
-        fireEvent.press(screen.getByTestId("ranking-row-7"))
+        fireEvent.press(screen.getByTestId("ranking-orbit-7"))
 
         expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
     })
@@ -149,6 +162,22 @@ describe("RankingsScreen", () => {
         fireEvent.press(screen.getByLabelText("Open Versus History"))
 
         expect(mockNavigate).toHaveBeenCalledWith("VersusHistory")
+    })
+
+    it("renders preview rows below the separator and navigates to SongDetail on tap", async () => {
+        mockListMyRankings.mockResolvedValue({
+            rankings: [ranking],
+            next_cursor: null,
+        })
+
+        render(<RankingsScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("ranking-preview-row-7")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("ranking-preview-row-7"))
+
+        expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
     })
 
     it("renders populated and missing Anchors", async () => {

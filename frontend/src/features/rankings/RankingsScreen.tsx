@@ -9,19 +9,23 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { ApiError } from "../../api/client"
 import DiamondScore from "../../components/DiamondScore"
 import ScoreArc from "../../components/ScoreArc"
-import { AppStackParamList, TabParamList } from "../../navigation/types"
+import { AppStackParamList, RankingsStackParamList, TabParamList } from "../../navigation/types"
 import { colors, fonts, bucketColor } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
 import { BucketName, RankingAnchorsResponse, RankingResponse } from "../comparison/types"
 import { getMyRankingAnchors, listMyRankings } from "./apiRequests"
 
 type RankingsNavigation = CompositeNavigationProp<
-    BottomTabNavigationProp<TabParamList, "Rankings">,
-    NativeStackNavigationProp<AppStackParamList>
+    NativeStackNavigationProp<RankingsStackParamList, "RankingsOverview">,
+    CompositeNavigationProp<
+        BottomTabNavigationProp<TabParamList, "Rankings">,
+        NativeStackNavigationProp<AppStackParamList>
+    >
 >
 
-// Top ORBIT_COUNT songs fill the orbital constellation; the rest go in the scrolling list.
+// Top ORBIT_COUNT songs fill the orbital constellation; PREVIEW_COUNT rows appear below the separator.
 const ORBIT_COUNT = 6
+const PREVIEW_COUNT = 5
 const DIAL_SIZE = 292
 const DIAL_RADIUS = DIAL_SIZE / 2 - 32          // 114 — orbit path radius
 const DIAL_START_DEG = -54                       // first satellite angle (upper-right)
@@ -43,42 +47,33 @@ const ANCHOR_DEFS: readonly {
     { key: "median_okay", label: "Median Okay", empty: "No Okay ratings yet." },
     { key: "lowest_dislike", label: "Lowest Dislike", empty: "No Dislike ratings yet." },
 ]
-
 export default function RankingsScreen() {
     const navigation = useNavigation<RankingsNavigation>()
     const { token } = useAuth()
     const [rankings, setRankings] = useState<RankingResponse[]>([])
     const [anchors, setAnchors] = useState<RankingAnchorsResponse>(EMPTY_ANCHORS)
-    const [nextCursor, setNextCursor] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(false)
-    const [isLoadingMore, setIsLoadingMore] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
-    const loadRankings = useCallback(async (
-        cursor: string | null,
-        shouldReplace: boolean,
-    ) => {
+    const loadRankings = useCallback(async () => {
         if (!token) {
             return
         }
 
-        if (shouldReplace) {
-            setIsLoading(true)
-        } else {
-            setIsLoadingMore(true)
-        }
+        setIsLoading(true)
         setError(null)
 
         try {
-            const response = await listMyRankings(token, cursor ?? undefined)
-            if (shouldReplace) {
-                const anchorResponse = await getMyRankingAnchors(token)
-                setRankings(response.rankings)
-                setAnchors(anchorResponse)
-            } else {
-                setRankings((currentRankings) => [...currentRankings, ...response.rankings])
-            }
-            setNextCursor(response.next_cursor)
+            const allRankings: RankingResponse[] = []
+            let cursor: string | null = null
+            do {
+                const response = await listMyRankings(token, cursor ?? undefined)
+                allRankings.push(...response.rankings)
+                cursor = response.next_cursor
+            } while (cursor !== null)
+            const anchorResponse = await getMyRankingAnchors(token)
+            setRankings(allRankings)
+            setAnchors(anchorResponse)
         } catch (err) {
             if (err instanceof ApiError) {
                 setError(err.detail)
@@ -89,17 +84,8 @@ export default function RankingsScreen() {
             }
         } finally {
             setIsLoading(false)
-            setIsLoadingMore(false)
         }
     }, [token])
-
-    const handleLoadMore = () => {
-        if (!nextCursor || isLoading || isLoadingMore) {
-            return
-        }
-
-        loadRankings(nextCursor, false)
-    }
 
     function handleRateFirstSong() {
         navigation.navigate("Discover", { focusSearch: true })
@@ -117,12 +103,8 @@ export default function RankingsScreen() {
         navigation.navigate("VersusHistory")
     }
 
-    const renderFooter = () => {
-        if (!isLoadingMore) {
-            return null
-        }
-
-        return <ActivityIndicator color={colors.clay} style={styles.footerSpinner} />
+    const handleFullRankingsPress = () => {
+        navigation.navigate("FullRankings")
     }
 
     const renderAnchor = (
@@ -179,7 +161,7 @@ export default function RankingsScreen() {
                 {/* Screen heading */}
                 <View style={styles.header}>
                     <View style={styles.headerLeft}>
-                        <Text style={styles.kicker}>{rankings.length} SONGS · YOUR LIST</Text>
+                        <Text style={styles.kicker}>{rankings.length} SONGS · YOUR RANKINGS</Text>
                         <Text style={styles.heading}>What you LISTn to</Text>
                     </View>
                     <TouchableOpacity
@@ -324,59 +306,24 @@ export default function RankingsScreen() {
                     <Text style={styles.versusHistoryArrow}>→</Text>
                 </TouchableOpacity>
 
-                <View style={styles.separator}>
-                    <Text style={styles.separatorRange}>1 — {rankings.length}</Text>
-                    <Text style={styles.separatorRight}>full list →</Text>
-                </View>
+                <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="View All / Filter Rankings"
+                    style={styles.separator}
+                    onPress={handleFullRankingsPress}
+                >
+                    <Text style={styles.separatorRange}>
+                        1 — {rankings.length}
+                    </Text>
+                    <Text style={styles.separatorRight}>View All / Filter →</Text>
+                </TouchableOpacity>
             </View>
-        )
-    }
-
-    const renderRanking = ({ item, index }: { item: RankingResponse; index: number }) => {
-        const accent = bucketColor(item.bucket)
-        const displayRank = index + 1
-
-        return (
-            <TouchableOpacity
-                accessibilityRole="button"
-                accessibilityLabel={`Open ${item.song.title} details`}
-                testID={`ranking-row-${item.id}`}
-                style={styles.rankingRow}
-                onPress={() => handleRankingPress(item)}
-                activeOpacity={0.8}
-            >
-                <Text style={styles.position}>{displayRank}</Text>
-                <View style={styles.coverFrame}>
-                    {item.song.cover_url ? (
-                        <Image source={{ uri: item.song.cover_url }} style={styles.coverImage} />
-                    ) : null}
-                </View>
-                <View style={styles.songInfo}>
-                    <Text style={styles.title} numberOfLines={1}>{item.song.title}</Text>
-                    <Text style={styles.artist} numberOfLines={1}>{item.song.artist}</Text>
-                </View>
-                <View style={styles.scoreArea}>
-                    <DiamondScore score={item.score} total={5} size={7} color={accent} />
-                    <ScoreArc
-                        score={item.score}
-                        max={10}
-                        size={44}
-                        strokeWidth={4}
-                        color={accent}
-                        trackColor={colors.sand}
-                    >
-                        <Text style={[styles.wheelScore, { color: accent }]}>
-                            {item.score.toFixed(1)}
-                        </Text>
-                    </ScoreArc>
-                </View>
-            </TouchableOpacity>
         )
     }
 
     useFocusEffect(
         useCallback(() => {
-            loadRankings(null, true)
+            loadRankings()
         }, [loadRankings]),
     )
 
@@ -392,7 +339,7 @@ export default function RankingsScreen() {
         return (
             <View style={styles.centerState}>
                 <Text style={styles.errorText}>{error}</Text>
-                <TouchableOpacity style={styles.button} onPress={() => loadRankings(null, true)}>
+                <TouchableOpacity style={styles.button} onPress={loadRankings}>
                     <Text style={styles.buttonText}>Try again</Text>
                 </TouchableOpacity>
             </View>
@@ -417,13 +364,45 @@ export default function RankingsScreen() {
         <View style={styles.container}>
             {error !== null && <Text style={styles.inlineError}>{error}</Text>}
             <FlashList
-                data={rankings}
-                renderItem={renderRanking}
-                keyExtractor={(item) => item.id.toString()}
-                onEndReached={handleLoadMore}
-                onEndReachedThreshold={0.6}
+                data={rankings.slice(0, PREVIEW_COUNT)}
+                keyExtractor={(item: RankingResponse) => item.id.toString()}
                 ListHeaderComponent={renderListHeader()}
-                ListFooterComponent={renderFooter}
+                renderItem={({ item }) => (
+                    <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel={`Open ${item.song.title} details`}
+                        testID={`ranking-preview-row-${item.id}`}
+                        style={styles.previewRow}
+                        onPress={() => handleRankingPress(item)}
+                        activeOpacity={0.8}
+                    >
+                        <Text style={styles.previewPosition}>#{item.position}</Text>
+                        <View style={styles.previewCoverFrame}>
+                            {item.song.cover_url ? (
+                                <Image source={{ uri: item.song.cover_url }} style={styles.previewCover} />
+                            ) : null}
+                        </View>
+                        <View style={styles.previewSongText}>
+                            <Text style={styles.previewTitle} numberOfLines={1}>{item.song.title}</Text>
+                            <Text style={styles.previewArtist} numberOfLines={1}>
+                                {item.song.artist} · {item.song.album}
+                            </Text>
+                        </View>
+                        <DiamondScore score={item.score} total={5} size={7} color={bucketColor(item.bucket)} />
+                        <ScoreArc
+                            score={item.score}
+                            max={10}
+                            size={42}
+                            strokeWidth={4}
+                            color={bucketColor(item.bucket)}
+                            trackColor={colors.sand}
+                        >
+                            <Text style={[styles.previewScore, { color: bucketColor(item.bucket) }]}>
+                                {item.score.toFixed(1)}
+                            </Text>
+                        </ScoreArc>
+                    </TouchableOpacity>
+                )}
                 maintainVisibleContentPosition={{ disabled: true }}
                 contentContainerStyle={styles.listContent}
             />
@@ -696,67 +675,54 @@ const styles = StyleSheet.create({
         fontSize: 20,
         marginLeft: 12,
     },
-    // List rows
     listContent: {
         paddingBottom: 24,
     },
-    rankingRow: {
+    previewRow: {
         flexDirection: "row",
         alignItems: "center",
-        paddingVertical: 10,
         paddingHorizontal: 18,
+        paddingVertical: 10,
         borderBottomWidth: 1,
         borderBottomColor: colors.line,
-        backgroundColor: colors.paper,
+        gap: 10,
     },
-    position: {
-        color: colors.inkDim,
-        fontSize: 11,
-        fontFamily: fonts.mono,
-        minWidth: 28,
-        letterSpacing: 0.4,
-    },
-    coverFrame: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        marginRight: 10,
-        backgroundColor: colors.sand,
-        overflow: "hidden",
-    },
-    coverImage: {
-        width: "100%",
-        height: "100%",
-    },
-    songInfo: {
-        flex: 1,
-        minWidth: 0,
-    },
-    title: {
-        color: colors.ink,
-        fontSize: 14,
-        fontWeight: "600",
-        marginBottom: 3,
-    },
-    artist: {
+    previewPosition: {
         fontFamily: fonts.mono,
         color: colors.inkSoft,
         fontSize: 11,
+        width: 28,
+        textAlign: "right",
     },
-    scoreArea: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 8,
-        marginLeft: 8,
-        flexShrink: 0,
+    previewCoverFrame: {
+        width: 40,
+        height: 40,
+        borderRadius: 4,
+        backgroundColor: colors.sand,
+        overflow: "hidden",
     },
-    wheelScore: {
-        fontFamily: fonts.serif,
+    previewCover: {
+        width: "100%",
+        height: "100%",
+    },
+    previewSongText: {
+        flex: 1,
+        minWidth: 0,
+    },
+    previewTitle: {
+        color: colors.ink,
         fontSize: 14,
-        lineHeight: 16,
+        fontWeight: "600",
     },
-    footerSpinner: {
-        marginVertical: 18,
+    previewArtist: {
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 10,
+        marginTop: 2,
+    },
+    previewScore: {
+        fontFamily: fonts.serif,
+        fontSize: 13,
     },
     // Empty/error states
     emptyText: {
