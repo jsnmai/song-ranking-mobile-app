@@ -9,6 +9,16 @@ const mockSetParams = jest.fn()
 const mockSearchSongs = jest.fn()
 const mockSearchProfiles = jest.fn()
 const mockGetMyRankingByDeezerId = jest.fn()
+const mockListCoSigns = jest.fn()
+const mockListFriendsNines = jest.fn()
+const mockSaveSong = jest.fn()
+const mockRemoveSavedSong = jest.fn()
+const mockCreatePlayer = jest.fn()
+
+jest.mock("expo-audio", () => ({
+    createAudioPlayer: (...args: unknown[]) => mockCreatePlayer(...args),
+    setAudioModeAsync: jest.fn(),
+}))
 
 jest.mock("@react-navigation/native", () => ({
     useNavigation: () => ({
@@ -36,6 +46,16 @@ jest.mock("../../profile/apiRequests", () => ({
 
 jest.mock("../../rankings/apiRequests", () => ({
     getMyRankingByDeezerId: (...args: unknown[]) => mockGetMyRankingByDeezerId(...args),
+}))
+
+jest.mock("../apiRequests", () => ({
+    listCoSigns: (...args: unknown[]) => mockListCoSigns(...args),
+    listFriendsNines: (...args: unknown[]) => mockListFriendsNines(...args),
+}))
+
+jest.mock("../../saved-songs/apiRequests", () => ({
+    saveSong: (...args: unknown[]) => mockSaveSong(...args),
+    removeSavedSong: (...args: unknown[]) => mockRemoveSavedSong(...args),
 }))
 
 const song = {
@@ -92,11 +112,33 @@ const profile = {
     is_blocked: false,
 }
 
+const coSignItem = {
+    song: ranking.song,
+    co_sign_count: 2,
+    average_visible_friend_score: 9.6,
+    latest_visible_rating_at: "2026-01-02T00:00:00Z",
+    contributors: [
+        { user_id: 3, username: "maya", display_name: "Maya", score: 9.7 },
+        { user_id: 4, username: "leo", display_name: "Leo", score: 9.5 },
+    ],
+    is_saved: false,
+}
+
 beforeEach(() => {
     jest.useFakeTimers()
     jest.resetAllMocks()
     mockSearchSongs.mockResolvedValue({ results: [song] })
     mockSearchProfiles.mockResolvedValue({ results: [profile] })
+    mockListCoSigns.mockResolvedValue({ items: [] })
+    mockListFriendsNines.mockResolvedValue({ items: [] })
+    mockSaveSong.mockResolvedValue({ id: 9 })
+    mockRemoveSavedSong.mockResolvedValue({ song_id: 42, removed: true })
+    mockCreatePlayer.mockReturnValue({
+        play: jest.fn(),
+        pause: jest.fn(),
+        remove: jest.fn(),
+        addListener: jest.fn().mockReturnValue({ remove: jest.fn() }),
+    })
 })
 
 afterEach(() => {
@@ -104,6 +146,39 @@ afterEach(() => {
 })
 
 describe("DiscoverScreen", () => {
+    it("shows Co-Sign and Friends' 9s empty states", async () => {
+        render(<DiscoverScreen />)
+
+        expect(await screen.findByText("Co-Signed by friends")).toBeTruthy()
+        expect(screen.getByText("No Co-Signs yet.")).toBeTruthy()
+        expect(screen.getByText("Friends’ 9s")).toBeTruthy()
+        expect(screen.getByText("No friends’ high scores yet.")).toBeTruthy()
+    })
+
+    it("renders social discovery cards and opens song detail", async () => {
+        mockListCoSigns.mockResolvedValue({ items: [coSignItem] })
+        render(<DiscoverScreen />)
+
+        fireEvent.press(await screen.findByLabelText("Open Nights"))
+
+        expect(screen.getByText("2 friends rated this 9+")).toBeTruthy()
+        expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { song: ranking.song })
+    })
+
+    it("opens rating flow and saves from a discovery card", async () => {
+        mockListCoSigns.mockResolvedValue({ items: [coSignItem] })
+        render(<DiscoverScreen />)
+
+        fireEvent.press(await screen.findByText("Rate now"))
+        expect(mockNavigate).toHaveBeenCalledWith("BucketSelection", { song: ranking.song })
+
+        fireEvent.press(screen.getByText("Save"))
+        await waitFor(() => {
+            expect(mockSaveSong).toHaveBeenCalledWith(ranking.song, "discovery", "test-token")
+        })
+        expect(screen.getByText("Saved")).toBeTruthy()
+    })
+
     it("opens unrated search results in Song Detail", async () => {
         mockGetMyRankingByDeezerId.mockRejectedValue(new ApiError(404, "Rating not found.", null))
         render(<DiscoverScreen />)

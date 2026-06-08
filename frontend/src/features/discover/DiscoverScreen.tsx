@@ -17,6 +17,9 @@ import { Profile } from "../profile/types"
 import { getMyRankingByDeezerId } from "../rankings/apiRequests"
 import { searchSongs } from "../search/apiRequests"
 import { SongSearchResult } from "../search/types"
+import { listCoSigns, listFriendsNines } from "./apiRequests"
+import SocialDiscoveryCard from "./SocialDiscoveryCard"
+import { CoSignItem, FriendsNineItem } from "./types"
 
 // RouteProp<ParamList, ScreenName> gives the type of route.params for a specific screen.
 type DiscoverRouteProp = RouteProp<TabParamList, "Discover">
@@ -38,6 +41,10 @@ export default function DiscoverScreen() {
     const [isLoading, setIsLoading] = useState(false)
     const [openingDeezerId, setOpeningDeezerId] = useState<number | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const [coSigns, setCoSigns] = useState<CoSignItem[]>([])
+    const [friendsNines, setFriendsNines] = useState<FriendsNineItem[]>([])
+    const [isDiscoveryLoading, setIsDiscoveryLoading] = useState(false)
+    const [discoveryError, setDiscoveryError] = useState<string | null>(null)
 
     const handleSongPress = async (song: SongSearchResult) => {
         if (!token || openingDeezerId !== null) {
@@ -74,6 +81,14 @@ export default function DiscoverScreen() {
             return
         }
         navigation.navigate("OtherProfile", { username: profile.username })
+    }
+
+    const handleDiscoverySongPress = (item: CoSignItem | FriendsNineItem) => {
+        navigation.navigate("SongDetail", { song: item.song })
+    }
+
+    const handleRatePress = (item: CoSignItem | FriendsNineItem) => {
+        navigation.navigate("BucketSelection", { song: item.song })
     }
 
     const setMode = (mode: "songs" | "users") => {
@@ -163,6 +178,38 @@ export default function DiscoverScreen() {
         }
     }, [query, searchMode, token])
 
+    useEffect(() => {
+        if (!token) {
+            return
+        }
+        let isCurrentRequest = true
+        setIsDiscoveryLoading(true)
+        setDiscoveryError(null)
+        Promise.all([
+            listCoSigns(token),
+            listFriendsNines(token),
+        ])
+            .then(([coSignResponse, friendsNinesResponse]) => {
+                if (isCurrentRequest) {
+                    setCoSigns(coSignResponse.items)
+                    setFriendsNines(friendsNinesResponse.items)
+                }
+            })
+            .catch((err) => {
+                if (isCurrentRequest) {
+                    setDiscoveryError(err instanceof ApiError ? err.detail : "Social discovery is temporarily unavailable.")
+                }
+            })
+            .finally(() => {
+                if (isCurrentRequest) {
+                    setIsDiscoveryLoading(false)
+                }
+            })
+        return () => {
+            isCurrentRequest = false
+        }
+    }, [token])
+
     return (
         <View style={styles.container}>
             <View style={styles.header}>
@@ -204,10 +251,44 @@ export default function DiscoverScreen() {
             >
                 {isLoading && <ActivityIndicator color={colors.clay} style={styles.status} />}
                 {!isLoading && error !== null && <Text style={styles.errorText}>{error}</Text>}
-                {!isLoading && error === null && query.trim().length === 0 && (
-                    <Text style={styles.emptyText}>
-                        {searchMode === "songs" ? "Search for a song to start ranking." : "Search for users to follow."}
-                    </Text>
+                {!isLoading && error === null && query.trim().length === 0 && searchMode === "users" && (
+                    <Text style={styles.emptyText}>Search for users to follow.</Text>
+                )}
+                {!isLoading && error === null && query.trim().length === 0 && searchMode === "songs" && (
+                    <>
+                        {isDiscoveryLoading && <ActivityIndicator color={colors.clay} style={styles.status} />}
+                        {!isDiscoveryLoading && discoveryError && <Text style={styles.errorText}>{discoveryError}</Text>}
+                        {!isDiscoveryLoading && !discoveryError && (
+                            <>
+                                <Text style={styles.sectionTitle}>Co-Signed by friends</Text>
+                                {coSigns.length === 0
+                                    ? <Text style={styles.sectionEmpty}>No Co-Signs yet.</Text>
+                                    : coSigns.map((item) => (
+                                        <SocialDiscoveryCard
+                                            key={`co-sign-${item.song.id}`}
+                                            item={item}
+                                            kind="co-sign"
+                                            token={token ?? ""}
+                                            onOpen={() => handleDiscoverySongPress(item)}
+                                            onRate={() => handleRatePress(item)}
+                                        />
+                                    ))}
+                                <Text style={styles.sectionTitle}>Friends’ 9s</Text>
+                                {friendsNines.length === 0
+                                    ? <Text style={styles.sectionEmpty}>No friends’ high scores yet.</Text>
+                                    : friendsNines.map((item) => (
+                                        <SocialDiscoveryCard
+                                            key={`friends-nine-${item.song.id}`}
+                                            item={item}
+                                            kind="friends-nine"
+                                            token={token ?? ""}
+                                            onOpen={() => handleDiscoverySongPress(item)}
+                                            onRate={() => handleRatePress(item)}
+                                        />
+                                    ))}
+                            </>
+                        )}
+                    </>
                 )}
                 {!isLoading && error === null && query.trim().length >= 2 && searchMode === "songs" && songResults.length === 0 && (
                     <Text style={styles.emptyText}>No songs found.</Text>
@@ -410,5 +491,17 @@ const styles = StyleSheet.create({
     },
     rowSpinner: {
         marginLeft: 4,
+    },
+    sectionTitle: {
+        fontFamily: fonts.serif,
+        color: colors.ink,
+        fontSize: 20,
+        marginTop: 10,
+        marginBottom: 10,
+    },
+    sectionEmpty: {
+        color: colors.inkDim,
+        fontSize: 13,
+        marginBottom: 18,
     },
 })
