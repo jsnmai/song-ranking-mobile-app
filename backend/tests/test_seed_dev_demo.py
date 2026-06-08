@@ -9,6 +9,10 @@ from scripts.demo_seed_data import (
     DEMO_ACCOUNTS,
     DEMO_EMAIL_DOMAIN,
     DEMO_PASSWORD,
+    DISCO_ALREADY_RATED_DEEZER_ID,
+    DISCO_BLOCKED_DEEZER_ID,
+    DISCO_CO_SIGN_DEEZER_ID,
+    DISCO_FRIENDS_NINE_DEEZER_ID,
     demo_email,
 )
 from scripts.seed_dev_demo import (
@@ -28,6 +32,7 @@ from src.sqlalchemy_tables.follow import Follow
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
+from src.sqlalchemy_tables.saved_song import SavedSong
 from src.sqlalchemy_tables.user import User
 from src.sqlalchemy_tables.user_similarity_snapshot import UserSimilaritySnapshot
 from tests.conftest import TEST_DATABASE_URL
@@ -265,6 +270,9 @@ def _demo_counts(
     profile_count = db_session.execute(
         select(func.count()).select_from(Profile).where(Profile.user_id.in_(demo_user_ids)),
     ).scalar_one()
+    saved_song_count = db_session.execute(
+        select(func.count()).select_from(SavedSong).where(SavedSong.user_id.in_(demo_user_ids)),
+    ).scalar_one()
     return {
         "profiles": profile_count,
         "rankings": ranking_count,
@@ -273,4 +281,170 @@ def _demo_counts(
         "follows": follow_count,
         "blocks": block_count,
         "snapshots": snapshot_count,
+        "saved_songs": saved_song_count,
     }
+
+
+def _run_seed(
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> dict[str, int]:
+    """Seed demo data in the test DB and return username → user_id."""
+    monkeypatch.setenv("ALLOW_DEV_SEED", "1")
+    monkeypatch.setattr("scripts.seed_dev_demo.settings.database_url", TEST_DATABASE_URL)
+    result = seed_demo_data(db_session)
+    db_session.commit()
+    return result.user_ids_by_username
+
+
+def _login(client, email: str) -> str:
+    """Log in a demo account and return its access token."""
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": DEMO_PASSWORD},
+    )
+    assert response.status_code == 200
+    return response.json()["access_token"]
+
+
+def test_discovery_seed_co_sign_present(
+    client,
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """demo_power sees at least one Co-Sign card after seeding."""
+    _run_seed(db_session, monkeypatch)
+    token = _login(client, demo_email("demo_power"))
+
+    body = client.get(
+        "/api/v1/discover/co-signs",
+        headers={"Authorization": f"Bearer {token}"},
+    ).json()
+
+    titles = [item["song"]["deezer_id"] for item in body["items"]]
+    assert DISCO_CO_SIGN_DEEZER_ID in titles
+    co_sign_item = next(item for item in body["items"] if item["song"]["deezer_id"] == DISCO_CO_SIGN_DEEZER_ID)
+    assert co_sign_item["co_sign_count"] == 2
+    contributor_usernames = {c["username"] for c in co_sign_item["contributors"]}
+    assert contributor_usernames == {"demo_disc_a", "demo_disc_b"}
+
+
+def test_discovery_seed_friends_nine_solo_present(
+    client,
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """demo_power sees a Friends' 9s card that does not qualify as a Co-Sign."""
+    _run_seed(db_session, monkeypatch)
+    token = _login(client, demo_email("demo_power"))
+
+    friends_items = client.get(
+        "/api/v1/discover/friends-9s",
+        headers={"Authorization": f"Bearer {token}"},
+    ).json()["items"]
+    co_sign_items = client.get(
+        "/api/v1/discover/co-signs",
+        headers={"Authorization": f"Bearer {token}"},
+    ).json()["items"]
+
+    friends_nine_ids = {item["song"]["deezer_id"] for item in friends_items}
+    co_sign_ids = {item["song"]["deezer_id"] for item in co_sign_items}
+    solo_ids = friends_nine_ids - co_sign_ids
+    assert DISCO_FRIENDS_NINE_DEEZER_ID in solo_ids
+
+
+def test_discovery_seed_blocked_user_song_excluded(
+    client,
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """demo_blocked's high-scored song does not appear in demo_power's discovery."""
+    _run_seed(db_session, monkeypatch)
+    token = _login(client, demo_email("demo_power"))
+
+    friends_ids = {
+        item["song"]["deezer_id"]
+        for item in client.get(
+            "/api/v1/discover/friends-9s",
+            headers={"Authorization": f"Bearer {token}"},
+        ).json()["items"]
+    }
+    co_sign_ids = {
+        item["song"]["deezer_id"]
+        for item in client.get(
+            "/api/v1/discover/co-signs",
+            headers={"Authorization": f"Bearer {token}"},
+        ).json()["items"]
+    }
+
+    assert DISCO_BLOCKED_DEEZER_ID not in friends_ids
+    assert DISCO_BLOCKED_DEEZER_ID not in co_sign_ids
+
+
+def test_discovery_seed_already_rated_excluded(
+    client,
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Songs demo_power has already rated never appear in discovery even when friends score them 9+."""
+    _run_seed(db_session, monkeypatch)
+    token = _login(client, demo_email("demo_power"))
+
+    friends_ids = {
+        item["song"]["deezer_id"]
+        for item in client.get(
+            "/api/v1/discover/friends-9s",
+            headers={"Authorization": f"Bearer {token}"},
+        ).json()["items"]
+    }
+
+    assert DISCO_ALREADY_RATED_DEEZER_ID not in friends_ids
+
+
+def test_discovery_seed_saved_state_present(
+    client,
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """demo_power's pre-seeded saved discovery song reports is_saved=True on Friends' 9s."""
+    _run_seed(db_session, monkeypatch)
+    token = _login(client, demo_email("demo_power"))
+
+    items = client.get(
+        "/api/v1/discover/friends-9s",
+        headers={"Authorization": f"Bearer {token}"},
+    ).json()["items"]
+
+    saved_item = next(
+        (item for item in items if item["song"]["deezer_id"] == DISCO_FRIENDS_NINE_DEEZER_ID),
+        None,
+    )
+    assert saved_item is not None
+    assert saved_item["is_saved"] is True
+
+
+def test_discovery_seed_is_idempotent(
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two seed passes produce identical discovery row counts."""
+    monkeypatch.setenv("ALLOW_DEV_SEED", "1")
+    monkeypatch.setattr("scripts.seed_dev_demo.settings.database_url", TEST_DATABASE_URL)
+
+    seed_demo_data(db_session)
+    db_session.commit()
+
+    demo_emails = [account.email for account in DEMO_ACCOUNTS]
+    demo_user_ids = list(
+        db_session.execute(
+            select(User.id).where(User.email.in_(demo_emails)),
+        ).scalars(),
+    )
+    counts_first = _demo_counts(db_session, demo_user_ids)
+
+    seed_demo_data(db_session)
+    db_session.commit()
+
+    counts_second = _demo_counts(db_session, demo_user_ids)
+    assert counts_first == counts_second
+    assert counts_first["saved_songs"] == 1

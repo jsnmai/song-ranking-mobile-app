@@ -6,8 +6,18 @@ DEMO_PASSWORD = "demo1234"
 DEMO_EMAIL_DOMAIN = "@listn.demo"
 LEGACY_DEMO_EMAIL_DOMAINS = ("@listn.dev", "@listn.test", "@demo.listn.dev", "@li.test")
 DEMO_DEEZER_ID_START = 9_000_001
-DEMO_DEEZER_ID_END = 9_000_030
+DEMO_DEEZER_ID_END = 9_000_033
 ALGORITHM_VERSION = "v1_cosine"
+
+# Discovery demo song IDs for manual Discover screen testing.
+# Co-Sign: demo_disc_a (10.0) + demo_disc_b (10.0) both rate this; power has not rated it.
+DISCO_CO_SIGN_DEEZER_ID = 9_000_031
+# Friends' 9s (solo): demo_disc_b rates this at 9.375; power has not rated it; only 1 contributor.
+DISCO_FRIENDS_NINE_DEEZER_ID = 9_000_032
+# Privacy test: demo_blocked rates this at 10.0 but is blocked by power → must not appear.
+DISCO_BLOCKED_DEEZER_ID = 9_000_033
+# Already-rated test: demo_disc_a rates this at 9.375 but power has already rated it → must not appear.
+DISCO_ALREADY_RATED_DEEZER_ID = 9_000_001
 
 # Shared songs used for compatibility pairs (power / friend / opposite / newbie overlap).
 SHARED_COMPAT_DEEZER_IDS = list(range(DEMO_DEEZER_ID_START, DEMO_DEEZER_ID_START + 8))
@@ -94,6 +104,9 @@ DEMO_ACCOUNTS: tuple[DemoAccountSpec, ...] = (
     DemoAccountSpec(demo_email("demo_feed"), "demo_feed", "Demo Feed", "public"),
     DemoAccountSpec(demo_email("demo_orbit_a"), "demo_orbit_a", "Demo Orbit A", "public"),
     DemoAccountSpec(demo_email("demo_orbit_b"), "demo_orbit_b", "Demo Orbit B", "public"),
+    # Discovery demo contributors — followed by demo_power for Discover testing.
+    DemoAccountSpec(demo_email("demo_disc_a"), "demo_disc_a", "Demo Disc A", "public"),
+    DemoAccountSpec(demo_email("demo_disc_b"), "demo_disc_b", "Demo Disc B", "public"),
 )
 
 DEMO_USERNAMES = frozenset(account.username for account in DEMO_ACCOUNTS)
@@ -167,8 +180,10 @@ RANKINGS_BY_USERNAME: dict[str, tuple[RankingSeedSpec, ...]] = {
         RankingSeedSpec(9_000_009, "dislike", 1),
     ),
     "demo_blocked": (
-        RankingSeedSpec(9_000_020, "like", 1),
-        RankingSeedSpec(9_000_021, "like", 2),
+        # 9_000_033 at pos 1/3 → score 10.0, but demo_blocked is blocked by power → excluded from discovery.
+        RankingSeedSpec(9_000_033, "like", 1),
+        RankingSeedSpec(9_000_020, "like", 2),
+        RankingSeedSpec(9_000_021, "like", 3),
         RankingSeedSpec(9_000_022, "alright", 1),
     ),
     "demo_feed": (
@@ -191,6 +206,24 @@ RANKINGS_BY_USERNAME: dict[str, tuple[RankingSeedSpec, ...]] = {
         RankingSeedSpec(9_000_018, "alright", 1),
         RankingSeedSpec(9_000_019, "dislike", 1),
     ),
+    # Discovery contributors for Friends' 9s / Co-Sign demo.
+    # 5 like songs → scores: pos1=10.0, pos2=9.375, pos3=8.75, pos4=8.125, pos5=7.5.
+    # 9_000_031 (pos 1, 10.0) + 9_000_001 (pos 2, 9.375 but power already rated it → excluded).
+    "demo_disc_a": (
+        RankingSeedSpec(9_000_031, "like", 1),
+        RankingSeedSpec(9_000_001, "like", 2),
+        RankingSeedSpec(9_000_003, "like", 3),
+        RankingSeedSpec(9_000_005, "like", 4),
+        RankingSeedSpec(9_000_007, "like", 5),
+    ),
+    # 9_000_031 (pos 1, 10.0) Co-Signs with disc_a; 9_000_032 (pos 2, 9.375) is Friends' 9s only.
+    "demo_disc_b": (
+        RankingSeedSpec(9_000_031, "like", 1),
+        RankingSeedSpec(9_000_032, "like", 2),
+        RankingSeedSpec(9_000_002, "like", 3),
+        RankingSeedSpec(9_000_004, "like", 4),
+        RankingSeedSpec(9_000_006, "like", 5),
+    ),
 }
 
 # follower_username -> following_username
@@ -204,6 +237,8 @@ FOLLOW_EDGES: tuple[tuple[str, str], ...] = (
     ("demo_power", "demo_private"),
     ("demo_power", "demo_friends_only"),
     ("demo_power", "demo_blocked"),
+    ("demo_power", "demo_disc_a"),
+    ("demo_power", "demo_disc_b"),
     ("demo_feed", "demo_power"),
     ("demo_feed", "demo_friend"),
     ("demo_feed", "demo_opposite"),
