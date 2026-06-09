@@ -302,7 +302,12 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
         : "?"
 
     return (
-        <View style={styles.container}>
+        <ScrollView
+            style={styles.container}
+            contentContainerStyle={styles.contentContainer}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+        >
             <View style={styles.header}>
                 <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
                     <Text style={styles.backText}>Back</Text>
@@ -462,11 +467,111 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
                 )}
 
                 {profileError !== null && profile !== null && <Text style={styles.error}>{profileError}</Text>}
+
+                {profile && !profile.can_view_taste && (
+                    <View style={styles.privateCard}>
+                        <Text style={styles.privateTitle}>
+                            {profile.visibility === "friends_only"
+                                ? "This user shares taste with friends only."
+                                : "This profile is private."
+                            }
+                        </Text>
+                        <Text style={styles.privateText}>
+                            {profile.visibility === "friends_only"
+                                ? "Follow each other to compare taste."
+                                : "No visible ratings yet."
+                            }
+                        </Text>
+                    </View>
+                )}
+
+                {profile && profile.can_view_taste && !compatLoading && compatibility && (
+                    <View style={styles.compatCard} testID="compatibility-card">
+                        {compatibility.has_overlap ? (
+                            <>
+                                <Text style={styles.compatKicker}>TASTE MATCH</Text>
+                                <View style={styles.compatScoreRow}>
+                                    <Text
+                                        style={[
+                                            styles.compatPercent,
+                                            { color: compatibilityAccent(compatibility.similarity_score!) },
+                                        ]}
+                                    >
+                                        {Math.round(compatibility.similarity_score! * 100)}%
+                                    </Text>
+                                    <DiamondScore
+                                        score={compatibility.similarity_score! * 10}
+                                        total={10}
+                                        size={8}
+                                        color={compatibilityAccent(compatibility.similarity_score!)}
+                                        testID="compatibility-diamonds"
+                                    />
+                                </View>
+                                <Text style={styles.compatText}>
+                                    {Math.round(compatibility.similarity_score! * 100)}% taste match · {compatibility.explanation}
+                                </Text>
+                                {compatibility.shared_song_count > 0 && (
+                                    <Text style={styles.compatMeta}>
+                                        {compatibility.shared_song_count} shared songs
+                                    </Text>
+                                )}
+                            </>
+                        ) : (
+                            <Text style={styles.compatTextMuted}>
+                                {compatibility.explanation}
+                            </Text>
+                        )}
+                    </View>
+                )}
             </View>
 
             {profile && (
-                <>
-                    {!profile.can_view_taste && (
+                <View style={styles.tabBar}>
+                    <TouchableOpacity
+                        style={[styles.tabBtn, activeTab === "profile" && styles.tabBtnActive]}
+                        onPress={() => setActiveTab("profile")}
+                    >
+                        <Text style={[styles.tabText, activeTab === "profile" && styles.tabTextActive]}>
+                            Profile
+                        </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.tabBtn, activeTab === "taste" && styles.tabBtnActive]}
+                        onPress={() => setActiveTab("taste")}
+                    >
+                        <Text style={[styles.tabText, activeTab === "taste" && styles.tabTextActive]}>
+                            Taste
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+
+            <View style={styles.tabContent}>
+                {profile && activeTab === "profile" && profile.can_view_taste && (
+                    <View style={styles.profilePanel}>
+                        <RecentVerdictsModule
+                            verdicts={verdicts}
+                            isLoading={verdicts === null}
+                            onItemPress={(item) => {
+                                navigation.navigate("SongDetail", { song: item.song as never })
+                            }}
+                        />
+                        <RankingsPreviewModule
+                            rankings={rankingsPreview}
+                            isLoading={rankingsPreview === null}
+                            onItemPress={(ranking) => navigation.navigate("SongDetail", { ranking })}
+                            onViewAll={() => navigation.navigate("UserRankings", { username })}
+                        />
+                    </View>
+                )}
+                {profile && activeTab === "taste" && (
+                    profile.can_view_taste ? (
+                        <TasteTabContent
+                            taste={taste}
+                            isLoading={tasteLoading}
+                            error={tasteError}
+                        />
+                    ) : (
                         <View style={styles.privateCard}>
                             <Text style={styles.privateTitle}>
                                 {profile.visibility === "friends_only"
@@ -481,114 +586,10 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
                                 }
                             </Text>
                         </View>
-                    )}
-
-                    {profile.can_view_taste && !compatLoading && compatibility && (
-                        <View style={styles.compatCard} testID="compatibility-card">
-                            {compatibility.has_overlap ? (
-                                <>
-                                    <Text style={styles.compatKicker}>TASTE MATCH</Text>
-                                    <View style={styles.compatScoreRow}>
-                                        <Text
-                                            style={[
-                                                styles.compatPercent,
-                                                { color: compatibilityAccent(compatibility.similarity_score!) },
-                                            ]}
-                                        >
-                                            {Math.round(compatibility.similarity_score! * 100)}%
-                                        </Text>
-                                        <DiamondScore
-                                            score={compatibility.similarity_score! * 10}
-                                            total={10}
-                                            size={8}
-                                            color={compatibilityAccent(compatibility.similarity_score!)}
-                                            testID="compatibility-diamonds"
-                                        />
-                                    </View>
-                                    <Text style={styles.compatText}>
-                                        {Math.round(compatibility.similarity_score! * 100)}% taste match · {compatibility.explanation}
-                                    </Text>
-                                    {compatibility.shared_song_count > 0 && (
-                                        <Text style={styles.compatMeta}>
-                                            {compatibility.shared_song_count} shared songs
-                                        </Text>
-                                    )}
-                                </>
-                            ) : (
-                                <Text style={styles.compatTextMuted}>
-                                    {compatibility.explanation}
-                                </Text>
-                            )}
-                        </View>
-                    )}
-
-                    <View style={styles.tabBar}>
-                        <TouchableOpacity
-                            style={[styles.tabBtn, activeTab === "profile" && styles.tabBtnActive]}
-                            onPress={() => setActiveTab("profile")}
-                        >
-                            <Text style={[styles.tabText, activeTab === "profile" && styles.tabTextActive]}>
-                                Profile
-                            </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.tabBtn, activeTab === "taste" && styles.tabBtnActive]}
-                            onPress={() => setActiveTab("taste")}
-                        >
-                            <Text style={[styles.tabText, activeTab === "taste" && styles.tabTextActive]}>
-                                Taste
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {activeTab === "profile" && profile.can_view_taste && (
-                        <ScrollView
-                            style={styles.profilePanel}
-                            contentContainerStyle={styles.profilePanelContent}
-                        >
-                            <RecentVerdictsModule
-                                verdicts={verdicts}
-                                isLoading={verdicts === null}
-                                onItemPress={(item) => {
-                                    navigation.navigate("SongDetail", { song: item.song as never })
-                                }}
-                            />
-                            <RankingsPreviewModule
-                                rankings={rankingsPreview}
-                                isLoading={rankingsPreview === null}
-                                onItemPress={(ranking) => navigation.navigate("SongDetail", { ranking })}
-                                onViewAll={() => navigation.navigate("UserRankings", { username })}
-                            />
-                        </ScrollView>
-                    )}
-
-                    {activeTab === "taste" && (
-                        profile.can_view_taste ? (
-                            <TasteTabContent
-                                taste={taste}
-                                isLoading={tasteLoading}
-                                error={tasteError}
-                            />
-                        ) : (
-                            <View style={styles.privateCard}>
-                                <Text style={styles.privateTitle}>
-                                    {profile.visibility === "friends_only"
-                                        ? "This user shares taste with friends only."
-                                        : "This profile is private."
-                                    }
-                                </Text>
-                                <Text style={styles.privateText}>
-                                    {profile.visibility === "friends_only"
-                                        ? "Follow each other to compare taste."
-                                        : "No visible ratings yet."
-                                    }
-                                </Text>
-                            </View>
-                        )
-                    )}
-                </>
-            )}
-        </View>
+                    )
+                )}
+            </View>
+        </ScrollView>
     )
 }
 
@@ -596,6 +597,12 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: colors.bg,
+    },
+    contentContainer: {
+        flexGrow: 1,
+    },
+    tabContent: {
+        paddingBottom: 32,
     },
     header: {
         alignItems: "center",
@@ -975,14 +982,11 @@ const styles = StyleSheet.create({
         marginTop: 8,
     },
     profilePanel: {
-        flex: 1,
-    },
-    profilePanelContent: {
         paddingHorizontal: 18,
-        paddingVertical: 18,
-        paddingBottom: 32,
+        paddingTop: 18,
     },
     tabBar: {
+        width: "100%",
         flexDirection: "row",
         borderTopWidth: 1,
         borderTopColor: colors.line,

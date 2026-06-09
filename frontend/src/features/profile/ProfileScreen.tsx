@@ -136,7 +136,12 @@ export default function ProfileScreen() {
         : "?"
 
     return (
-        <View style={styles.container}>
+        <ScrollView
+            style={styles.container}
+            contentContainerStyle={styles.contentContainer}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+        >
             <View style={styles.header}>
                 <View style={styles.headerRow}>
                     <Text style={styles.kicker}>YOUR PROFILE</Text>
@@ -171,6 +176,27 @@ export default function ProfileScreen() {
                                 <Text style={styles.countLabel}>FOLLOWING</Text>
                             </TouchableOpacity>
                         </View>
+                        {profile.user_stats && (
+                            <View style={styles.statsCard}>
+                                <TouchableOpacity
+                                    style={styles.statButton}
+                                    onPress={() => navigation.navigate("MainTabs", { screen: "Rankings", params: { screen: "FullRankings" } })}
+                                    testID="stats-rated"
+                                >
+                                    <Text style={styles.statValue}>{profile.user_stats.rated_count}</Text>
+                                    <Text style={styles.statLabel}>RATED</Text>
+                                </TouchableOpacity>
+                                <View style={styles.statDivider} />
+                                <TouchableOpacity
+                                    style={styles.statButton}
+                                    onPress={openBookmarks}
+                                    testID="stats-bookmarked"
+                                >
+                                    <Text style={styles.statValue}>{profile.user_stats.bookmarked_count}</Text>
+                                    <Text style={styles.statLabel}>BOOKMARKS</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
                     </View>
                 ) : profileError ? (
                     <Text style={styles.error}>{profileError}</Text>
@@ -198,60 +224,41 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
             </View>
 
-            {activeTab === "taste" && (
-                <TasteTabContent
-                    taste={taste}
-                    isLoading={tasteLoading}
-                    error={tasteError}
-                    footer={
+            <View style={styles.tabContent}>
+                {activeTab === "profile" && (
+                    <View style={styles.profilePanel}>
+                        <RecentVerdictsModule
+                            verdicts={verdicts}
+                            isLoading={verdicts === null}
+                            onItemPress={(item) => {
+                                navigation.navigate("SongDetail", { song: item.song as never })
+                            }}
+                        />
+                        <RankingsPreviewModule
+                            rankings={rankingsPreview}
+                            isLoading={rankingsPreview === null}
+                            onItemPress={(ranking) => navigation.navigate("SongDetail", { ranking })}
+                            onViewAll={() => navigation.navigate("MainTabs", { screen: "Rankings", params: { screen: "FullRankings" } })}
+                        />
+                    </View>
+                )}
+                {activeTab === "taste" && (
+                    <>
+                        <TasteTabContent
+                            taste={taste}
+                            isLoading={tasteLoading}
+                            error={tasteError}
+                        />
                         <MostCompatibleModule
                             users={mostCompatible}
                             isLoading={mostCompatible === null}
                             onUserPress={(username) => navigation.navigate("OtherProfile", { username })}
                             onViewAll={() => navigation.navigate("MostCompatible")}
                         />
-                    }
-                />
-            )}
-            {activeTab === "profile" && (
-                <ScrollView style={styles.profilePanel} contentContainerStyle={styles.profilePanelContent}>
-                    {profile?.user_stats && (
-                        <View style={styles.statsCard}>
-                            <TouchableOpacity
-                                style={styles.statButton}
-                                onPress={() => navigation.navigate("MainTabs", { screen: "Rankings", params: { screen: "FullRankings" } })}
-                                testID="stats-rated"
-                            >
-                                <Text style={styles.statValue}>{profile.user_stats.rated_count}</Text>
-                                <Text style={styles.statLabel}>RATED</Text>
-                            </TouchableOpacity>
-                            <View style={styles.statDivider} />
-                            <TouchableOpacity
-                                style={styles.statButton}
-                                onPress={openBookmarks}
-                                testID="stats-bookmarked"
-                            >
-                                <Text style={styles.statValue}>{profile.user_stats.bookmarked_count}</Text>
-                                <Text style={styles.statLabel}>BOOKMARKS</Text>
-                            </TouchableOpacity>
-                        </View>
-                    )}
-                    <RecentVerdictsModule
-                        verdicts={verdicts}
-                        isLoading={verdicts === null}
-                        onItemPress={(item) => {
-                            navigation.navigate("SongDetail", { song: item.song as never })
-                        }}
-                    />
-                    <RankingsPreviewModule
-                        rankings={rankingsPreview}
-                        isLoading={rankingsPreview === null}
-                        onItemPress={(ranking) => navigation.navigate("SongDetail", { ranking })}
-                        onViewAll={() => navigation.navigate("MainTabs", { screen: "Rankings", params: { screen: "FullRankings" } })}
-                    />
-                </ScrollView>
-            )}
-        </View>
+                    </>
+                )}
+            </View>
+        </ScrollView>
     )
 }
 
@@ -259,6 +266,12 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: colors.bg,
+    },
+    contentContainer: {
+        flexGrow: 1,
+    },
+    tabContent: {
+        paddingBottom: 32,
     },
     header: {
         alignItems: "center",
@@ -377,6 +390,7 @@ const styles = StyleSheet.create({
         textAlign: "center",
     },
     tabBar: {
+        width: "100%",
         flexDirection: "row",
         borderTopWidth: 1,
         borderTopColor: colors.line,
@@ -385,12 +399,8 @@ const styles = StyleSheet.create({
         backgroundColor: colors.bg,
     },
     profilePanel: {
-        flex: 1,
-    },
-    profilePanelContent: {
         paddingHorizontal: 18,
-        paddingVertical: 18,
-        paddingBottom: 32,
+        paddingTop: 18,
     },
     statsCard: {
         flexDirection: "row",
@@ -401,7 +411,8 @@ const styles = StyleSheet.create({
         borderColor: colors.line,
         paddingVertical: 14,
         paddingHorizontal: 8,
-        marginBottom: 16,
+        marginTop: 12,
+        width: "100%",
         shadowColor: "#000",
         shadowOpacity: 0.06,
         shadowRadius: 8,

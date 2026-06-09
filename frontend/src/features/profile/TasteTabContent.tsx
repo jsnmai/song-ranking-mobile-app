@@ -1,6 +1,6 @@
 // Shared taste profile component used by ProfileScreen and OtherProfileScreen.
-import { type ReactNode, useState } from "react"
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { useState } from "react"
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
 import DiamondScore from "../../components/DiamondScore"
 import { colors, fonts, bucketColor } from "../../theme"
@@ -14,15 +14,14 @@ type Props = {
     taste: TasteProfileResponse | null;
     isLoading: boolean;
     error: string | null;
-    footer?: ReactNode;
 }
 
-export default function TasteTabContent({ taste, isLoading, error, footer }: Props) {
+export default function TasteTabContent({ taste, isLoading, error }: Props) {
     const [activeTab, setActiveTab] = useState<TabKey>("overall")
 
     if (isLoading) {
         return (
-            <View style={styles.centered}>
+            <View style={styles.loadingState}>
                 <ActivityIndicator color={colors.clay} />
             </View>
         )
@@ -30,7 +29,7 @@ export default function TasteTabContent({ taste, isLoading, error, footer }: Pro
 
     if (error) {
         return (
-            <View style={styles.centered}>
+            <View style={styles.errorState}>
                 <Text style={styles.errorText}>{error}</Text>
             </View>
         )
@@ -53,11 +52,7 @@ export default function TasteTabContent({ taste, isLoading, error, footer }: Pro
         : null
 
     return (
-        <ScrollView
-            style={styles.scroll}
-            contentContainerStyle={styles.content}
-            showsVerticalScrollIndicator={false}
-        >
+        <View style={styles.content}>
             <View style={styles.summaryCard}>
                 <View style={styles.headerRow}>
                     <View style={styles.statBox}>
@@ -165,8 +160,7 @@ export default function TasteTabContent({ taste, isLoading, error, footer }: Pro
                     ))}
                 </View>
             )}
-            {footer}
-        </ScrollView>
+        </View>
     )
 }
 
@@ -179,21 +173,18 @@ const cardShadow = {
 }
 
 const styles = StyleSheet.create({
-    scroll: {
-        flex: 1,
-        backgroundColor: colors.bg,
-    },
     content: {
         paddingHorizontal: 16,
-        paddingBottom: 40,
         paddingTop: 16,
     },
-    centered: {
-        flex: 1,
-        backgroundColor: colors.bg,
-        alignItems: "center",
-        justifyContent: "center",
+    loadingState: {
         paddingTop: 60,
+        alignItems: "center",
+    },
+    errorState: {
+        paddingTop: 60,
+        alignItems: "center",
+        paddingHorizontal: 24,
     },
     errorText: {
         color: colors.dislike,

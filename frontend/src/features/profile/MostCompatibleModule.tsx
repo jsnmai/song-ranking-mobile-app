@@ -51,6 +51,7 @@ export default function MostCompatibleModule({ users, isLoading, onUserPress, on
 const styles = StyleSheet.create({
     container: {
         marginTop: 20,
+        paddingHorizontal: 16,
     },
     headerRow: {
         flexDirection: "row",
