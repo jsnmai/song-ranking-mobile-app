@@ -1,42 +1,42 @@
-"""HTTP boundary for private current-user Saved Songs."""
+"""HTTP boundary for per-user Bookmarks."""
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
 from src.core.limiter import limiter
-from src.pydantic_schemas.saved_songs import (
-    SavedSongCreate,
-    SavedSongListResponse,
-    SavedSongRemoveResponse,
-    SavedSongResponse,
-    SavedSongStatusResponse,
+from src.pydantic_schemas.bookmarks import (
+    BookmarkCreate,
+    BookmarkListResponse,
+    BookmarkRemoveResponse,
+    BookmarkResponse,
+    BookmarkStatusResponse,
 )
-from src.services.saved_songs import (
-    get_saved_song_status,
-    list_my_saved_songs,
-    remove_saved_song,
-    save_song,
+from src.services.bookmarks import (
+    bookmark_song,
+    get_bookmark_status,
+    list_my_bookmarks,
+    remove_bookmark,
 )
 from src.sqlalchemy_tables.user import User
 
 router = APIRouter(
-    prefix="/saved-songs",
-    tags=["saved-songs"],
+    prefix="/bookmarks",
+    tags=["bookmarks"],
 )
 
 
 @router.get(
     "",
-    response_model=SavedSongListResponse,
+    response_model=BookmarkListResponse,
 )
 @limiter.limit("300/minute")
-def my_saved_songs(
+def my_bookmarks(
     request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> SavedSongListResponse:
-    """Return the authenticated user's private Saved Songs."""
-    return list_my_saved_songs(
+) -> BookmarkListResponse:
+    """Return the authenticated user's Bookmarks."""
+    return list_my_bookmarks(
         db,
         user_id=current_user.id,
     )
@@ -44,17 +44,17 @@ def my_saved_songs(
 
 @router.get(
     "/by-deezer/{deezer_id}",
-    response_model=SavedSongStatusResponse,
+    response_model=BookmarkStatusResponse,
 )
 @limiter.limit("300/minute")
-def saved_song_status(
+def bookmark_status(
     request: Request,
     deezer_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> SavedSongStatusResponse:
-    """Return saved state for one song."""
-    return get_saved_song_status(
+) -> BookmarkStatusResponse:
+    """Return bookmark state for one song."""
+    return get_bookmark_status(
         db,
         user_id=current_user.id,
         deezer_id=deezer_id,
@@ -63,17 +63,17 @@ def saved_song_status(
 
 @router.post(
     "",
-    response_model=SavedSongResponse,
+    response_model=BookmarkResponse,
 )
 @limiter.limit("60/minute")
-def save_song_endpoint(
+def bookmark_song_endpoint(
     request: Request,
-    data: SavedSongCreate,
+    data: BookmarkCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> SavedSongResponse:
-    """Save one song for the authenticated user."""
-    return save_song(
+) -> BookmarkResponse:
+    """Bookmark one song for the authenticated user."""
+    return bookmark_song(
         db,
         user_id=current_user.id,
         data=data,
@@ -82,17 +82,17 @@ def save_song_endpoint(
 
 @router.delete(
     "/{song_id}",
-    response_model=SavedSongRemoveResponse,
+    response_model=BookmarkRemoveResponse,
 )
 @limiter.limit("60/minute")
-def remove_saved_song_endpoint(
+def remove_bookmark_endpoint(
     request: Request,
     song_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> SavedSongRemoveResponse:
-    """Remove one saved song for the authenticated user."""
-    return remove_saved_song(
+) -> BookmarkRemoveResponse:
+    """Remove one bookmark for the authenticated user."""
+    return remove_bookmark(
         db,
         user_id=current_user.id,
         song_id=song_id,

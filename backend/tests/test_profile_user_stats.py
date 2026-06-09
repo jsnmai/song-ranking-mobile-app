@@ -7,7 +7,7 @@ Privacy matrix tested:
 - only-me viewer sees user_stats=null
 - blocked viewer sees user_stats=null
 - rated_count reflects rankings rows (not rating_events)
-- bookmarked_count reflects saved_songs rows
+- bookmarked_count reflects bookmarks rows
 """
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from src.core.limiter import limiter
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
-from src.sqlalchemy_tables.saved_song import SavedSong
+from src.sqlalchemy_tables.bookmark import Bookmark
 from src.sqlalchemy_tables.song import Song
 
 
@@ -88,12 +88,12 @@ def _create_ranking(db: Session, username: str, song: Song) -> Ranking:
     return ranking
 
 
-def _create_saved_song(db: Session, username: str, song: Song) -> SavedSong:
+def _create_bookmark(db: Session, username: str, song: Song) -> Bookmark:
     user_id = db.execute(select(Profile.user_id).where(Profile.username == username)).scalar_one()
-    save = SavedSong(user_id=user_id, song_id=song.id, source="manual")
-    db.add(save)
+    bm = Bookmark(user_id=user_id, song_id=song.id, source="manual")
+    db.add(bm)
     db.commit()
-    return save
+    return bm
 
 
 def _get_profile(client: TestClient, token: str, username: str | None = None) -> tuple[int, dict]:
@@ -115,7 +115,7 @@ def test_owner_sees_own_user_stats(client: TestClient, db_session: Session):
     song_a = _create_song(db_session, 40001, "Rated Song A")
     song_b = _create_song(db_session, 40002, "Saved Song B")
     _create_ranking(db_session, "statsowner1", song_a)
-    _create_saved_song(db_session, "statsowner1", song_b)
+    _create_bookmark(db_session, "statsowner1", song_b)
 
     status, data = _get_profile(client, token)
 
@@ -197,15 +197,15 @@ def test_rated_count_reflects_rankings_not_events(client: TestClient, db_session
     assert data["user_stats"]["rated_count"] == 2
 
 
-def test_bookmarked_count_reflects_saved_songs(client: TestClient, db_session: Session):
-    """bookmarked_count comes from the saved_songs table."""
+def test_bookmarked_count_reflects_bookmarks(client: TestClient, db_session: Session):
+    """bookmarked_count comes from the bookmarks table."""
     token = _register(client, "statsowner7")
     song_a = _create_song(db_session, 40009, "Saved A")
     song_b = _create_song(db_session, 40010, "Saved B")
     song_c = _create_song(db_session, 40011, "Saved C")
-    _create_saved_song(db_session, "statsowner7", song_a)
-    _create_saved_song(db_session, "statsowner7", song_b)
-    _create_saved_song(db_session, "statsowner7", song_c)
+    _create_bookmark(db_session, "statsowner7", song_a)
+    _create_bookmark(db_session, "statsowner7", song_b)
+    _create_bookmark(db_session, "statsowner7", song_c)
 
     status, data = _get_profile(client, token)
 

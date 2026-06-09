@@ -1,4 +1,4 @@
-"""Integration tests for GET /profile/{username}/bookmarked.
+"""Integration tests for GET /profile/{username}/bookmarks.
 
 Privacy matrix:
 - owner sees own bookmarks
@@ -12,8 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.core.limiter import limiter
+from src.sqlalchemy_tables.bookmark import Bookmark
 from src.sqlalchemy_tables.profile import Profile
-from src.sqlalchemy_tables.saved_song import SavedSong
 from src.sqlalchemy_tables.song import Song
 
 
@@ -69,18 +69,18 @@ def _create_song(db: Session, deezer_id: int, title: str) -> Song:
     return song
 
 
-def _create_saved_song(db: Session, username: str, song: Song) -> SavedSong:
+def _create_bookmark(db: Session, username: str, song: Song) -> Bookmark:
     user_id = db.execute(select(Profile.user_id).where(Profile.username == username)).scalar_one()
-    save = SavedSong(user_id=user_id, song_id=song.id, source="manual")
-    db.add(save)
+    bm = Bookmark(user_id=user_id, song_id=song.id, source="manual")
+    db.add(bm)
     db.commit()
-    return save
+    return bm
 
 
-def _get_bookmarked(client: TestClient, token: str, username: str) -> tuple[int, dict]:
+def _get_bookmarks(client: TestClient, token: str, username: str) -> tuple[int, dict]:
     limiter._storage.reset()
     response = client.get(
-        f"/api/v1/profile/{username}/bookmarked",
+        f"/api/v1/profile/{username}/bookmarks",
         headers={"Authorization": f"Bearer {token}"},
     )
     return response.status_code, response.json()
@@ -89,30 +89,30 @@ def _get_bookmarked(client: TestClient, token: str, username: str) -> tuple[int,
 # ── Tests ────────────────────────────────────────────────────────────────────
 
 
-def test_owner_sees_own_bookmarked(client: TestClient, db_session: Session):
+def test_owner_sees_own_bookmarks(client: TestClient, db_session: Session):
     """Owner sees their own bookmarks via the username endpoint."""
     token = _register(client, "bkowner1")
-    song = _create_song(db_session, 50001, "Saved Song One")
-    _create_saved_song(db_session, "bkowner1", song)
+    song = _create_song(db_session, 50001, "Bookmarked Song One")
+    _create_bookmark(db_session, "bkowner1", song)
 
-    status, data = _get_bookmarked(client, token, "bkowner1")
+    status, data = _get_bookmarks(client, token, "bkowner1")
 
     assert status == 200
-    assert len(data["saves"]) == 1
-    assert data["saves"][0]["song"]["title"] == "Saved Song One"
+    assert len(data["bookmarks"]) == 1
+    assert data["bookmarks"][0]["song"]["title"] == "Bookmarked Song One"
 
 
-def test_public_viewer_sees_public_bookmarked(client: TestClient, db_session: Session):
+def test_public_viewer_sees_public_bookmarks(client: TestClient, db_session: Session):
     """Public viewer sees bookmarks on a public profile."""
     owner_token = _register(client, "bkowner2")
     viewer_token = _register(client, "bkviewer2")
-    song = _create_song(db_session, 50002, "Public Saved")
-    _create_saved_song(db_session, "bkowner2", song)
+    song = _create_song(db_session, 50002, "Public Bookmarked")
+    _create_bookmark(db_session, "bkowner2", song)
 
-    status, data = _get_bookmarked(client, viewer_token, "bkowner2")
+    status, data = _get_bookmarks(client, viewer_token, "bkowner2")
 
     assert status == 200
-    assert len(data["saves"]) == 1
+    assert len(data["bookmarks"]) == 1
     _ = owner_token
 
 
@@ -121,28 +121,28 @@ def test_friends_only_non_mutual_gets_404(client: TestClient, db_session: Sessio
     owner_token = _register(client, "bkowner3")
     viewer_token = _register(client, "bkviewer3")
     _set_visibility(client, owner_token, "friends_only")
-    song = _create_song(db_session, 50003, "Friends Saved")
-    _create_saved_song(db_session, "bkowner3", song)
+    song = _create_song(db_session, 50003, "Friends Bookmarked")
+    _create_bookmark(db_session, "bkowner3", song)
 
-    status, _ = _get_bookmarked(client, viewer_token, "bkowner3")
+    status, _ = _get_bookmarks(client, viewer_token, "bkowner3")
 
     assert status == 404
 
 
-def test_mutual_follow_sees_friends_only_bookmarked(client: TestClient, db_session: Session):
+def test_mutual_follow_sees_friends_only_bookmarks(client: TestClient, db_session: Session):
     """Mutual follow sees bookmarks on a friends-only profile."""
     owner_token = _register(client, "bkowner4")
     viewer_token = _register(client, "bkviewer4")
     _set_visibility(client, owner_token, "friends_only")
     _follow(client, viewer_token, "bkowner4")
     _follow(client, owner_token, "bkviewer4")
-    song = _create_song(db_session, 50004, "Mutual Saved")
-    _create_saved_song(db_session, "bkowner4", song)
+    song = _create_song(db_session, 50004, "Mutual Bookmarked")
+    _create_bookmark(db_session, "bkowner4", song)
 
-    status, data = _get_bookmarked(client, viewer_token, "bkowner4")
+    status, data = _get_bookmarks(client, viewer_token, "bkowner4")
 
     assert status == 200
-    assert len(data["saves"]) == 1
+    assert len(data["bookmarks"]) == 1
 
 
 def test_only_me_viewer_gets_404(client: TestClient, db_session: Session):
@@ -150,23 +150,23 @@ def test_only_me_viewer_gets_404(client: TestClient, db_session: Session):
     owner_token = _register(client, "bkowner5")
     viewer_token = _register(client, "bkviewer5")
     _set_visibility(client, owner_token, "only_me")
-    song = _create_song(db_session, 50005, "Private Saved")
-    _create_saved_song(db_session, "bkowner5", song)
+    song = _create_song(db_session, 50005, "Private Bookmarked")
+    _create_bookmark(db_session, "bkowner5", song)
 
-    status, _ = _get_bookmarked(client, viewer_token, "bkowner5")
+    status, _ = _get_bookmarks(client, viewer_token, "bkowner5")
 
     assert status == 404
 
 
 def test_empty_bookmarks_returns_empty_list(client: TestClient, db_session: Session):
-    """User with no saves returns an empty list."""
+    """User with no bookmarks returns an empty list."""
     token = _register(client, "bkowner6")
     viewer_token = _register(client, "bkviewer6")
 
-    status, data = _get_bookmarked(client, viewer_token, "bkowner6")
+    status, data = _get_bookmarks(client, viewer_token, "bkowner6")
 
     assert status == 200
-    assert data["saves"] == []
+    assert data["bookmarks"] == []
     _ = token
 
 
@@ -175,12 +175,12 @@ def test_bookmarked_song_has_title_and_artist(client: TestClient, db_session: Se
     token = _register(client, "bkowner7")
     viewer_token = _register(client, "bkviewer7")
     song = _create_song(db_session, 50006, "Bookmarked Track")
-    _create_saved_song(db_session, "bkowner7", song)
+    _create_bookmark(db_session, "bkowner7", song)
 
-    status, data = _get_bookmarked(client, viewer_token, "bkowner7")
+    status, data = _get_bookmarks(client, viewer_token, "bkowner7")
 
     assert status == 200
-    save = data["saves"][0]
-    assert save["song"]["title"] == "Bookmarked Track"
-    assert save["song"]["artist"] == "Test Artist"
+    bm = data["bookmarks"][0]
+    assert bm["song"]["title"] == "Bookmarked Track"
+    assert bm["song"]["artist"] == "Test Artist"
     _ = token

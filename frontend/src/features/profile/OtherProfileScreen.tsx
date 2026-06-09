@@ -22,7 +22,7 @@ import {
     blockUser,
     followUser,
     getCompatibility,
-    getProfileBookmarked,
+    getProfileBookmarks,
     getProfileByUsername,
     getProfileRankings,
     getProfileRecentVerdicts,
@@ -345,11 +345,11 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
                                 <View style={styles.statDivider} />
                                 <TouchableOpacity
                                     style={styles.statButton}
-                                    onPress={() => navigation.navigate("UserBookmarked", { username })}
+                                    onPress={() => navigation.navigate("UserBookmarks", { username })}
                                     testID="stats-bookmarked"
                                 >
                                     <Text style={styles.statValue}>{profile.user_stats.bookmarked_count}</Text>
-                                    <Text style={styles.statLabel}>BOOKMARKED</Text>
+                                    <Text style={styles.statLabel}>BOOKMARKS</Text>
                                 </TouchableOpacity>
                             </View>
                         )}

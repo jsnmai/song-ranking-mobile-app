@@ -38,7 +38,7 @@ const mockUnfollowUser = jest.fn()
 const mockBlockUser = jest.fn()
 const mockUnblockUser = jest.fn()
 const mockReportUser = jest.fn()
-const mockGetProfileBookmarked = jest.fn()
+const mockGetProfileBookmarks = jest.fn()
 
 jest.mock("../apiRequests", () => ({
     getMyProfile: (...args: unknown[]) => mockGetMyProfile(...args),
@@ -49,7 +49,7 @@ jest.mock("../apiRequests", () => ({
     getUserTasteProfile: (...args: unknown[]) => mockGetUserTasteProfile(...args),
     getProfileRecentVerdicts: (...args: unknown[]) => mockGetProfileRecentVerdicts(...args),
     getProfileRankings: (...args: unknown[]) => mockGetProfileRankings(...args),
-    getProfileBookmarked: (...args: unknown[]) => mockGetProfileBookmarked(...args),
+    getProfileBookmarks: (...args: unknown[]) => mockGetProfileBookmarks(...args),
     followUser: (...args: unknown[]) => mockFollowUser(...args),
     unfollowUser: (...args: unknown[]) => mockUnfollowUser(...args),
     blockUser: (...args: unknown[]) => mockBlockUser(...args),
@@ -212,7 +212,7 @@ describe("ProfileScreen profile modules", () => {
         expect(mockNavigate).toHaveBeenCalledWith("MainTabs", { screen: "Rankings", params: { screen: "FullRankings" } })
     })
 
-    it("tapping Bookmarked on own profile navigates to SavedSongs", async () => {
+    it("tapping Bookmarked on own profile navigates to Bookmarks", async () => {
         render(<ProfileScreen />)
 
         await waitFor(() => {
@@ -220,7 +220,7 @@ describe("ProfileScreen profile modules", () => {
         })
         fireEvent.press(screen.getByTestId("stats-bookmarked"))
 
-        expect(mockNavigate).toHaveBeenCalledWith("SavedSongs")
+        expect(mockNavigate).toHaveBeenCalledWith("Bookmarks")
     })
 
     it("verdict item shows song title, artist, note, and bucket", async () => {
@@ -296,7 +296,7 @@ describe("OtherProfileScreen profile modules", () => {
         mockGetCompatibility.mockResolvedValue(compatNoOverlap)
         mockGetProfileRecentVerdicts.mockResolvedValue(verdictsResponse)
         mockGetProfileRankings.mockResolvedValue(rankingsResponse)
-        mockGetProfileBookmarked.mockResolvedValue({ saves: [] })
+        mockGetProfileBookmarks.mockResolvedValue({ bookmarks: [] })
         mockReportUser.mockResolvedValue({ id: 1, status: "open" })
     })
 
@@ -332,7 +332,7 @@ describe("OtherProfileScreen profile modules", () => {
         expect(mockNavigate).toHaveBeenCalledWith("UserRankings", { username: "maya" })
     })
 
-    it("tapping Bookmarked on other profile navigates to UserBookmarked", async () => {
+    it("tapping Bookmarked on other profile navigates to UserBookmarks", async () => {
         render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
 
         await waitFor(() => {
@@ -340,7 +340,7 @@ describe("OtherProfileScreen profile modules", () => {
         })
         fireEvent.press(screen.getByTestId("stats-bookmarked"))
 
-        expect(mockNavigate).toHaveBeenCalledWith("UserBookmarked", { username: "maya" })
+        expect(mockNavigate).toHaveBeenCalledWith("UserBookmarks", { username: "maya" })
     })
 
     it("hides stats row when user_stats is null (private profile)", async () => {

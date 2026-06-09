@@ -9,18 +9,18 @@ import { AppStackParamList } from "../../navigation/types"
 import { colors, fonts } from "../../theme"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
 import { useAuth } from "../auth/AuthContext"
-import { listMySavedSongs } from "./apiRequests"
-import { SavedSong } from "./types"
+import { listMyBookmarks } from "./apiRequests"
+import { Bookmark } from "./types"
 
-type SavedSongsScreenProps = NativeStackScreenProps<AppStackParamList, "SavedSongs">
+type BookmarksScreenProps = NativeStackScreenProps<AppStackParamList, "Bookmarks">
 
-export default function SavedSongsScreen({ navigation }: SavedSongsScreenProps) {
+export default function BookmarksScreen({ navigation }: BookmarksScreenProps) {
     const { token } = useAuth()
-    const [saves, setSaves] = useState<SavedSong[]>([])
+    const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
 
-    const loadSaves = useCallback(async () => {
+    const loadBookmarks = useCallback(async () => {
         if (!token) {
             setIsLoading(false)
             return
@@ -28,32 +28,32 @@ export default function SavedSongsScreen({ navigation }: SavedSongsScreenProps) 
         setIsLoading(true)
         setError(null)
         try {
-            const response = await listMySavedSongs(token)
-            setSaves(response.saves)
+            const response = await listMyBookmarks(token)
+            setBookmarks(response.bookmarks)
         } catch (err) {
             if (err instanceof ApiError) {
                 setError(err.detail)
             } else if (err instanceof Error) {
                 setError(err.message)
             } else {
-                setError("Saved Songs is temporarily unavailable.")
+                setError("Bookmarks is temporarily unavailable.")
             }
         } finally {
             setIsLoading(false)
         }
     }, [token])
 
-    const openSong = (save: SavedSong) => {
-        if (save.ranking !== null) {
-            navigation.navigate("SongDetail", { ranking: save.ranking })
+    const openSong = (bm: Bookmark) => {
+        if (bm.ranking !== null) {
+            navigation.navigate("SongDetail", { ranking: bm.ranking })
             return
         }
-        navigation.navigate("SongDetail", { song: save.song })
+        navigation.navigate("SongDetail", { song: bm.song })
     }
 
     useEffect(() => {
-        loadSaves()
-    }, [loadSaves])
+        loadBookmarks()
+    }, [loadBookmarks])
 
     return (
         <View style={styles.container}>
@@ -61,25 +61,25 @@ export default function SavedSongsScreen({ navigation }: SavedSongsScreenProps) 
                 <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
                     <Text style={styles.backText}>Back</Text>
                 </TouchableOpacity>
-                <Text style={styles.kicker}>SAVE FOR LATER</Text>
-                <Text style={styles.heading}>Saved Songs</Text>
-                <Text style={styles.subheading}>Songs saved for later. Private, free, and unlimited.</Text>
+                <Text style={styles.kicker}>BOOKMARKS</Text>
+                <Text style={styles.heading}>Bookmarks</Text>
+                <Text style={styles.subheading}>Songs you bookmark. Private, free, and unlimited.</Text>
             </View>
 
             {isLoading ? (
-                <ActivityIndicator accessibilityLabel="Loading Saved Songs" color={colors.clay} style={styles.status} />
+                <ActivityIndicator accessibilityLabel="Loading Bookmarks" color={colors.clay} style={styles.status} />
             ) : error !== null ? (
                 <View style={styles.centerState}>
                     <Text style={styles.error}>{error}</Text>
-                    <TouchableOpacity style={styles.retryButton} onPress={loadSaves}>
+                    <TouchableOpacity style={styles.retryButton} onPress={loadBookmarks}>
                         <Text style={styles.retryText}>Try again</Text>
                     </TouchableOpacity>
                 </View>
-            ) : saves.length === 0 ? (
-                <Text style={styles.empty}>Songs you save will show up here.</Text>
+            ) : bookmarks.length === 0 ? (
+                <Text style={styles.empty}>No Bookmarks yet.</Text>
             ) : (
                 <FlashList
-                    data={saves}
+                    data={bookmarks}
                     renderItem={({ item }) => (
                         <TouchableOpacity
                             accessibilityRole="button"
@@ -96,7 +96,7 @@ export default function SavedSongsScreen({ navigation }: SavedSongsScreenProps) 
                             <View style={styles.songText}>
                                 <Text style={styles.title} numberOfLines={1}>{item.song.title}</Text>
                                 <Text style={styles.artist} numberOfLines={1}>{item.song.artist}</Text>
-                                <Text style={styles.savedAt}>{formatRelativeTime(item.saved_at)}</Text>
+                                <Text style={styles.bookmarkedAt}>{formatRelativeTime(item.bookmarked_at)}</Text>
                             </View>
                             {item.ranking !== null ? <BucketBadge bucket={item.ranking.bucket} /> : null}
                         </TouchableOpacity>
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
         fontSize: 10,
         marginTop: 3,
     },
-    savedAt: {
+    bookmarkedAt: {
         fontFamily: fonts.mono,
         color: colors.inkDim,
         fontSize: 9,

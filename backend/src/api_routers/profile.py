@@ -21,14 +21,14 @@ from src.pydantic_schemas.profile import (
 )
 from src.pydantic_schemas.profile_modules import RecentVerdictsResponse
 from src.pydantic_schemas.rating import RankingListResponse
-from src.pydantic_schemas.saved_songs import SavedSongListResponse
+from src.pydantic_schemas.bookmarks import BookmarkListResponse
 from src.services.profile import (
     block_profile,
     follow_profile,
     get_compatibility_for_username,
     get_my_blocked_profiles,
     get_my_profile,
-    get_profile_bookmarked,
+    get_profile_bookmarks,
     get_profile_by_username,
     get_profile_followers,
     get_profile_following,
@@ -253,18 +253,18 @@ def profile_rankings(
 
 
 @router.get(
-    "/{username}/bookmarked",
-    response_model=SavedSongListResponse,
+    "/{username}/bookmarks",
+    response_model=BookmarkListResponse,
 )
 @limiter.limit("300/minute")
-def profile_bookmarked(
+def profile_bookmarks(
     request: Request,
     username: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> SavedSongListResponse:
-    """Return a profile's bookmarked songs, enforcing taste visibility rules."""
-    return get_profile_bookmarked(
+) -> BookmarkListResponse:
+    """Return a profile's bookmarks, enforcing taste visibility rules."""
+    return get_profile_bookmarks(
         db,
         current_user_id=current_user.id,
         username=username,

@@ -245,23 +245,23 @@ def test_social_discovery_sorts_by_count_then_score_then_recency(
     ]
 
 
-def test_social_discovery_returns_saved_state(
+def test_social_discovery_returns_bookmarked_state(
     client: TestClient,
     db_session: Session,
 ):
-    """Discovery cards can render the viewer's private Saved state."""
+    """Discovery cards can render the viewer's private Bookmark state."""
     viewer_token = _register(client, "viewer")
     _register(client, "friend")
     _follow(client, viewer_token, "friend")
-    _create_ranking(db_session, "friend", 501, "Saved Recommendation", 9.5)
+    _create_ranking(db_session, "friend", 501, "Bookmarked Recommendation", 9.5)
     song_response = _get(client, viewer_token, "/api/v1/discover/friends-9s")["items"][0]["song"]
-    save_response = client.post(
-        "/api/v1/saved-songs",
+    bookmark_response = client.post(
+        "/api/v1/bookmarks",
         json={"song": song_response, "source": "discovery"},
         headers={"Authorization": f"Bearer {viewer_token}"},
     )
-    assert save_response.status_code == 200
+    assert bookmark_response.status_code == 200
 
     item = _get(client, viewer_token, "/api/v1/discover/friends-9s")["items"][0]
 
-    assert item["is_saved"] is True
+    assert item["is_bookmarked"] is True

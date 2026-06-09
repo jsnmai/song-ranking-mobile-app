@@ -32,7 +32,7 @@ from src.sqlalchemy_tables.follow import Follow
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
-from src.sqlalchemy_tables.saved_song import SavedSong
+from src.sqlalchemy_tables.bookmark import Bookmark
 from src.sqlalchemy_tables.user import User
 from src.sqlalchemy_tables.user_similarity_snapshot import UserSimilaritySnapshot
 from tests.conftest import TEST_DATABASE_URL
@@ -270,8 +270,8 @@ def _demo_counts(
     profile_count = db_session.execute(
         select(func.count()).select_from(Profile).where(Profile.user_id.in_(demo_user_ids)),
     ).scalar_one()
-    saved_song_count = db_session.execute(
-        select(func.count()).select_from(SavedSong).where(SavedSong.user_id.in_(demo_user_ids)),
+    bookmark_count = db_session.execute(
+        select(func.count()).select_from(Bookmark).where(Bookmark.user_id.in_(demo_user_ids)),
     ).scalar_one()
     return {
         "profiles": profile_count,
@@ -281,7 +281,7 @@ def _demo_counts(
         "follows": follow_count,
         "blocks": block_count,
         "snapshots": snapshot_count,
-        "saved_songs": saved_song_count,
+        "bookmarks": bookmark_count,
     }
 
 
@@ -401,12 +401,12 @@ def test_discovery_seed_already_rated_excluded(
     assert DISCO_ALREADY_RATED_DEEZER_ID not in friends_ids
 
 
-def test_discovery_seed_saved_state_present(
+def test_discovery_seed_bookmarked_state_present(
     client,
     db_session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """demo_power's pre-seeded saved discovery song reports is_saved=True on Friends' 9s."""
+    """demo_power's pre-seeded bookmarked discovery song reports is_bookmarked=True on Friends' 9s."""
     _run_seed(db_session, monkeypatch)
     token = _login(client, demo_email("demo_power"))
 
@@ -415,12 +415,12 @@ def test_discovery_seed_saved_state_present(
         headers={"Authorization": f"Bearer {token}"},
     ).json()["items"]
 
-    saved_item = next(
+    bookmarked_item = next(
         (item for item in items if item["song"]["deezer_id"] == DISCO_FRIENDS_NINE_DEEZER_ID),
         None,
     )
-    assert saved_item is not None
-    assert saved_item["is_saved"] is True
+    assert bookmarked_item is not None
+    assert bookmarked_item["is_bookmarked"] is True
 
 
 def test_discovery_seed_is_idempotent(
@@ -447,4 +447,4 @@ def test_discovery_seed_is_idempotent(
 
     counts_second = _demo_counts(db_session, demo_user_ids)
     assert counts_first == counts_second
-    assert counts_first["saved_songs"] == 1
+    assert counts_first["bookmarks"] == 1

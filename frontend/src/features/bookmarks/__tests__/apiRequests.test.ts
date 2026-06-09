@@ -1,8 +1,8 @@
 import {
-    getSavedSongStatus,
-    listMySavedSongs,
-    removeSavedSong,
-    saveSong,
+    getBookmarkStatus,
+    listMyBookmarks,
+    removeBookmark,
+    bookmarkSong,
 } from "../apiRequests"
 import { SongSearchResult } from "../../search/types"
 
@@ -33,40 +33,40 @@ beforeEach(() => {
     jest.resetAllMocks()
 })
 
-describe("Saved Songs API requests", () => {
-    it("lists the current user's Saved Songs", async () => {
-        mockGet.mockResolvedValue({ saves: [] })
+describe("Bookmarks API requests", () => {
+    it("lists the current user's Bookmarks", async () => {
+        mockGet.mockResolvedValue({ bookmarks: [] })
 
-        await listMySavedSongs("test-token")
+        await listMyBookmarks("test-token")
 
-        expect(mockGet).toHaveBeenCalledWith("/api/v1/saved-songs", "test-token")
+        expect(mockGet).toHaveBeenCalledWith("/api/v1/bookmarks", "test-token")
     })
 
-    it("gets saved state by Deezer ID", async () => {
-        mockGet.mockResolvedValue({ is_saved: false, save: null })
+    it("gets bookmark state by Deezer ID", async () => {
+        mockGet.mockResolvedValue({ is_bookmarked: false, bookmark: null })
 
-        await getSavedSongStatus(123, "test-token")
+        await getBookmarkStatus(123, "test-token")
 
-        expect(mockGet).toHaveBeenCalledWith("/api/v1/saved-songs/by-deezer/123", "test-token")
+        expect(mockGet).toHaveBeenCalledWith("/api/v1/bookmarks/by-deezer/123", "test-token")
     })
 
-    it("saves a song with its source", async () => {
+    it("bookmarks a song with its source", async () => {
         mockPost.mockResolvedValue({ id: 1 })
 
-        await saveSong(song, "song_detail", "test-token")
+        await bookmarkSong(song, "song_detail", "test-token")
 
         expect(mockPost).toHaveBeenCalledWith(
-            "/api/v1/saved-songs",
+            "/api/v1/bookmarks",
             { song, source: "song_detail" },
             "test-token",
         )
     })
 
-    it("removes a saved song by LISTn song ID", async () => {
+    it("removes a bookmark by LISTn song ID", async () => {
         mockDelete.mockResolvedValue({ song_id: 42, removed: true })
 
-        await removeSavedSong(42, "test-token")
+        await removeBookmark(42, "test-token")
 
-        expect(mockDelete).toHaveBeenCalledWith("/api/v1/saved-songs/42", "test-token")
+        expect(mockDelete).toHaveBeenCalledWith("/api/v1/bookmarks/42", "test-token")
     })
 })

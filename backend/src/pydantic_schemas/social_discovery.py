@@ -23,7 +23,7 @@ class FriendsNineItem(BaseModel):
     average_visible_friend_score: float
     latest_visible_rating_at: datetime
     contributors: list[SocialDiscoveryContributor]
-    is_saved: bool
+    is_bookmarked: bool
 
 
 class FriendsNinesResponse(BaseModel):
@@ -40,7 +40,7 @@ class CoSignItem(BaseModel):
     average_visible_friend_score: float
     latest_visible_rating_at: datetime
     contributors: list[SocialDiscoveryContributor]
-    is_saved: bool
+    is_bookmarked: bool
 
 
 class CoSignsResponse(BaseModel):

@@ -11,12 +11,12 @@ from slowapi.errors import RateLimitExceeded
 
 from src.api_routers import (
     auth,
+    bookmarks,
     comparison,
     comparison_history,
     feed,
     profile,
     rating,
-    saved_songs,
     search,
     social_discovery,
     song,
@@ -126,7 +126,7 @@ app.include_router(
     prefix="/api/v1",
 )
 app.include_router(
-    saved_songs.router,
+    bookmarks.router,
     prefix="/api/v1",
 )
 

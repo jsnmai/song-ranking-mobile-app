@@ -56,8 +56,8 @@ export default function ProfileScreen() {
         navigation.navigate("Settings")
     }
 
-    const openSavedSongs = () => {
-        navigation.navigate("SavedSongs")
+    const openBookmarks = () => {
+        navigation.navigate("Bookmarks")
     }
 
     useFocusEffect(
@@ -215,11 +215,11 @@ export default function ProfileScreen() {
                             <View style={styles.statDivider} />
                             <TouchableOpacity
                                 style={styles.statButton}
-                                onPress={openSavedSongs}
+                                onPress={openBookmarks}
                                 testID="stats-bookmarked"
                             >
                                 <Text style={styles.statValue}>{profile.user_stats.bookmarked_count}</Text>
-                                <Text style={styles.statLabel}>BOOKMARKED</Text>
+                                <Text style={styles.statLabel}>BOOKMARKS</Text>
                             </TouchableOpacity>
                         </View>
                     )}

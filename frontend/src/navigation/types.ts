@@ -32,10 +32,10 @@ export type AppStackParamList = {
     LegalPlaceholder: { kind: "support" | "privacy" | "terms" | "guidelines" };
     Reorder: undefined;
     VersusHistory: undefined;
-    SavedSongs: undefined;
+    Bookmarks: undefined;
     BucketSelection: { song: SongSearchResult };
     ComparisonFlow: { session: ComparisonSessionResponse };
     ScoreReveal: { result: RatingFinalizeResponse; isRerate?: boolean };
     UserRankings: { username: string };
-    UserBookmarked: { username: string };
+    UserBookmarks: { username: string };
 }

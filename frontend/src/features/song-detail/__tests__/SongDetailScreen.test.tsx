@@ -9,9 +9,9 @@ const mockGoBack = jest.fn()
 const mockNavigate = jest.fn()
 const mockRemoveRating = jest.fn()
 const mockFetchPreviewUrl = jest.fn()
-const mockGetSavedSongStatus = jest.fn()
-const mockRemoveSavedSong = jest.fn()
-const mockSaveSong = jest.fn()
+const mockGetBookmarkStatus = jest.fn()
+const mockRemoveBookmark = jest.fn()
+const mockBookmarkSong = jest.fn()
 
 const mockPlay = jest.fn()
 const mockRemove = jest.fn()
@@ -37,10 +37,10 @@ jest.mock("../../songs/apiRequests", () => ({
     fetchPreviewUrl: (...args: unknown[]) => mockFetchPreviewUrl(...args),
 }))
 
-jest.mock("../../saved-songs/apiRequests", () => ({
-    getSavedSongStatus: (...args: unknown[]) => mockGetSavedSongStatus(...args),
-    removeSavedSong: (...args: unknown[]) => mockRemoveSavedSong(...args),
-    saveSong: (...args: unknown[]) => mockSaveSong(...args),
+jest.mock("../../bookmarks/apiRequests", () => ({
+    getBookmarkStatus: (...args: unknown[]) => mockGetBookmarkStatus(...args),
+    removeBookmark: (...args: unknown[]) => mockRemoveBookmark(...args),
+    bookmarkSong: (...args: unknown[]) => mockBookmarkSong(...args),
 }))
 
 const ranking: RankingResponse = {
@@ -99,7 +99,7 @@ beforeEach(() => {
     })
     mockAddNavigationListener.mockReturnValue(jest.fn())
     mockFetchPreviewUrl.mockResolvedValue("https://example.com/preview.mp3")
-    mockGetSavedSongStatus.mockResolvedValue({ is_saved: false, save: null })
+    mockGetBookmarkStatus.mockResolvedValue({ is_bookmarked: false, bookmark: null })
 })
 
 describe("SongDetailScreen", () => {
@@ -264,58 +264,58 @@ describe("SongDetailScreen", () => {
         expect(screen.queryByText("Play Preview")).toBeNull()
     })
 
-    it("shows Save for an unsaved song and updates after saving", async () => {
-        mockSaveSong.mockResolvedValue({
+    it("shows Bookmark for an unbookmarked song and updates after bookmarking", async () => {
+        mockBookmarkSong.mockResolvedValue({
             id: 8,
             source: "song_detail",
-            saved_at: "2026-01-01T00:00:00Z",
+            bookmarked_at: "2026-01-01T00:00:00Z",
             song: ranking.song,
             ranking,
         })
 
         render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
 
-        fireEvent.press(await screen.findByText("Save"))
+        fireEvent.press(await screen.findByText("Bookmark"))
 
         await waitFor(() => {
-            expect(mockSaveSong).toHaveBeenCalledWith(ranking.song, "song_detail", "test-token")
+            expect(mockBookmarkSong).toHaveBeenCalledWith(ranking.song, "song_detail", "test-token")
         })
-        expect(await screen.findByText("Remove from Saved Songs")).toBeTruthy()
+        expect(await screen.findByText("Remove Bookmark")).toBeTruthy()
     })
 
-    it("shows saved state and removes without affecting rating actions", async () => {
-        mockGetSavedSongStatus.mockResolvedValue({
-            is_saved: true,
-            save: {
+    it("shows bookmarked state and removes without affecting rating actions", async () => {
+        mockGetBookmarkStatus.mockResolvedValue({
+            is_bookmarked: true,
+            bookmark: {
                 id: 8,
                 source: "song_detail",
-                saved_at: "2026-01-01T00:00:00Z",
+                bookmarked_at: "2026-01-01T00:00:00Z",
                 song: ranking.song,
                 ranking,
             },
         })
-        mockRemoveSavedSong.mockResolvedValue({ song_id: ranking.song.id, removed: true })
+        mockRemoveBookmark.mockResolvedValue({ song_id: ranking.song.id, removed: true })
 
         render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
 
-        fireEvent.press(await screen.findByText("Remove from Saved Songs"))
+        fireEvent.press(await screen.findByText("Remove Bookmark"))
 
         await waitFor(() => {
-            expect(mockRemoveSavedSong).toHaveBeenCalledWith(ranking.song.id, "test-token")
+            expect(mockRemoveBookmark).toHaveBeenCalledWith(ranking.song.id, "test-token")
         })
-        expect(await screen.findByText("Save")).toBeTruthy()
+        expect(await screen.findByText("Bookmark")).toBeTruthy()
         expect(screen.getByText("Rate Again")).toBeTruthy()
     })
 
-    it("shows save failure and does not claim the song is saved", async () => {
-        mockSaveSong.mockRejectedValue(new Error("Could not save song."))
+    it("shows bookmark failure and does not claim the song is bookmarked", async () => {
+        mockBookmarkSong.mockRejectedValue(new Error("Could not bookmark song."))
 
         render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
 
-        fireEvent.press(await screen.findByText("Save"))
+        fireEvent.press(await screen.findByText("Bookmark"))
 
-        expect(await screen.findByText("Could not save song.")).toBeTruthy()
-        expect(screen.getByText("Save")).toBeTruthy()
-        expect(screen.queryByText("Remove from Saved Songs")).toBeNull()
+        expect(await screen.findByText("Could not bookmark song.")).toBeTruthy()
+        expect(screen.getByText("Bookmark")).toBeTruthy()
+        expect(screen.queryByText("Remove Bookmark")).toBeNull()
     })
 })

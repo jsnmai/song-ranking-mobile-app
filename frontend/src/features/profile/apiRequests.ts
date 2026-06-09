@@ -17,7 +17,7 @@ import {
     TasteProfileResponse,
 } from "./types"
 import { RankingListResponse } from "../comparison/types"
-import { SavedSongListResponse } from "../saved-songs/types"
+import { BookmarkListResponse } from "../bookmarks/types"
 
 // Calls GET /api/v1/profile/me
 // Returns the authenticated user's own profile.
@@ -137,10 +137,10 @@ export async function getProfileRankings(
     return apiClient.get<RankingListResponse>(path, token)
 }
 
-// Calls GET /api/v1/profile/{username}/bookmarked
-export async function getProfileBookmarked(
+// Calls GET /api/v1/profile/{username}/bookmarks
+export async function getProfileBookmarks(
     username: string,
     token: string,
-): Promise<SavedSongListResponse> {
-    return apiClient.get<SavedSongListResponse>(`/api/v1/profile/${username}/bookmarked`, token)
+): Promise<BookmarkListResponse> {
+    return apiClient.get<BookmarkListResponse>(`/api/v1/profile/${username}/bookmarks`, token)
 }

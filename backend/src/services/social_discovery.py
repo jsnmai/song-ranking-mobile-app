@@ -28,7 +28,7 @@ class SocialDiscoveryGroup:
     rows: list[SocialHighScoreRow]
     average_score: float
     latest_at: datetime
-    is_saved: bool
+    is_bookmarked: bool
 
 
 def list_friends_nines(
@@ -49,7 +49,7 @@ def list_friends_nines(
                 average_visible_friend_score=group.average_score,
                 latest_visible_rating_at=group.latest_at,
                 contributors=_contributors(group),
-                is_saved=group.is_saved,
+                is_bookmarked=group.is_bookmarked,
             )
             for group in groups
         ],
@@ -74,7 +74,7 @@ def list_co_signs(
                 average_visible_friend_score=group.average_score,
                 latest_visible_rating_at=group.latest_at,
                 contributors=_contributors(group),
-                is_saved=group.is_saved,
+                is_bookmarked=group.is_bookmarked,
             )
             for group in groups
         ],
@@ -104,7 +104,7 @@ def _list_groups(
                 2,
             ),
             latest_at=max(row.ranking.updated_at for row in rows),
-            is_saved=rows[0].is_saved,
+            is_bookmarked=rows[0].is_bookmarked,
         )
         for rows in rows_by_song.values()
         if len(rows) >= minimum_count

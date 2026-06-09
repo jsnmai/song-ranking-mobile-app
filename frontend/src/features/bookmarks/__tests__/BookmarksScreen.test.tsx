@@ -1,11 +1,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native"
 
-import SavedSongsScreen from "../SavedSongsScreen"
-import { SavedSong } from "../types"
+import BookmarksScreen from "../BookmarksScreen"
+import { Bookmark } from "../types"
 
 const mockGoBack = jest.fn()
 const mockNavigate = jest.fn()
-const mockListMySavedSongs = jest.fn()
+const mockListMyBookmarks = jest.fn()
 
 jest.mock("@shopify/flash-list", () => {
     const React = require("react")
@@ -13,9 +13,9 @@ jest.mock("@shopify/flash-list", () => {
 
     return {
         FlashList: ({ data, renderItem, keyExtractor }: {
-            data: SavedSong[];
-            renderItem: ({ item }: { item: SavedSong }) => unknown;
-            keyExtractor: (item: SavedSong) => string;
+            data: Bookmark[];
+            renderItem: ({ item }: { item: Bookmark }) => unknown;
+            keyExtractor: (item: Bookmark) => string;
         }) => (
             <View>
                 {data.map((item) => (
@@ -35,7 +35,7 @@ jest.mock("../../auth/AuthContext", () => ({
 }))
 
 jest.mock("../apiRequests", () => ({
-    listMySavedSongs: (...args: unknown[]) => mockListMySavedSongs(...args),
+    listMyBookmarks: (...args: unknown[]) => mockListMyBookmarks(...args),
 }))
 
 const song = {
@@ -63,10 +63,10 @@ const song = {
     created_at: "2026-01-01T00:00:00Z",
 }
 
-const savedSong = {
+const bookmark = {
     id: 7,
     source: "song_detail",
-    saved_at: "2026-01-01T00:00:00Z",
+    bookmarked_at: "2026-01-01T00:00:00Z",
     song,
     ranking: null,
 }
@@ -80,19 +80,19 @@ beforeEach(() => {
     jest.resetAllMocks()
 })
 
-describe("SavedSongsScreen", () => {
-    it("renders a loading state while Saved Songs are requested", () => {
-        mockListMySavedSongs.mockReturnValue(new Promise(() => {}))
+describe("BookmarksScreen", () => {
+    it("renders a loading state while Bookmarks are requested", () => {
+        mockListMyBookmarks.mockReturnValue(new Promise(() => {}))
 
-        render(<SavedSongsScreen navigation={navigation as never} route={{} as never} />)
+        render(<BookmarksScreen navigation={navigation as never} route={{} as never} />)
 
-        expect(screen.getByLabelText("Loading Saved Songs")).toBeTruthy()
+        expect(screen.getByLabelText("Loading Bookmarks")).toBeTruthy()
     })
 
-    it("renders saved songs and opens unrated Song Detail", async () => {
-        mockListMySavedSongs.mockResolvedValue({ saves: [savedSong] })
+    it("renders bookmarks and opens unrated Song Detail", async () => {
+        mockListMyBookmarks.mockResolvedValue({ bookmarks: [bookmark] })
 
-        render(<SavedSongsScreen navigation={navigation as never} route={{} as never} />)
+        render(<BookmarksScreen navigation={navigation as never} route={{} as never} />)
 
         expect(await screen.findByText("Nights")).toBeTruthy()
         expect(screen.getByText("Frank Ocean")).toBeTruthy()
@@ -113,36 +113,36 @@ describe("SavedSongsScreen", () => {
             updated_at: "2026-01-01T00:00:00Z",
             song,
         }
-        mockListMySavedSongs.mockResolvedValue({
-            saves: [{ ...savedSong, ranking }],
+        mockListMyBookmarks.mockResolvedValue({
+            bookmarks: [{ ...bookmark, ranking }],
         })
 
-        render(<SavedSongsScreen navigation={navigation as never} route={{} as never} />)
+        render(<BookmarksScreen navigation={navigation as never} route={{} as never} />)
         fireEvent.press(await screen.findByLabelText("Open Nights"))
 
         expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
     })
 
     it("renders the empty state", async () => {
-        mockListMySavedSongs.mockResolvedValue({ saves: [] })
+        mockListMyBookmarks.mockResolvedValue({ bookmarks: [] })
 
-        render(<SavedSongsScreen navigation={navigation as never} route={{} as never} />)
+        render(<BookmarksScreen navigation={navigation as never} route={{} as never} />)
 
-        expect(await screen.findByText("Songs you save will show up here.")).toBeTruthy()
+        expect(await screen.findByText("No Bookmarks yet.")).toBeTruthy()
     })
 
     it("renders an error and retries normally", async () => {
-        mockListMySavedSongs
-            .mockRejectedValueOnce(new Error("Could not load Saved Songs."))
-            .mockResolvedValueOnce({ saves: [] })
+        mockListMyBookmarks
+            .mockRejectedValueOnce(new Error("Could not load Bookmarks."))
+            .mockResolvedValueOnce({ bookmarks: [] })
 
-        render(<SavedSongsScreen navigation={navigation as never} route={{} as never} />)
+        render(<BookmarksScreen navigation={navigation as never} route={{} as never} />)
 
         fireEvent.press(await screen.findByText("Try again"))
 
         await waitFor(() => {
-            expect(mockListMySavedSongs).toHaveBeenCalledTimes(2)
+            expect(mockListMyBookmarks).toHaveBeenCalledTimes(2)
         })
-        expect(await screen.findByText("Songs you save will show up here.")).toBeTruthy()
+        expect(await screen.findByText("No Bookmarks yet.")).toBeTruthy()
     })
 })

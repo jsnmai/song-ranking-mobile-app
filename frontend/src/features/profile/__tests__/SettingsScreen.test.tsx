@@ -42,6 +42,7 @@ const profile: Profile = {
     is_own_profile: true,
     can_view_taste: true,
     is_blocked: false,
+    user_stats: null,
 }
 
 const blockedProfile: Profile = {

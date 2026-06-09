@@ -32,7 +32,7 @@ import src.sqlalchemy_tables.follow  # noqa: F401
 import src.sqlalchemy_tables.profile  # noqa: F401
 import src.sqlalchemy_tables.ranking  # noqa: F401
 import src.sqlalchemy_tables.rating_event  # noqa: F401
-import src.sqlalchemy_tables.saved_song  # noqa: F401
+import src.sqlalchemy_tables.bookmark  # noqa: F401
 import src.sqlalchemy_tables.song  # noqa: F401
 import src.sqlalchemy_tables.user  # noqa: F401
 import src.sqlalchemy_tables.user_similarity_snapshot  # noqa: F401
@@ -75,7 +75,7 @@ from src.sqlalchemy_tables.follow import Follow
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
-from src.sqlalchemy_tables.saved_song import SavedSong
+from src.sqlalchemy_tables.bookmark import Bookmark
 from src.sqlalchemy_tables.song import Song
 from src.sqlalchemy_tables.user import User
 from src.sqlalchemy_tables.user_similarity_snapshot import UserSimilaritySnapshot
@@ -305,7 +305,7 @@ def clear_demo_scoped_rows(
     db.execute(delete(RatingEvent).where(RatingEvent.user_id.in_(demo_user_ids)))
     db.execute(delete(Comparison).where(Comparison.user_id.in_(demo_user_ids)))
     db.execute(delete(Ranking).where(Ranking.user_id.in_(demo_user_ids)))
-    db.execute(delete(SavedSong).where(SavedSong.user_id.in_(demo_user_ids)))
+    db.execute(delete(Bookmark).where(Bookmark.user_id.in_(demo_user_ids)))
     db.execute(
         delete(Block).where(
             Block.blocker_id.in_(demo_user_ids) | Block.blocked_id.in_(demo_user_ids),
@@ -567,15 +567,15 @@ def recompute_aggregates(
         recompute_song_aggregates(db, song_id)
 
 
-def seed_saved_songs(
+def seed_bookmarks(
     db: Session,
     user_ids: dict[str, int],
     song_ids: dict[int, int],
 ) -> None:
-    """Seed one pre-saved discovery song for demo_power so the Saved state is visible on first load."""
+    """Seed one pre-bookmarked discovery song for demo_power so the Bookmark state is visible on first load."""
     power_id = user_ids["demo_power"]
     song_id = song_ids[DISCO_FRIENDS_NINE_DEEZER_ID]
-    db.add(SavedSong(user_id=power_id, song_id=song_id, source="discovery"))
+    db.add(Bookmark(user_id=power_id, song_id=song_id, source="discovery"))
     db.flush()
 
 
@@ -606,7 +606,7 @@ def seed_demo_data(db: Session) -> SeedResult:
     seed_blocks(db, user_ids)
     friend_score, opposite_score = seed_similarity_snapshots(db, user_ids)
     recompute_aggregates(db, touched_song_ids)
-    seed_saved_songs(db, user_ids, song_ids)
+    seed_bookmarks(db, user_ids, song_ids)
 
     db.commit()
     return SeedResult(

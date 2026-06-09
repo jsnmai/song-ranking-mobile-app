@@ -11,8 +11,8 @@ const mockSearchProfiles = jest.fn()
 const mockGetMyRankingByDeezerId = jest.fn()
 const mockListCoSigns = jest.fn()
 const mockListFriendsNines = jest.fn()
-const mockSaveSong = jest.fn()
-const mockRemoveSavedSong = jest.fn()
+const mockBookmarkSong = jest.fn()
+const mockRemoveBookmark = jest.fn()
 const mockCreatePlayer = jest.fn()
 
 jest.mock("expo-audio", () => ({
@@ -53,9 +53,9 @@ jest.mock("../apiRequests", () => ({
     listFriendsNines: (...args: unknown[]) => mockListFriendsNines(...args),
 }))
 
-jest.mock("../../saved-songs/apiRequests", () => ({
-    saveSong: (...args: unknown[]) => mockSaveSong(...args),
-    removeSavedSong: (...args: unknown[]) => mockRemoveSavedSong(...args),
+jest.mock("../../bookmarks/apiRequests", () => ({
+    bookmarkSong: (...args: unknown[]) => mockBookmarkSong(...args),
+    removeBookmark: (...args: unknown[]) => mockRemoveBookmark(...args),
 }))
 
 const song = {
@@ -121,7 +121,7 @@ const coSignItem = {
         { user_id: 3, username: "maya", display_name: "Maya", score: 9.7 },
         { user_id: 4, username: "leo", display_name: "Leo", score: 9.5 },
     ],
-    is_saved: false,
+    is_bookmarked: false,
 }
 
 beforeEach(() => {
@@ -131,8 +131,8 @@ beforeEach(() => {
     mockSearchProfiles.mockResolvedValue({ results: [profile] })
     mockListCoSigns.mockResolvedValue({ items: [] })
     mockListFriendsNines.mockResolvedValue({ items: [] })
-    mockSaveSong.mockResolvedValue({ id: 9 })
-    mockRemoveSavedSong.mockResolvedValue({ song_id: 42, removed: true })
+    mockBookmarkSong.mockResolvedValue({ id: 9 })
+    mockRemoveBookmark.mockResolvedValue({ song_id: 42, removed: true })
     mockCreatePlayer.mockReturnValue({
         play: jest.fn(),
         pause: jest.fn(),
@@ -165,18 +165,18 @@ describe("DiscoverScreen", () => {
         expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { song: ranking.song })
     })
 
-    it("opens rating flow and saves from a discovery card", async () => {
+    it("opens rating flow and bookmarks from a discovery card", async () => {
         mockListCoSigns.mockResolvedValue({ items: [coSignItem] })
         render(<DiscoverScreen />)
 
         fireEvent.press(await screen.findByText("Rate now"))
         expect(mockNavigate).toHaveBeenCalledWith("BucketSelection", { song: ranking.song })
 
-        fireEvent.press(screen.getByText("Save"))
+        fireEvent.press(screen.getByText("Bookmark"))
         await waitFor(() => {
-            expect(mockSaveSong).toHaveBeenCalledWith(ranking.song, "discovery", "test-token")
+            expect(mockBookmarkSong).toHaveBeenCalledWith(ranking.song, "discovery", "test-token")
         })
-        expect(screen.getByText("Saved")).toBeTruthy()
+        expect(screen.getByText("Bookmarked")).toBeTruthy()
     })
 
     it("opens unrated search results in Song Detail", async () => {

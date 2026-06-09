@@ -13,7 +13,7 @@ export type FriendsNineItem = {
     average_visible_friend_score: number;
     latest_visible_rating_at: string;
     contributors: SocialDiscoveryContributor[];
-    is_saved: boolean;
+    is_bookmarked: boolean;
 }
 
 export type CoSignItem = {
@@ -22,7 +22,7 @@ export type CoSignItem = {
     average_visible_friend_score: number;
     latest_visible_rating_at: string;
     contributors: SocialDiscoveryContributor[];
-    is_saved: boolean;
+    is_bookmarked: boolean;
 }
 
 export type FriendsNinesResponse = {

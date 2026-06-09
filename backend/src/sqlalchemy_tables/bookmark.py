@@ -1,4 +1,4 @@
-"""SQLAlchemy model for private current-user Saved Songs."""
+"""SQLAlchemy model for per-user Bookmarks."""
 from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, Index, String, UniqueConstraint, func
@@ -7,18 +7,18 @@ from sqlalchemy.orm import Mapped, mapped_column
 from src.db.base import Base
 
 
-class SavedSong(Base):
-    """One user-controlled saved song."""
+class Bookmark(Base):
+    """One user-controlled bookmarked song."""
 
-    __tablename__ = "saved_songs"
+    __tablename__ = "bookmarks"
     __table_args__ = (
         UniqueConstraint(
             "user_id",
             "song_id",
-            name="uq_saved_songs_user_song",
+            name="uq_bookmarks_user_song",
         ),
         Index(
-            "ix_saved_songs_user_created_at",
+            "ix_bookmarks_user_created_at",
             "user_id",
             "created_at",
         ),

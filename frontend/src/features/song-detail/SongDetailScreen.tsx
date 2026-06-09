@@ -12,8 +12,8 @@ import { colors, fonts, bucketColor } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
 import { removeRating } from "../rankings/apiRequests"
 import { fetchPreviewUrl } from "../songs/apiRequests"
-import { getSavedSongStatus, removeSavedSong, saveSong } from "../saved-songs/apiRequests"
-import { SavedSong } from "../saved-songs/types"
+import { bookmarkSong, getBookmarkStatus, removeBookmark } from "../bookmarks/apiRequests"
+import { Bookmark } from "../bookmarks/types"
 
 type SongDetailProps = NativeStackScreenProps<AppStackParamList, "SongDetail">
 
@@ -36,9 +36,9 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
     const [error, setError] = useState<string | null>(null)
     const [previewUrl, setPreviewUrl] = useState<string | null>(null)
     const [isPreviewLoading, setIsPreviewLoading] = useState(true)
-    const [savedSong, setSavedSong] = useState<SavedSong | null>(null)
-    const [isSavedStatusLoading, setIsSavedStatusLoading] = useState(true)
-    const [isSavedUpdating, setIsSavedUpdating] = useState(false)
+    const [bookmark, setBookmark] = useState<Bookmark | null>(null)
+    const [isBookmarkStatusLoading, setIsBookmarkStatusLoading] = useState(true)
+    const [isBookmarkUpdating, setIsBookmarkUpdating] = useState(false)
     const { isPlaying, toggle: toggleAudio, stop: stopAudio } = useAudioPlayer(previewUrl)
 
     const accent = ranking ? bucketColor(ranking.bucket) : colors.clay
@@ -100,20 +100,20 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
         }
     }
 
-    const handleSavedToggle = async () => {
-        if (!token || isSavedUpdating) {
+    const handleBookmarkToggle = async () => {
+        if (!token || isBookmarkUpdating) {
             return
         }
 
-        setIsSavedUpdating(true)
+        setIsBookmarkUpdating(true)
         setError(null)
         try {
-            if (savedSong === null) {
-                const saved = await saveSong(song, "song_detail", token)
-                setSavedSong(saved)
+            if (bookmark === null) {
+                const bm = await bookmarkSong(song, "song_detail", token)
+                setBookmark(bm)
             } else {
-                await removeSavedSong(savedSong.song.id, token)
-                setSavedSong(null)
+                await removeBookmark(bookmark.song.id, token)
+                setBookmark(null)
             }
         } catch (err) {
             if (err instanceof ApiError) {
@@ -121,10 +121,10 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
             } else if (err instanceof Error) {
                 setError(err.message)
             } else {
-                setError("Could not update saved state.")
+                setError("Could not update bookmark state.")
             }
         } finally {
-            setIsSavedUpdating(false)
+            setIsBookmarkUpdating(false)
         }
     }
 
@@ -173,28 +173,28 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
 
     useEffect(() => {
         let isActive = true
-        async function loadSavedState() {
+        async function loadBookmarkState() {
             if (!token) {
-                setIsSavedStatusLoading(false)
+                setIsBookmarkStatusLoading(false)
                 return
             }
-            setIsSavedStatusLoading(true)
+            setIsBookmarkStatusLoading(true)
             try {
-                const response = await getSavedSongStatus(song.deezer_id, token)
+                const response = await getBookmarkStatus(song.deezer_id, token)
                 if (isActive) {
-                    setSavedSong(response.save)
+                    setBookmark(response.bookmark)
                 }
             } catch (err) {
                 if (isActive) {
-                    setError(err instanceof ApiError ? err.detail : "Could not load saved state.")
+                    setError(err instanceof ApiError ? err.detail : "Could not load bookmark state.")
                 }
             } finally {
                 if (isActive) {
-                    setIsSavedStatusLoading(false)
+                    setIsBookmarkStatusLoading(false)
                 }
             }
         }
-        loadSavedState()
+        loadBookmarkState()
         return () => {
             isActive = false
         }
@@ -364,17 +364,17 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                 <TouchableOpacity
                     accessibilityRole="button"
                     style={styles.saveButton}
-                    onPress={handleSavedToggle}
-                    disabled={isSavedStatusLoading || isSavedUpdating}
+                    onPress={handleBookmarkToggle}
+                    disabled={isBookmarkStatusLoading || isBookmarkUpdating}
                 >
                     <Text style={styles.saveButtonText}>
-                        {isSavedStatusLoading
-                            ? "Checking saved state..."
-                            : isSavedUpdating
+                        {isBookmarkStatusLoading
+                            ? "Checking bookmark..."
+                            : isBookmarkUpdating
                                 ? "Updating..."
-                                : savedSong === null
-                                    ? "Save"
-                                    : "Remove from Saved Songs"}
+                                : bookmark === null
+                                    ? "Bookmark"
+                                    : "Remove Bookmark"}
                     </Text>
                 </TouchableOpacity>
                 {ranking !== null && (

@@ -9,20 +9,20 @@ import { AppStackParamList } from "../../navigation/types"
 import { colors, fonts } from "../../theme"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
 import { useAuth } from "../auth/AuthContext"
-import { SavedSong } from "../saved-songs/types"
-import { getProfileBookmarked } from "./apiRequests"
+import { Bookmark } from "../bookmarks/types"
+import { getProfileBookmarks } from "./apiRequests"
 
-type UserBookmarkedProps = NativeStackScreenProps<AppStackParamList, "UserBookmarked">
+type UserBookmarksProps = NativeStackScreenProps<AppStackParamList, "UserBookmarks">
 
-export default function UserBookmarkedScreen({ navigation, route }: UserBookmarkedProps) {
+export default function UserBookmarksScreen({ navigation, route }: UserBookmarksProps) {
     const { token } = useAuth()
     const { username } = route.params
-    const [saves, setSaves] = useState<SavedSong[]>([])
+    const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
-        async function fetchBookmarked() {
+        async function fetchBookmarks() {
             if (!token) {
                 setIsLoading(false)
                 return
@@ -30,8 +30,8 @@ export default function UserBookmarkedScreen({ navigation, route }: UserBookmark
             setIsLoading(true)
             setError(null)
             try {
-                const response = await getProfileBookmarked(username, token)
-                setSaves(response.saves)
+                const response = await getProfileBookmarks(username, token)
+                setBookmarks(response.bookmarks)
             } catch (err) {
                 if (err instanceof ApiError) {
                     setError(err.detail)
@@ -44,15 +44,15 @@ export default function UserBookmarkedScreen({ navigation, route }: UserBookmark
                 setIsLoading(false)
             }
         }
-        fetchBookmarked()
+        fetchBookmarks()
     }, [token, username])
 
-    const openSong = (save: SavedSong) => {
-        if (save.ranking !== null) {
-            navigation.navigate("SongDetail", { ranking: save.ranking })
+    const openSong = (bm: Bookmark) => {
+        if (bm.ranking !== null) {
+            navigation.navigate("SongDetail", { ranking: bm.ranking })
             return
         }
-        navigation.navigate("SongDetail", { song: save.song })
+        navigation.navigate("SongDetail", { song: bm.song })
     }
 
     return (
@@ -62,18 +62,18 @@ export default function UserBookmarkedScreen({ navigation, route }: UserBookmark
                     <Text style={styles.backText}>Back</Text>
                 </TouchableOpacity>
                 <Text style={styles.kicker}>@{username}</Text>
-                <Text style={styles.heading}>Bookmarked</Text>
+                <Text style={styles.heading}>Bookmarks</Text>
             </View>
 
             {isLoading ? (
                 <ActivityIndicator color={colors.clay} style={styles.status} />
             ) : error !== null ? (
                 <Text style={styles.error}>{error}</Text>
-            ) : saves.length === 0 ? (
-                <Text style={styles.empty}>No bookmarks yet.</Text>
+            ) : bookmarks.length === 0 ? (
+                <Text style={styles.empty}>No Bookmarks yet.</Text>
             ) : (
                 <FlashList
-                    data={saves}
+                    data={bookmarks}
                     renderItem={({ item }) => (
                         <TouchableOpacity
                             accessibilityRole="button"
@@ -91,7 +91,7 @@ export default function UserBookmarkedScreen({ navigation, route }: UserBookmark
                             <View style={styles.songText}>
                                 <Text style={styles.title} numberOfLines={1}>{item.song.title}</Text>
                                 <Text style={styles.artist} numberOfLines={1}>{item.song.artist}</Text>
-                                <Text style={styles.savedAt}>{formatRelativeTime(item.saved_at)}</Text>
+                                <Text style={styles.bookmarkedAt}>{formatRelativeTime(item.bookmarked_at)}</Text>
                             </View>
                             {item.ranking !== null ? <BucketBadge bucket={item.ranking.bucket} /> : null}
                         </TouchableOpacity>
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
         fontSize: 10,
         marginTop: 3,
     },
-    savedAt: {
+    bookmarkedAt: {
         fontFamily: fonts.mono,
         color: colors.inkDim,
         fontSize: 9,

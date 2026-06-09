@@ -4,7 +4,7 @@ import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } fr
 import { ApiError } from "../../api/client"
 import { useAudioPlayer } from "../../hooks/useAudioPlayer"
 import { colors, fonts } from "../../theme"
-import { removeSavedSong, saveSong } from "../saved-songs/apiRequests"
+import { bookmarkSong, removeBookmark } from "../bookmarks/apiRequests"
 import { CoSignItem, FriendsNineItem } from "./types"
 
 type SocialDiscoveryCardProps = {
@@ -22,37 +22,37 @@ export default function SocialDiscoveryCard({
     onOpen,
     onRate,
 }: SocialDiscoveryCardProps) {
-    const [isSaved, setIsSaved] = useState(item.is_saved)
-    const [isSaving, setIsSaving] = useState(false)
-    const [saveError, setSaveError] = useState<string | null>(null)
+    const [isBookmarked, setIsBookmarked] = useState(item.is_bookmarked)
+    const [isBookmarking, setIsBookmarking] = useState(false)
+    const [bookmarkError, setBookmarkError] = useState<string | null>(null)
     const { isPlaying, toggle: toggleAudio } = useAudioPlayer(item.song.preview_url)
 
     const count = kind === "co-sign"
         ? (item as CoSignItem).co_sign_count
         : (item as FriendsNineItem).visible_high_score_friend_count
 
-    const handleSave = async () => {
-        if (isSaving) {
+    const handleBookmark = async () => {
+        if (isBookmarking) {
             return
         }
-        setIsSaving(true)
-        setSaveError(null)
+        setIsBookmarking(true)
+        setBookmarkError(null)
         try {
-            if (isSaved) {
-                await removeSavedSong(item.song.id, token)
-                setIsSaved(false)
+            if (isBookmarked) {
+                await removeBookmark(item.song.id, token)
+                setIsBookmarked(false)
             } else {
-                await saveSong(item.song, "discovery", token)
-                setIsSaved(true)
+                await bookmarkSong(item.song, "discovery", token)
+                setIsBookmarked(true)
             }
         } catch (err) {
             if (err instanceof ApiError) {
-                setSaveError(err.detail)
+                setBookmarkError(err.detail)
             } else {
-                setSaveError("Could not update Saved Songs.")
+                setBookmarkError("Could not update Bookmarks.")
             }
         } finally {
-            setIsSaving(false)
+            setIsBookmarking(false)
         }
     }
 
@@ -90,13 +90,13 @@ export default function SocialDiscoveryCard({
                 <TouchableOpacity style={styles.actionButton} onPress={onRate}>
                     <Text style={styles.actionText}>Rate now</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton} onPress={handleSave} disabled={isSaving}>
-                    {isSaving
+                <TouchableOpacity style={styles.actionButton} onPress={handleBookmark} disabled={isBookmarking}>
+                    {isBookmarking
                         ? <ActivityIndicator color={colors.clay} size="small" />
-                        : <Text style={styles.actionText}>{isSaved ? "Saved" : "Save"}</Text>}
+                        : <Text style={styles.actionText}>{isBookmarked ? "Bookmarked" : "Bookmark"}</Text>}
                 </TouchableOpacity>
             </View>
-            {saveError && <Text style={styles.errorText}>{saveError}</Text>}
+            {bookmarkError && <Text style={styles.errorText}>{bookmarkError}</Text>}
         </TouchableOpacity>
     )
 }
