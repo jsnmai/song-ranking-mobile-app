@@ -1,5 +1,5 @@
 // Shared taste profile component used by ProfileScreen and OtherProfileScreen.
-import { useState } from "react"
+import { type ReactNode, useState } from "react"
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
 import DiamondScore from "../../components/DiamondScore"
@@ -14,9 +14,10 @@ type Props = {
     taste: TasteProfileResponse | null;
     isLoading: boolean;
     error: string | null;
+    footer?: ReactNode;
 }
 
-export default function TasteTabContent({ taste, isLoading, error }: Props) {
+export default function TasteTabContent({ taste, isLoading, error, footer }: Props) {
     const [activeTab, setActiveTab] = useState<TabKey>("overall")
 
     if (isLoading) {
@@ -164,6 +165,7 @@ export default function TasteTabContent({ taste, isLoading, error }: Props) {
                     ))}
                 </View>
             )}
+            {footer}
         </ScrollView>
     )
 }

@@ -5,6 +5,7 @@ import { apiClient } from "../../api/client"
 import {
     BlockedProfileListResponse,
     CompatibilityResponse,
+    MostCompatibleResponse,
     Profile,
     ProfileBase,
     ProfileListResponse,
@@ -143,4 +144,9 @@ export async function getProfileBookmarks(
     token: string,
 ): Promise<BookmarkListResponse> {
     return apiClient.get<BookmarkListResponse>(`/api/v1/profile/${username}/bookmarks`, token)
+}
+
+// Calls GET /api/v1/profile/me/most-compatible
+export async function getMostCompatible(token: string): Promise<MostCompatibleResponse> {
+    return apiClient.get<MostCompatibleResponse>("/api/v1/profile/me/most-compatible", token)
 }

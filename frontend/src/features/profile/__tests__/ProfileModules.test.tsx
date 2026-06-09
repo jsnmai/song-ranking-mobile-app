@@ -1,9 +1,9 @@
-// Tests for RecentVerdictsModule and RankingsPreviewModule on ProfileScreen and OtherProfileScreen.
+// Tests for RecentVerdictsModule, RankingsPreviewModule, and MostCompatibleModule on ProfileScreen and OtherProfileScreen.
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native"
 
 import OtherProfileScreen from "../OtherProfileScreen"
 import ProfileScreen from "../ProfileScreen"
-import { CompatibilityResponse, Profile, RecentVerdictsResponse } from "../types"
+import { CompatibilityResponse, MostCompatibleItem, MostCompatibleResponse, Profile, RecentVerdictsResponse } from "../types"
 import { RankingListResponse, RankingResponse } from "../../comparison/types"
 
 // ── Navigation mocks ─────────────────────────────────────────────────────────
@@ -39,6 +39,7 @@ const mockBlockUser = jest.fn()
 const mockUnblockUser = jest.fn()
 const mockReportUser = jest.fn()
 const mockGetProfileBookmarks = jest.fn()
+const mockGetMostCompatible = jest.fn()
 
 jest.mock("../apiRequests", () => ({
     getMyProfile: (...args: unknown[]) => mockGetMyProfile(...args),
@@ -50,6 +51,7 @@ jest.mock("../apiRequests", () => ({
     getProfileRecentVerdicts: (...args: unknown[]) => mockGetProfileRecentVerdicts(...args),
     getProfileRankings: (...args: unknown[]) => mockGetProfileRankings(...args),
     getProfileBookmarks: (...args: unknown[]) => mockGetProfileBookmarks(...args),
+    getMostCompatible: (...args: unknown[]) => mockGetMostCompatible(...args),
     followUser: (...args: unknown[]) => mockFollowUser(...args),
     unfollowUser: (...args: unknown[]) => mockUnfollowUser(...args),
     blockUser: (...args: unknown[]) => mockBlockUser(...args),
@@ -163,6 +165,18 @@ const compatNoOverlap: CompatibilityResponse = {
     is_plus: false,
 }
 
+const compatibleUser: MostCompatibleItem = {
+    username: "maya",
+    display_name: "Maya",
+    similarity_score: 0.87,
+    shared_song_count: 14,
+    explanation: "Both love Frank Ocean",
+    computed_at: "2026-06-01T00:00:00Z",
+}
+
+const mostCompatibleResponse: MostCompatibleResponse = { users: [compatibleUser] }
+const emptyMostCompatibleResponse: MostCompatibleResponse = { users: [] }
+
 // ── ProfileScreen tests ───────────────────────────────────────────────────────
 
 describe("ProfileScreen profile modules", () => {
@@ -172,6 +186,7 @@ describe("ProfileScreen profile modules", () => {
         mockGetMyTasteProfile.mockResolvedValue({ total_rated: 0, avg_score: null, bucket_breakdown: { like: 0, okay: 0, dislike: 0 }, overall: { genres: [], top_artists: [] }, by_bucket: { like: { genres: [], top_artists: [], avg_score: null, count: 0 }, okay: { genres: [], top_artists: [], avg_score: null, count: 0 }, dislike: { genres: [], top_artists: [], avg_score: null, count: 0 } } })
         mockGetMyRecentVerdicts.mockResolvedValue(verdictsResponse)
         mockListMyRankings.mockResolvedValue(rankingsResponse)
+        mockGetMostCompatible.mockResolvedValue(mostCompatibleResponse)
     })
 
     it("renders Recent Verdicts module on the profile tab", async () => {
@@ -274,6 +289,71 @@ describe("ProfileScreen profile modules", () => {
         await waitFor(() => {
             expect(screen.getByText("No ratings yet.")).toBeTruthy()
             expect(screen.getByText("No rankings yet.")).toBeTruthy()
+        })
+    })
+
+    it("renders Most Compatible module on the taste tab", async () => {
+        render(<ProfileScreen />)
+
+        await waitFor(() => screen.getByText("Taste"))
+        fireEvent.press(screen.getByText("Taste"))
+
+        await waitFor(() => {
+            expect(screen.getByTestId("most-compatible-module")).toBeTruthy()
+        })
+    })
+
+    it("renders a compatible user row with match percentage on the taste tab", async () => {
+        render(<ProfileScreen />)
+
+        await waitFor(() => screen.getByText("Taste"))
+        fireEvent.press(screen.getByText("Taste"))
+
+        await waitFor(() => {
+            expect(screen.getByTestId("most-compatible-item-maya")).toBeTruthy()
+            expect(screen.getByText("87% match")).toBeTruthy()
+            expect(screen.getByText("Based on 14 shared ratings")).toBeTruthy()
+        })
+    })
+
+    it("tapping a compatible user navigates to OtherProfile", async () => {
+        render(<ProfileScreen />)
+
+        await waitFor(() => screen.getByText("Taste"))
+        fireEvent.press(screen.getByText("Taste"))
+
+        await waitFor(() => {
+            expect(screen.getByTestId("most-compatible-item-maya")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("most-compatible-item-maya"))
+
+        expect(mockNavigate).toHaveBeenCalledWith("OtherProfile", { username: "maya" })
+    })
+
+    it("View all on Most Compatible navigates to MostCompatible screen", async () => {
+        render(<ProfileScreen />)
+
+        await waitFor(() => screen.getByText("Taste"))
+        fireEvent.press(screen.getByText("Taste"))
+
+        await waitFor(() => {
+            expect(screen.getByTestId("most-compatible-view-all")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("most-compatible-view-all"))
+
+        expect(mockNavigate).toHaveBeenCalledWith("MostCompatible")
+    })
+
+    it("renders Most Compatible empty state on the taste tab when no compatible users", async () => {
+        mockGetMostCompatible.mockResolvedValue(emptyMostCompatibleResponse)
+
+        render(<ProfileScreen />)
+
+        await waitFor(() => screen.getByText("Taste"))
+        fireEvent.press(screen.getByText("Taste"))
+
+        await waitFor(() => {
+            expect(screen.getByText("Rate more songs to find compatible listeners.")).toBeTruthy()
         })
     })
 })

@@ -25,10 +25,12 @@ from src.crud.profile import create_profile, get_by_user_id, get_by_username, se
 from src.crud.rating import count_user_rankings
 from src.crud.report import create_report
 from src.crud.bookmarks import count_user_bookmarks, list_user_bookmarks
-from src.crud.similarity import get_snapshot_for_pair
+from src.crud.similarity import get_most_compatible_users, get_snapshot_for_pair
 from src.pydantic_schemas.profile import (
     BlockedProfileListResponse,
     CompatibilityResponse,
+    MostCompatibleItem,
+    MostCompatibleResponse,
     ProfileListResponse,
     ProfileReportCreate,
     ProfileReportResponse,
@@ -601,19 +603,26 @@ def get_profile_bookmarks(
 _ALGORITHM_VERSION = "v1_cosine"
 
 
-def _build_explanation(snapshot: UserSimilaritySnapshot) -> str:
-    """
-    Format a one-phrase explanation from structured snapshot fields.
+def _build_explanation_from_parts(
+    shared_top_artists: list[str],
+    shared_genres: list[str],
+    shared_song_count: int,
+) -> str:
+    """Format a one-phrase explanation from structured compatibility fields."""
+    if shared_top_artists:
+        return f"Both love {shared_top_artists[0]}"
+    if shared_genres:
+        return f"You both rate {shared_genres[0]} highly"
+    return f"You agree on {shared_song_count} songs"
 
-    Tries shared artists first, then genres, then falls back to song count.
-    Structured fields are used here — no pre-formatted strings are stored in
-    the database so future display surfaces can format them differently.
-    """
-    if snapshot.shared_top_artists:
-        return f"Both love {snapshot.shared_top_artists[0]}"
-    if snapshot.shared_genres:
-        return f"You both rate {snapshot.shared_genres[0]} highly"
-    return f"You agree on {snapshot.shared_song_count} songs"
+
+def _build_explanation(snapshot: UserSimilaritySnapshot) -> str:
+    """Format a one-phrase explanation from a snapshot row."""
+    return _build_explanation_from_parts(
+        snapshot.shared_top_artists,
+        snapshot.shared_genres,
+        snapshot.shared_song_count,
+    )
 
 
 def get_compatibility_for_username(
@@ -657,4 +666,29 @@ def get_compatibility_for_username(
         shared_song_count=snapshot.shared_song_count,
         explanation=_build_explanation(snapshot),
         is_plus=user_is_plus,
+    )
+
+
+def get_most_compatible(
+    db: Session,
+    viewer_id: int,
+) -> MostCompatibleResponse:
+    """Return users most taste-compatible with the current user, sorted by score."""
+    rows = get_most_compatible_users(db, viewer_id)
+    return MostCompatibleResponse(
+        users=[
+            MostCompatibleItem(
+                username=row.username,
+                display_name=row.display_name,
+                similarity_score=row.similarity_score,
+                shared_song_count=row.shared_song_count,
+                explanation=_build_explanation_from_parts(
+                    row.shared_top_artists,
+                    row.shared_genres,
+                    row.shared_song_count,
+                ),
+                computed_at=row.computed_at,
+            )
+            for row in rows
+        ]
     )

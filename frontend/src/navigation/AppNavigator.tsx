@@ -28,6 +28,7 @@ import SongDetailScreen from "../features/song-detail/SongDetailScreen"
 import BookmarksScreen from "../features/bookmarks/BookmarksScreen"
 import UserBookmarksScreen from "../features/profile/UserBookmarksScreen"
 import UserRankingsScreen from "../features/profile/UserRankingsScreen"
+import MostCompatibleScreen from "../features/profile/MostCompatibleScreen"
 
 const Tab = createBottomTabNavigator<TabParamList>()
 const Stack = createNativeStackNavigator<AppStackParamList>()
@@ -113,6 +114,7 @@ export default function AppNavigator() {
             <Stack.Screen name="ScoreReveal" component={ScoreRevealScreen} />
             <Stack.Screen name="UserRankings" component={UserRankingsScreen} />
             <Stack.Screen name="UserBookmarks" component={UserBookmarksScreen} />
+            <Stack.Screen name="MostCompatible" component={MostCompatibleScreen} />
         </Stack.Navigator>
     )
 }

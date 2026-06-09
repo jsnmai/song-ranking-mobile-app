@@ -11,9 +11,10 @@ import { listMyRankings } from "../rankings/apiRequests"
 import { AppStackParamList } from "../../navigation/types"
 import { colors, fonts } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
-import { getMyProfile, getMyRecentVerdicts, getMyTasteProfile } from "./apiRequests"
-import { Profile, RecentVerdictItem, TasteProfileResponse } from "./types"
+import { getMostCompatible, getMyProfile, getMyRecentVerdicts, getMyTasteProfile } from "./apiRequests"
+import { MostCompatibleItem, Profile, RecentVerdictItem, TasteProfileResponse } from "./types"
 import TasteTabContent from "./TasteTabContent"
+import MostCompatibleModule from "./MostCompatibleModule"
 import RankingsPreviewModule from "./RankingsPreviewModule"
 import RecentVerdictsModule from "./RecentVerdictsModule"
 
@@ -31,6 +32,7 @@ export default function ProfileScreen() {
     const [activeTab, setActiveTab] = useState<ProfileTab>("profile")
     const [verdicts, setVerdicts] = useState<RecentVerdictItem[] | null>(null)
     const [rankingsPreview, setRankingsPreview] = useState<RankingResponse[] | null>(null)
+    const [mostCompatible, setMostCompatible] = useState<MostCompatibleItem[] | null>(null)
 
     const openFollowers = () => {
         if (!profile) {
@@ -81,16 +83,19 @@ export default function ProfileScreen() {
             }
             async function fetchModules() {
                 try {
-                    const [vData, rData] = await Promise.all([
+                    const [vData, rData, mcData] = await Promise.all([
                         getMyRecentVerdicts(token!),
                         listMyRankings(token!),
+                        getMostCompatible(token!),
                     ])
                     setVerdicts(vData.items)
                     setRankingsPreview(rData.rankings.slice(0, 5))
+                    setMostCompatible(mcData.users)
                 } catch {
                     // silently degrade — modules show empty state
                     setVerdicts([])
                     setRankingsPreview([])
+                    setMostCompatible([])
                 }
             }
             fetchProfile()
@@ -198,6 +203,14 @@ export default function ProfileScreen() {
                     taste={taste}
                     isLoading={tasteLoading}
                     error={tasteError}
+                    footer={
+                        <MostCompatibleModule
+                            users={mostCompatible}
+                            isLoading={mostCompatible === null}
+                            onUserPress={(username) => navigation.navigate("OtherProfile", { username })}
+                            onViewAll={() => navigation.navigate("MostCompatible")}
+                        />
+                    }
                 />
             )}
             {activeTab === "profile" && (

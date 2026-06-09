@@ -155,3 +155,18 @@ export type CompatibilityResponse = {
     explanation: string;
     is_plus: boolean;
 }
+
+// Mirrors MostCompatibleItem in backend/src/pydantic_schemas/profile.py
+export type MostCompatibleItem = {
+    username: string;
+    display_name: string;
+    similarity_score: number;
+    shared_song_count: number;
+    explanation: string;
+    computed_at: string;
+}
+
+// Mirrors MostCompatibleResponse in backend/src/pydantic_schemas/profile.py
+export type MostCompatibleResponse = {
+    users: MostCompatibleItem[];
+}

@@ -9,6 +9,7 @@ from src.core.limiter import limiter
 from src.pydantic_schemas.profile import (
     BlockedProfileListResponse,
     CompatibilityResponse,
+    MostCompatibleResponse,
     ProfileListResponse,
     ProfileReportCreate,
     ProfileReportResponse,
@@ -26,6 +27,7 @@ from src.services.profile import (
     block_profile,
     follow_profile,
     get_compatibility_for_username,
+    get_most_compatible,
     get_my_blocked_profiles,
     get_my_profile,
     get_profile_bookmarks,
@@ -213,6 +215,23 @@ def profile_blocked(
     return get_my_blocked_profiles(
         db,
         current_user_id=current_user.id,
+    )
+
+
+@router.get(
+    "/me/most-compatible",
+    response_model=MostCompatibleResponse,
+)
+@limiter.limit("60/minute")
+def my_most_compatible(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MostCompatibleResponse:
+    """Return users most taste-compatible with the current user, sorted by score."""
+    return get_most_compatible(
+        db,
+        viewer_id=current_user.id,
     )
 
 

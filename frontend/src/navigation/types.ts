@@ -38,4 +38,5 @@ export type AppStackParamList = {
     ScoreReveal: { result: RatingFinalizeResponse; isRerate?: boolean };
     UserRankings: { username: string };
     UserBookmarks: { username: string };
+    MostCompatible: undefined;
 }

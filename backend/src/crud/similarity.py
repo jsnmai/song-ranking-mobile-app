@@ -2,12 +2,32 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
+from src.crud.social_access import visible_taste_owner_predicate
+from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.song import Song
 from src.sqlalchemy_tables.user_similarity_snapshot import UserSimilaritySnapshot
+
+MOST_COMPATIBLE_MIN_SHARED = 5
+MOST_COMPATIBLE_LIMIT = 20
+_MOST_COMPATIBLE_ALGORITHM = "v1_cosine"
+
+
+@dataclass
+class MostCompatibleRow:
+    """One row returned by get_most_compatible_users."""
+
+    other_user_id: int
+    username: str
+    display_name: str
+    similarity_score: float
+    shared_song_count: int
+    shared_genres: list[str]
+    shared_top_artists: list[str]
+    computed_at: datetime
 
 
 @dataclass
@@ -144,3 +164,58 @@ def upsert_snapshot(
         snapshot.shared_top_artists = shared_top_artists
         snapshot.computed_at = datetime.now(timezone.utc)
     db.flush()
+
+
+def get_most_compatible_users(
+    db: Session,
+    viewer_id: int,
+) -> list[MostCompatibleRow]:
+    """
+    Return users most taste-compatible with viewer_id, sorted by score descending.
+
+    Applies visibility and block rules via visible_taste_owner_predicate so callers
+    never see private, blocked, or deleted users in the result.
+    """
+    # Snapshots use canonical ordering (user_a_id < user_b_id), so the "other"
+    # user is on either side depending on which ID is smaller.
+    other_id = case(
+        (UserSimilaritySnapshot.user_a_id == viewer_id, UserSimilaritySnapshot.user_b_id),
+        else_=UserSimilaritySnapshot.user_a_id,
+    )
+    rows = db.execute(
+        select(
+            other_id.label("other_user_id"),
+            UserSimilaritySnapshot.similarity_score,
+            UserSimilaritySnapshot.shared_song_count,
+            UserSimilaritySnapshot.shared_genres,
+            UserSimilaritySnapshot.shared_top_artists,
+            UserSimilaritySnapshot.computed_at,
+            Profile.username,
+            Profile.display_name,
+        )
+        .join(Profile, Profile.user_id == other_id)
+        .where(
+            or_(
+                UserSimilaritySnapshot.user_a_id == viewer_id,
+                UserSimilaritySnapshot.user_b_id == viewer_id,
+            )
+        )
+        .where(UserSimilaritySnapshot.shared_song_count >= MOST_COMPATIBLE_MIN_SHARED)
+        .where(UserSimilaritySnapshot.algorithm_version == _MOST_COMPATIBLE_ALGORITHM)
+        .where(visible_taste_owner_predicate(viewer_id, other_id, include_self=False))
+        .order_by(UserSimilaritySnapshot.similarity_score.desc())
+        .limit(MOST_COMPATIBLE_LIMIT)
+    ).all()
+    return [
+        MostCompatibleRow(
+            other_user_id=row.other_user_id,
+            username=row.username,
+            display_name=row.display_name,
+            similarity_score=row.similarity_score,
+            shared_song_count=row.shared_song_count,
+            shared_genres=row.shared_genres or [],
+            shared_top_artists=row.shared_top_artists or [],
+            computed_at=row.computed_at,
+        )
+        for row in rows
+    ]

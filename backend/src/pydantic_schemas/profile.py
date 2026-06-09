@@ -225,3 +225,20 @@ class CompatibilityResponse(BaseModel):
     # Never stored pre-formatted in the database.
     explanation: str
     is_plus: bool
+
+
+class MostCompatibleItem(BaseModel):
+    """One user entry in the Most Compatible ranked list."""
+
+    username: str
+    display_name: str
+    similarity_score: float
+    shared_song_count: int
+    explanation: str
+    computed_at: datetime
+
+
+class MostCompatibleResponse(BaseModel):
+    """Response body for GET /profile/me/most-compatible."""
+
+    users: list[MostCompatibleItem]
