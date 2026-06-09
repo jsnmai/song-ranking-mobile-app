@@ -1,17 +1,21 @@
 // Profile tab — shows the logged-in user's display name, social counts, logout, and taste profile.
 import { useCallback, useEffect, useState } from "react"
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { useFocusEffect, useNavigation } from "@react-navigation/native"
 
 import { ApiError } from "../../api/client"
 import StarAvatar from "../../components/StarAvatar"
+import { RankingResponse } from "../comparison/types"
+import { listMyRankings } from "../rankings/apiRequests"
 import { AppStackParamList } from "../../navigation/types"
 import { colors, fonts } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
-import { getMyProfile, getMyTasteProfile } from "./apiRequests"
-import { Profile, TasteProfileResponse } from "./types"
+import { getMyProfile, getMyRecentVerdicts, getMyTasteProfile } from "./apiRequests"
+import { Profile, RecentVerdictItem, TasteProfileResponse } from "./types"
 import TasteTabContent from "./TasteTabContent"
+import RankingsPreviewModule from "./RankingsPreviewModule"
+import RecentVerdictsModule from "./RecentVerdictsModule"
 
 type ProfileNavigationProp = NativeStackNavigationProp<AppStackParamList, "MainTabs">
 type ProfileTab = "profile" | "taste"
@@ -25,6 +29,8 @@ export default function ProfileScreen() {
     const [tasteLoading, setTasteLoading] = useState(false)
     const [tasteError, setTasteError] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<ProfileTab>("profile")
+    const [verdicts, setVerdicts] = useState<RecentVerdictItem[] | null>(null)
+    const [rankingsPreview, setRankingsPreview] = useState<RankingResponse[] | null>(null)
 
     const openFollowers = () => {
         if (!profile) {
@@ -56,12 +62,12 @@ export default function ProfileScreen() {
 
     useFocusEffect(
         useCallback(() => {
+            if (!token) {
+                return
+            }
             async function fetchProfile() {
-                if (!token) {
-                    return
-                }
                 try {
-                    const data = await getMyProfile(token)
+                    const data = await getMyProfile(token!)
                     setProfile(data)
                 } catch (err) {
                     if (err instanceof ApiError) {
@@ -73,7 +79,22 @@ export default function ProfileScreen() {
                     }
                 }
             }
+            async function fetchModules() {
+                try {
+                    const [vData, rData] = await Promise.all([
+                        getMyRecentVerdicts(token!),
+                        listMyRankings(token!),
+                    ])
+                    setVerdicts(vData.items)
+                    setRankingsPreview(rData.rankings.slice(0, 5))
+                } catch {
+                    // silently degrade — modules show empty state
+                    setVerdicts([])
+                    setRankingsPreview([])
+                }
+            }
             fetchProfile()
+            fetchModules()
         }, [token])
     )
 
@@ -180,15 +201,42 @@ export default function ProfileScreen() {
                 />
             )}
             {activeTab === "profile" && (
-                <View style={styles.profilePanel}>
-                    <TouchableOpacity style={styles.savedSongsCard} onPress={openSavedSongs}>
-                        <View>
-                            <Text style={styles.savedSongsTitle}>Saved Songs</Text>
-                            <Text style={styles.savedSongsCopy}>Songs saved for later. Private, free, and unlimited.</Text>
+                <ScrollView style={styles.profilePanel} contentContainerStyle={styles.profilePanelContent}>
+                    {profile?.user_stats && (
+                        <View style={styles.statsCard}>
+                            <TouchableOpacity
+                                style={styles.statButton}
+                                onPress={() => navigation.navigate("MainTabs", { screen: "Rankings", params: { screen: "FullRankings" } })}
+                                testID="stats-rated"
+                            >
+                                <Text style={styles.statValue}>{profile.user_stats.rated_count}</Text>
+                                <Text style={styles.statLabel}>RATED</Text>
+                            </TouchableOpacity>
+                            <View style={styles.statDivider} />
+                            <TouchableOpacity
+                                style={styles.statButton}
+                                onPress={openSavedSongs}
+                                testID="stats-bookmarked"
+                            >
+                                <Text style={styles.statValue}>{profile.user_stats.bookmarked_count}</Text>
+                                <Text style={styles.statLabel}>BOOKMARKED</Text>
+                            </TouchableOpacity>
                         </View>
-                        <Text style={styles.savedSongsArrow}>→</Text>
-                    </TouchableOpacity>
-                </View>
+                    )}
+                    <RecentVerdictsModule
+                        verdicts={verdicts}
+                        isLoading={verdicts === null}
+                        onItemPress={(item) => {
+                            navigation.navigate("SongDetail", { song: item.song as never })
+                        }}
+                    />
+                    <RankingsPreviewModule
+                        rankings={rankingsPreview}
+                        isLoading={rankingsPreview === null}
+                        onItemPress={(ranking) => navigation.navigate("SongDetail", { ranking })}
+                        onViewAll={() => navigation.navigate("MainTabs", { screen: "Rankings", params: { screen: "FullRankings" } })}
+                    />
+                </ScrollView>
             )}
         </View>
     )
@@ -324,35 +372,51 @@ const styles = StyleSheet.create({
         backgroundColor: colors.bg,
     },
     profilePanel: {
+        flex: 1,
+    },
+    profilePanelContent: {
         paddingHorizontal: 18,
         paddingVertical: 18,
+        paddingBottom: 32,
     },
-    savedSongsCard: {
+    statsCard: {
         flexDirection: "row",
         alignItems: "center",
-        justifyContent: "space-between",
+        backgroundColor: colors.paper,
+        borderRadius: 14,
         borderWidth: 1,
         borderColor: colors.line,
-        borderRadius: 12,
-        backgroundColor: colors.paper,
-        padding: 14,
+        paddingVertical: 14,
+        paddingHorizontal: 8,
+        marginBottom: 16,
+        shadowColor: "#000",
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: 2,
     },
-    savedSongsTitle: {
+    statDivider: {
+        width: 1,
+        height: 36,
+        backgroundColor: colors.line,
+    },
+    statButton: {
+        flex: 1,
+        alignItems: "center",
+        paddingVertical: 4,
+    },
+    statValue: {
         fontFamily: fonts.serif,
         color: colors.ink,
-        fontSize: 20,
-        lineHeight: 24,
+        fontSize: 22,
+        lineHeight: 26,
+        marginBottom: 4,
     },
-    savedSongsCopy: {
+    statLabel: {
+        fontFamily: fonts.mono,
         color: colors.inkSoft,
-        fontSize: 11,
-        marginTop: 3,
-        maxWidth: 260,
-    },
-    savedSongsArrow: {
-        color: colors.clay,
-        fontSize: 20,
-        marginLeft: 12,
+        fontSize: 9,
+        letterSpacing: 1.4,
     },
     tabBtn: {
         flex: 1,

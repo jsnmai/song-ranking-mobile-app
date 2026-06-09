@@ -1,7 +1,7 @@
 """Database access for private current-user Saved Songs."""
 from dataclasses import dataclass
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -102,6 +102,16 @@ def list_user_saved_songs(
         )
         for row in rows
     ]
+
+
+def count_user_saved_songs(
+    db: Session,
+    user_id: int,
+) -> int:
+    """Return the total number of saved songs for a user."""
+    return db.execute(
+        select(func.count()).select_from(SavedSong).where(SavedSong.user_id == user_id)
+    ).scalar_one()
 
 
 def delete_user_saved_song(

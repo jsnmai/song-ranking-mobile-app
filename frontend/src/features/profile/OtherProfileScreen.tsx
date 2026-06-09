@@ -1,11 +1,20 @@
 // OtherProfile shows another user's public profile and the follow/unfollow action.
 import { useEffect, useState } from "react"
-import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
+import {
+    ActivityIndicator,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from "react-native"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 
 import { ApiError } from "../../api/client"
 import DiamondScore from "../../components/DiamondScore"
 import StarAvatar from "../../components/StarAvatar"
+import { RankingResponse } from "../comparison/types"
 import { AppStackParamList } from "../../navigation/types"
 import { colors, fonts } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
@@ -13,14 +22,19 @@ import {
     blockUser,
     followUser,
     getCompatibility,
+    getProfileBookmarked,
     getProfileByUsername,
+    getProfileRankings,
+    getProfileRecentVerdicts,
     getUserTasteProfile,
     reportUser,
     unblockUser,
     unfollowUser,
 } from "./apiRequests"
-import { CompatibilityResponse, Profile, ReportReason, TasteProfileResponse } from "./types"
+import { CompatibilityResponse, Profile, RecentVerdictItem, ReportReason, TasteProfileResponse } from "./types"
 import TasteTabContent from "./TasteTabContent"
+import RankingsPreviewModule from "./RankingsPreviewModule"
+import RecentVerdictsModule from "./RecentVerdictsModule"
 
 type OtherProfileProps = NativeStackScreenProps<AppStackParamList, "OtherProfile">
 type ProfileTab = "profile" | "taste"
@@ -65,6 +79,8 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
     const [isReporting, setIsReporting] = useState(false)
     const [reportError, setReportError] = useState<string | null>(null)
     const [reportSuccess, setReportSuccess] = useState(false)
+    const [verdicts, setVerdicts] = useState<RecentVerdictItem[] | null>(null)
+    const [rankingsPreview, setRankingsPreview] = useState<RankingResponse[] | null>(null)
 
     const openFollowers = () => {
         navigation.navigate("ProfileList", {
@@ -257,6 +273,30 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
         fetchCompatibility()
     }, [profile, token, username])
 
+    useEffect(() => {
+        if (!token || !profile || !profile.can_view_taste) {
+            return
+        }
+        async function fetchModules() {
+            if (!token) {
+                return
+            }
+            try {
+                const [vData, rData] = await Promise.all([
+                    getProfileRecentVerdicts(username, token),
+                    getProfileRankings(username, token),
+                ])
+                setVerdicts(vData.items)
+                setRankingsPreview(rData.rankings.slice(0, 5))
+            } catch {
+                // silently degrade — modules show empty state
+                setVerdicts([])
+                setRankingsPreview([])
+            }
+        }
+        fetchModules()
+    }, [profile, token, username])
+
     const profileInitial = profile
         ? (profile.display_name || profile.username).charAt(0).toUpperCase()
         : "?"
@@ -292,6 +332,27 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
                                 <Text style={styles.countLabel}>FOLLOWING</Text>
                             </TouchableOpacity>
                         </View>
+                        {profile.user_stats && (
+                            <View style={styles.statsCard} testID="other-profile-stats">
+                                <TouchableOpacity
+                                    style={styles.statButton}
+                                    onPress={() => navigation.navigate("UserRankings", { username })}
+                                    testID="stats-rated"
+                                >
+                                    <Text style={styles.statValue}>{profile.user_stats.rated_count}</Text>
+                                    <Text style={styles.statLabel}>RATED</Text>
+                                </TouchableOpacity>
+                                <View style={styles.statDivider} />
+                                <TouchableOpacity
+                                    style={styles.statButton}
+                                    onPress={() => navigation.navigate("UserBookmarked", { username })}
+                                    testID="stats-bookmarked"
+                                >
+                                    <Text style={styles.statValue}>{profile.user_stats.bookmarked_count}</Text>
+                                    <Text style={styles.statLabel}>BOOKMARKED</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
                         {!profile.is_own_profile && (
                             <View style={styles.actions}>
                                 <View style={styles.actionRow}>
@@ -480,6 +541,27 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
                         </TouchableOpacity>
                     </View>
 
+                    {activeTab === "profile" && profile.can_view_taste && (
+                        <ScrollView
+                            style={styles.profilePanel}
+                            contentContainerStyle={styles.profilePanelContent}
+                        >
+                            <RecentVerdictsModule
+                                verdicts={verdicts}
+                                isLoading={verdicts === null}
+                                onItemPress={(item) => {
+                                    navigation.navigate("SongDetail", { song: item.song as never })
+                                }}
+                            />
+                            <RankingsPreviewModule
+                                rankings={rankingsPreview}
+                                isLoading={rankingsPreview === null}
+                                onItemPress={(ranking) => navigation.navigate("SongDetail", { ranking })}
+                                onViewAll={() => navigation.navigate("UserRankings", { username })}
+                            />
+                        </ScrollView>
+                    )}
+
                     {activeTab === "taste" && (
                         profile.can_view_taste ? (
                             <TasteTabContent
@@ -596,6 +678,46 @@ const styles = StyleSheet.create({
         marginBottom: 4,
     },
     countLabel: {
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 9,
+        letterSpacing: 1.4,
+    },
+    statsCard: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: colors.paper,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: colors.line,
+        paddingVertical: 14,
+        paddingHorizontal: 8,
+        width: "100%",
+        marginBottom: 16,
+        shadowColor: "#000",
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: 2,
+    },
+    statDivider: {
+        width: 1,
+        height: 36,
+        backgroundColor: colors.line,
+    },
+    statButton: {
+        flex: 1,
+        alignItems: "center",
+        paddingVertical: 4,
+    },
+    statValue: {
+        fontFamily: fonts.serif,
+        color: colors.ink,
+        fontSize: 22,
+        lineHeight: 26,
+        marginBottom: 4,
+    },
+    statLabel: {
         fontFamily: fonts.mono,
         color: colors.inkSoft,
         fontSize: 9,
@@ -851,6 +973,14 @@ const styles = StyleSheet.create({
         fontSize: 11,
         letterSpacing: 0.4,
         marginTop: 8,
+    },
+    profilePanel: {
+        flex: 1,
+    },
+    profilePanelContent: {
+        paddingHorizontal: 18,
+        paddingVertical: 18,
+        paddingBottom: 32,
     },
     tabBar: {
         flexDirection: "row",

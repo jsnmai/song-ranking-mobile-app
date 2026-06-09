@@ -24,6 +24,12 @@ export type ProfileBase = {
     created_at: string;
 }
 
+// Mirrors UserStats in backend/src/pydantic_schemas/profile.py
+export type UserStats = {
+    rated_count: number;
+    bookmarked_count: number;
+}
+
 // Mirrors ProfileSummaryResponse in backend/src/pydantic_schemas/profile.py
 export type Profile = ProfileBase & {
     follower_count: number;
@@ -32,6 +38,7 @@ export type Profile = ProfileBase & {
     is_own_profile: boolean;
     can_view_taste: boolean;
     is_blocked: boolean;
+    user_stats: UserStats | null;
 }
 
 // Mirrors ProfileSearchResponse in backend/src/pydantic_schemas/profile.py
@@ -115,6 +122,29 @@ export type TasteProfileResponse = {
         okay: TasteBucketSection;
         dislike: TasteBucketSection;
     };
+}
+
+export type RecentVerdictSong = {
+    id: number;
+    deezer_id: number;
+    title: string;
+    artist: string;
+    album: string;
+    cover_url: string;
+    preview_url: string | null;
+}
+
+export type RecentVerdictItem = {
+    rating_event_id: number;
+    song: RecentVerdictSong;
+    bucket: string;
+    score: number;
+    note: string | null;
+    created_at: string;
+}
+
+export type RecentVerdictsResponse = {
+    items: RecentVerdictItem[];
 }
 
 // Mirrors CompatibilityResponse in backend/src/pydantic_schemas/profile.py

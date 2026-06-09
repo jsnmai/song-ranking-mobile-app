@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from src.sqlalchemy_tables.ranking import Ranking
@@ -183,6 +183,16 @@ def list_user_rankings_with_songs(
         )
         for row in rows
     ]
+
+
+def count_user_rankings(
+    db: Session,
+    user_id: int,
+) -> int:
+    """Return the total number of ranked songs for a user."""
+    return db.execute(
+        select(func.count()).select_from(Ranking).where(Ranking.user_id == user_id)
+    ).scalar_one()
 
 
 def create_ranking(

@@ -19,12 +19,16 @@ from src.pydantic_schemas.profile import (
     ProfileVisibilityUpdate,
     TasteProfileResponse,
 )
+from src.pydantic_schemas.profile_modules import RecentVerdictsResponse
+from src.pydantic_schemas.rating import RankingListResponse
+from src.pydantic_schemas.saved_songs import SavedSongListResponse
 from src.services.profile import (
     block_profile,
     follow_profile,
     get_compatibility_for_username,
     get_my_blocked_profiles,
     get_my_profile,
+    get_profile_bookmarked,
     get_profile_by_username,
     get_profile_followers,
     get_profile_following,
@@ -34,6 +38,11 @@ from src.services.profile import (
     unblock_profile,
     unfollow_profile,
     update_my_visibility,
+)
+from src.services.profile_modules import (
+    get_my_recent_verdicts,
+    get_profile_rankings_by_username,
+    get_profile_recent_verdicts,
 )
 from src.services.taste import (
     get_my_taste_profile,
@@ -124,6 +133,20 @@ def profile_search(
 
 
 @router.get(
+    "/me/recent-verdicts",
+    response_model=RecentVerdictsResponse,
+)
+@limiter.limit("300/minute")
+def my_recent_verdicts(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RecentVerdictsResponse:
+    """Return the authenticated user's own recent rating verdicts."""
+    return get_my_recent_verdicts(db, user_id=current_user.id)
+
+
+@router.get(
     "/me/taste",
     response_model=TasteProfileResponse,
 )
@@ -190,6 +213,61 @@ def profile_blocked(
     return get_my_blocked_profiles(
         db,
         current_user_id=current_user.id,
+    )
+
+
+@router.get(
+    "/{username}/recent-verdicts",
+    response_model=RecentVerdictsResponse,
+)
+@limiter.limit("300/minute")
+def profile_recent_verdicts(
+    request: Request,
+    username: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RecentVerdictsResponse:
+    """Return a profile's recent verdicts, enforcing taste visibility rules."""
+    return get_profile_recent_verdicts(db, viewer_id=current_user.id, username=username)
+
+
+@router.get(
+    "/{username}/rankings",
+    response_model=RankingListResponse,
+)
+@limiter.limit("300/minute")
+def profile_rankings(
+    request: Request,
+    username: str,
+    cursor: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RankingListResponse:
+    """Return a profile's rankings, enforcing taste visibility rules."""
+    return get_profile_rankings_by_username(
+        db,
+        viewer_id=current_user.id,
+        username=username,
+        cursor=cursor,
+    )
+
+
+@router.get(
+    "/{username}/bookmarked",
+    response_model=SavedSongListResponse,
+)
+@limiter.limit("300/minute")
+def profile_bookmarked(
+    request: Request,
+    username: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SavedSongListResponse:
+    """Return a profile's bookmarked songs, enforcing taste visibility rules."""
+    return get_profile_bookmarked(
+        db,
+        current_user_id=current_user.id,
+        username=username,
     )
 
 

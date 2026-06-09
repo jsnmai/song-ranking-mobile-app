@@ -11,6 +11,8 @@ const mockNavigate = jest.fn()
 const mockGetProfileByUsername = jest.fn()
 const mockGetCompatibility = jest.fn()
 const mockGetUserTasteProfile = jest.fn()
+const mockGetProfileRecentVerdicts = jest.fn()
+const mockGetProfileRankings = jest.fn()
 const mockFollowUser = jest.fn()
 const mockUnfollowUser = jest.fn()
 const mockBlockUser = jest.fn()
@@ -27,6 +29,8 @@ jest.mock("../apiRequests", () => ({
     getProfileByUsername: (...args: unknown[]) => mockGetProfileByUsername(...args),
     getCompatibility: (...args: unknown[]) => mockGetCompatibility(...args),
     getUserTasteProfile: (...args: unknown[]) => mockGetUserTasteProfile(...args),
+    getProfileRecentVerdicts: (...args: unknown[]) => mockGetProfileRecentVerdicts(...args),
+    getProfileRankings: (...args: unknown[]) => mockGetProfileRankings(...args),
     followUser: (...args: unknown[]) => mockFollowUser(...args),
     unfollowUser: (...args: unknown[]) => mockUnfollowUser(...args),
     blockUser: (...args: unknown[]) => mockBlockUser(...args),
@@ -79,6 +83,8 @@ beforeEach(() => {
     jest.resetAllMocks()
     mockGetProfileByUsername.mockResolvedValue(profile)
     mockGetCompatibility.mockResolvedValue(compatNoOverlap)
+    mockGetProfileRecentVerdicts.mockResolvedValue({ items: [] })
+    mockGetProfileRankings.mockResolvedValue({ rankings: [], next_cursor: null })
     mockReportUser.mockResolvedValue({
         id: 1,
         status: "open",

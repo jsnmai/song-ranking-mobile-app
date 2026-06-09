@@ -123,6 +123,13 @@ class ProfileResponse(BaseModel):
     created_at: datetime
 
 
+class UserStats(BaseModel):
+    """Rated and bookmarked counts, shown when the viewer can see taste data."""
+
+    rated_count: int
+    bookmarked_count: int
+
+
 class ProfileSummaryResponse(ProfileResponse):
     """Profile plus social relationship metadata for the current user."""
 
@@ -132,6 +139,7 @@ class ProfileSummaryResponse(ProfileResponse):
     is_own_profile: bool
     can_view_taste: bool
     is_blocked: bool
+    user_stats: UserStats | None = None
 
 
 class BlockedProfileListResponse(BaseModel):

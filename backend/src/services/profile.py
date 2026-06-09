@@ -22,7 +22,9 @@ from src.crud.follow import (
     list_following,
 )
 from src.crud.profile import create_profile, get_by_user_id, get_by_username, search_by_username
+from src.crud.rating import count_user_rankings
 from src.crud.report import create_report
+from src.crud.saved_songs import count_user_saved_songs, list_user_saved_songs
 from src.crud.similarity import get_snapshot_for_pair
 from src.pydantic_schemas.profile import (
     BlockedProfileListResponse,
@@ -35,9 +37,12 @@ from src.pydantic_schemas.profile import (
     ProfileSetup,
     ProfileSummaryResponse,
     ProfileVisibilityUpdate,
+    UserStats,
 )
+from src.pydantic_schemas.saved_songs import SavedSongListResponse, SavedSongResponse
 from src.services.access import can_view_profile, can_view_taste
 from src.services.access import is_plus as check_is_plus
+from src.services.rating import build_ranking_response
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.user import User
 from src.sqlalchemy_tables.user_similarity_snapshot import UserSimilaritySnapshot
@@ -104,6 +109,15 @@ def _build_profile_summary(
             profile.user_id,
         )
     )
+    taste_visible = can_view_taste(db, current_user_id, profile)
+    user_stats = (
+        UserStats(
+            rated_count=count_user_rankings(db, profile.user_id),
+            bookmarked_count=count_user_saved_songs(db, profile.user_id),
+        )
+        if taste_visible
+        else None
+    )
     return ProfileSummaryResponse(
         **base.model_dump(),
         follower_count=count_followers(
@@ -120,12 +134,9 @@ def _build_profile_summary(
             profile.user_id,
         ) is not None,
         is_own_profile=current_user_id == profile.user_id,
-        can_view_taste=can_view_taste(
-            db,
-            current_user_id,
-            profile,
-        ),
+        can_view_taste=taste_visible,
         is_blocked=is_blocked,
+        user_stats=user_stats,
     )
 
 
@@ -561,6 +572,28 @@ def get_my_blocked_profiles(
                 db,
                 current_user_id,
             )
+        ],
+    )
+
+
+def get_profile_bookmarked(
+    db: Session,
+    current_user_id: int,
+    username: str,
+) -> SavedSongListResponse:
+    """Return another user's bookmarked songs, enforcing taste visibility."""
+    profile = _get_taste_visible_profile_by_username(db, current_user_id, username)
+    rows = list_user_saved_songs(db, user_id=profile.user_id, limit=100)
+    return SavedSongListResponse(
+        saves=[
+            SavedSongResponse(
+                id=row.save.id,
+                source=row.save.source,
+                saved_at=row.save.created_at,
+                song=row.song,
+                ranking=build_ranking_response(row.ranking, row.song) if row.ranking is not None else None,
+            )
+            for row in rows
         ],
     )
 

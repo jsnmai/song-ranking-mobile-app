@@ -26,6 +26,8 @@ import ProfileScreen from "../features/profile/ProfileScreen"
 import SettingsScreen from "../features/profile/SettingsScreen"
 import SongDetailScreen from "../features/song-detail/SongDetailScreen"
 import SavedSongsScreen from "../features/saved-songs/SavedSongsScreen"
+import UserBookmarkedScreen from "../features/profile/UserBookmarkedScreen"
+import UserRankingsScreen from "../features/profile/UserRankingsScreen"
 
 const Tab = createBottomTabNavigator<TabParamList>()
 const Stack = createNativeStackNavigator<AppStackParamList>()
@@ -109,6 +111,8 @@ export default function AppNavigator() {
             <Stack.Screen name="BucketSelection" component={BucketSelectionScreen} />
             <Stack.Screen name="ComparisonFlow" component={ComparisonFlowScreen} />
             <Stack.Screen name="ScoreReveal" component={ScoreRevealScreen} />
+            <Stack.Screen name="UserRankings" component={UserRankingsScreen} />
+            <Stack.Screen name="UserBookmarked" component={UserBookmarkedScreen} />
         </Stack.Navigator>
     )
 }

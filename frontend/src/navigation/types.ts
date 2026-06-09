@@ -36,4 +36,6 @@ export type AppStackParamList = {
     BucketSelection: { song: SongSearchResult };
     ComparisonFlow: { session: ComparisonSessionResponse };
     ScoreReveal: { result: RatingFinalizeResponse; isRerate?: boolean };
+    UserRankings: { username: string };
+    UserBookmarked: { username: string };
 }
