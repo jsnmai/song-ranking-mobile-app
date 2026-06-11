@@ -222,6 +222,8 @@ def test_start_comparison_session_creates_temporary_state_only(
         {
             "song_id": body["candidate"]["song_id"],
             "title": "Nights",
+            "artist": "Frank Ocean",
+            "cover_url": "https://example.com/cover.jpg",
         }
     ]
     db_session.expire_all()

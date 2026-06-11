@@ -403,6 +403,8 @@ def _bucket_ranking_items(
             ComparisonBucketRankingItem(
                 song_id=ranking.song_id,
                 title=song.title,
+                artist=song.artist,
+                cover_url=song.cover_url,
             )
         )
     return items

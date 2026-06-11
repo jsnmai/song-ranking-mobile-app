@@ -47,6 +47,8 @@ class ComparisonBucketRankingItem(BaseModel):
 
     song_id: int
     title: str
+    artist: str
+    cover_url: str | None = None
 
 
 class ComparisonSessionResponse(BaseModel):

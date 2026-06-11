@@ -83,6 +83,8 @@ export type RankingReorderResponse = {
 export type ComparisonBucketRankingItem = {
     song_id: number;
     title: string;
+    artist: string;
+    cover_url: string | null;
 }
 
 export type ComparisonSessionResponse = {
