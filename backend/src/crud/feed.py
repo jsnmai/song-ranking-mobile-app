@@ -29,7 +29,7 @@ def list_feed_events(
     cursor_created_at: datetime | None = None,
     cursor_id: int | None = None,
 ) -> list[FeedEventRow]:
-    """Return feed events from users followed by the current user."""
+    """Return feed events from the current user and users they follow."""
     mutual_follow = aliased(Follow)
     viewer_blocks_actor = aliased(Block)
     actor_blocks_viewer = aliased(Block)
@@ -57,9 +57,12 @@ def list_feed_events(
             latest_event_ids,
             latest_event_ids.c.id == RatingEvent.id,
         )
-        .join(
+        .outerjoin(
             Follow,
-            Follow.following_id == RatingEvent.user_id,
+            and_(
+                Follow.following_id == RatingEvent.user_id,
+                Follow.follower_id == user_id,
+            ),
         )
         .outerjoin(
             mutual_follow,
@@ -90,18 +93,25 @@ def list_feed_events(
             Song,
             Song.id == RatingEvent.song_id,
         )
-        .where(Follow.follower_id == user_id)
         .where(
             or_(
-                Profile.visibility == "public",
+                # Own events are always visible.
+                RatingEvent.user_id == user_id,
+                # Followed-user events are subject to visibility and block checks.
                 and_(
-                    Profile.visibility == "friends_only",
-                    mutual_follow.id.is_not(None),
+                    Follow.id.is_not(None),
+                    or_(
+                        Profile.visibility == "public",
+                        and_(
+                            Profile.visibility == "friends_only",
+                            mutual_follow.id.is_not(None),
+                        ),
+                    ),
+                    viewer_blocks_actor.id.is_(None),
+                    actor_blocks_viewer.id.is_(None),
                 ),
             )
         )
-        .where(viewer_blocks_actor.id.is_(None))
-        .where(actor_blocks_viewer.id.is_(None))
         .where(RatingEvent.event_type != "removed")
         .where(RatingEvent.event_type != "reordered")
         .where(RatingEvent.new_bucket.is_not(None))
