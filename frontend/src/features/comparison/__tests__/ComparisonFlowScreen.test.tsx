@@ -12,6 +12,10 @@ const mockPlay = jest.fn()
 const mockCreatePlayer = jest.fn()
 const mockAddNavigationListener = jest.fn()
 
+jest.mock("react-native-safe-area-context", () => ({
+    useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}))
+
 jest.mock("expo-audio", () => ({
     createAudioPlayer: (...args: unknown[]) => mockCreatePlayer(...args),
     setAudioModeAsync: jest.fn(),
@@ -86,7 +90,7 @@ const session: ComparisonSessionResponse = {
     high_index: 1,
     candidate_index: 0,
     total_in_bucket: 1,
-    current_bucket_rankings: [{ song_id: 42, title: "Pink + White" }],
+    current_bucket_rankings: [{ song_id: 42, title: "Pink + White", artist: "Frank Ocean", cover_url: null }],
     created_at: "2026-01-01T00:00:00Z",
 }
 
@@ -127,7 +131,7 @@ describe("ComparisonFlowScreen", () => {
             expect(mockFetchPreviewUrl).toHaveBeenCalledWith(999, "test-token")
         })
 
-        const previewButton = await screen.findByText("Preview")
+        const previewButton = await screen.findByLabelText("Preview candidate")
         act(() => {
             fireEvent.press(previewButton, { stopPropagation: jest.fn() })
         })
@@ -157,7 +161,7 @@ describe("ComparisonFlowScreen", () => {
         const rendered = render(<ComparisonFlowScreen navigation={navigation as never} route={route as never} />)
 
         jest.spyOn(Date, "now").mockReturnValue(2450)
-        fireEvent.press(screen.getByText("New rating"))
+        fireEvent.press(screen.getByLabelText("Choose new song"))
 
         await waitFor(() => {
             expect(mockChooseComparisonWinner).toHaveBeenCalledWith("session-123", "target", "test-token", 1450)

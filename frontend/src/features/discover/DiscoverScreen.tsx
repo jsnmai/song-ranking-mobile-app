@@ -1,59 +1,187 @@
-// Discover tab — houses song search, recommendations, and trending in later phases.
-// Phase 3 wires the search bar to LISTn's backend Deezer proxy.
-// The search bar auto-focuses when the user navigates here via the FAB.
-import { useEffect, useRef, useState } from "react"
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
-import { CompositeNavigationProp, useNavigation, useRoute, RouteProp } from "@react-navigation/native"
+// Discover tab — song search, user search, and social discovery sections.
+import { useCallback, useEffect, useRef, useState } from "react"
+import {
+    ActivityIndicator,
+    Image,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from "react-native"
+import Animated, {
+    FadeInDown,
+    FadeInRight,
+    FadeOut,
+    FadeOutRight,
+    LinearTransition,
+} from "react-native-reanimated"
+import { CompositeNavigationProp, useFocusEffect, useNavigation, useRoute, RouteProp } from "@react-navigation/native"
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
+import * as SecureStore from "expo-secure-store"
+import Svg, { Circle, Path } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
-import StarAvatar from "../../components/StarAvatar"
 import { AppStackParamList, TabParamList } from "../../navigation/types"
 import { colors, fonts } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
-import { searchProfiles } from "../profile/apiRequests"
-import { Profile } from "../profile/types"
+import { getMostCompatible, searchProfiles } from "../profile/apiRequests"
+import { MostCompatibleItem, Profile } from "../profile/types"
 import { getMyRankingByDeezerId } from "../rankings/apiRequests"
 import { searchSongs } from "../search/apiRequests"
 import { SongSearchResult } from "../search/types"
-import { listCoSigns, listFriendsNines } from "./apiRequests"
+import { listCoSigns } from "./apiRequests"
 import SocialDiscoveryCard from "./SocialDiscoveryCard"
-import { CoSignItem, FriendsNineItem } from "./types"
+import { CoSignItem } from "./types"
 
-// RouteProp<ParamList, ScreenName> gives the type of route.params for a specific screen.
+const RECENT_KEY = "discover_recent_searches"
+
+const POPULAR_PLACEHOLDERS = [
+    { id: 1, title: "Redbone", artist: "CHILDISH GAMBINO" },
+    { id: 2, title: "After Hours", artist: "THE WEEKND" },
+    { id: 3, title: "Saturn", artist: "SZA" },
+    { id: 4, title: "Pink + White", artist: "FRANK OCEAN" },
+]
+
 type DiscoverRouteProp = RouteProp<TabParamList, "Discover">
 type DiscoverNavigationProp = CompositeNavigationProp<
     BottomTabNavigationProp<TabParamList, "Discover">,
     NativeStackNavigationProp<AppStackParamList>
 >
 
+function SearchIcon({ size = 16 }: { size?: number }) {
+    return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+            stroke={colors.inkSoft} strokeWidth={1.9} strokeLinecap="round">
+            <Circle cx={11} cy={11} r={7} />
+            <Path d="m20 20-3.4-3.4" />
+        </Svg>
+    )
+}
+
+function PersonIcon() {
+    return (
+        <Svg width={11} height={11} viewBox="0 0 24 24" fill="none">
+            <Circle cx="12" cy="8" r="4" stroke={colors.inkSoft} strokeWidth={2} strokeLinecap="round" />
+            <Path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" stroke={colors.inkSoft} strokeWidth={2} strokeLinecap="round" />
+        </Svg>
+    )
+}
+
+function MiniSearchIcon() {
+    return (
+        <Svg width={11} height={11} viewBox="0 0 24 24" fill="none">
+            <Circle cx={11} cy={11} r={7} stroke={colors.inkSoft} strokeWidth={2} />
+            <Path d="m20 20-3.4-3.4" stroke={colors.inkSoft} strokeWidth={2} strokeLinecap="round" />
+        </Svg>
+    )
+}
+
+type RecentEntry = { query: string; mode: "songs" | "users" }
+
 export default function DiscoverScreen() {
     const route = useRoute<DiscoverRouteProp>()
     const navigation = useNavigation<DiscoverNavigationProp>()
-    const { token } = useAuth()
-    // useRef holds a reference to the TextInput DOM node so we can call .focus() imperatively.
+    const { token, profile } = useAuth()
+    const avatarInitial = (profile?.display_name || profile?.username || "?").charAt(0).toUpperCase()
     const searchRef = useRef<TextInput>(null)
+    const [searchFocused, setSearchFocused] = useState(false)
     const [searchMode, setSearchMode] = useState<"songs" | "users">(route.params?.searchMode ?? "songs")
     const [query, setQuery] = useState("")
+    const [recentSearches, setRecentSearches] = useState<RecentEntry[]>([])
+    const recentLoaded = useRef(false)
     const [songResults, setSongResults] = useState<SongSearchResult[]>([])
     const [profileResults, setProfileResults] = useState<Profile[]>([])
     const [isLoading, setIsLoading] = useState(false)
     const [openingDeezerId, setOpeningDeezerId] = useState<number | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [coSigns, setCoSigns] = useState<CoSignItem[]>([])
-    const [friendsNines, setFriendsNines] = useState<FriendsNineItem[]>([])
     const [isDiscoveryLoading, setIsDiscoveryLoading] = useState(false)
     const [discoveryError, setDiscoveryError] = useState<string | null>(null)
+    const [topCompatUser, setTopCompatUser] = useState<MostCompatibleItem | null>(null)
+
+    // Load persisted recent searches on mount
+    useEffect(() => {
+        SecureStore.getItemAsync(RECENT_KEY)
+            .then(json => {
+                if (json) {
+                    try { setRecentSearches(JSON.parse(json)) } catch {}
+                }
+            })
+            .finally(() => { recentLoaded.current = true })
+    }, [])
+
+    // Persist recent searches whenever the list changes (skip initial empty state)
+    useEffect(() => {
+        if (!recentLoaded.current) return
+        SecureStore.setItemAsync(RECENT_KEY, JSON.stringify(recentSearches)).catch(() => {})
+    }, [recentSearches])
+
+    // Bring up the keyboard whenever searchFocused becomes true (e.g. from route param or tap).
+    // 150ms gives nav transitions time to complete before focus is requested.
+    useEffect(() => {
+        if (searchFocused) {
+            const id = setTimeout(() => searchRef.current?.focus(), 150)
+            return () => clearTimeout(id)
+        }
+    }, [searchFocused])
+
+    // Restore keyboard when returning to this tab while a search is in progress.
+    useFocusEffect(
+        useCallback(() => {
+            if (searchFocused) {
+                const id = setTimeout(() => searchRef.current?.focus(), 150)
+                return () => clearTimeout(id)
+            }
+        }, [searchFocused])
+    )
+
+    // Pressing the Discover tab while already on it and searching → reset to home.
+    useEffect(() => {
+        return navigation.addListener("tabPress", (e) => {
+            if (navigation.isFocused() && searchFocused) {
+                e.preventDefault()
+                handleCancel()
+            }
+        })
+    }, [navigation, searchFocused])
+
+    const addToRecent = (q: string, mode: "songs" | "users") => {
+        if (q.trim().length < 2) return
+        setRecentSearches(prev => {
+            const filtered = prev.filter(r => !(r.query === q.trim() && r.mode === mode))
+            return [{ query: q.trim(), mode }, ...filtered].slice(0, 8)
+        })
+    }
+
+    const handleFocusSearch = () => setSearchFocused(true)
+
+    const handleCancel = () => {
+        setSearchFocused(false)
+        setQuery("")
+        searchRef.current?.blur()
+        setSongResults([])
+        setProfileResults([])
+        setError(null)
+    }
+
+    const handleRecentPress = (item: RecentEntry) => {
+        setSearchMode(item.mode)
+        setQuery(item.query)
+    }
+
+    const handleRemoveRecent = (item: RecentEntry) => {
+        setRecentSearches(prev => prev.filter(r => !(r.query === item.query && r.mode === item.mode)))
+    }
 
     const handleSongPress = async (song: SongSearchResult) => {
-        if (!token || openingDeezerId !== null) {
-            return
-        }
-
+        if (!token || openingDeezerId !== null) return
         setOpeningDeezerId(song.deezer_id)
         setError(null)
-
+        addToRecent(query, "songs")
         try {
             const ranking = await getMyRankingByDeezerId(song.deezer_id, token)
             navigation.navigate("SongDetail", { ranking })
@@ -62,7 +190,6 @@ export default function DiscoverScreen() {
                 navigation.navigate("SongDetail", { song })
                 return
             }
-
             if (err instanceof ApiError) {
                 setError(err.detail)
             } else if (err instanceof Error) {
@@ -75,19 +202,20 @@ export default function DiscoverScreen() {
         }
     }
 
-    const handleProfilePress = (profile: Profile) => {
-        if (profile.is_own_profile) {
+    const handleProfilePress = (p: Profile) => {
+        addToRecent(query, "users")
+        if (p.is_own_profile) {
             navigation.navigate("MainTabs", { screen: "Profile" })
             return
         }
-        navigation.navigate("OtherProfile", { username: profile.username })
+        navigation.navigate("OtherProfile", { username: p.username })
     }
 
-    const handleDiscoverySongPress = (item: CoSignItem | FriendsNineItem) => {
+    const handleDiscoverySongPress = (item: CoSignItem) => {
         navigation.navigate("SongDetail", { song: item.song })
     }
 
-    const handleRatePress = (item: CoSignItem | FriendsNineItem) => {
+    const handleRatePress = (item: CoSignItem) => {
         navigation.navigate("BucketSelection", { song: item.song })
     }
 
@@ -98,20 +226,17 @@ export default function DiscoverScreen() {
         setError(null)
     }
 
-    // Auto-focus the search bar when navigated here via the FAB.
-    // After focusing, reset the param so a normal tab press later does not re-trigger focus.
     useEffect(() => {
         if (route.params?.searchMode) {
             setMode(route.params.searchMode)
             navigation.setParams({ searchMode: undefined })
         }
         if (route.params?.focusSearch) {
-            searchRef.current?.focus()
+            setSearchFocused(true)
             navigation.setParams({ focusSearch: undefined })
         }
     }, [route.params?.focusSearch, route.params?.searchMode, navigation])
 
-    // Debounce means wait for typing to pause before searching, instead of firing one request per keypress.
     useEffect(() => {
         const trimmedQuery = query.trim()
         if (trimmedQuery.length === 0) {
@@ -121,7 +246,6 @@ export default function DiscoverScreen() {
             setIsLoading(false)
             return
         }
-
         if (trimmedQuery.length < 2) {
             setSongResults([])
             setProfileResults([])
@@ -129,16 +253,12 @@ export default function DiscoverScreen() {
             setIsLoading(false)
             return
         }
-
-        if (!token) {
-            return
-        }
+        if (!token) return
 
         let isCurrentSearch = true
         const timeoutId = setTimeout(async () => {
             setIsLoading(true)
             setError(null)
-
             try {
                 if (searchMode === "songs") {
                     const response = await searchSongs(trimmedQuery, token)
@@ -166,9 +286,7 @@ export default function DiscoverScreen() {
                     }
                 }
             } finally {
-                if (isCurrentSearch) {
-                    setIsLoading(false)
-                }
+                if (isCurrentSearch) setIsLoading(false)
             }
         }, 350)
 
@@ -179,178 +297,409 @@ export default function DiscoverScreen() {
     }, [query, searchMode, token])
 
     useEffect(() => {
-        if (!token) {
-            return
-        }
+        if (!token) return
         let isCurrentRequest = true
         setIsDiscoveryLoading(true)
         setDiscoveryError(null)
         Promise.all([
             listCoSigns(token),
-            listFriendsNines(token),
+            getMostCompatible(token),
         ])
-            .then(([coSignResponse, friendsNinesResponse]) => {
-                if (isCurrentRequest) {
-                    setCoSigns(coSignResponse.items)
-                    setFriendsNines(friendsNinesResponse.items)
-                }
+            .then(([coSignResponse, compatResponse]) => {
+                if (!isCurrentRequest) return
+                setCoSigns(coSignResponse.items)
+                setTopCompatUser(compatResponse.users[0] ?? null)
             })
             .catch((err) => {
                 if (isCurrentRequest) {
-                    setDiscoveryError(err instanceof ApiError ? err.detail : "Social discovery is temporarily unavailable.")
+                    setDiscoveryError(
+                        err instanceof ApiError
+                            ? err.detail
+                            : "Social discovery is temporarily unavailable.",
+                    )
                 }
             })
             .finally(() => {
-                if (isCurrentRequest) {
-                    setIsDiscoveryLoading(false)
-                }
+                if (isCurrentRequest) setIsDiscoveryLoading(false)
             })
-        return () => {
-            isCurrentRequest = false
-        }
+        return () => { isCurrentRequest = false }
     }, [token])
+
+    const trimmedQuery = query.trim()
+    const hasQuery = trimmedQuery.length > 0
+    const followingCount = profile?.following_count ?? 0
+    const ratedCount = profile?.user_stats?.rated_count ?? 0
 
     return (
         <View style={styles.container}>
+            {/* Header */}
             <View style={styles.header}>
-                <Text style={styles.kicker}>DISCOVER</Text>
-                <Text style={styles.heading}>Find music</Text>
-                <View style={styles.modeRow}>
-                    <TouchableOpacity
-                        style={[styles.modeButton, searchMode === "songs" ? styles.activeModeButton : null]}
-                        onPress={() => setMode("songs")}
-                    >
-                        <Text style={[styles.modeText, searchMode === "songs" ? styles.activeModeText : null]}>
-                            Songs
-                        </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.modeButton, searchMode === "users" ? styles.activeModeButton : null]}
-                        onPress={() => setMode("users")}
-                    >
-                        <Text style={[styles.modeText, searchMode === "users" ? styles.activeModeText : null]}>
-                            Users
-                        </Text>
-                    </TouchableOpacity>
+                <View>
+                    <Text style={styles.kicker}>DISCOVER THROUGH TASTE</Text>
+                    <Text style={styles.heading}>Discover</Text>
                 </View>
-                <TextInput
-                    ref={searchRef}
-                    style={styles.searchBar}
-                    placeholder={searchMode === "songs" ? "Search for a song..." : "Search for a user..."}
-                    placeholderTextColor={colors.inkDim}
-                    value={query}
-                    onChangeText={setQuery}
-                    autoCapitalize="none"
-                    returnKeyType="search"
-                />
+                <TouchableOpacity
+                    style={styles.avatarCircle}
+                    onPress={() => navigation.navigate("Profile")}
+                    accessibilityLabel="Your profile"
+                >
+                    <Text style={styles.avatarLetter}>{avatarInitial}</Text>
+                </TouchableOpacity>
             </View>
+
+            {/* Search area */}
+            <View style={styles.searchArea}>
+                <Animated.View layout={LinearTransition.duration(220)} style={styles.searchFocusedRow}>
+                    <Pressable style={styles.searchBar} onPress={() => searchRef.current?.focus()}>
+                        <SearchIcon />
+                        <TextInput
+                            ref={searchRef}
+                            style={styles.searchInput}
+                            placeholder="Search songs or people…"
+                            placeholderTextColor={colors.inkDim}
+                            value={query}
+                            onChangeText={setQuery}
+                            autoCapitalize="none"
+                            returnKeyType="search"
+                            onFocus={handleFocusSearch}
+                        />
+                    </Pressable>
+                    {searchFocused && (
+                        <Animated.View entering={FadeInRight.duration(220)} exiting={FadeOutRight.duration(180)}>
+                            <TouchableOpacity onPress={handleCancel} style={styles.cancelBtn} activeOpacity={0.7}>
+                                <Text style={styles.cancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                        </Animated.View>
+                    )}
+                </Animated.View>
+            </View>
+
+            {/* Scope toggle — focused only */}
+            {searchFocused && (
+                <Animated.View
+                    entering={FadeInDown.duration(200)}
+                    exiting={FadeOut.duration(120)}
+                    style={styles.scopeRow}
+                >
+                    <View style={styles.scopePill}>
+                        {(["songs", "users"] as const).map((mode) => (
+                            <TouchableOpacity
+                                key={mode}
+                                style={[styles.scopeBtn, searchMode === mode && styles.scopeBtnActive]}
+                                onPress={() => setMode(mode)}
+                            >
+                                <Text style={[styles.scopeBtnText, searchMode === mode && styles.scopeBtnTextActive]}>
+                                    {mode === "songs" ? "Songs" : "People"}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                </Animated.View>
+            )}
+
+            {/* Content */}
             <ScrollView
-                style={styles.results}
-                contentContainerStyle={styles.resultsContent}
+                style={styles.scroll}
+                contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"
             >
-                {isLoading && <ActivityIndicator color={colors.clay} style={styles.status} />}
-                {!isLoading && error !== null && <Text style={styles.errorText}>{error}</Text>}
-                {!isLoading && error === null && query.trim().length === 0 && searchMode === "users" && (
-                    <Text style={styles.emptyText}>Search for users to follow.</Text>
-                )}
-                {!isLoading && error === null && query.trim().length === 0 && searchMode === "songs" && (
+                {searchFocused ? (
                     <>
-                        {isDiscoveryLoading && <ActivityIndicator color={colors.clay} style={styles.status} />}
-                        {!isDiscoveryLoading && discoveryError && <Text style={styles.errorText}>{discoveryError}</Text>}
+                        {isLoading && <ActivityIndicator color={colors.accent} style={styles.spinner} />}
+
+                        {!isLoading && error !== null && (
+                            <Text style={styles.errorText}>{error}</Text>
+                        )}
+
+                        {/* No query: recent searches */}
+                        {!isLoading && error === null && !hasQuery && recentSearches.length > 0 && (
+                            <>
+                                <View style={styles.recentHeader}>
+                                    <Text style={styles.recentLabel}>RECENT</Text>
+                                    <TouchableOpacity onPress={() => setRecentSearches([])}>
+                                        <Text style={styles.clearText}>Clear</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                <View style={styles.recentChips}>
+                                    {recentSearches.map((item, i) => (
+                                        <View key={i} style={styles.recentChip}>
+                                            <View style={styles.recentChipIcon}>
+                                                {item.mode === "songs" ? <MiniSearchIcon /> : <PersonIcon />}
+                                            </View>
+                                            <TouchableOpacity onPress={() => handleRecentPress(item)}>
+                                                <Text style={styles.recentChipText}>{item.query}</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity onPress={() => handleRemoveRecent(item)} style={styles.recentChipClose}>
+                                                <Text style={styles.recentChipCloseText}>×</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    ))}
+                                </View>
+                            </>
+                        )}
+
+                        {/* No results */}
+                        {!isLoading && error === null && trimmedQuery.length >= 2 && searchMode === "songs" && songResults.length === 0 && (
+                            <Text style={styles.emptyText}>No songs found.</Text>
+                        )}
+                        {!isLoading && error === null && trimmedQuery.length >= 2 && searchMode === "users" && profileResults.length === 0 && (
+                            <Text style={styles.emptyText}>No users found.</Text>
+                        )}
+
+                        {/* Song results */}
+                        {!isLoading && error === null && searchMode === "songs" && songResults.length > 0 && (
+                            <View style={styles.resultCard}>
+                                {songResults.map((song, i) => (
+                                    <TouchableOpacity
+                                        key={song.deezer_id}
+                                        style={[styles.resultRow, i > 0 && styles.resultRowBorder]}
+                                        onPress={() => handleSongPress(song)}
+                                        disabled={openingDeezerId !== null}
+                                        activeOpacity={0.75}
+                                    >
+                                        <View style={styles.cover}>
+                                            {song.cover_url ? (
+                                                <Image source={{ uri: song.cover_url }} style={styles.coverImg} />
+                                            ) : null}
+                                        </View>
+                                        <View style={styles.resultText}>
+                                            <Text style={styles.resultTitle} numberOfLines={1}>{song.title}</Text>
+                                            <Text style={styles.resultArtist} numberOfLines={1}>{song.artist}</Text>
+                                            <Text style={styles.resultAlbum} numberOfLines={1}>{song.album}</Text>
+                                        </View>
+                                        {openingDeezerId === song.deezer_id && (
+                                            <ActivityIndicator color={colors.accent} size="small" />
+                                        )}
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        )}
+
+                        {/* People results */}
+                        {!isLoading && error === null && searchMode === "users" && profileResults.length > 0 && (
+                            <View style={styles.resultCard}>
+                                {profileResults.map((p, i) => (
+                                    <TouchableOpacity
+                                        key={p.id}
+                                        style={[styles.resultRow, i > 0 && styles.resultRowBorder]}
+                                        onPress={() => handleProfilePress(p)}
+                                        activeOpacity={0.75}
+                                    >
+                                        <View style={[styles.userBust, { backgroundColor: colors.inkSoft }]}>
+                                            <Text style={styles.userBustLetter}>
+                                                {(p.display_name || p.username).charAt(0).toUpperCase()}
+                                            </Text>
+                                        </View>
+                                        <View style={styles.resultText}>
+                                            <Text style={styles.resultTitle} numberOfLines={1}>{p.display_name}</Text>
+                                            <Text style={styles.resultArtist} numberOfLines={1}>@{p.username}</Text>
+                                            <Text style={styles.resultAlbum} numberOfLines={1}>
+                                                {p.follower_count} followers · {p.following_count} following
+                                            </Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        )}
+                    </>
+                ) : (
+                    <>
+                        {isDiscoveryLoading && (
+                            <ActivityIndicator color={colors.accent} style={styles.spinner} />
+                        )}
+                        {!isDiscoveryLoading && discoveryError && (
+                            <Text style={styles.errorText}>{discoveryError}</Text>
+                        )}
                         {!isDiscoveryLoading && !discoveryError && (
                             <>
-                                <Text style={styles.sectionTitle}>Co-Signed by friends</Text>
-                                {coSigns.length === 0
-                                    ? <Text style={styles.sectionEmpty}>No Co-Signs yet.</Text>
-                                    : coSigns.map((item) => (
-                                        <SocialDiscoveryCard
-                                            key={`co-sign-${item.song.id}`}
-                                            item={item}
-                                            kind="co-sign"
-                                            token={token ?? ""}
-                                            onOpen={() => handleDiscoverySongPress(item)}
-                                            onRate={() => handleRatePress(item)}
-                                        />
+                                {/* Popular on LISTn — always visible */}
+                                <View style={styles.discoverSectionRow}>
+                                    <Text style={styles.discoverSectionLabel}>POPULAR ON LISTN · THIS WEEK</Text>
+                                </View>
+                                <ScrollView
+                                    horizontal
+                                    showsHorizontalScrollIndicator={false}
+                                    style={styles.popularScroll}
+                                    contentContainerStyle={styles.popularScrollContent}
+                                >
+                                    {POPULAR_PLACEHOLDERS.map((song) => (
+                                        <View key={song.id} style={styles.popularTile}>
+                                            <View style={styles.popularCoverBox}>
+                                                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                                                    <Path d="M9 18V5l12-2v13M9 18a3 3 0 01-6 0 3 3 0 016 0zm12-2a3 3 0 01-6 0 3 3 0 016 0z"
+                                                        stroke={colors.inkDim} strokeWidth={1.5}
+                                                        strokeLinecap="round" strokeLinejoin="round" />
+                                                </Svg>
+                                            </View>
+                                            <Text style={styles.popularTileTitle} numberOfLines={1}>{song.title}</Text>
+                                            <Text style={styles.popularTileArtist} numberOfLines={1}>{song.artist}</Text>
+                                        </View>
                                     ))}
-                                <Text style={styles.sectionTitle}>Friends’ 9s</Text>
-                                {friendsNines.length === 0
-                                    ? <Text style={styles.sectionEmpty}>No friends’ high scores yet.</Text>
-                                    : friendsNines.map((item) => (
-                                        <SocialDiscoveryCard
-                                            key={`friends-nine-${item.song.id}`}
-                                            item={item}
-                                            kind="friends-nine"
-                                            token={token ?? ""}
-                                            onOpen={() => handleDiscoverySongPress(item)}
-                                            onRate={() => handleRatePress(item)}
-                                        />
-                                    ))}
+                                </ScrollView>
+
+                                {/* Co-Sign — live when friends co-sign exist, locked otherwise */}
+                                {coSigns.length > 0 ? (
+                                    <>
+                                        {coSigns.map((item) => (
+                                            <SocialDiscoveryCard
+                                                key={`co-sign-${item.song.id}`}
+                                                item={item}
+                                                token={token ?? ""}
+                                                onOpen={() => handleDiscoverySongPress(item)}
+                                                onRate={() => handleRatePress(item)}
+                                            />
+                                        ))}
+                                    </>
+                                ) : (
+                                    <View style={styles.coSignLockedCard}>
+                                        {/* Left: pill + kicker, then ghost row */}
+                                        <View style={styles.coSignLockedLeft}>
+                                            <View style={styles.coSignLockedHeader}>
+                                                <View style={styles.coSignPill}>
+                                                    <Text style={styles.coSignPillText}>Co-sign</Text>
+                                                </View>
+                                                <Text style={styles.coSignKicker}>FRIENDS' UNANIMOUS 9s</Text>
+                                            </View>
+                                            <View style={styles.coSignGhostRow}>
+                                                <View style={styles.coSignGhostThumb} />
+                                                <View style={styles.coSignGhostLines}>
+                                                    <View style={[styles.coSignGhostLine, { width: "72%" }]} />
+                                                    <View style={[styles.coSignGhostLine, { width: "46%", opacity: 0.65 }]} />
+                                                </View>
+                                            </View>
+                                        </View>
+                                        {/* Right: lock circle */}
+                                        <View style={styles.coSignLockCircle}>
+                                            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+                                                <Path d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4"
+                                                    stroke="#fff" strokeWidth={2}
+                                                    strokeLinecap="round" strokeLinejoin="round" />
+                                            </Svg>
+                                        </View>
+                                    </View>
+                                )}
+
+                                {/* Trending in your circle — locked until trending API ships; show friend progress */}
+                                <View style={styles.trendingCard}>
+                                    <Text style={styles.trendingKicker}>TRENDING IN YOUR CIRCLE</Text>
+                                    <View style={styles.trendingRow}>
+                                        <View style={styles.trendingLockCircle}>
+                                            <Svg width={17} height={17} viewBox="0 0 24 24" fill="none">
+                                                <Path d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4"
+                                                    stroke="rgba(17,19,28,0.5)" strokeWidth={2}
+                                                    strokeLinecap="round" strokeLinejoin="round" />
+                                            </Svg>
+                                        </View>
+                                        <View style={styles.trendingTextBlock}>
+                                            <Text style={styles.trendingTitle}>Locked for now</Text>
+                                            <Text style={styles.trendingBody}>
+                                                Follow friends to see what's hot in your circle.
+                                            </Text>
+                                        </View>
+                                        <Text style={styles.trendingCounter}>{Math.min(followingCount, 3)}/3</Text>
+                                    </View>
+                                </View>
+
+                                {/* 2-col: Compatibility (live or locked) + Most-Rated (locked) */}
+                                <View style={styles.twoColRow}>
+                                    <View style={[styles.twoColCard, styles.compatCard]}>
+                                        <View style={styles.compatPill}>
+                                            <Text style={styles.compatPillText}>Compatibility</Text>
+                                        </View>
+                                        {topCompatUser ? (
+                                            <>
+                                                <View style={styles.compatUserRow}>
+                                                    <View style={styles.compatAva}>
+                                                        <Text style={styles.compatAvaText}>
+                                                            {(topCompatUser.display_name || topCompatUser.username).charAt(0).toUpperCase()}
+                                                        </Text>
+                                                    </View>
+                                                    <Text style={styles.compatUserName} numberOfLines={1}>
+                                                        {(topCompatUser.display_name || topCompatUser.username).split(" ")[0]}
+                                                    </Text>
+                                                </View>
+                                                <View style={styles.compatScoreRow}>
+                                                    <Text style={styles.compatPct} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                                                        {Math.round(topCompatUser.similarity_score * 100)}%
+                                                    </Text>
+                                                    <Text style={styles.compatAlignedLabel}>ALIGNED</Text>
+                                                </View>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <View style={styles.compatLockRow}>
+                                                    <View style={styles.compatLockCircle}>
+                                                        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                                                            <Path d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4"
+                                                                stroke="rgba(255,255,255,0.55)" strokeWidth={2}
+                                                                strokeLinecap="round" strokeLinejoin="round" />
+                                                        </Svg>
+                                                    </View>
+                                                    <View style={styles.compatBars}>
+                                                        <View style={[styles.compatBar, { width: "90%" }]} />
+                                                        <View style={[styles.compatBar, { width: "62%" }]} />
+                                                    </View>
+                                                </View>
+                                                <View style={styles.compatScoreRow}>
+                                                    <Text style={styles.compatPct} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>–%</Text>
+                                                    <Text style={styles.compatAlignedLabel}>ALIGNED</Text>
+                                                </View>
+                                                <Text style={styles.compatBody}>Follow friends to see your match.</Text>
+                                            </>
+                                        )}
+                                    </View>
+
+                                    <View style={[styles.twoColCard, styles.circleCard]}>
+                                        <View style={styles.circlePill}>
+                                            <Text style={styles.circlePillText}>Most-rated · circle</Text>
+                                        </View>
+                                        <View style={styles.circleLockRow}>
+                                            <View style={styles.circleLockSquare}>
+                                                <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                                                    <Path d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4"
+                                                        stroke={colors.gold} strokeWidth={2}
+                                                        strokeLinecap="round" strokeLinejoin="round" />
+                                                </Svg>
+                                            </View>
+                                            <View style={styles.circleBars}>
+                                                <View style={[styles.circleBar, { width: "72%" }]} />
+                                                <View style={[styles.circleBar, { width: "44%" }]} />
+                                            </View>
+                                        </View>
+                                        <View style={styles.circleCountRow}>
+                                            <Text style={styles.circleCountNum}>—</Text>
+                                            <Text style={styles.circleCountLabel}>TOTAL RATINGS</Text>
+                                        </View>
+                                    </View>
+                                </View>
+
+                                {/* Curated Lists — locked with rated count progress */}
+                                <View style={styles.discoverSectionRow}>
+                                    <Text style={styles.discoverSectionLabel}>CURATED LISTS</Text>
+                                </View>
+                                <View style={styles.curatedCard}>
+                                    <View style={styles.curatedLockWrap}>
+                                        <Svg width={17} height={17} viewBox="0 0 24 24" fill="none">
+                                            <Path d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4"
+                                                stroke={colors.inkSoft} strokeWidth={2}
+                                                strokeLinecap="round" strokeLinejoin="round" />
+                                        </Svg>
+                                    </View>
+                                    <View style={styles.curatedText}>
+                                        <Text style={styles.curatedTitle}>No lists yet</Text>
+                                        <Text style={styles.curatedBody}>
+                                            Rate more songs to unlock lists curated to your taste.
+                                        </Text>
+                                    </View>
+                                    <Text style={styles.trendingCounter}>{Math.min(ratedCount, 30)}/30</Text>
+                                </View>
                             </>
                         )}
                     </>
                 )}
-                {!isLoading && error === null && query.trim().length >= 2 && searchMode === "songs" && songResults.length === 0 && (
-                    <Text style={styles.emptyText}>No songs found.</Text>
-                )}
-                {!isLoading && error === null && query.trim().length >= 2 && searchMode === "users" && profileResults.length === 0 && (
-                    <Text style={styles.emptyText}>No users found.</Text>
-                )}
-                {!isLoading && error === null && searchMode === "songs" && songResults.map((song) => (
-                    <TouchableOpacity
-                        key={song.deezer_id}
-                        style={styles.resultRow}
-                        onPress={() => handleSongPress(song)}
-                        disabled={openingDeezerId !== null}
-                        activeOpacity={0.75}
-                    >
-                        <View style={styles.coverFrame}>
-                            {song.cover_url ? (
-                                <Image source={{ uri: song.cover_url }} style={styles.coverImage} />
-                            ) : null}
-                        </View>
-                        <View style={styles.resultText}>
-                            <Text style={styles.title} numberOfLines={1}>{song.title}</Text>
-                            <Text style={styles.artist} numberOfLines={1}>{song.artist}</Text>
-                            <Text style={styles.album} numberOfLines={1}>{song.album}</Text>
-                        </View>
-                        {openingDeezerId === song.deezer_id && (
-                            <ActivityIndicator color={colors.clay} style={styles.rowSpinner} />
-                        )}
-                    </TouchableOpacity>
-                ))}
-                {!isLoading && error === null && searchMode === "users" && profileResults.map((profile) => (
-                    <TouchableOpacity
-                        key={profile.id}
-                        style={styles.resultRow}
-                        onPress={() => handleProfilePress(profile)}
-                        activeOpacity={0.75}
-                    >
-                        <StarAvatar
-                            initial={(profile.display_name || profile.username).charAt(0)}
-                            outerColor={colors.clay}
-                            size={44}
-                        />
-                        <View style={styles.resultText}>
-                            <Text style={styles.title} numberOfLines={1}>{profile.display_name}</Text>
-                            <Text style={styles.artist} numberOfLines={1}>@{profile.username}</Text>
-                            <Text style={styles.album} numberOfLines={1}>
-                                {profile.follower_count} followers, {profile.following_count} following
-                            </Text>
-                        </View>
-                    </TouchableOpacity>
-                ))}
             </ScrollView>
         </View>
     )
-}
-
-const cardShadow = {
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
 }
 
 const styles = StyleSheet.create({
@@ -358,150 +707,664 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: colors.bg,
     },
+    // ── Header ─────────────────────────────────────────────────────────
     header: {
         paddingTop: 60,
         paddingHorizontal: 16,
-        paddingBottom: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.line,
+        paddingBottom: 10,
+        flexDirection: "row",
+        alignItems: "flex-start",
+        justifyContent: "space-between",
     },
     kicker: {
         fontFamily: fonts.mono,
-        color: colors.inkSoft,
-        fontSize: 10,
-        letterSpacing: 1.8,
-        marginBottom: 4,
+        color: colors.inkDim,
+        fontSize: 8.5,
+        letterSpacing: 2,
+        fontWeight: "700",
+        marginBottom: 3,
     },
     heading: {
-        fontFamily: fonts.serif,
+        fontFamily: fonts.display,
+        fontSize: 30,
+        letterSpacing: -0.6,
+        lineHeight: 29,
         color: colors.ink,
-        fontSize: 32,
-        lineHeight: 36,
-        marginBottom: 16,
     },
-    modeRow: {
+    avatarCircle: {
+        width: 32,
+        height: 32,
+        borderRadius: 9,
+        backgroundColor: colors.ink,
+        alignItems: "center",
+        justifyContent: "center",
+        marginTop: 4,
+    },
+    avatarLetter: {
+        color: "#fff",
+        fontWeight: "700",
+        fontSize: 17,
+    },
+    // ── Search area ────────────────────────────────────────────────────
+    searchArea: {
+        paddingHorizontal: 14,
+        marginBottom: 6,
+    },
+    searchFocusedRow: {
         flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+    },
+    searchBar: {
+        flex: 1,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
         backgroundColor: colors.paper,
-        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: colors.line,
+        borderRadius: 12,
+        paddingVertical: 11,
+        paddingHorizontal: 13,
+    },
+    searchInput: {
+        flex: 1,
+        fontSize: 14,
+        color: colors.ink,
+        fontWeight: "500",
+        padding: 0,
+    },
+    cancelBtn: {
+        paddingVertical: 4,
+        paddingLeft: 2,
+    },
+    cancelText: {
+        fontFamily: fonts.display,
+        fontSize: 13.5,
+        color: colors.accent,
+    },
+    // ── Scope toggle ───────────────────────────────────────────────────
+    scopeRow: {
+        paddingHorizontal: 14,
+        marginBottom: 8,
+    },
+    scopePill: {
+        flexDirection: "row",
+        backgroundColor: colors.bg,
+        borderRadius: 999,
         borderWidth: 1,
         borderColor: colors.line,
         padding: 3,
-        marginBottom: 12,
-        overflow: "hidden",
     },
-    modeButton: {
+    scopeBtn: {
         flex: 1,
+        paddingVertical: 7,
         alignItems: "center",
-        paddingVertical: 10,
-        borderRadius: 7,
+        borderRadius: 999,
     },
-    activeModeButton: {
-        backgroundColor: colors.sand,
+    scopeBtnActive: {
+        backgroundColor: colors.ink,
     },
-    modeText: {
-        fontFamily: fonts.mono,
-        color: colors.inkSoft,
+    scopeBtnText: {
+        fontWeight: "600",
         fontSize: 12,
-        letterSpacing: 0.4,
+        color: colors.inkSoft,
     },
-    activeModeText: {
-        color: colors.ink,
+    scopeBtnTextActive: {
+        color: "#fff",
     },
-    searchBar: {
-        backgroundColor: colors.sand,
-        color: colors.ink,
-        borderRadius: 10,
+    // ── Recent searches ────────────────────────────────────────────────
+    recentHeader: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 10,
+    },
+    recentLabel: {
+        fontFamily: fonts.mono,
+        fontSize: 9,
+        letterSpacing: 1.8,
+        color: colors.inkDim,
+        fontWeight: "700",
+    },
+    clearText: {
+        fontFamily: fonts.mono,
+        fontSize: 11,
+        color: colors.accent,
+        fontWeight: "600",
+    },
+    recentChips: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        gap: 8,
+    },
+    recentChip: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        backgroundColor: colors.paper,
         borderWidth: 1,
         borderColor: colors.line,
+        borderRadius: 999,
+        paddingVertical: 8,
+        paddingHorizontal: 11,
+    },
+    recentChipIcon: {
+        opacity: 0.7,
+    },
+    recentChipText: {
+        fontSize: 13,
+        color: colors.ink,
+        fontWeight: "500",
+    },
+    recentChipClose: {
+        paddingLeft: 2,
+    },
+    recentChipCloseText: {
+        fontSize: 15,
+        color: colors.inkDim,
+        lineHeight: 16,
+        marginTop: -1,
+    },
+    // ── Results ────────────────────────────────────────────────────────
+    scroll: { flex: 1 },
+    scrollContent: {
         paddingHorizontal: 14,
-        paddingVertical: 10,
-        fontSize: 16,
+        paddingTop: 8,
+        paddingBottom: 96,
     },
-    results: {
-        flex: 1,
-    },
-    resultsContent: {
-        paddingHorizontal: 16,
-        paddingTop: 12,
-        paddingBottom: 24,
-    },
-    status: {
-        marginTop: 40,
+    spinner: { marginTop: 40 },
+    errorText: {
+        color: colors.danger,
+        fontSize: 14,
+        marginTop: 30,
+        textAlign: "center",
+        lineHeight: 20,
     },
     emptyText: {
         color: colors.inkDim,
-        fontSize: 15,
-        marginTop: 40,
+        fontSize: 14,
+        marginTop: 30,
         textAlign: "center",
-        paddingHorizontal: 12,
-        lineHeight: 22,
+        lineHeight: 20,
     },
-    errorText: {
-        color: colors.dislike,
-        fontSize: 15,
-        marginTop: 40,
-        textAlign: "center",
-        paddingHorizontal: 12,
-        lineHeight: 22,
+    // ── Section labels ────────────────────────────────────────────────
+    sectionRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "baseline",
+        marginTop: 13,
+        marginBottom: 7,
+    },
+    sectionLabel: {
+        fontFamily: fonts.mono,
+        fontSize: 9,
+        letterSpacing: 1.6,
+        color: colors.inkDim,
+        fontWeight: "700",
+    },
+    // ── Result card + rows ────────────────────────────────────────────
+    resultCard: {
+        backgroundColor: colors.paper,
+        borderWidth: 1,
+        borderColor: colors.line,
+        borderRadius: 16,
+        overflow: "hidden",
+        shadowColor: colors.ink,
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
+        paddingHorizontal: 14,
+        paddingVertical: 2,
     },
     resultRow: {
         flexDirection: "row",
         alignItems: "center",
-        backgroundColor: colors.paper,
-        borderRadius: 14,
-        borderWidth: 1,
-        borderColor: colors.line,
-        padding: 12,
-        marginBottom: 8,
         gap: 12,
-        ...cardShadow,
+        paddingVertical: 10,
     },
-    coverFrame: {
-        width: 52,
-        height: 52,
+    resultRowBorder: {
+        borderTopWidth: 1,
+        borderTopColor: colors.line,
+    },
+    cover: {
+        width: 44,
+        height: 44,
         borderRadius: 8,
-        backgroundColor: colors.sand,
+        backgroundColor: colors.paper2,
         overflow: "hidden",
+        flexShrink: 0,
     },
-    coverImage: {
-        width: "100%",
-        height: "100%",
+    coverImg: { width: "100%", height: "100%" },
+    userBust: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+    },
+    userBustLetter: {
+        color: "#fff",
+        fontWeight: "700",
+        fontSize: 18,
     },
     resultText: {
         flex: 1,
         minWidth: 0,
     },
-    title: {
-        fontFamily: fonts.serif,
+    resultTitle: {
+        fontWeight: "700",
+        fontSize: 14,
         color: colors.ink,
-        fontSize: 16,
-        lineHeight: 20,
-        marginBottom: 3,
-    },
-    artist: {
-        fontFamily: fonts.mono,
-        color: colors.inkSoft,
-        fontSize: 13,
+        lineHeight: 17,
         marginBottom: 2,
     },
-    album: {
+    resultArtist: {
+        fontFamily: fonts.mono,
+        color: colors.inkSoft,
+        fontSize: 10,
+        letterSpacing: 0.4,
+        marginBottom: 1,
+    },
+    resultAlbum: {
         fontFamily: fonts.mono,
         color: colors.inkDim,
+        fontSize: 9,
+        letterSpacing: 0.2,
+    },
+    // ── Discovery sections ─────────────────────────────────────────────
+    discoverSectionRow: {
+        marginTop: 12,
+        marginBottom: 7,
+    },
+    discoverSectionLabel: {
+        fontFamily: fonts.mono,
+        fontSize: 9,
+        letterSpacing: 1.6,
+        color: colors.inkDim,
+        fontWeight: "700",
+    },
+    popularScroll: {
+        marginHorizontal: -14,
+    },
+    popularScrollContent: {
+        paddingHorizontal: 14,
+        gap: 10,
+        paddingBottom: 12,
+    },
+    popularTile: {
+        width: 80,
+        alignItems: "center",
+    },
+    popularCoverBox: {
+        width: 76,
+        height: 76,
+        borderRadius: 12,
+        backgroundColor: colors.paper2,
+        alignItems: "center",
+        justifyContent: "center",
+        marginBottom: 6,
+    },
+    popularTileTitle: {
+        fontWeight: "700",
+        fontSize: 11.5,
+        color: colors.ink,
+        textAlign: "center",
+        lineHeight: 14,
+        marginBottom: 2,
+    },
+    popularTileArtist: {
+        fontFamily: fonts.mono,
+        fontSize: 8,
+        color: colors.inkDim,
+        textAlign: "center",
+        letterSpacing: 0.3,
+    },
+    coSignLockedCard: {
+        backgroundColor: colors.mint,
+        borderRadius: 14,
+        padding: 12,
+        marginBottom: 8,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        overflow: "hidden",
+    },
+    coSignLockedLeft: {
+        flex: 1,
+        minWidth: 0,
+    },
+    coSignLockedHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+    },
+    coSignPill: {
+        backgroundColor: "rgba(0,0,0,0.22)",
+        borderRadius: 999,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+    },
+    coSignPillText: {
+        fontFamily: fonts.mono,
+        color: "#fff",
+        fontSize: 8.5,
+        letterSpacing: 1.4,
+        fontWeight: "700",
+        textTransform: "uppercase",
+    },
+    coSignKicker: {
+        fontFamily: fonts.mono,
+        fontSize: 9.5,
+        fontWeight: "700",
+        letterSpacing: 0.9,
+        color: "rgba(255,255,255,0.9)",
+        flexShrink: 1,
+    },
+    coSignGhostRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 11,
+        marginTop: 11,
+    },
+    coSignGhostThumb: {
+        width: 46,
+        height: 46,
+        borderRadius: 8,
+        borderWidth: 1.5,
+        borderColor: "rgba(255,255,255,0.5)",
+        borderStyle: "dashed",
+        backgroundColor: "rgba(255,255,255,0.07)",
+        flexShrink: 0,
+    },
+    coSignGhostLines: {
+        flex: 1,
+        gap: 7,
+    },
+    coSignGhostLine: {
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: "rgba(255,255,255,0.32)",
+    },
+    coSignLockCircle: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: "rgba(255,255,255,0.18)",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+    },
+    trendingCard: {
+        backgroundColor: colors.butter,
+        borderRadius: 16,
+        padding: 14,
+        marginBottom: 8,
+    },
+    trendingKicker: {
+        fontFamily: fonts.mono,
+        fontSize: 8.5,
+        letterSpacing: 1.8,
+        color: "rgba(17,19,28,0.5)",
+        fontWeight: "700",
+        marginBottom: 12,
+    },
+    trendingRow: {
+        flexDirection: "row",
+        alignItems: "flex-start",
+        gap: 12,
+    },
+    trendingLockCircle: {
+        width: 42,
+        height: 42,
+        borderRadius: 8,
+        borderWidth: 1.5,
+        borderColor: "rgba(17,19,28,0.3)",
+        borderStyle: "dashed",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        marginTop: 2,
+    },
+    trendingTextBlock: {
+        flex: 1,
+    },
+    trendingTitle: {
+        fontFamily: fonts.display,
+        fontSize: 17,
+        letterSpacing: -0.3,
+        color: colors.ink,
+        marginBottom: 4,
+    },
+    trendingBody: {
+        fontFamily: fonts.mono,
+        fontSize: 11,
+        lineHeight: 16,
+        color: "rgba(17,19,28,0.6)",
+    },
+    trendingCounter: {
+        fontFamily: fonts.mono,
+        fontSize: 13,
+        fontWeight: "700",
+        color: "rgba(17,19,28,0.5)",
+        marginTop: 2,
+    },
+    twoColRow: {
+        flexDirection: "row",
+        gap: 8,
+        marginBottom: 8,
+    },
+    twoColCard: {
+        flex: 1,
+        borderRadius: 16,
+        padding: 11,
+    },
+    compatCard: {
+        backgroundColor: colors.sky,
+    },
+    compatPill: {
+        backgroundColor: "rgba(255,255,255,0.20)",
+        borderRadius: 999,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        alignSelf: "flex-start",
+        marginBottom: 9,
+    },
+    compatPillText: {
+        fontFamily: fonts.mono,
+        color: "#fff",
+        fontSize: 8.5,
+        letterSpacing: 1.4,
+        fontWeight: "700",
+        textTransform: "uppercase",
+    },
+    compatUserRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 7,
+        marginBottom: 6,
+    },
+    compatAva: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: "rgba(255,255,255,0.30)",
+        borderWidth: 1.5,
+        borderColor: "rgba(255,255,255,0.50)",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+    },
+    compatAvaText: {
+        color: "#fff",
+        fontWeight: "700",
         fontSize: 11,
     },
-    rowSpinner: {
-        marginLeft: 4,
+    compatUserName: {
+        fontFamily: fonts.display,
+        fontSize: 15,
+        color: "#fff",
+        flex: 1,
+        minWidth: 0,
     },
-    sectionTitle: {
-        fontFamily: fonts.serif,
+    compatScoreRow: {
+        flexDirection: "row",
+        alignItems: "flex-end",
+        gap: 6,
+    },
+    compatPct: {
+        fontFamily: fonts.display,
+        fontSize: 44,
+        color: "#fff",
+        lineHeight: 40,
+        letterSpacing: -1,
+        flex: 1,
+    },
+    compatAlignedLabel: {
+        fontFamily: fonts.mono,
+        fontSize: 8,
+        color: "rgba(255,255,255,0.85)",
+        letterSpacing: 1.6,
+        fontWeight: "700",
+        paddingBottom: 6,
+        flexShrink: 0,
+    },
+    compatLockRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        marginBottom: 6,
+    },
+    compatLockCircle: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        borderWidth: 1.5,
+        borderColor: "rgba(255,255,255,0.45)",
+        borderStyle: "dashed",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+    },
+    compatBars: {
+        flex: 1,
+        gap: 6,
+    },
+    compatBar: {
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: "rgba(255,255,255,0.35)",
+    },
+    compatBody: {
+        fontFamily: fonts.mono,
+        fontSize: 9.5,
+        lineHeight: 14,
+        color: "rgba(255,255,255,0.72)",
+        marginTop: 4,
+    },
+    circleCard: {
+        backgroundColor: colors.navy,
+    },
+    circlePill: {
+        backgroundColor: "rgba(245,184,64,0.16)",
+        borderRadius: 999,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        alignSelf: "flex-start",
+        marginBottom: 9,
+    },
+    circlePillText: {
+        fontFamily: fonts.mono,
+        color: colors.gold,
+        fontSize: 8.5,
+        letterSpacing: 1.4,
+        fontWeight: "700",
+        textTransform: "uppercase",
+    },
+    circleLockRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        marginBottom: 9,
+    },
+    circleLockSquare: {
+        width: 34,
+        height: 34,
+        borderRadius: 7,
+        borderWidth: 1.5,
+        borderColor: "rgba(245,184,64,0.55)",
+        borderStyle: "dashed",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+    },
+    circleBars: {
+        flex: 1,
+        gap: 7,
+    },
+    circleBar: {
+        height: 7,
+        borderRadius: 4,
+        backgroundColor: "rgba(255,255,255,0.14)",
+    },
+    circleCountRow: {
+        flexDirection: "row",
+        alignItems: "baseline",
+        gap: 6,
+    },
+    circleCountNum: {
+        fontFamily: fonts.display,
+        fontSize: 26,
+        color: colors.gold,
+        lineHeight: 24,
+    },
+    circleCountLabel: {
+        fontFamily: fonts.mono,
+        fontSize: 8,
+        color: colors.cdim,
+        letterSpacing: 1.4,
+    },
+    curatedCard: {
+        backgroundColor: colors.paper,
+        borderWidth: 1,
+        borderColor: colors.line,
+        borderRadius: 16,
+        padding: 14,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        marginBottom: 8,
+        shadowColor: colors.ink,
+        shadowOpacity: 0.04,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 2 },
+    },
+    curatedLockWrap: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        backgroundColor: colors.paper2,
+        borderWidth: 1.5,
+        borderColor: colors.line,
+        borderStyle: "dashed",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+    },
+    curatedText: {
+        flex: 1,
+    },
+    curatedTitle: {
+        fontWeight: "700",
+        fontSize: 14,
         color: colors.ink,
-        fontSize: 20,
-        marginTop: 10,
-        marginBottom: 10,
+        marginBottom: 3,
     },
-    sectionEmpty: {
-        color: colors.inkDim,
-        fontSize: 13,
-        marginBottom: 18,
+    curatedBody: {
+        fontFamily: fonts.mono,
+        fontSize: 10.5,
+        color: colors.inkSoft,
+        lineHeight: 15,
     },
 })

@@ -54,6 +54,7 @@ jest.mock("@shopify/flash-list", () => {
 jest.mock("../../auth/AuthContext", () => ({
     useAuth: () => ({
         token: "test-token",
+        refreshProfile: jest.fn().mockResolvedValue(undefined),
     }),
 }))
 
@@ -206,7 +207,7 @@ describe("FeedScreen", () => {
         render(<FeedScreen />)
 
         await waitFor(() => {
-            expect(screen.getByText("3 hrs ago")).toBeTruthy()
+            expect(screen.getByText(/3 hrs ago/)).toBeTruthy()
         })
     })
 
@@ -219,8 +220,8 @@ describe("FeedScreen", () => {
         render(<FeedScreen />)
 
         await waitFor(() => {
-            expect(screen.getByText("It doesn't lift, it hovers.")).toBeTruthy()
-            expect(screen.getByText("Report note")).toBeTruthy()
+            expect(screen.getByText('"It doesn\'t lift, it hovers."')).toBeTruthy()
+            expect(screen.getByText("···")).toBeTruthy()
         })
     })
 
@@ -233,9 +234,9 @@ describe("FeedScreen", () => {
         render(<FeedScreen />)
 
         await waitFor(() => {
-            expect(screen.getByText("Report note")).toBeTruthy()
+            expect(screen.getByText("···")).toBeTruthy()
         })
-        fireEvent.press(screen.getByText("Report note"))
+        fireEvent.press(screen.getByText("···"))
         fireEvent.press(screen.getByText("Spam"))
         fireEvent.changeText(screen.getByPlaceholderText("Add context for review."), "Repeated spam.")
         fireEvent.press(screen.getByText("Submit report"))
@@ -263,9 +264,9 @@ describe("FeedScreen", () => {
         render(<FeedScreen />)
 
         await waitFor(() => {
-            expect(screen.getByText("Your feed is quiet")).toBeTruthy()
+            expect(screen.getByText("Your feed is empty")).toBeTruthy()
         })
-        fireEvent.press(screen.getByText("Find users"))
+        fireEvent.press(screen.getByText("Connect contacts"))
 
         expect(mockNavigate).toHaveBeenCalledWith("Discover", {
             focusSearch: true,

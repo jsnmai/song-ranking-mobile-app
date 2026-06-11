@@ -1,6 +1,7 @@
 // App entry point.
 import { useFonts, Fraunces_700Bold } from "@expo-google-fonts/fraunces"
 import { JetBrainsMono_400Regular } from "@expo-google-fonts/jetbrains-mono"
+import { ArchivoBlack_400Regular } from "@expo-google-fonts/archivo-black"
 import { GestureHandlerRootView } from "react-native-gesture-handler"
 
 import { AuthProvider } from "./src/features/auth/AuthContext"
@@ -12,6 +13,7 @@ export default function App() {
     const [fontsLoaded, fontError] = useFonts({
         Fraunces_700Bold,
         JetBrainsMono_400Regular,
+        ArchivoBlack_400Regular,
     })
 
     // Render nothing until fonts are ready. fontError lets the app proceed with system fallback.

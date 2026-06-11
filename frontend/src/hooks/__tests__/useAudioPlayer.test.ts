@@ -10,7 +10,8 @@ const mockRemoveListener = jest.fn()
 const mockCreatePlayer = jest.fn()
 
 // Capture the status listener so tests can simulate playback events (e.g. didJustFinish).
-let capturedStatusListener: ((status: { didJustFinish: boolean }) => void) | null = null
+type MockStatus = { didJustFinish?: boolean; currentTime?: number; duration?: number }
+let capturedStatusListener: ((status: MockStatus) => void) | null = null
 
 jest.mock("expo-audio", () => ({
     createAudioPlayer: (...args: unknown[]) => mockCreatePlayer(...args),
@@ -24,7 +25,7 @@ beforeEach(() => {
         play: mockPlay,
         pause: mockPause,
         remove: mockRemove,
-        addListener: (event: string, callback: (status: { didJustFinish: boolean }) => void) => {
+        addListener: (event: string, callback: (status: MockStatus) => void) => {
             if (event === "playbackStatusUpdate") {
                 capturedStatusListener = callback
             }

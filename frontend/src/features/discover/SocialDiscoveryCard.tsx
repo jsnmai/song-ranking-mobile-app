@@ -1,182 +1,215 @@
-import { useState } from "react"
-import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import Svg, { Path } from "react-native-svg"
 
-import { ApiError } from "../../api/client"
-import { useAudioPlayer } from "../../hooks/useAudioPlayer"
 import { colors, fonts } from "../../theme"
-import { bookmarkSong, removeBookmark } from "../bookmarks/apiRequests"
-import { CoSignItem, FriendsNineItem } from "./types"
+import { CoSignItem } from "./types"
 
 type SocialDiscoveryCardProps = {
-    item: FriendsNineItem | CoSignItem;
-    kind: "co-sign" | "friends-nine";
+    item: CoSignItem;
     token: string;
     onOpen: () => void;
     onRate: () => void;
 }
 
-export default function SocialDiscoveryCard({
-    item,
-    kind,
-    token,
-    onOpen,
-    onRate,
-}: SocialDiscoveryCardProps) {
-    const [isBookmarked, setIsBookmarked] = useState(item.is_bookmarked)
-    const [isBookmarking, setIsBookmarking] = useState(false)
-    const [bookmarkError, setBookmarkError] = useState<string | null>(null)
-    const { isPlaying, toggle: toggleAudio } = useAudioPlayer(item.song.preview_url)
+const AVATAR_COLORS = [colors.accent, colors.sky, colors.plum, colors.gold, colors.butter]
 
-    const count = kind === "co-sign"
-        ? (item as CoSignItem).co_sign_count
-        : (item as FriendsNineItem).visible_high_score_friend_count
-
-    const handleBookmark = async () => {
-        if (isBookmarking) {
-            return
-        }
-        setIsBookmarking(true)
-        setBookmarkError(null)
-        try {
-            if (isBookmarked) {
-                await removeBookmark(item.song.id, token)
-                setIsBookmarked(false)
-            } else {
-                await bookmarkSong(item.song, "discovery", token)
-                setIsBookmarked(true)
-            }
-        } catch (err) {
-            if (err instanceof ApiError) {
-                setBookmarkError(err.detail)
-            } else {
-                setBookmarkError("Could not update Bookmarks.")
-            }
-        } finally {
-            setIsBookmarking(false)
-        }
-    }
-
-    const contributorCopy = kind === "co-sign"
-        ? `Co-Signed by ${item.contributors.map((contributor) => contributor.display_name).join(" and ")}`
-        : `${item.contributors[0]?.display_name ?? "A friend"} rated this ${item.contributors[0]?.score.toFixed(1) ?? "9+"}`
+export default function SocialDiscoveryCard({ item, onOpen }: SocialDiscoveryCardProps) {
+    const friendCount = item.contributors.length
+    const avg = item.average_visible_friend_score
 
     return (
         <TouchableOpacity
             style={styles.card}
             onPress={onOpen}
-            activeOpacity={0.8}
+            activeOpacity={0.85}
             accessibilityLabel={`Open ${item.song.title}`}
         >
-            <View style={styles.mainRow}>
+            {/* Row 1: pill + chevron */}
+            <View style={styles.headerRow}>
+                <View style={styles.pill}>
+                    <Text style={styles.pillText}>Co-sign · {friendCount} friends</Text>
+                </View>
+                <View style={styles.chevronCircle}>
+                    <Svg width={15} height={15} viewBox="0 0 24 24" fill="none"
+                        stroke="#fff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+                        <Path d="m9 6 6 6-6 6" />
+                    </Svg>
+                </View>
+            </View>
+
+            {/* Row 2: cover + title/artist */}
+            <View style={styles.songRow}>
                 <View style={styles.coverFrame}>
-                    {item.song.cover_url ? <Image source={{ uri: item.song.cover_url }} style={styles.coverImage} /> : null}
+                    {item.song.cover_url
+                        ? <Image source={{ uri: item.song.cover_url }} style={styles.cover} />
+                        : null
+                    }
                 </View>
-                <View style={styles.textColumn}>
+                <View style={styles.songText}>
                     <Text style={styles.title} numberOfLines={1}>{item.song.title}</Text>
-                    <Text style={styles.artist} numberOfLines={1}>{item.song.artist}</Text>
-                    <Text style={styles.signal} numberOfLines={2}>
-                        {kind === "co-sign" ? `${count} friends rated this 9+` : contributorCopy}
-                    </Text>
-                    {kind === "co-sign" && <Text style={styles.contributors} numberOfLines={1}>{contributorCopy}</Text>}
+                    <Text style={styles.artist} numberOfLines={1}>{item.song.artist.toUpperCase()}</Text>
                 </View>
-                <Text style={styles.score}>{item.average_visible_friend_score.toFixed(1)}</Text>
             </View>
-            <View style={styles.actions}>
-                {item.song.preview_url && (
-                    <TouchableOpacity style={styles.actionButton} onPress={toggleAudio}>
-                        <Text style={styles.actionText}>{isPlaying ? "Pause" : "Play preview"}</Text>
-                    </TouchableOpacity>
-                )}
-                <TouchableOpacity style={styles.actionButton} onPress={onRate}>
-                    <Text style={styles.actionText}>Rate now</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton} onPress={handleBookmark} disabled={isBookmarking}>
-                    {isBookmarking
-                        ? <ActivityIndicator color={colors.clay} size="small" />
-                        : <Text style={styles.actionText}>{isBookmarked ? "Bookmarked" : "Bookmark"}</Text>}
-                </TouchableOpacity>
+
+            {/* Row 3: avatars + tagline + AVG — all center-aligned in one row */}
+            <View style={styles.socialRow}>
+                <View style={styles.avatarStack}>
+                    {item.contributors.slice(0, 4).map((c, i) => (
+                        <View
+                            key={i}
+                            style={[styles.avatar, {
+                                backgroundColor: AVATAR_COLORS[i % AVATAR_COLORS.length],
+                                marginLeft: i > 0 ? -6 : 0,
+                            }]}
+                        >
+                            <Text style={styles.avatarInitial}>
+                                {(c.display_name || c.username || "?")[0].toUpperCase()}
+                            </Text>
+                        </View>
+                    ))}
+                </View>
+                <Text style={styles.tagline} numberOfLines={1}>everyone gave it 9+</Text>
+                <View style={styles.avgBlock}>
+                    <View style={styles.avgLabelWrap}>
+                        <Text style={styles.avgLabel}>AVG</Text>
+                    </View>
+                    <Text style={styles.avgNum}>{avg.toFixed(1)}</Text>
+                </View>
             </View>
-            {bookmarkError && <Text style={styles.errorText}>{bookmarkError}</Text>}
         </TouchableOpacity>
     )
 }
 
 const styles = StyleSheet.create({
     card: {
-        backgroundColor: colors.paper,
-        borderRadius: 14,
-        borderWidth: 1,
-        borderColor: colors.line,
-        padding: 12,
+        backgroundColor: colors.mint,
+        borderRadius: 16,
+        paddingTop: 5,
+        paddingBottom: 12,
+        paddingHorizontal: 12,
         marginBottom: 10,
-    },
-    mainRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 12,
-    },
-    coverFrame: {
-        width: 58,
-        height: 58,
-        borderRadius: 8,
-        backgroundColor: colors.sand,
+        gap: 0,
         overflow: "hidden",
     },
-    coverImage: {
+    headerRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 8,
+    },
+    pill: {
+        backgroundColor: "rgba(0,0,0,0.22)",
+        borderRadius: 999,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+    },
+    pillText: {
+        fontFamily: fonts.mono,
+        fontSize: 8.5,
+        color: "#fff",
+        letterSpacing: 1.4,
+        fontWeight: "700",
+        textTransform: "uppercase",
+    },
+    chevronCircle: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        backgroundColor: "rgba(255,255,255,0.22)",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        marginTop: 4,
+    },
+    songRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 11,
+    },
+    coverFrame: {
+        width: 48,
+        height: 48,
+        borderRadius: 8,
+        backgroundColor: "rgba(0,0,0,0.2)",
+        overflow: "hidden",
+        flexShrink: 0,
+    },
+    cover: {
         width: "100%",
         height: "100%",
     },
-    textColumn: {
+    songText: {
         flex: 1,
         minWidth: 0,
     },
     title: {
-        fontFamily: fonts.serif,
-        color: colors.ink,
-        fontSize: 16,
+        fontFamily: fonts.display,
+        fontSize: 17,
+        color: "#fff",
         lineHeight: 20,
     },
     artist: {
         fontFamily: fonts.mono,
-        color: colors.inkSoft,
-        fontSize: 12,
-        marginTop: 2,
+        fontSize: 8,
+        color: "rgba(255,255,255,0.85)",
+        letterSpacing: 1,
+        marginTop: 3,
     },
-    signal: {
-        color: colors.ink,
-        fontSize: 12,
-        marginTop: 5,
-    },
-    contributors: {
-        color: colors.inkDim,
-        fontSize: 11,
-        marginTop: 2,
-    },
-    score: {
-        fontFamily: fonts.mono,
-        color: colors.clay,
-        fontSize: 16,
-    },
-    actions: {
+    socialRow: {
         flexDirection: "row",
+        alignItems: "flex-end",
         gap: 8,
-        marginTop: 12,
+        justifyContent: "space-between",
+        marginTop: -10,
     },
-    actionButton: {
-        minHeight: 34,
+    avatarStack: {
+        flexDirection: "row",
+    },
+    avatar: {
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        borderWidth: 1.5,
+        borderColor: colors.mint,
+        alignItems: "center",
         justifyContent: "center",
-        paddingHorizontal: 10,
-        borderRadius: 8,
-        backgroundColor: colors.sand,
     },
-    actionText: {
+    avatarInitial: {
+        fontFamily: fonts.display,
+        fontSize: 10,
+        color: "#fff",
+        lineHeight: 12,
+    },
+    tagline: {
+        fontFamily: fonts.serif,
+        fontStyle: "italic",
+        fontSize: 11.5,
+        color: "#fff",
+        flex: 1,
+        minWidth: 0,
+    },
+    avgBlock: {
+        flexDirection: "row",
+        alignItems: "flex-end",
+        gap: 4,
+        flexShrink: 0,
+        marginBottom: -8,
+    },
+    avgLabelWrap: {
+        paddingBottom: 10,
+    },
+    avgLabel: {
         fontFamily: fonts.mono,
-        color: colors.ink,
-        fontSize: 11,
+        fontSize: 8,
+        color: "rgba(255,255,255,0.6)",
+        letterSpacing: 1.4,
+        fontWeight: "700",
+        lineHeight: 14,
     },
-    errorText: {
-        color: colors.dislike,
-        fontSize: 11,
-        marginTop: 8,
+    avgNum: {
+        fontFamily: fonts.display,
+        fontSize: 58,
+        color: "#fff",
+        lineHeight: 54,
     },
 })

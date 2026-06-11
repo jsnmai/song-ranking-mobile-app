@@ -49,6 +49,7 @@ const profile: Profile = {
     follower_count: 12,
     following_count: 8,
     is_following: false,
+    is_followed_by: false,
     is_own_profile: false,
     can_view_taste: true,
     is_blocked: false,
@@ -99,7 +100,7 @@ describe("OtherProfileScreen compatibility card", () => {
         render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
 
         await waitFor(() => {
-            expect(screen.getByText(/78% taste match/)).toBeTruthy()
+            expect(screen.getByText(/78% match/)).toBeTruthy()
             expect(screen.getByText(/Both love Frank Ocean/)).toBeTruthy()
         })
     })
@@ -122,7 +123,7 @@ describe("OtherProfileScreen compatibility card", () => {
             expect(screen.getByText("Maya")).toBeTruthy()
         })
         // Neither compat phrase should appear
-        expect(screen.queryByText(/taste match/)).toBeNull()
+        expect(screen.queryByText(/% match/)).toBeNull()
         expect(screen.queryByText(/Not enough overlap/)).toBeNull()
     })
 
@@ -147,7 +148,7 @@ describe("OtherProfileScreen compatibility card", () => {
             // Both tab labels should be present alongside the compat card
             expect(screen.getByText("Profile")).toBeTruthy()
             expect(screen.getByText("Taste")).toBeTruthy()
-            expect(screen.getByText(/78% taste match/)).toBeTruthy()
+            expect(screen.getByText(/78% match/)).toBeTruthy()
         })
     })
 

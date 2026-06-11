@@ -1,5 +1,6 @@
 // Tests for Discover search navigation into Song Detail.
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native"
+import * as SecureStore from "expo-secure-store"
 
 import { ApiError } from "../../../api/client"
 import DiscoverScreen from "../DiscoverScreen"
@@ -10,7 +11,7 @@ const mockSearchSongs = jest.fn()
 const mockSearchProfiles = jest.fn()
 const mockGetMyRankingByDeezerId = jest.fn()
 const mockListCoSigns = jest.fn()
-const mockListFriendsNines = jest.fn()
+const mockGetMostCompatible = jest.fn()
 const mockBookmarkSong = jest.fn()
 const mockRemoveBookmark = jest.fn()
 const mockCreatePlayer = jest.fn()
@@ -20,14 +21,22 @@ jest.mock("expo-audio", () => ({
     setAudioModeAsync: jest.fn(),
 }))
 
+jest.mock("expo-secure-store", () => ({
+    getItemAsync: jest.fn(),
+    setItemAsync: jest.fn(),
+}))
+
 jest.mock("@react-navigation/native", () => ({
     useNavigation: () => ({
         navigate: mockNavigate,
         setParams: mockSetParams,
+        addListener: jest.fn(() => jest.fn()),
+        isFocused: jest.fn(() => true),
     }),
     useRoute: () => ({
         params: undefined,
     }),
+    useFocusEffect: jest.fn(),
 }))
 
 jest.mock("../../auth/AuthContext", () => ({
@@ -42,6 +51,7 @@ jest.mock("../../search/apiRequests", () => ({
 
 jest.mock("../../profile/apiRequests", () => ({
     searchProfiles: (...args: unknown[]) => mockSearchProfiles(...args),
+    getMostCompatible: (...args: unknown[]) => mockGetMostCompatible(...args),
 }))
 
 jest.mock("../../rankings/apiRequests", () => ({
@@ -50,7 +60,6 @@ jest.mock("../../rankings/apiRequests", () => ({
 
 jest.mock("../apiRequests", () => ({
     listCoSigns: (...args: unknown[]) => mockListCoSigns(...args),
-    listFriendsNines: (...args: unknown[]) => mockListFriendsNines(...args),
 }))
 
 jest.mock("../../bookmarks/apiRequests", () => ({
@@ -107,6 +116,7 @@ const profile = {
     follower_count: 12,
     following_count: 8,
     is_following: false,
+    is_followed_by: false,
     is_own_profile: false,
     can_view_taste: true,
     is_blocked: false,
@@ -127,10 +137,12 @@ const coSignItem = {
 beforeEach(() => {
     jest.useFakeTimers()
     jest.resetAllMocks()
+    ;(SecureStore.getItemAsync as jest.Mock).mockResolvedValue(null)
+    ;(SecureStore.setItemAsync as jest.Mock).mockResolvedValue(undefined)
     mockSearchSongs.mockResolvedValue({ results: [song] })
     mockSearchProfiles.mockResolvedValue({ results: [profile] })
     mockListCoSigns.mockResolvedValue({ items: [] })
-    mockListFriendsNines.mockResolvedValue({ items: [] })
+    mockGetMostCompatible.mockResolvedValue({ users: [] })
     mockBookmarkSong.mockResolvedValue({ id: 9 })
     mockRemoveBookmark.mockResolvedValue({ song_id: 42, removed: true })
     mockCreatePlayer.mockReturnValue({
@@ -146,13 +158,11 @@ afterEach(() => {
 })
 
 describe("DiscoverScreen", () => {
-    it("shows Co-Sign and Friends' 9s empty states", async () => {
+    it("shows new-user discovery state when no co-signs exist", async () => {
         render(<DiscoverScreen />)
 
-        expect(await screen.findByText("Co-Signed by friends")).toBeTruthy()
-        expect(screen.getByText("No Co-Signs yet.")).toBeTruthy()
-        expect(screen.getByText("Friends’ 9s")).toBeTruthy()
-        expect(screen.getByText("No friends’ high scores yet.")).toBeTruthy()
+        expect(await screen.findByText("POPULAR ON LISTN · THIS WEEK")).toBeTruthy()
+        expect(screen.getByText("No lists yet")).toBeTruthy()
     })
 
     it("renders social discovery cards and opens song detail", async () => {
@@ -161,29 +171,24 @@ describe("DiscoverScreen", () => {
 
         fireEvent.press(await screen.findByLabelText("Open Nights"))
 
-        expect(screen.getByText("2 friends rated this 9+")).toBeTruthy()
+        expect(screen.getByText("everyone gave it 9+")).toBeTruthy()
         expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { song: ranking.song })
     })
 
-    it("opens rating flow and bookmarks from a discovery card", async () => {
+    it("renders co-sign card with friend count pill and avg score", async () => {
         mockListCoSigns.mockResolvedValue({ items: [coSignItem] })
         render(<DiscoverScreen />)
 
-        fireEvent.press(await screen.findByText("Rate now"))
-        expect(mockNavigate).toHaveBeenCalledWith("BucketSelection", { song: ranking.song })
-
-        fireEvent.press(screen.getByText("Bookmark"))
-        await waitFor(() => {
-            expect(mockBookmarkSong).toHaveBeenCalledWith(ranking.song, "discovery", "test-token")
-        })
-        expect(screen.getByText("Bookmarked")).toBeTruthy()
+        expect(await screen.findByText("Co-sign · 2 friends")).toBeTruthy()
+        expect(screen.getByText("everyone gave it 9+")).toBeTruthy()
     })
 
     it("opens unrated search results in Song Detail", async () => {
         mockGetMyRankingByDeezerId.mockRejectedValue(new ApiError(404, "Rating not found.", null))
         render(<DiscoverScreen />)
 
-        fireEvent.changeText(screen.getByPlaceholderText("Search for a song..."), "nights")
+        fireEvent(screen.getByPlaceholderText("Search songs or people…"), "focus")
+        fireEvent.changeText(screen.getByPlaceholderText("Search songs or people…"), "nights")
         act(() => {
             jest.advanceTimersByTime(350)
         })
@@ -200,7 +205,8 @@ describe("DiscoverScreen", () => {
         mockGetMyRankingByDeezerId.mockResolvedValue(ranking)
         render(<DiscoverScreen />)
 
-        fireEvent.changeText(screen.getByPlaceholderText("Search for a song..."), "nights")
+        fireEvent(screen.getByPlaceholderText("Search songs or people…"), "focus")
+        fireEvent.changeText(screen.getByPlaceholderText("Search songs or people…"), "nights")
         act(() => {
             jest.advanceTimersByTime(350)
         })
@@ -217,8 +223,9 @@ describe("DiscoverScreen", () => {
     it("switches to user search and opens another user's profile", async () => {
         render(<DiscoverScreen />)
 
-        fireEvent.press(screen.getByText("Users"))
-        fireEvent.changeText(screen.getByPlaceholderText("Search for a user..."), "jason")
+        fireEvent(screen.getByPlaceholderText("Search songs or people…"), "focus")
+        fireEvent.press(screen.getByText("People"))
+        fireEvent.changeText(screen.getByPlaceholderText("Search songs or people…"), "jason")
         act(() => {
             jest.advanceTimersByTime(350)
         })

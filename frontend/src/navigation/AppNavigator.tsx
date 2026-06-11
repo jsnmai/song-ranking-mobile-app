@@ -1,13 +1,15 @@
 // AppNavigator — the main tab bar shown when the user is logged in.
-// Tab order: Feed | Rankings | [FAB] | Discover | Profile
-// The center button is a FAB (floating action button), not a tab.
-// Tapping it navigates to Discover and auto-focuses the search bar.
+// Tab order: Feed | Rankings | [FAB] | Discover | You
+// The center button is a raised gold FAB that opens the rating flow (Discover + focusSearch).
+// Tab bar uses a frosted-glass overlay so content scrolls behind it.
 
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
-import { useNavigation } from "@react-navigation/native"
-import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
+import { BottomTabBarProps } from "@react-navigation/bottom-tabs"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
+import Svg, { Path, Rect, Circle } from "react-native-svg"
+import { BlurView } from "expo-blur"
 
 import { AppStackParamList, RankingsStackParamList, TabParamList } from "./types"
 import BucketSelectionScreen from "../features/comparison/BucketSelectionScreen"
@@ -29,34 +31,142 @@ import BookmarksScreen from "../features/bookmarks/BookmarksScreen"
 import UserBookmarksScreen from "../features/profile/UserBookmarksScreen"
 import UserRankingsScreen from "../features/profile/UserRankingsScreen"
 import MostCompatibleScreen from "../features/profile/MostCompatibleScreen"
+import { colors, fonts } from "../theme"
 
 const Tab = createBottomTabNavigator<TabParamList>()
 const Stack = createNativeStackNavigator<AppStackParamList>()
 const RankingsStack = createNativeStackNavigator<RankingsStackParamList>()
 
-// FABButton is the center action button — visually floats above the tab bar.
-// Not a tab: it always navigates to Discover with focusSearch:true.
-function FABButton() {
-    const navigation = useNavigation<BottomTabNavigationProp<TabParamList>>()
+// ── Tab bar icons (SVG) ───────────────────────────────────────────────────
+const S = 22  // icon size
+const SW = 1.9 // stroke width
 
-    function handlePress() {
-        navigation.navigate("Discover", { focusSearch: true })
-    }
-
+function FeedIcon({ color }: { color: string }) {
     return (
-        // The outer View fills the tab slot so the FAB is centered in that slot.
-        <View style={styles.fabSlot}>
-            <TouchableOpacity style={styles.fab} onPress={handlePress} activeOpacity={0.8}>
-                <Text style={styles.fabIcon}>+</Text>
-            </TouchableOpacity>
-        </View>
+        <Svg width={S} height={S} viewBox="0 0 24 24" fill="none">
+            <Rect x="4.5" y="5" width="15" height="14" rx="4" stroke={color} strokeWidth={SW} strokeLinecap="round" strokeLinejoin="round" />
+            <Circle cx="8.6" cy="10" r="1.5" fill={color} stroke="none" />
+            <Rect x="11" y="8.8" width="5" height="2.4" rx="1.2" fill={color} stroke="none" />
+            <Path d="M8 14.3h8" stroke={color} strokeWidth={SW} strokeLinecap="round" />
+        </Svg>
     )
 }
 
-// FABPlaceholderScreen is never shown — its tab slot is replaced by FABButton.
-// React Navigation requires a screen component for every registered tab.
+function RankIcon({ color }: { color: string }) {
+    return (
+        <Svg width={S} height={S} viewBox="0 0 24 24" fill={color}>
+            <Rect x="4" y="5.6" width="16" height="3.3" rx="1.65" />
+            <Rect x="4" y="10.35" width="11" height="3.3" rx="1.65" />
+            <Rect x="4" y="15.1" width="7" height="3.3" rx="1.65" />
+        </Svg>
+    )
+}
+
+function DiscoverIcon({ color }: { color: string }) {
+    return (
+        <Svg width={S} height={S} viewBox="0 0 24 24" fill="none">
+            <Circle cx="11" cy="11" r="7" stroke={color} strokeWidth={SW} strokeLinecap="round" />
+            <Path d="m20 20-3.4-3.4" stroke={color} strokeWidth={SW} strokeLinecap="round" />
+        </Svg>
+    )
+}
+
+function YouIcon({ color }: { color: string }) {
+    return (
+        <Svg width={S} height={S} viewBox="0 0 24 24" fill="none">
+            <Circle cx="12" cy="8" r="4" stroke={color} strokeWidth={SW} strokeLinecap="round" />
+            <Path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" stroke={color} strokeWidth={SW} strokeLinecap="round" />
+        </Svg>
+    )
+}
+
+type TabIconName = "Feed" | "Rankings" | "Discover" | "Profile"
+
+function TabIcon({ name, color }: { name: TabIconName; color: string }) {
+    if (name === "Feed") return <FeedIcon color={color} />
+    if (name === "Rankings") return <RankIcon color={color} />
+    if (name === "Discover") return <DiscoverIcon color={color} />
+    return <YouIcon color={color} />
+}
+
+// ── Custom frosted glass tab bar ──────────────────────────────────────────
+// Absolutely positioned overlay; content scrolls behind it.
+function FrostedTabBar({ state, descriptors: _desc, navigation }: BottomTabBarProps) {
+    const { bottom } = useSafeAreaInsets()
+    const tabBarH = 56 + bottom
+
+    const tabDefs: Array<{ route: TabIconName; label: string }> = [
+        { route: "Feed", label: "FEED" },
+        { route: "Rankings", label: "RANKINGS" },
+    ]
+    const rightDefs: Array<{ route: TabIconName; label: string }> = [
+        { route: "Discover", label: "DISCOVER" },
+        { route: "Profile", label: "YOU" },
+    ]
+
+    function routeIndex(name: string) {
+        return state.routes.findIndex((r) => r.name === name)
+    }
+
+    function onTabPress(name: string) {
+        const index = routeIndex(name)
+        if (index === -1) return
+        const event = navigation.emit({ type: "tabPress", target: state.routes[index].key, canPreventDefault: true })
+        if (!event.defaultPrevented && state.index !== index) {
+            navigation.navigate(state.routes[index].name)
+        }
+    }
+
+    function renderTab({ route, label }: { route: TabIconName; label: string }) {
+        const isFocused = state.routes[state.index]?.name === route
+        const iconColor = isFocused ? colors.ink : colors.inkDim
+        return (
+            <TouchableOpacity
+                key={route}
+                style={styles.tabBtn}
+                onPress={() => onTabPress(route)}
+                accessibilityRole="button"
+                accessibilityLabel={label}
+                accessibilityState={isFocused ? { selected: true } : {}}
+            >
+                <TabIcon name={route} color={iconColor} />
+                <Text style={[styles.tabLabel, isFocused && styles.tabLabelActive]}>{label}</Text>
+                <View style={[styles.tabUnderline, isFocused && styles.tabUnderlineActive]} />
+            </TouchableOpacity>
+        )
+    }
+
+    return (
+        <BlurView
+            intensity={48}
+            tint="light"
+            style={[styles.tabBar, { height: tabBarH, paddingBottom: bottom }]}
+        >
+            {/* Left two tabs */}
+            {tabDefs.map(renderTab)}
+
+            {/* Center gold FAB */}
+            <View style={styles.fabSlot}>
+                <TouchableOpacity
+                    style={styles.fab}
+                    onPress={() => navigation.navigate("Discover", { focusSearch: true } as never)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Rate a song"
+                    activeOpacity={0.88}
+                >
+                    <Text style={styles.fabPlus}>+</Text>
+                </TouchableOpacity>
+            </View>
+
+            {/* Right two tabs */}
+            {rightDefs.map(renderTab)}
+        </BlurView>
+    )
+}
+
+// FABPlaceholderScreen is never shown — required by React Navigation for every registered tab.
 function FABPlaceholderScreen() {
-    return <View style={{ flex: 1, backgroundColor: "#000" }} />
+    return <View style={{ flex: 1, backgroundColor: colors.bg }} />
 }
 
 function RankingsNavigator() {
@@ -71,23 +181,15 @@ function RankingsNavigator() {
 function MainTabs() {
     return (
         <Tab.Navigator
-            screenOptions={{
-                headerShown: false,
-                tabBarStyle: styles.tabBar,
-                tabBarActiveTintColor: "#fff",
-                tabBarInactiveTintColor: "#555",
-            }}
+            tabBar={(props) => <FrostedTabBar {...props} />}
+            screenOptions={{ headerShown: false }}
         >
             <Tab.Screen name="Feed" component={FeedScreen} />
             <Tab.Screen name="Rankings" component={RankingsNavigator} />
             <Tab.Screen
                 name="FABPlaceholder"
                 component={FABPlaceholderScreen}
-                options={{
-                    tabBarLabel: "",
-                    // tabBarButton replaces the default touchable with our FAB component.
-                    tabBarButton: () => <FABButton />,
-                }}
+                options={{ tabBarButton: () => null }}
             />
             <Tab.Screen name="Discover" component={DiscoverScreen} />
             <Tab.Screen name="Profile" component={ProfileScreen} />
@@ -99,17 +201,19 @@ export default function AppNavigator() {
     return (
         <Stack.Navigator screenOptions={{ headerShown: false }}>
             <Stack.Screen name="MainTabs" component={MainTabs} />
-            {/* change presentation to 'modal' to try as bottom sheet */}
             <Stack.Screen name="SongDetail" component={SongDetailScreen} />
             <Stack.Screen name="OtherProfile" component={OtherProfileScreen} />
             <Stack.Screen name="ProfileList" component={ProfileListScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} />
             <Stack.Screen name="LegalPlaceholder" component={LegalPlaceholderScreen} />
-            {/* change presentation to 'modal' to try as bottom sheet */}
             <Stack.Screen name="Reorder" component={ReorderScreen} />
             <Stack.Screen name="VersusHistory" component={VersusHistoryScreen} />
             <Stack.Screen name="Bookmarks" component={BookmarksScreen} />
-            <Stack.Screen name="BucketSelection" component={BucketSelectionScreen} />
+            <Stack.Screen
+                name="BucketSelection"
+                component={BucketSelectionScreen}
+                options={{ presentation: "transparentModal", animation: "none" }}
+            />
             <Stack.Screen name="ComparisonFlow" component={ComparisonFlowScreen} />
             <Stack.Screen name="ScoreReveal" component={ScoreRevealScreen} />
             <Stack.Screen name="UserRankings" component={UserRankingsScreen} />
@@ -120,38 +224,81 @@ export default function AppNavigator() {
 }
 
 const styles = StyleSheet.create({
+    // ── Frosted tab bar ──────────────────────────────────────────────────
     tabBar: {
-        backgroundColor: "#111",
-        borderTopColor: "#222",
-        height: 60,
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: 0,
+        flexDirection: "row",
+        alignItems: "flex-end",
+        justifyContent: "space-between",
+        paddingHorizontal: 16,
+        paddingTop: 9,
+        // Tint layer on top of the blur — warm paper wash at low opacity
+        backgroundColor: "rgba(253,251,244,0.45)",
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: "rgba(17,19,28,0.10)",
+        shadowColor: "#000",
+        shadowOpacity: 0.08,
+        shadowRadius: 24,
+        shadowOffset: { width: 0, height: -4 },
+        zIndex: 20,
     },
-    // fabSlot fills the tab bar slot so FABButton is horizontally centered in it.
-    fabSlot: {
+    tabBtn: {
         flex: 1,
         alignItems: "center",
-        justifyContent: "center",
+        gap: 3,
+        paddingBottom: 4,
+    },
+    tabLabel: {
+        fontFamily: fonts.mono,
+        fontSize: 7.5,
+        letterSpacing: 0.7,
+        color: colors.inkDim,
+        fontWeight: "700",
+    },
+    tabLabelActive: {
+        color: colors.ink,
+    },
+    tabUnderline: {
+        width: 18,
+        height: 2.5,
+        borderRadius: 2,
+        backgroundColor: "transparent",
+        marginTop: 1,
+    },
+    tabUnderlineActive: {
+        backgroundColor: colors.accent,
+    },
+    // ── Gold FAB ─────────────────────────────────────────────────────────
+    fabSlot: {
+        alignItems: "center",
+        justifyContent: "flex-end",
+        width: 60,
+        paddingBottom: 8,
     },
     fab: {
-        width: 52,
-        height: 52,
-        borderRadius: 26,
-        backgroundColor: "#fff",
+        width: 54,
+        height: 54,
+        borderRadius: 16,
+        backgroundColor: colors.gold,
         alignItems: "center",
         justifyContent: "center",
-        // Negative marginTop lifts the circle above the tab bar line.
-        marginTop: -16,
-        // Shadow (iOS)
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.4,
-        shadowRadius: 6,
-        // Elevation (Android)
+        // Lifted above the bar
+        marginBottom: 8,
+        shadowColor: colors.gold,
+        shadowOpacity: 0.5,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 6 },
+        // Offset shadow matching design: 4px 4px 0 accent
         elevation: 8,
     },
-    fabIcon: {
-        color: "#000",
-        fontSize: 28,
-        // lineHeight centers the + glyph vertically inside the circle.
-        lineHeight: 30,
+    fabPlus: {
+        color: colors.navy,
+        fontSize: 30,
+        lineHeight: 32,
+        fontWeight: "300",
+        marginTop: -2,
     },
 })

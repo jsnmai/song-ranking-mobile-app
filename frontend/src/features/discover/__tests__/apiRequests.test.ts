@@ -1,4 +1,4 @@
-import { listCoSigns, listFriendsNines } from "../apiRequests"
+import { listCoSigns } from "../apiRequests"
 
 const mockGet = jest.fn()
 
@@ -13,14 +13,6 @@ beforeEach(() => {
 })
 
 describe("social discovery API requests", () => {
-    it("loads Friends' 9s for the current user", async () => {
-        mockGet.mockResolvedValue({ items: [] })
-
-        await listFriendsNines("test-token")
-
-        expect(mockGet).toHaveBeenCalledWith("/api/v1/discover/friends-9s", "test-token")
-    })
-
     it("loads Co-Signs for the current user", async () => {
         mockGet.mockResolvedValue({ items: [] })
 

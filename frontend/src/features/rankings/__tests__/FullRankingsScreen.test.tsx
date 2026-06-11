@@ -94,7 +94,9 @@ function makeRanking(
 const likeRanking = makeRanking(7, "Nights", "Frank Ocean", "Blonde", "like", 1)
 const okayRanking = makeRanking(8, "Alright", "Kendrick Lamar", "DAMN.", "alright", 2)
 const dislikeRanking = makeRanking(9, "Bad Religion", "Frank Ocean", "channel ORANGE", "dislike", 3)
-const rankings = [likeRanking, okayRanking, dislikeRanking]
+const extraRanking1 = makeRanking(10, "Solar Power", "Lorde", "Solar Power", "like", 4)
+const extraRanking2 = makeRanking(11, "See You Again", "Tyler, the Creator", "Flower Boy", "dislike", 5)
+const rankings = [likeRanking, okayRanking, dislikeRanking, extraRanking1, extraRanking2]
 const navigation = { goBack: mockGoBack, navigate: mockNavigate }
 
 beforeEach(() => {
@@ -103,16 +105,20 @@ beforeEach(() => {
 })
 
 describe("FullRankingsScreen", () => {
-    it("renders a back button, bucket tabs, and filter button", async () => {
+    it("renders a back button, reorder button, bucket tabs, and filter button", async () => {
         render(<FullRankingsScreen navigation={navigation as never} route={{} as never} />)
 
-        expect(await screen.findByText("View All / Filter")).toBeTruthy()
-        expect(screen.getByText("Back")).toBeTruthy()
+        expect(await screen.findByText("All Rankings")).toBeTruthy()
+        expect(screen.getByLabelText("Go back")).toBeTruthy()
+        expect(screen.getByLabelText("Reorder rankings")).toBeTruthy()
         expect(screen.getByLabelText("Filter bucket All")).toBeTruthy()
         expect(screen.getByLabelText("Open rankings filters")).toBeTruthy()
 
-        fireEvent.press(screen.getByText("Back"))
+        fireEvent.press(screen.getByLabelText("Go back"))
         expect(mockGoBack).toHaveBeenCalled()
+
+        fireEvent.press(screen.getByLabelText("Reorder rankings"))
+        expect(mockNavigate).toHaveBeenCalledWith("Reorder")
     })
 
     it("filters buckets with contiguous display numbering", async () => {
@@ -144,7 +150,7 @@ describe("FullRankingsScreen", () => {
 
     it("loads all cursor pages and keeps original Rankings data intact", async () => {
         mockListMyRankings
-            .mockResolvedValueOnce({ rankings: [likeRanking, okayRanking], next_cursor: "7.5:8" })
+            .mockResolvedValueOnce({ rankings: [likeRanking, okayRanking, extraRanking1, extraRanking2], next_cursor: "7.5:8" })
             .mockResolvedValueOnce({ rankings: [dislikeRanking], next_cursor: null })
 
         render(<FullRankingsScreen navigation={navigation as never} route={{} as never} />)
@@ -172,7 +178,7 @@ describe("FullRankingsScreen", () => {
 
         expect(screen.getByText("No songs match these filters.")).toBeTruthy()
 
-        fireEvent.press(screen.getByText("Clear filters"))
+        fireEvent.press(screen.getByText("Clear"))
         expect(screen.getByTestId("full-ranking-row-7")).toBeTruthy()
         expect(screen.getByTestId("full-ranking-row-8")).toBeTruthy()
         expect(screen.getByTestId("full-ranking-row-9")).toBeTruthy()

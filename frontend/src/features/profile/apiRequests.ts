@@ -17,7 +17,7 @@ import {
     RecentVerdictsResponse,
     TasteProfileResponse,
 } from "./types"
-import { RankingListResponse } from "../comparison/types"
+import { RankingAnchorsResponse, RankingListResponse } from "../comparison/types"
 import { BookmarkListResponse } from "../bookmarks/types"
 
 // Calls GET /api/v1/profile/me
@@ -149,4 +149,9 @@ export async function getProfileBookmarks(
 // Calls GET /api/v1/profile/me/most-compatible
 export async function getMostCompatible(token: string): Promise<MostCompatibleResponse> {
     return apiClient.get<MostCompatibleResponse>("/api/v1/profile/me/most-compatible", token)
+}
+
+// Calls GET /api/v1/profile/{username}/rankings/anchors
+export async function getProfileAnchors(username: string, token: string): Promise<RankingAnchorsResponse> {
+    return apiClient.get<RankingAnchorsResponse>(`/api/v1/profile/${username}/rankings/anchors`, token)
 }

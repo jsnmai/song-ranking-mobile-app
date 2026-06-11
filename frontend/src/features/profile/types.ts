@@ -35,6 +35,7 @@ export type Profile = ProfileBase & {
     follower_count: number;
     following_count: number;
     is_following: boolean;
+    is_followed_by: boolean;
     is_own_profile: boolean;
     can_view_taste: boolean;
     is_blocked: boolean;

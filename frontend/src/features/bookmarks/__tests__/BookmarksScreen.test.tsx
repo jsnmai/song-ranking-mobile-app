@@ -128,7 +128,7 @@ describe("BookmarksScreen", () => {
 
         render(<BookmarksScreen navigation={navigation as never} route={{} as never} />)
 
-        expect(await screen.findByText("No Bookmarks yet.")).toBeTruthy()
+        expect(await screen.findByText("NOTHING SAVED YET")).toBeTruthy()
     })
 
     it("renders an error and retries normally", async () => {
@@ -143,6 +143,6 @@ describe("BookmarksScreen", () => {
         await waitFor(() => {
             expect(mockListMyBookmarks).toHaveBeenCalledTimes(2)
         })
-        expect(await screen.findByText("No Bookmarks yet.")).toBeTruthy()
+        expect(await screen.findByText("NOTHING SAVED YET")).toBeTruthy()
     })
 })

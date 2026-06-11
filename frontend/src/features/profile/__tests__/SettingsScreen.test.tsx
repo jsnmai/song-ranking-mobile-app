@@ -39,6 +39,7 @@ const profile: Profile = {
     follower_count: 4,
     following_count: 8,
     is_following: false,
+    is_followed_by: false,
     is_own_profile: true,
     can_view_taste: true,
     is_blocked: false,

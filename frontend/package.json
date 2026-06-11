@@ -10,9 +10,11 @@
     "test": "jest --watchAll=false"
   },
   "jest": {
-    "preset": "jest-expo"
+    "preset": "jest-expo",
+    "setupFilesAfterEnv": ["./jest.setup.js"]
   },
   "dependencies": {
+    "@expo-google-fonts/archivo-black": "^0.4.1",
     "@expo-google-fonts/fraunces": "^0.4.1",
     "@expo-google-fonts/jetbrains-mono": "^0.4.1",
     "@react-navigation/bottom-tabs": "^7.16.1",
@@ -22,6 +24,7 @@
     "babel-preset-expo": "~55.0.8",
     "expo": "~55.0.25",
     "expo-audio": "~55.0.14",
+    "expo-blur": "~55.0.14",
     "expo-font": "~55.0.8",
     "expo-secure-store": "~55.0.14",
     "expo-status-bar": "~55.0.6",

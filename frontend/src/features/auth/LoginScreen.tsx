@@ -1,47 +1,47 @@
-// Login screen — email + password form.
-// Calls login() from AuthContext on submit.
-// On success, AuthContext sets the user and navigation switches to the app stack automatically.
-
+// Sign-in screen — "Welcome back" design.
+// Clean cream canvas, large heading, pill inputs, dark pill CTA.
 import { useState } from "react"
 import {
     ActivityIndicator,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View,
 } from "react-native"
-
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
-
 import { ApiError } from "../../api/client"
 import { useAuth } from "./AuthContext"
 import { AuthStackParamList } from "../../navigation/AuthNavigator"
+import { fonts } from "../../theme"
 
 type LoginNavigationProp = NativeStackNavigationProp<AuthStackParamList, "Login">
+type Props = { navigation: LoginNavigationProp }
 
-type Props = {
-    navigation: LoginNavigationProp;
-}
+const BG = "#f4f1eb"
+const CARD = "#fdfbf4"
+const INK = "#11131c"
+const INK_SOFT = "#3d4350"
+const INK_DIM = "#8b8f9c"
+const LINE = "rgba(17,19,28,0.10)"
 
 export default function LoginScreen({ navigation }: Props) {
-    // Local state for the form fields and UI feedback
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
+    const [showPassword, setShowPassword] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
-    const [error, setError] = useState<string | null>(null)  // null means no error to show; a string means show that error message
+    const [error, setError] = useState<string | null>(null)
 
     const { login } = useAuth()
 
     const handleLogin = async () => {
         setError(null)
         setIsLoading(true)
-
         try {
             await login(email, password)
-            // No navigation.navigate() needed here.
-            // login() sets the user in AuthContext, which triggers the RootNavigator
-            // to switch from AuthStack to AppStack automatically.
         } catch (err) {
             if (err instanceof ApiError) {
                 setError(err.detail)
@@ -56,92 +56,282 @@ export default function LoginScreen({ navigation }: Props) {
     }
 
     return (
-        <View style={styles.container}>
-            <Text style={styles.title}>Log In</Text>
-
-            <TextInput
-                style={styles.input}
-                placeholder="Email"
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-            />
-
-            <TextInput
-                style={styles.input}
-                placeholder="Password"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-            />
-
-            {/* Only render the error message when there is one */}
-            {error !== null && <Text style={styles.errorText}>{error}</Text>}
-
-            <TouchableOpacity
-                style={styles.primaryButton}
-                onPress={handleLogin}
-                disabled={isLoading}
+        <KeyboardAvoidingView
+            style={styles.root}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+            <ScrollView
+                contentContainerStyle={styles.scroll}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
             >
-                {/* Show a spinner while the request is in flight, otherwise show the label */}
-                {isLoading
-                    ? <ActivityIndicator color="#fff" />
-                    : <Text style={styles.primaryButtonText}>Log In</Text>
-                }
-            </TouchableOpacity>
+                {/* Back + wordmark */}
+                <View style={styles.navRow}>
+                    <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+                        <Text style={styles.backArrow}>‹</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.wordmark}>LISTn</Text>
+                </View>
 
-            <TouchableOpacity onPress={() => navigation.navigate("Register")}>
-                <Text style={styles.linkText}>Don't have an account? Sign up</Text>
-            </TouchableOpacity>
-        </View>
+                {/* Heading */}
+                <Text style={styles.heading}>Welcome{"\n"}back.</Text>
+
+                {/* Email field */}
+                <View style={styles.fieldGroup}>
+                    <Text style={styles.fieldLabel}>Email</Text>
+                    <View style={styles.fieldRow}>
+                        <TextInput
+                            style={styles.fieldInput}
+                            value={email}
+                            onChangeText={setEmail}
+                            placeholder="you@email.com"
+                            placeholderTextColor={INK_DIM}
+                            autoCapitalize="none"
+                            keyboardType="email-address"
+                            autoCorrect={false}
+                        />
+                    </View>
+                </View>
+
+                {/* Password field */}
+                <View style={styles.fieldGroup}>
+                    <Text style={styles.fieldLabel}>Password</Text>
+                    <View style={styles.fieldRow}>
+                        <TextInput
+                            style={styles.fieldInput}
+                            value={password}
+                            onChangeText={setPassword}
+                            placeholder="Your password"
+                            placeholderTextColor={INK_DIM}
+                            secureTextEntry={!showPassword}
+                        />
+                        <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                            <Text style={styles.showHide}>{showPassword ? "Hide" : "Show"}</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                {/* Forgot password */}
+                <TouchableOpacity style={{ alignSelf: "flex-end", marginTop: 10 }}>
+                    <Text style={styles.forgotText}>Forgot password?</Text>
+                </TouchableOpacity>
+
+                {/* Error */}
+                {error !== null && <Text style={styles.error}>{error}</Text>}
+
+                {/* Sign in button */}
+                <TouchableOpacity
+                    style={[styles.primaryBtn, isLoading && { opacity: 0.7 }]}
+                    onPress={handleLogin}
+                    disabled={isLoading}
+                    activeOpacity={0.85}
+                >
+                    {isLoading ? (
+                        <ActivityIndicator color="#fff" />
+                    ) : (
+                        <>
+                            <Text style={styles.primaryBtnText}>Sign in</Text>
+                            <Text style={styles.arrow}>→</Text>
+                        </>
+                    )}
+                </TouchableOpacity>
+
+                {/* Divider */}
+                <View style={styles.divider}>
+                    <View style={styles.dividerLine} />
+                    <Text style={styles.dividerLabel}>or</Text>
+                    <View style={styles.dividerLine} />
+                </View>
+
+                {/* Social placeholders */}
+                <View style={styles.socialBtn}>
+                    <Text style={styles.socialBtnText}>Continue with Apple</Text>
+                </View>
+                <View style={[styles.socialBtn, { marginTop: 10 }]}>
+                    <Text style={styles.socialBtnText}>Continue with Google</Text>
+                </View>
+
+                <View style={{ flex: 1, minHeight: 24 }} />
+
+                {/* Footer link */}
+                <TouchableOpacity
+                    style={styles.footerLink}
+                    onPress={() => navigation.replace("Register")}
+                >
+                    <Text style={styles.footerText}>
+                        New here?{" "}
+                        <Text style={{ color: INK, fontWeight: "700" }}>Create account</Text>
+                    </Text>
+                </TouchableOpacity>
+            </ScrollView>
+        </KeyboardAvoidingView>
     )
 }
 
 const styles = StyleSheet.create({
-    container: {
+    root: {
         flex: 1,
-        backgroundColor: "#fff",
+        backgroundColor: BG,
+    },
+    scroll: {
+        flexGrow: 1,
+        paddingHorizontal: 22,
+        paddingTop: 56,
+        paddingBottom: 32,
+    },
+    navRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        marginBottom: 26,
+    },
+    backBtn: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        backgroundColor: CARD,
+        borderWidth: 1,
+        borderColor: LINE,
         alignItems: "center",
         justifyContent: "center",
-        paddingHorizontal: 32,
+        shadowColor: INK,
+        shadowOpacity: 0.05,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 2 },
     },
-    title: {
+    backArrow: {
+        fontSize: 22,
+        color: INK,
+        lineHeight: 24,
+        marginTop: -1,
+    },
+    wordmark: {
+        fontFamily: fonts.serif,
+        fontSize: 20,
+        color: INK,
+        letterSpacing: -0.3,
+    },
+    heading: {
         fontSize: 32,
-        fontWeight: "bold",
-        marginBottom: 32,
+        fontWeight: "800",
+        color: INK,
+        letterSpacing: -0.8,
+        lineHeight: 36,
     },
-    input: {
-        width: "100%",
+    sub: {
+        fontSize: 14,
+        color: INK_SOFT,
+        marginTop: 11,
+        lineHeight: 21,
+    },
+    fieldGroup: {
+        marginTop: 16,
+    },
+    fieldLabel: {
+        fontSize: 12,
+        fontWeight: "600",
+        color: INK_SOFT,
+        marginBottom: 7,
+    },
+    fieldRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+        backgroundColor: CARD,
         borderWidth: 1,
-        borderColor: "#ccc",
-        borderRadius: 8,
+        borderColor: LINE,
+        borderRadius: 14,
+        paddingVertical: 14,
         paddingHorizontal: 16,
-        paddingVertical: 12,
-        fontSize: 16,
-        marginBottom: 12,
+        shadowColor: INK,
+        shadowOpacity: 0.03,
+        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 1 },
     },
-    errorText: {
-        color: "red",
-        marginBottom: 12,
+    fieldInput: {
+        flex: 1,
+        fontSize: 15,
+        color: INK,
+        fontWeight: "500",
+        padding: 0,
+    },
+    showHide: {
+        fontSize: 12.5,
+        fontWeight: "600",
+        color: INK_SOFT,
+    },
+    forgotText: {
+        fontSize: 12.5,
+        fontWeight: "600",
+        color: INK_SOFT,
+    },
+    error: {
+        color: "#e0492e",
+        fontSize: 13,
+        marginTop: 10,
         textAlign: "center",
     },
-    primaryButton: {
-        width: "100%",
-        backgroundColor: "#000",
-        paddingVertical: 16,
-        borderRadius: 12,
+    primaryBtn: {
+        flexDirection: "row",
         alignItems: "center",
-        marginTop: 8,
-        marginBottom: 16,
+        justifyContent: "center",
+        gap: 9,
+        backgroundColor: INK,
+        borderRadius: 999,
+        paddingVertical: 15,
+        marginTop: 18,
+        shadowColor: INK,
+        shadowOpacity: 0.18,
+        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 8 },
     },
-    primaryButtonText: {
+    primaryBtnText: {
         color: "#fff",
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: "600",
     },
-    linkText: {
-        color: "#666",
-        fontSize: 14,
+    arrow: {
+        color: "#fff",
+        fontSize: 16,
+    },
+    divider: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        marginVertical: 18,
+    },
+    dividerLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: LINE,
+    },
+    dividerLabel: {
+        fontSize: 11.5,
+        fontWeight: "500",
+        color: INK_DIM,
+    },
+    socialBtn: {
+        backgroundColor: CARD,
+        borderWidth: 1,
+        borderColor: LINE,
+        borderRadius: 999,
+        paddingVertical: 14,
+        alignItems: "center",
+        shadowColor: INK,
+        shadowOpacity: 0.04,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 2 },
+    },
+    socialBtnText: {
+        fontSize: 14.5,
+        fontWeight: "600",
+        color: INK,
+    },
+    footerLink: {
+        alignItems: "center",
+    },
+    footerText: {
+        fontSize: 13.5,
+        color: INK_SOFT,
     },
 })

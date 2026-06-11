@@ -7,6 +7,7 @@ import { RankingResponse } from "../../comparison/types"
 const mockNavigate = jest.fn()
 const mockListMyRankings = jest.fn()
 const mockGetMyRankingAnchors = jest.fn()
+const mockListMyVersusHistory = jest.fn()
 
 jest.mock("@react-navigation/native", () => {
     const actual = jest.requireActual("@react-navigation/native")
@@ -57,6 +58,7 @@ jest.mock("../../auth/AuthContext", () => ({
 jest.mock("../apiRequests", () => ({
     getMyRankingAnchors: (...args: unknown[]) => mockGetMyRankingAnchors(...args),
     listMyRankings: (...args: unknown[]) => mockListMyRankings(...args),
+    listMyVersusHistory: (...args: unknown[]) => mockListMyVersusHistory(...args),
 }))
 
 const ranking: RankingResponse = {
@@ -100,6 +102,7 @@ beforeEach(() => {
         median_okay: null,
         lowest_dislike: null,
     })
+    mockListMyVersusHistory.mockResolvedValue({ receipts: [] })
 })
 
 describe("RankingsScreen", () => {
@@ -117,22 +120,26 @@ describe("RankingsScreen", () => {
     })
 
     it("navigates to SongDetail with the full ranking when an orbit song is tapped", async () => {
-        mockListMyRankings.mockResolvedValue({
-            rankings: [ranking],
-            next_cursor: null,
-        })
+        // Rank map unlocks at 10 songs; provide 10 to show the orbit.
+        const tenRankings = Array.from({ length: 10 }, (_, i) => ({
+            ...ranking,
+            id: i + 1,
+            position: i + 1,
+            score: 9.4 - i * 0.3,
+        }))
+        mockListMyRankings.mockResolvedValue({ rankings: tenRankings, next_cursor: null })
 
         render(<RankingsScreen />)
 
         await waitFor(() => {
-            expect(screen.getAllByText("Nights").length).toBeGreaterThan(0)
+            expect(screen.getByTestId("ranking-orbit-1")).toBeTruthy()
         })
-        fireEvent.press(screen.getByTestId("ranking-orbit-7"))
+        fireEvent.press(screen.getByTestId("ranking-orbit-1"))
 
-        expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
+        expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking: tenRankings[0] })
     })
 
-    it("navigates to Reorder when the header button is tapped", async () => {
+    it("renders the Versus History empty state and navigates via LOG link", async () => {
         mockListMyRankings.mockResolvedValue({
             rankings: [ranking],
             next_cursor: null,
@@ -141,25 +148,10 @@ describe("RankingsScreen", () => {
         render(<RankingsScreen />)
 
         await waitFor(() => {
-            expect(screen.getAllByText("Nights").length).toBeGreaterThan(0)
+            expect(screen.getByText("No match-ups yet")).toBeTruthy()
         })
-        fireEvent.press(screen.getByText("Reorder"))
-
-        expect(mockNavigate).toHaveBeenCalledWith("Reorder")
-    })
-
-    it("renders the Versus History entry point and navigates to it", async () => {
-        mockListMyRankings.mockResolvedValue({
-            rankings: [ranking],
-            next_cursor: null,
-        })
-
-        render(<RankingsScreen />)
-
-        await waitFor(() => {
-            expect(screen.getByText("See your recent head-to-head decisions")).toBeTruthy()
-        })
-        fireEvent.press(screen.getByLabelText("Open Versus History"))
+        expect(screen.getByText("As you rate, LISTn pits each song against others to place it — those head-to-heads land here.")).toBeTruthy()
+        fireEvent.press(screen.getByText("LOG ↗"))
 
         expect(mockNavigate).toHaveBeenCalledWith("VersusHistory")
     })
@@ -180,7 +172,27 @@ describe("RankingsScreen", () => {
         expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
     })
 
-    it("renders populated and missing Anchors", async () => {
+    it("shows 3 empty anchor cards when requirements not met (only Like rated)", async () => {
+        mockListMyRankings.mockResolvedValue({
+            rankings: [ranking],
+            next_cursor: null,
+        })
+
+        render(<RankingsScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("anchors-locked")).toBeTruthy()
+        })
+        expect(screen.queryByTestId("anchors-unlocked")).toBeNull()
+        expect(screen.getByText("TOP · LIKE")).toBeTruthy()
+        expect(screen.getByText("MEDIAN · OKAY")).toBeTruthy()
+        expect(screen.getByText("FLOOR · DISLIKE")).toBeTruthy()
+        expect(screen.getByText("1/1")).toBeTruthy()   // like: 1 of 1 required
+        expect(screen.getByText("0/3")).toBeTruthy()   // okay: 0 of 3 required
+        expect(screen.getByText("0/1")).toBeTruthy()   // dislike: 0 of 1 required
+    })
+
+    it("shows empty anchor cards when only Like is rated (Top Like not revealed)", async () => {
         mockListMyRankings.mockResolvedValue({
             rankings: [ranking],
             next_cursor: null,
@@ -188,34 +200,65 @@ describe("RankingsScreen", () => {
         mockGetMyRankingAnchors.mockResolvedValue({
             top_like: ranking,
             median_okay: null,
-            lowest_dislike: {
-                ...ranking,
-                id: 8,
-                song_id: 43,
-                bucket: "dislike",
-                position: 1,
-                score: 2.0,
-                song: {
-                    ...ranking.song,
-                    id: 43,
-                    deezer_id: 124,
-                    title: "Bad Song",
-                    artist: "The Skips",
-                },
-            },
+            lowest_dislike: null,
         })
 
         render(<RankingsScreen />)
 
         await waitFor(() => {
-            expect(screen.getByText("Anchors")).toBeTruthy()
+            expect(screen.getByTestId("anchors-locked")).toBeTruthy()
         })
-        expect(screen.getByText("Top Like")).toBeTruthy()
-        expect(screen.getByText("Median Okay")).toBeTruthy()
-        expect(screen.getByText("Lowest Dislike")).toBeTruthy()
-        expect(screen.getAllByText("Nights").length).toBeGreaterThan(0)
+        expect(screen.getByText("TOP · LIKE")).toBeTruthy()
+        expect(screen.getByText("1/1")).toBeTruthy()   // like: 1 of 1 required, shown as fraction
+    })
+
+    it("shows empty anchor cards with Like + Dislike but fewer than 3 Okay ratings", async () => {
+        const okayRanking: RankingResponse = { ...ranking, id: 10, bucket: "alright" }
+        const dislikeRanking: RankingResponse = { ...ranking, id: 11, bucket: "dislike" }
+        mockListMyRankings.mockResolvedValue({
+            rankings: [ranking, okayRanking, dislikeRanking],
+            next_cursor: null,
+        })
+
+        render(<RankingsScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("anchors-locked")).toBeTruthy()
+        })
+        expect(screen.queryByTestId("anchors-unlocked")).toBeNull()
+        expect(screen.getByText("1/3")).toBeTruthy()   // okay: 1 of 3 required, shown as fraction
+    })
+
+    it("shows all three anchors when all requirements are met", async () => {
+        const okayRanking1: RankingResponse = { ...ranking, id: 10, bucket: "alright" }
+        const okayRanking2: RankingResponse = { ...ranking, id: 11, bucket: "alright" }
+        const okayRanking3: RankingResponse = { ...ranking, id: 12, bucket: "alright" }
+        const dislikeRanking: RankingResponse = {
+            ...ranking,
+            id: 13,
+            bucket: "dislike",
+            song: { ...ranking.song, title: "Bad Song" },
+        }
+        mockListMyRankings.mockResolvedValue({
+            rankings: [ranking, okayRanking1, okayRanking2, okayRanking3, dislikeRanking],
+            next_cursor: null,
+        })
+        mockGetMyRankingAnchors.mockResolvedValue({
+            top_like: ranking,
+            median_okay: okayRanking2,
+            lowest_dislike: dislikeRanking,
+        })
+
+        render(<RankingsScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("anchors-unlocked")).toBeTruthy()
+        })
+        expect(screen.queryByTestId("anchors-locked")).toBeNull()
+        expect(screen.getByText("TOP · LIKE")).toBeTruthy()
+        expect(screen.getByText("MEDIAN · OKAY")).toBeTruthy()
+        expect(screen.getByText("FLOOR · DISLIKE")).toBeTruthy()
         expect(screen.getByText("Bad Song")).toBeTruthy()
-        expect(screen.getByText("No Okay ratings yet.")).toBeTruthy()
         expect(mockGetMyRankingAnchors).toHaveBeenCalledWith("test-token")
     })
 })

@@ -8,6 +8,7 @@ import { RankingResponse } from "../../comparison/types"
 const mockGoBack = jest.fn()
 const mockNavigate = jest.fn()
 const mockRemoveRating = jest.fn()
+const mockListMyVersusHistory = jest.fn()
 const mockFetchPreviewUrl = jest.fn()
 const mockGetBookmarkStatus = jest.fn()
 const mockRemoveBookmark = jest.fn()
@@ -31,6 +32,7 @@ jest.mock("../../auth/AuthContext", () => ({
 
 jest.mock("../../rankings/apiRequests", () => ({
     removeRating: (...args: unknown[]) => mockRemoveRating(...args),
+    listMyVersusHistory: (...args: unknown[]) => mockListMyVersusHistory(...args),
 }))
 
 jest.mock("../../songs/apiRequests", () => ({
@@ -100,15 +102,16 @@ beforeEach(() => {
     mockAddNavigationListener.mockReturnValue(jest.fn())
     mockFetchPreviewUrl.mockResolvedValue("https://example.com/preview.mp3")
     mockGetBookmarkStatus.mockResolvedValue({ is_bookmarked: false, bookmark: null })
+    mockListMyVersusHistory.mockResolvedValue({ receipts: [] })
 })
 
 describe("SongDetailScreen", () => {
-    it("opens Reorder from the action list", async () => {
+    it("opens Reorder from the actions menu", async () => {
         render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
-        // Flush the async fetchPreviewUrl effect before asserting to avoid act() warnings.
         await act(async () => {})
 
-        fireEvent.press(screen.getByText("Reorder"))
+        fireEvent.press(screen.getByLabelText("More actions"))
+        fireEvent.press(screen.getByText("Move in ranking"))
 
         expect(mockNavigate).toHaveBeenCalledWith("Reorder")
     })
@@ -120,7 +123,8 @@ describe("SongDetailScreen", () => {
         render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
         await act(async () => {})
 
-        fireEvent.press(screen.getByText("Remove Rating"))
+        fireEvent.press(screen.getByLabelText("More actions"))
+        fireEvent.press(screen.getByText("Remove rating"))
 
         expect(alertSpy).toHaveBeenCalledWith(
             "Remove this song from your rankings? This cannot be undone.",
@@ -145,7 +149,8 @@ describe("SongDetailScreen", () => {
         render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
         await act(async () => {})
 
-        fireEvent.press(screen.getByText("Remove Rating"))
+        fireEvent.press(screen.getByLabelText("More actions"))
+        fireEvent.press(screen.getByText("Remove rating"))
         const buttons = alertSpy.mock.calls[0][2] as AlertButton[]
         buttons[0].onPress?.()
 
@@ -155,28 +160,28 @@ describe("SongDetailScreen", () => {
 
     it("shows Play Preview button when fetchPreviewUrl returns a URL", async () => {
         render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
-        // findByText waits until the element appears — handles the async fetch naturally.
-        expect(await screen.findByText("Play Preview")).toBeTruthy()
+        // findByLabelText waits until the element appears — handles the async fetch naturally.
+        expect(await screen.findByLabelText("Play Preview")).toBeTruthy()
     })
 
     it("creates a player and immediately shows Pause Preview when pressed", async () => {
         render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
 
         // Wait for the async fetchPreviewUrl to finish before the button appears.
-        const playButton = await screen.findByText("Play Preview")
+        const playButton = await screen.findByLabelText("Play Preview")
         act(() => {
             fireEvent.press(playButton)
         })
 
         expect(mockCreatePlayer).toHaveBeenCalledWith("https://example.com/preview.mp3")
         expect(mockPlay).toHaveBeenCalledTimes(1)
-        expect(screen.getByText("Pause Preview")).toBeTruthy()
+        expect(screen.getByLabelText("Pause Preview")).toBeTruthy()
     })
 
     it("stops preview audio when the screen blurs", async () => {
         render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
 
-        const playButton = await screen.findByText("Play Preview")
+        const playButton = await screen.findByLabelText("Play Preview")
         act(() => {
             fireEvent.press(playButton)
         })
@@ -199,9 +204,9 @@ describe("SongDetailScreen", () => {
 
         render(<SongDetailScreen navigation={navigation as never} route={unratedRoute as never} />)
 
-        expect(await screen.findByText("Play Preview")).toBeTruthy()
+        expect(await screen.findByLabelText("Play Preview")).toBeTruthy()
         expect(screen.getByText("Rate Song")).toBeTruthy()
-        expect(screen.queryByText("Remove Rating")).toBeNull()
+        expect(screen.queryByLabelText("More actions")).toBeNull()
         expect(mockFetchPreviewUrl).not.toHaveBeenCalled()
     })
 
@@ -261,7 +266,7 @@ describe("SongDetailScreen", () => {
         render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
         await act(async () => {})
 
-        expect(screen.queryByText("Play Preview")).toBeNull()
+        expect(screen.queryByLabelText("Play Preview")).toBeNull()
     })
 
     it("shows Bookmark for an unbookmarked song and updates after bookmarking", async () => {
@@ -275,12 +280,12 @@ describe("SongDetailScreen", () => {
 
         render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
 
-        fireEvent.press(await screen.findByText("Bookmark"))
+        fireEvent.press(await screen.findByLabelText("Bookmark"))
 
         await waitFor(() => {
             expect(mockBookmarkSong).toHaveBeenCalledWith(ranking.song, "song_detail", "test-token")
         })
-        expect(await screen.findByText("Remove Bookmark")).toBeTruthy()
+        expect(await screen.findByLabelText("Remove Bookmark")).toBeTruthy()
     })
 
     it("shows bookmarked state and removes without affecting rating actions", async () => {
@@ -298,13 +303,13 @@ describe("SongDetailScreen", () => {
 
         render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
 
-        fireEvent.press(await screen.findByText("Remove Bookmark"))
+        fireEvent.press(await screen.findByLabelText("Remove Bookmark"))
 
         await waitFor(() => {
             expect(mockRemoveBookmark).toHaveBeenCalledWith(ranking.song.id, "test-token")
         })
-        expect(await screen.findByText("Bookmark")).toBeTruthy()
-        expect(screen.getByText("Rate Again")).toBeTruthy()
+        expect(await screen.findByLabelText("Bookmark")).toBeTruthy()
+        expect(screen.getByText("Re-rate")).toBeTruthy()
     })
 
     it("shows bookmark failure and does not claim the song is bookmarked", async () => {
@@ -312,10 +317,10 @@ describe("SongDetailScreen", () => {
 
         render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
 
-        fireEvent.press(await screen.findByText("Bookmark"))
+        fireEvent.press(await screen.findByLabelText("Bookmark"))
 
         expect(await screen.findByText("Could not bookmark song.")).toBeTruthy()
-        expect(screen.getByText("Bookmark")).toBeTruthy()
-        expect(screen.queryByText("Remove Bookmark")).toBeNull()
+        expect(screen.getByLabelText("Bookmark")).toBeTruthy()
+        expect(screen.queryByLabelText("Remove Bookmark")).toBeNull()
     })
 })

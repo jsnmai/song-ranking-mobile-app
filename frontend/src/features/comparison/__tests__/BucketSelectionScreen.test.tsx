@@ -18,6 +18,10 @@ const mockPlay = jest.fn()
 const mockRemove = jest.fn()
 const mockCreatePlayer = jest.fn()
 
+jest.mock("react-native-safe-area-context", () => ({
+    useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}))
+
 jest.mock("expo-audio", () => ({
     createAudioPlayer: (...args: unknown[]) => mockCreatePlayer(...args),
     setAudioModeAsync: jest.fn(),
@@ -123,7 +127,7 @@ describe("BucketSelectionScreen", () => {
     it("shows Play Preview when preview_url exists", () => {
         render(<BucketSelectionScreen navigation={navigation as never} route={buildRoute() as never} />)
 
-        expect(screen.getByText("Play Preview")).toBeTruthy()
+        expect(screen.getByLabelText("Play preview")).toBeTruthy()
     })
 
     it("hides preview button when preview_url is missing", () => {
@@ -138,15 +142,15 @@ describe("BucketSelectionScreen", () => {
             />,
         )
 
-        expect(screen.queryByText("Play Preview")).toBeNull()
-        expect(screen.queryByText("Pause Preview")).toBeNull()
+        expect(screen.queryByLabelText("Play preview")).toBeNull()
+        expect(screen.queryByLabelText("Stop preview")).toBeNull()
     })
 
     it("empty bucket finalizes rating and replaces to ScoreReveal", async () => {
         render(<BucketSelectionScreen navigation={navigation as never} route={buildRoute() as never} />)
 
         fireEvent.press(screen.getByTestId("bucket-like"))
-        fireEvent.press(screen.getByText("Continue"))
+        fireEvent.press(screen.getByText("Next"))
 
         await waitFor(() => {
             expect(mockFinalizeRating).toHaveBeenCalledWith(
@@ -169,9 +173,9 @@ describe("BucketSelectionScreen", () => {
     it("sends an optional note with the finalized rating", async () => {
         render(<BucketSelectionScreen navigation={navigation as never} route={buildRoute() as never} />)
 
-        fireEvent.changeText(screen.getByPlaceholderText("What made this score?"), "  Hovering all week.  ")
+        fireEvent.changeText(screen.getByPlaceholderText("Add a note…"), "  Hovering all week.  ")
         fireEvent.press(screen.getByTestId("bucket-like"))
-        fireEvent.press(screen.getByText("Continue"))
+        fireEvent.press(screen.getByText("Next"))
 
         await waitFor(() => {
             expect(mockFinalizeRating).toHaveBeenCalledWith(
@@ -228,7 +232,7 @@ describe("BucketSelectionScreen", () => {
         render(<BucketSelectionScreen navigation={navigation as never} route={buildRoute() as never} />)
 
         fireEvent.press(screen.getByTestId("bucket-like"))
-        fireEvent.press(screen.getByText("Continue"))
+        fireEvent.press(screen.getByText("Next"))
 
         await waitFor(() => {
             expect(mockStartComparisonSession).toHaveBeenCalledWith(
@@ -249,29 +253,42 @@ describe("BucketSelectionScreen", () => {
         render(<BucketSelectionScreen navigation={navigation as never} route={buildRoute() as never} />)
 
         fireEvent.press(screen.getByTestId("bucket-dislike"))
-        fireEvent.press(screen.getByText("Continue"))
+        fireEvent.press(screen.getByText("Next"))
 
         expect(await screen.findByText("Bucket unavailable")).toBeTruthy()
 
         fireEvent.press(screen.getByTestId("bucket-like"))
-        fireEvent.press(screen.getByText("Continue"))
+        fireEvent.press(screen.getByText("Next"))
         await waitFor(() => {
             expect(mockFinalizeRating).toHaveBeenCalledTimes(2)
         })
     })
 
     it("close goes back", () => {
+        jest.useFakeTimers()
+        // jest.resetAllMocks() clears startAnimatingNode's default impl; re-apply so animation callbacks fire
+        const { NativeModules } = require("react-native")
+        NativeModules.NativeAnimatedModule?.startAnimatingNode?.mockImplementation(
+            (_id: unknown, _tag: unknown, _config: unknown, cb: (r: { finished: boolean }) => void) => {
+                setTimeout(() => cb({ finished: true }), 16)
+            },
+        )
+
         render(<BucketSelectionScreen navigation={navigation as never} route={buildRoute() as never} />)
 
-        fireEvent.press(screen.getByTestId("bucket-selection-close"))
+        act(() => {
+            fireEvent.press(screen.getByTestId("bucket-selection-close"))
+            jest.runAllTimers()
+        })
 
         expect(mockGoBack).toHaveBeenCalledTimes(1)
+        jest.useRealTimers()
     })
 
     it("starts preview playback when Play Preview is pressed", () => {
         render(<BucketSelectionScreen navigation={navigation as never} route={buildRoute() as never} />)
 
-        fireEvent.press(screen.getByText("Play Preview"))
+        fireEvent.press(screen.getByLabelText("Play preview"))
 
         expect(mockCreatePlayer).toHaveBeenCalledWith("https://example.com/preview.mp3")
         expect(mockPlay).toHaveBeenCalledTimes(1)
@@ -290,7 +307,7 @@ describe("BucketSelectionScreen", () => {
             <BucketSelectionScreen navigation={navigation as never} route={buildRoute() as never} />,
         )
 
-        fireEvent.press(screen.getByText("Play Preview"))
+        fireEvent.press(screen.getByLabelText("Play preview"))
         act(() => {
             blurHandler?.()
         })

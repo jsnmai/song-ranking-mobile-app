@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { FlashList } from "@shopify/flash-list"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
+import Svg, { Path } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
 import BucketBadge from "../../components/BucketBadge"
@@ -76,7 +77,30 @@ export default function BookmarksScreen({ navigation }: BookmarksScreenProps) {
                     </TouchableOpacity>
                 </View>
             ) : bookmarks.length === 0 ? (
-                <Text style={styles.empty}>No Bookmarks yet.</Text>
+                <View style={styles.noSavesState}>
+                    <View style={styles.noSavesIcon}>
+                        <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+                            <Path
+                                d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"
+                                stroke={colors.butter}
+                                strokeWidth={2}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                            />
+                        </Svg>
+                    </View>
+                    <Text style={styles.noSavesKicker}>NOTHING SAVED YET</Text>
+                    <Text style={styles.noSavesTitle}>Park songs for later</Text>
+                    <Text style={styles.noSavesBody}>
+                        Bookmark any song from its page — your list lives here.
+                    </Text>
+                    <TouchableOpacity
+                        style={styles.noSavesBtn}
+                        onPress={() => navigation.navigate("MainTabs", { screen: "Discover" })}
+                    >
+                        <Text style={styles.noSavesBtnText}>Discover songs</Text>
+                    </TouchableOpacity>
+                </View>
             ) : (
                 <FlashList
                     data={bookmarks}
@@ -175,11 +199,57 @@ const styles = StyleSheet.create({
         color: colors.ink,
         fontSize: 13,
     },
-    empty: {
+    // ── NoSaves empty state ───────────────────────────────────────────────
+    noSavesState: {
+        alignItems: "center",
+        paddingHorizontal: 32,
+        paddingTop: 64,
+    },
+    noSavesIcon: {
+        width: 44,
+        height: 44,
+        borderRadius: 999,
+        backgroundColor: "rgba(245,195,67,0.12)",
+        alignItems: "center",
+        justifyContent: "center",
+        marginBottom: 16,
+    },
+    noSavesKicker: {
+        fontFamily: fonts.mono,
+        fontSize: 9,
+        letterSpacing: 2,
         color: colors.inkDim,
-        fontSize: 15,
-        marginTop: 42,
+        fontWeight: "700",
+        marginBottom: 8,
+    },
+    noSavesTitle: {
+        fontFamily: fonts.display,
+        fontSize: 20,
+        color: colors.ink,
+        letterSpacing: -0.3,
+        marginBottom: 8,
         textAlign: "center",
+    },
+    noSavesBody: {
+        fontFamily: fonts.mono,
+        fontSize: 13,
+        color: colors.inkSoft,
+        lineHeight: 19,
+        textAlign: "center",
+        marginBottom: 24,
+    },
+    noSavesBtn: {
+        backgroundColor: colors.ink,
+        borderRadius: 10,
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        alignItems: "center",
+    },
+    noSavesBtnText: {
+        fontFamily: fonts.display,
+        fontSize: 15,
+        color: "#fff",
+        letterSpacing: -0.2,
     },
     listContent: {
         paddingHorizontal: 16,

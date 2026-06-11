@@ -5,12 +5,22 @@ import { AudioPlayer, createAudioPlayer, setAudioModeAsync } from "expo-audio"
 // expo-audio replaces expo-av for Expo Go SDK 52+. expo-av requires a dev build.
 type AudioPlayerResult = {
     isPlaying: boolean;
+    currentTime: number;
+    duration: number | null;
     toggle: () => void;
     stop: () => void;
 }
 
+type PlaybackStatus = {
+    didJustFinish?: boolean;
+    currentTime?: number;
+    duration?: number;
+}
+
 export function useAudioPlayer(previewUrl: string | null): AudioPlayerResult {
     const [isPlaying, setIsPlaying] = useState(false)
+    const [currentTime, setCurrentTime] = useState(0)
+    const [duration, setDuration] = useState<number | null>(null)
     // useRef persists the AudioPlayer object across renders without causing re-renders.
     const playerRef = useRef<AudioPlayer | null>(null)
     const statusSubscriptionRef = useRef<{ remove: () => void } | null>(null)
@@ -33,6 +43,7 @@ export function useAudioPlayer(previewUrl: string | null): AudioPlayerResult {
             playerRef.current = null
         }
         setIsPlaying(false)
+        setCurrentTime(0)
     }, [])
 
     useEffect(() => {
@@ -64,9 +75,12 @@ export function useAudioPlayer(previewUrl: string | null): AudioPlayerResult {
 
         // First play — createAudioPlayer and play() are synchronous; native layer buffers internally.
         const player = createAudioPlayer(previewUrl)
-        statusSubscriptionRef.current = player.addListener("playbackStatusUpdate", (status) => {
+        statusSubscriptionRef.current = player.addListener("playbackStatusUpdate", (status: PlaybackStatus) => {
+            if (status.currentTime != null) setCurrentTime(status.currentTime)
+            if (status.duration != null) setDuration(status.duration)
             if (status.didJustFinish) {
                 setIsPlaying(false)
+                setCurrentTime(0)
             }
         })
         player.play()
@@ -74,5 +88,5 @@ export function useAudioPlayer(previewUrl: string | null): AudioPlayerResult {
         setIsPlaying(true)
     }, [previewUrl, isPlaying])
 
-    return { isPlaying, toggle, stop }
+    return { isPlaying, currentTime, duration, toggle, stop }
 }

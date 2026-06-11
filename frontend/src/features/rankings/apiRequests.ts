@@ -11,6 +11,13 @@ import {
 } from "../comparison/types"
 import { ComparisonHistoryListResponse } from "./types"
 
+export async function listMyBucketRankings(
+    bucket: string,
+    token: string,
+): Promise<RankingListResponse> {
+    return apiClient.get<RankingListResponse>(`/api/v1/rankings/me/bucket/${bucket}`, token)
+}
+
 export async function listMyRankings(
     token: string,
     cursor?: string,

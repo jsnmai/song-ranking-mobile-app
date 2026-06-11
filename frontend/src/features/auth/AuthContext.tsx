@@ -1,7 +1,7 @@
 // AuthContext.tsx is a shared storage box for auth state that any screen in the app can reach into.
 // Tracks who is logged in, and exposes login/register/logout functions.
 // Any screen that needs the current user or auth actions reads from here via useAuth().
-import { createContext, useContext, useEffect, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useState } from "react"
 import * as SecureStore from "expo-secure-store"
 
 import { ApiError, setUnauthorizedHandler } from "../../api/client"
@@ -12,11 +12,14 @@ import {
     me,
     register as registerRequest,
 } from "./apiRequests"
+import { getMyProfile } from "../profile/apiRequests"
+import { Profile } from "../profile/types"
 import { User } from "./types"
 
 // The shape of everything this context contains - a user, a JWT token, a loading flag, and 3 functions.
 type AuthContextType = {
     user: User | null;      // the logged-in user, or null if not logged in
+    profile: Profile | null; // the logged-in user's own profile (display_name, username, etc.)
     token: string | null;   // the raw JWT — available if screens ever need to call authenticated endpoints directly
     isLoading: boolean;     // true while checking the stored token on app launch
     login: (email: string, password: string) => Promise<void>;
@@ -29,6 +32,7 @@ type AuthContextType = {
     ) => Promise<void>;
     deleteAccount: (confirmation: string) => Promise<void>;
     logout: () => Promise<void>;
+    refreshProfile: () => Promise<void>;
 }
 // Create the actual context box. Starts empty: (null)
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -42,8 +46,18 @@ type AuthProviderProps = {
 export function AuthProvider({ children }: AuthProviderProps) {
     // [value, updater] = useState(starting value) 
     const [user, setUser] = useState<User | null>(null)
+    const [profile, setProfile] = useState<Profile | null>(null)
     const [token, setToken] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(true)
+
+    const tryFetchProfile = async (jwt: string) => {
+        try {
+            const p = await getMyProfile(jwt)
+            setProfile(p)
+        } catch {
+            // profile may not exist yet (new user pre-setup) — silently ignore
+        }
+    }
 
     const login = async (email: string, password: string) => {
         const tokenResponse = await loginRequest(email, password)
@@ -51,6 +65,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const currentUser = await me(tokenResponse.access_token)
         setToken(tokenResponse.access_token)
         setUser(currentUser)
+        await tryFetchProfile(tokenResponse.access_token)
     }
 
     const register = async (
@@ -71,8 +86,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const logout = async () => {
         await SecureStore.deleteItemAsync(KEYS.JWT_TOKEN)
         setUser(null)
+        setProfile(null)
         setToken(null)
     }
+
+    const refreshProfile = useCallback(async () => {
+        if (!token) return
+        await tryFetchProfile(token)
+    }, [token])
 
     const deleteAccount = async (confirmation: string) => {
         if (!token) {
@@ -93,6 +114,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             const currentUser = await me(token)  // me() will throw ApiError if token is expired/invalid
             setToken(token)
             setUser(currentUser)
+            await tryFetchProfile(token)
         } catch (err) {
             if (err instanceof ApiError && err.status === 401) {
                 await SecureStore.deleteItemAsync(KEYS.JWT_TOKEN)  // delete it so the user sees the login screen
@@ -116,7 +138,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }, []) 
 
     return (
-        <AuthContext.Provider value={{ user, token, isLoading, login, register, deleteAccount, logout }}>
+        <AuthContext.Provider value={{ user, profile, token, isLoading, login, register, deleteAccount, logout, refreshProfile }}>
             {children}
         </AuthContext.Provider>
     )

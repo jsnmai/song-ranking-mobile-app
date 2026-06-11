@@ -2,7 +2,6 @@
 import { useState } from "react"
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
-import DiamondScore from "../../components/DiamondScore"
 import { colors, fonts, bucketColor } from "../../theme"
 import { TasteBucketSection, TasteProfileResponse, TasteSection } from "./types"
 
@@ -22,7 +21,7 @@ export default function TasteTabContent({ taste, isLoading, error }: Props) {
     if (isLoading) {
         return (
             <View style={styles.loadingState}>
-                <ActivityIndicator color={colors.clay} />
+                <ActivityIndicator color={colors.accent} />
             </View>
         )
     }
@@ -53,47 +52,43 @@ export default function TasteTabContent({ taste, isLoading, error }: Props) {
 
     return (
         <View style={styles.content}>
+            {/* Summary paper card */}
             <View style={styles.summaryCard}>
-                <View style={styles.headerRow}>
+                <View style={styles.statsRow}>
                     <View style={styles.statBox}>
                         <Text style={styles.statValue}>{total_rated}</Text>
                         <Text style={styles.statLabel}>RATED</Text>
                     </View>
+                    <View style={styles.statDivider} />
                     <View style={styles.statBox}>
-                        <View style={styles.avgRow}>
-                            <Text style={styles.statValue}>
-                                {avg_score !== null ? avg_score.toFixed(2) : "—"}
-                            </Text>
-                            {avg_score !== null && (
-                                <DiamondScore
-                                    score={avg_score}
-                                    total={5}
-                                    size={7}
-                                    color={colors.clay}
-                                    testID="taste-avg-diamonds"
-                                />
-                            )}
-                        </View>
+                        <Text style={styles.statValue}>
+                            {avg_score !== null ? avg_score.toFixed(2) : "—"}
+                        </Text>
                         <Text style={styles.statLabel}>AVG SCORE</Text>
                     </View>
                 </View>
 
                 <View style={styles.bucketRow}>
-                    <Text style={styles.bucketText}>
-                        <Text style={{ color: bucketColor("like") }}>Like {bucket_breakdown.like}</Text>
-                        <Text style={styles.bucketSep}>  ·  </Text>
-                        <Text style={{ color: bucketColor("alright") }}>Okay {bucket_breakdown.okay}</Text>
-                        <Text style={styles.bucketSep}>  ·  </Text>
-                        <Text style={{ color: bucketColor("dislike") }}>Dislike {bucket_breakdown.dislike}</Text>
+                    <Text style={[styles.bucketChip, { color: bucketColor("like") }]}>
+                        Like {bucket_breakdown.like}
+                    </Text>
+                    <Text style={styles.bucketSep}>·</Text>
+                    <Text style={[styles.bucketChip, { color: bucketColor("alright") }]}>
+                        Okay {bucket_breakdown.okay}
+                    </Text>
+                    <Text style={styles.bucketSep}>·</Text>
+                    <Text style={[styles.bucketChip, { color: bucketColor("dislike") }]}>
+                        Dislike {bucket_breakdown.dislike}
                     </Text>
                 </View>
             </View>
 
-            <View style={styles.toggleRow}>
+            {/* BO segmented toggle */}
+            <View style={styles.toggleWrap}>
                 {(["overall", "like", "okay", "dislike"] as TabKey[]).map((tab) => (
                     <TouchableOpacity
                         key={tab}
-                        style={[styles.toggleBtn, activeTab === tab && styles.toggleBtnActive]}
+                        style={[styles.togglePill, activeTab === tab && styles.togglePillActive]}
                         onPress={() => setActiveTab(tab)}
                     >
                         <Text style={[styles.toggleText, activeTab === tab && styles.toggleTextActive]}>
@@ -123,21 +118,21 @@ export default function TasteTabContent({ taste, isLoading, error }: Props) {
                 <>
                     {activeSection.genres.length > 0 && (
                         <View style={styles.sectionCard}>
-                            <Text style={styles.sectionTitle}>GENRES</Text>
+                            <Text style={styles.sectionKicker}>GENRES</Text>
                             {activeSection.genres.map((genre) => (
-                                <View key={genre.name} style={styles.genreRow}>
+                                <View key={genre.name} style={styles.listRow}>
                                     <Text
                                         style={[
-                                            styles.genreName,
-                                            genre.name === "Unknown" && styles.genreNameMuted,
+                                            styles.listLabel,
+                                            genre.name === "Unknown" && styles.listLabelMuted,
                                         ]}
                                     >
                                         {genre.name}
                                     </Text>
                                     <Text
                                         style={[
-                                            styles.genrePct,
-                                            genre.name === "Unknown" && styles.genreNameMuted,
+                                            styles.listMeta,
+                                            genre.name === "Unknown" && styles.listLabelMuted,
                                         ]}
                                     >
                                         {genre.percentage.toFixed(1)}%
@@ -151,11 +146,11 @@ export default function TasteTabContent({ taste, isLoading, error }: Props) {
 
             {activeSection.top_artists.length > 0 && (
                 <View style={styles.sectionCard}>
-                    <Text style={styles.sectionTitle}>TOP ARTISTS</Text>
+                    <Text style={styles.sectionKicker}>TOP ARTISTS</Text>
                     {activeSection.top_artists.map((artist) => (
-                        <View key={artist.name} style={styles.artistRow}>
-                            <Text style={styles.artistName}>{artist.name}</Text>
-                            <Text style={styles.artistCount}>{artist.count}</Text>
+                        <View key={artist.name} style={styles.listRow}>
+                            <Text style={styles.listLabel}>{artist.name}</Text>
+                            <Text style={styles.listMeta}>{artist.count}</Text>
                         </View>
                     ))}
                 </View>
@@ -164,18 +159,10 @@ export default function TasteTabContent({ taste, isLoading, error }: Props) {
     )
 }
 
-const cardShadow = {
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-}
-
 const styles = StyleSheet.create({
     content: {
-        paddingHorizontal: 16,
-        paddingTop: 16,
+        paddingHorizontal: 14,
+        paddingTop: 14,
     },
     loadingState: {
         paddingTop: 60,
@@ -187,103 +174,120 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
     },
     errorText: {
-        color: colors.dislike,
+        color: colors.danger,
         fontSize: 14,
         textAlign: "center",
         paddingHorizontal: 24,
     },
+    // ── Summary card ──────────────────────────────────────────────────
     summaryCard: {
         backgroundColor: colors.paper,
-        borderRadius: 14,
-        padding: 18,
-        marginBottom: 16,
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 12,
         borderWidth: 1,
         borderColor: colors.line,
-        ...cardShadow,
+        shadowColor: colors.ink,
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
     },
-    headerRow: {
+    statsRow: {
         flexDirection: "row",
+        alignItems: "center",
         justifyContent: "center",
-        gap: 48,
-        marginBottom: 16,
+        gap: 0,
+        marginBottom: 14,
     },
     statBox: {
+        flex: 1,
         alignItems: "center",
+        paddingVertical: 4,
     },
-    avgRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 8,
-        marginBottom: 4,
+    statDivider: {
+        width: 1,
+        height: 36,
+        backgroundColor: colors.line,
     },
     statValue: {
-        fontFamily: fonts.serif,
-        color: colors.ink,
+        fontFamily: fonts.display,
         fontSize: 28,
+        letterSpacing: -0.4,
         lineHeight: 32,
+        color: colors.ink,
+        marginBottom: 3,
     },
     statLabel: {
         fontFamily: fonts.mono,
-        color: colors.inkSoft,
-        fontSize: 10,
-        letterSpacing: 1.6,
+        color: colors.inkDim,
+        fontSize: 8.5,
+        letterSpacing: 1.4,
     },
     bucketRow: {
+        flexDirection: "row",
         alignItems: "center",
+        justifyContent: "center",
+        gap: 7,
     },
-    bucketText: {
+    bucketChip: {
         fontFamily: fonts.mono,
-        fontSize: 12,
+        fontSize: 11,
+        fontWeight: "700",
+        letterSpacing: 0.3,
     },
     bucketSep: {
+        fontFamily: fonts.mono,
         color: colors.inkDim,
+        fontSize: 11,
     },
-    toggleRow: {
+    // ── Segmented toggle ─────────────────────────────────────────────
+    toggleWrap: {
         flexDirection: "row",
-        marginBottom: 16,
-        borderRadius: 10,
+        backgroundColor: colors.bg,
+        borderRadius: 999,
+        padding: 4,
+        gap: 2,
+        marginBottom: 12,
         borderWidth: 1,
         borderColor: colors.line,
-        overflow: "hidden",
-        backgroundColor: colors.paper,
     },
-    toggleBtn: {
+    togglePill: {
         flex: 1,
-        paddingVertical: 10,
+        paddingVertical: 8,
+        borderRadius: 999,
         alignItems: "center",
-        backgroundColor: colors.paper,
     },
-    toggleBtnActive: {
-        backgroundColor: colors.sand,
+    togglePillActive: {
+        backgroundColor: colors.ink,
     },
     toggleText: {
-        fontFamily: fonts.mono,
+        fontWeight: "600",
+        fontSize: 11.5,
         color: colors.inkSoft,
-        fontSize: 12,
-        letterSpacing: 0.4,
     },
     toggleTextActive: {
-        color: colors.ink,
+        color: "#fff",
     },
     bucketStatRow: {
         alignItems: "center",
-        marginBottom: 16,
+        marginBottom: 12,
     },
     bucketStatText: {
         fontFamily: fonts.mono,
         color: colors.inkSoft,
-        fontSize: 12,
+        fontSize: 11,
+        letterSpacing: 0.3,
     },
+    // ── Empty state ──────────────────────────────────────────────────
     emptyCard: {
         backgroundColor: colors.paper,
-        borderRadius: 14,
+        borderRadius: 16,
         paddingVertical: 32,
         paddingHorizontal: 20,
         alignItems: "center",
         borderWidth: 1,
         borderColor: colors.line,
-        marginBottom: 16,
-        ...cardShadow,
+        marginBottom: 12,
     },
     emptyTitle: {
         color: colors.inkSoft,
@@ -298,55 +302,47 @@ const styles = StyleSheet.create({
         fontSize: 12,
         letterSpacing: 0.4,
     },
+    // ── Genre / artist cards ─────────────────────────────────────────
     sectionCard: {
         backgroundColor: colors.paper,
-        borderRadius: 14,
-        padding: 16,
-        marginBottom: 16,
+        borderRadius: 16,
+        padding: 14,
+        marginBottom: 12,
         borderWidth: 1,
         borderColor: colors.line,
-        ...cardShadow,
+        shadowColor: colors.ink,
+        shadowOpacity: 0.04,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 2 },
     },
-    sectionTitle: {
+    sectionKicker: {
         fontFamily: fonts.mono,
-        color: colors.inkSoft,
-        fontSize: 10,
-        letterSpacing: 1.8,
-        marginBottom: 12,
+        color: colors.inkDim,
+        fontSize: 9,
+        letterSpacing: 1.6,
+        fontWeight: "700",
+        marginBottom: 10,
     },
-    genreRow: {
+    listRow: {
         flexDirection: "row",
         justifyContent: "space-between",
-        paddingVertical: 8,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: colors.line,
+        alignItems: "center",
+        paddingVertical: 9,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: colors.line,
     },
-    genreName: {
+    listLabel: {
+        fontWeight: "600",
+        fontSize: 14,
         color: colors.ink,
-        fontSize: 15,
     },
-    genreNameMuted: {
+    listLabelMuted: {
         color: colors.inkDim,
     },
-    genrePct: {
+    listMeta: {
         fontFamily: fonts.mono,
         color: colors.inkSoft,
-        fontSize: 13,
-    },
-    artistRow: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        paddingVertical: 8,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: colors.line,
-    },
-    artistName: {
-        color: colors.ink,
-        fontSize: 15,
-    },
-    artistCount: {
-        fontFamily: fonts.mono,
-        color: colors.inkSoft,
-        fontSize: 13,
+        fontSize: 12,
+        letterSpacing: 0.3,
     },
 })

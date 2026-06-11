@@ -3,10 +3,9 @@ import { ActivityIndicator, Image, Modal, ScrollView, StyleSheet, Text, Touchabl
 import { FlashList } from "@shopify/flash-list"
 import { CompositeNavigationProp, useFocusEffect } from "@react-navigation/native"
 import { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack"
+import Svg, { Path } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
-import DiamondScore from "../../components/DiamondScore"
-import ScoreArc from "../../components/ScoreArc"
 import { AppStackParamList, RankingsStackParamList } from "../../navigation/types"
 import { bucketColor, colors, fonts } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
@@ -101,6 +100,13 @@ export default function FullRankingsScreen({ navigation }: FullRankingsScreenPro
     const hasDetailFilters = artistFilter !== null || selectedAlbum !== null
     const hasAnyFilters = bucketFilter !== "all" || hasDetailFilters
 
+    const bucketCounts = useMemo(() => ({
+        all: rankings.length,
+        like: rankings.filter((r) => r.bucket === "like").length,
+        alright: rankings.filter((r) => r.bucket === "alright").length,
+        dislike: rankings.filter((r) => r.bucket === "dislike").length,
+    }), [rankings])
+
     const loadRankings = useCallback(async () => {
         if (!token) {
             setIsLoading(false)
@@ -164,53 +170,84 @@ export default function FullRankingsScreen({ navigation }: FullRankingsScreenPro
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity accessibilityRole="button" onPress={() => navigation.goBack()}>
-                    <Text style={styles.back}>Back</Text>
-                </TouchableOpacity>
-                <View style={styles.headerText}>
-                    <Text style={styles.kicker}>YOUR RANKINGS</Text>
-                    <Text style={styles.heading}>View All / Filter</Text>
+                <View style={styles.headerLeft}>
+                    <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel="Go back"
+                        style={styles.navBtn}
+                        onPress={() => navigation.goBack()}
+                    >
+                        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none"
+                            stroke={colors.ink} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                            <Path d="M15 18l-6-6 6-6" />
+                        </Svg>
+                    </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                    accessibilityRole="button"
-                    accessibilityLabel="Open rankings filters"
-                    style={[styles.filterButton, hasDetailFilters && styles.filterButtonActive]}
-                    onPress={() => setIsFilterModalOpen(true)}
-                >
-                    <Text style={[styles.filterButtonText, hasDetailFilters && styles.filterButtonTextActive]}>
-                        Filter{hasDetailFilters ? " · Active" : ""}
-                    </Text>
-                </TouchableOpacity>
+                <Text style={styles.heading}>All Rankings</Text>
+                <View style={styles.headerRight}>
+                    <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel="Open rankings filters"
+                        style={[styles.filterBtn, hasDetailFilters && styles.filterBtnActive]}
+                        onPress={() => setIsFilterModalOpen(true)}
+                    >
+                        <Text style={[styles.filterBtnText, hasDetailFilters && styles.filterBtnTextActive]}>
+                            Filter
+                        </Text>
+                    </TouchableOpacity>
+                </View>
             </View>
 
             <View style={styles.bucketTabs}>
-                {BUCKET_FILTERS.map((filter) => (
-                    <TouchableOpacity
-                        key={filter.value}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Filter bucket ${filter.label}`}
-                        style={[styles.bucketTab, bucketFilter === filter.value && styles.bucketTabActive]}
-                        onPress={() => setBucketFilter(filter.value)}
-                    >
-                        <Text style={[
-                            styles.bucketTabText,
-                            bucketFilter === filter.value && styles.bucketTabTextActive,
-                        ]}>
-                            {filter.label}
-                        </Text>
-                    </TouchableOpacity>
-                ))}
+                {BUCKET_FILTERS.map((filter) => {
+                    const isActive = bucketFilter === filter.value
+                    const count = filter.value === "all" ? bucketCounts.all : bucketCounts[filter.value as BucketName]
+                    const dotColor = filter.value !== "all" ? bucketColor(filter.value as BucketName) : null
+                    return (
+                        <TouchableOpacity
+                            key={filter.value}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Filter bucket ${filter.label}`}
+                            style={[styles.bucketTab, isActive && styles.bucketTabActive]}
+                            onPress={() => setBucketFilter(filter.value)}
+                        >
+                            {dotColor !== null && !isActive && (
+                                <View style={[styles.bucketTabDot, { backgroundColor: dotColor }]} />
+                            )}
+                            <Text style={[styles.bucketTabLabel, isActive && styles.bucketTabLabelActive]}>
+                                {filter.label}
+                            </Text>
+                            <Text style={[styles.bucketTabCount, isActive && styles.bucketTabCountActive]}>
+                                {count}
+                            </Text>
+                        </TouchableOpacity>
+                    )
+                })}
             </View>
 
             <View style={styles.summary}>
                 <Text style={styles.summaryText}>
-                    {filteredRankings.length} {filteredRankings.length === 1 ? "song" : "songs"}
+                    {filteredRankings.length} {filteredRankings.length === 1 ? "SONG" : "SONGS"} · HIGH → LOW
                 </Text>
-                {hasAnyFilters && (
-                    <TouchableOpacity accessibilityRole="button" onPress={clearAllFilters}>
-                        <Text style={styles.clear}>Clear filters</Text>
+                <View style={styles.summaryRight}>
+                    <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel="Reorder rankings"
+                        style={styles.reorderPill}
+                        onPress={() => navigation.navigate("Reorder")}
+                    >
+                        <Text style={styles.reorderPillText}>REORDER</Text>
+                        <Svg width={11} height={11} viewBox="0 0 24 24" fill="none"
+                            stroke={colors.ink} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                            <Path d="M3 9l4-4 4 4M7 5v14M21 15l-4 4-4-4M17 19V5" />
+                        </Svg>
                     </TouchableOpacity>
-                )}
+                    {hasAnyFilters && (
+                        <TouchableOpacity accessibilityRole="button" onPress={clearAllFilters}>
+                            <Text style={styles.clear}>Clear</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
             </View>
 
             {filteredRankings.length === 0 ? (
@@ -221,41 +258,49 @@ export default function FullRankingsScreen({ navigation }: FullRankingsScreenPro
                     keyExtractor={(item) => item.id.toString()}
                     contentContainerStyle={styles.listContent}
                     maintainVisibleContentPosition={{ disabled: true }}
-                    renderItem={({ item, index }) => (
-                        <TouchableOpacity
-                            accessibilityRole="button"
-                            accessibilityLabel={`Open ${item.song.title} details`}
-                            testID={`full-ranking-row-${item.id}`}
-                            style={styles.row}
-                            onPress={() => navigation.navigate("SongDetail", { ranking: item })}
-                        >
-                            <Text style={styles.position}>{index + 1}</Text>
-                            <View style={styles.coverFrame}>
-                                {item.song.cover_url ? (
-                                    <Image source={{ uri: item.song.cover_url }} style={styles.cover} />
-                                ) : null}
-                            </View>
-                            <View style={styles.songText}>
-                                <Text style={styles.title} numberOfLines={1}>{item.song.title}</Text>
-                                <Text style={styles.artist} numberOfLines={1}>
-                                    {item.song.artist} · {item.song.album}
-                                </Text>
-                            </View>
-                            <DiamondScore score={item.score} total={5} size={7} color={bucketColor(item.bucket)} />
-                            <ScoreArc
-                                score={item.score}
-                                max={10}
-                                size={42}
-                                strokeWidth={4}
-                                color={bucketColor(item.bucket)}
-                                trackColor={colors.sand}
+                    renderItem={({ item, index }) => {
+                        const scoresLocked = rankings.length < 5
+                        return (
+                            <TouchableOpacity
+                                accessibilityRole="button"
+                                accessibilityLabel={`Open ${item.song.title} details`}
+                                testID={`full-ranking-row-${item.id}`}
+                                style={styles.row}
+                                onPress={() => navigation.navigate("SongDetail", { ranking: item })}
                             >
-                                <Text style={[styles.score, { color: bucketColor(item.bucket) }]}>
-                                    {item.score.toFixed(1)}
+                                <Text style={[styles.position, scoresLocked && { color: colors.inkDim }]}>
+                                    {scoresLocked ? "?" : index + 1}
                                 </Text>
-                            </ScoreArc>
-                        </TouchableOpacity>
-                    )}
+                                <View style={styles.coverFrame}>
+                                    {item.song.cover_url ? (
+                                        <Image source={{ uri: item.song.cover_url }} style={styles.cover} />
+                                    ) : null}
+                                </View>
+                                <View style={styles.songText}>
+                                    <Text style={styles.title} numberOfLines={1}>{item.song.title}</Text>
+                                    <Text style={styles.artist} numberOfLines={1}>
+                                        {item.song.artist} · {item.song.album}
+                                    </Text>
+                                </View>
+                                <View style={styles.scoreGroup}>
+                                    <View style={[styles.bucketDot, { backgroundColor: bucketColor(item.bucket) }]} />
+                                    {scoresLocked ? (
+                                        <View style={styles.scoreLockIcon}>
+                                            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none"
+                                                stroke={colors.inkDim} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                                                <Path d="M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z" />
+                                                <Path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                                            </Svg>
+                                        </View>
+                                    ) : (
+                                        <Text style={[styles.score, { color: bucketColor(item.bucket) }]}>
+                                            {item.score.toFixed(1)}
+                                        </Text>
+                                    )}
+                                </View>
+                            </TouchableOpacity>
+                        )
+                    }}
                 />
             )}
 
@@ -355,23 +400,48 @@ const styles = StyleSheet.create({
         paddingBottom: 14,
         flexDirection: "row",
         alignItems: "center",
-        borderBottomWidth: 1,
-        borderBottomColor: colors.line,
+        justifyContent: "space-between",
     },
-    back: { fontFamily: fonts.mono, color: colors.ink, fontSize: 12 },
-    headerText: { flex: 1, alignItems: "center", paddingHorizontal: 8 },
-    kicker: { fontFamily: fonts.mono, color: colors.inkSoft, fontSize: 8, letterSpacing: 1.4 },
-    heading: { fontFamily: fonts.serif, color: colors.ink, fontSize: 22, lineHeight: 26 },
-    filterButton: {
+    navBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        backgroundColor: colors.paper,
         borderWidth: 1,
-        borderColor: colors.ink,
-        borderRadius: 8,
-        paddingHorizontal: 10,
-        paddingVertical: 7,
+        borderColor: colors.line,
+        alignItems: "center",
+        justifyContent: "center",
     },
-    filterButtonActive: { borderColor: colors.clay, backgroundColor: colors.clay },
-    filterButtonText: { fontFamily: fonts.mono, color: colors.ink, fontSize: 9 },
-    filterButtonTextActive: { color: colors.paper },
+    navBtnActive: { borderColor: colors.clay },
+    headerLeft: { width: 80 },
+    headerRight: { width: 80, alignItems: "flex-end" },
+    heading: {
+        flex: 1,
+        textAlign: "center",
+        fontFamily: fonts.display,
+        color: colors.ink,
+        fontSize: 18,
+        letterSpacing: -0.3,
+    },
+    filterBtn: {
+        height: 36,
+        borderRadius: 10,
+        backgroundColor: colors.paper,
+        borderWidth: 1,
+        borderColor: colors.line,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: 14,
+    },
+    filterBtnActive: { borderColor: colors.clay },
+    filterBtnText: {
+        fontFamily: fonts.mono,
+        fontSize: 11,
+        color: colors.ink,
+        fontWeight: "700",
+        letterSpacing: 0.5,
+    },
+    filterBtnTextActive: { color: colors.clay },
     bucketTabs: {
         flexDirection: "row",
         paddingHorizontal: 14,
@@ -382,48 +452,89 @@ const styles = StyleSheet.create({
     },
     bucketTab: {
         flex: 1,
+        flexDirection: "row",
         alignItems: "center",
+        justifyContent: "center",
+        gap: 4,
         borderWidth: 1,
         borderColor: colors.line,
         borderRadius: 999,
         paddingVertical: 8,
+        paddingHorizontal: 4,
         backgroundColor: colors.paper,
     },
-    bucketTabActive: { borderColor: colors.clay, backgroundColor: colors.clay },
-    bucketTabText: { fontFamily: fonts.mono, color: colors.inkSoft, fontSize: 9 },
-    bucketTabTextActive: { color: colors.paper },
+    bucketTabActive: { borderColor: colors.ink, backgroundColor: colors.ink },
+    bucketTabDot: { width: 6, height: 6, borderRadius: 3 },
+    bucketTabLabel: { fontFamily: fonts.display, color: colors.inkSoft, fontSize: 10.5 },
+    bucketTabLabelActive: { color: "#fff" },
+    bucketTabCount: { fontFamily: fonts.mono, color: colors.inkDim, fontSize: 8 },
+    bucketTabCountActive: { color: "rgba(255,255,255,0.6)" },
     summary: {
         flexDirection: "row",
         justifyContent: "space-between",
+        alignItems: "center",
         paddingHorizontal: 18,
-        paddingVertical: 10,
+        paddingVertical: 8,
     },
     summaryText: { fontFamily: fonts.mono, color: colors.inkSoft, fontSize: 10 },
+    summaryRight: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+    },
+    reorderPill: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 5,
+        borderWidth: 1,
+        borderColor: colors.line,
+        borderRadius: 999,
+        paddingHorizontal: 9,
+        paddingVertical: 5,
+        backgroundColor: colors.paper,
+    },
+    reorderPillText: {
+        fontFamily: fonts.mono,
+        fontSize: 9,
+        color: colors.ink,
+        fontWeight: "700",
+        letterSpacing: 0.8,
+    },
     clear: { fontFamily: fonts.mono, color: colors.clay, fontSize: 10 },
     listContent: { paddingBottom: 24 },
     row: {
         flexDirection: "row",
         alignItems: "center",
-        paddingVertical: 10,
+        paddingVertical: 9,
         paddingHorizontal: 16,
         borderBottomWidth: 1,
         borderBottomColor: colors.line,
         backgroundColor: colors.paper,
+        gap: 12,
     },
-    position: { minWidth: 26, fontFamily: fonts.mono, color: colors.inkDim, fontSize: 11 },
+    position: {
+        minWidth: 18,
+        fontStyle: "italic",
+        fontWeight: "700",
+        color: "#b8923f",
+        fontSize: 17,
+        textAlign: "center",
+    },
     coverFrame: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+        width: 38,
+        height: 38,
+        borderRadius: 7,
         overflow: "hidden",
-        backgroundColor: colors.sand,
-        marginRight: 10,
+        backgroundColor: colors.paper2,
     },
     cover: { width: "100%", height: "100%" },
-    songText: { flex: 1, minWidth: 0, marginRight: 8 },
-    title: { color: colors.ink, fontSize: 14, fontWeight: "600" },
-    artist: { fontFamily: fonts.mono, color: colors.inkSoft, fontSize: 9, marginTop: 3 },
-    score: { fontFamily: fonts.serif, fontSize: 13 },
+    songText: { flex: 1, minWidth: 0 },
+    title: { color: colors.ink, fontWeight: "700", fontSize: 13, lineHeight: 16 },
+    artist: { fontFamily: fonts.mono, color: colors.inkSoft, fontSize: 7.5, letterSpacing: 1, marginTop: 3 },
+    scoreGroup: { flexDirection: "row", alignItems: "center", gap: 5 },
+    bucketDot: { width: 6, height: 6, borderRadius: 3 },
+    score: { fontFamily: fonts.display, fontSize: 17, letterSpacing: -0.4 },
+    scoreLockIcon: { width: 22, alignItems: "center", justifyContent: "center" },
     empty: { color: colors.inkSoft, textAlign: "center", marginTop: 42, fontSize: 14 },
     error: { color: colors.dislike, textAlign: "center", marginBottom: 16 },
     retryButton: { borderWidth: 1, borderColor: colors.ink, borderRadius: 8, padding: 10 },

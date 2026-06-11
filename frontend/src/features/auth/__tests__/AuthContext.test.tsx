@@ -27,6 +27,10 @@ jest.mock("../apiRequests", () => ({
     register: jest.fn(),
 }))
 
+jest.mock("../../profile/apiRequests", () => ({
+    getMyProfile: jest.fn().mockResolvedValue(null),
+}))
+
 const mockGetItemAsync = jest.mocked(SecureStore.getItemAsync)
 const mockSetItemAsync = jest.mocked(SecureStore.setItemAsync)
 const mockDeleteItemAsync = jest.mocked(SecureStore.deleteItemAsync)
