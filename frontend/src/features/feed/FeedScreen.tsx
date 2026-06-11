@@ -327,7 +327,7 @@ export default function FeedScreen() {
                             <View style={styles.lockDotLg}><LockIcon color="#fff" size={18} /></View>
                             <View style={[styles.skBar, { width: "40%", height: 8, backgroundColor: "rgba(255,255,255,0.4)" }]} />
                         </View>
-                        <View style={{ marginBottom: 16 }}>
+                        <View>
                             <View style={styles.consensusFullBars}>
                                 {[4, 6, 9, 13, 16, 12, 7, 4].map((h, i) => (
                                     <View key={i} style={[styles.fullConsBar, { height: h }]} />
@@ -658,7 +658,7 @@ export default function FeedScreen() {
                     activeOpacity={0.7}
                 >
                     <SearchIcon />
-                    <Text style={styles.searchPlaceholder}>Search the feed…</Text>
+                    <Text style={styles.searchPlaceholder}>Search…</Text>
                     <View style={styles.ratePill}>
                         <Text style={styles.ratePillText}>RATE +</Text>
                     </View>
@@ -944,7 +944,7 @@ export default function FeedScreen() {
                     activeOpacity={0.7}
                 >
                     <SearchIcon />
-                    <Text style={styles.searchPlaceholder}>Search the feed…</Text>
+                    <Text style={styles.searchPlaceholder}>Search…</Text>
                     <View style={styles.ratePill}>
                         <Text style={styles.ratePillText}>RATE +</Text>
                     </View>
