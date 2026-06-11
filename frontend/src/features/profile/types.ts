@@ -40,6 +40,8 @@ export type Profile = ProfileBase & {
     can_view_taste: boolean;
     is_blocked: boolean;
     user_stats: UserStats | null;
+    // Taste similarity with the viewer; populated on user search results.
+    similarity_score?: number | null;
 }
 
 // Mirrors ProfileSearchResponse in backend/src/pydantic_schemas/profile.py

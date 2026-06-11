@@ -141,6 +141,8 @@ class ProfileSummaryResponse(ProfileResponse):
     can_view_taste: bool
     is_blocked: bool
     user_stats: UserStats | None = None
+    # Taste similarity with the viewer, populated only on surfaces that need it (user search).
+    similarity_score: float | None = None
 
 
 class BlockedProfileListResponse(BaseModel):

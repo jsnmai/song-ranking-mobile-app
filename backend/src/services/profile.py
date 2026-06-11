@@ -237,26 +237,36 @@ def search_profiles(
     current_user_id: int,
     query: str,
 ) -> ProfileSearchResponse:
-    """Search public profiles by username or display name."""
+    """Search public profiles by username or display name, with viewer taste similarity."""
     profiles = search_by_username(
         db,
         query,
     )
-    return ProfileSearchResponse(
-        results=[
-            _build_profile_summary(
-                db,
-                current_user_id,
-                profile,
-            )
-            for profile in profiles
-            if can_view_profile(
+    results = []
+    for profile in profiles:
+        if not can_view_profile(
+            db,
+            current_user_id,
+            profile.user_id,
+        ):
+            continue
+        summary = _build_profile_summary(
+            db,
+            current_user_id,
+            profile,
+        )
+        # Search rows surface taste match; other profile summaries skip the snapshot lookup.
+        if not summary.is_own_profile and summary.can_view_taste:
+            snapshot = get_snapshot_for_pair(
                 db,
                 current_user_id,
                 profile.user_id,
+                _ALGORITHM_VERSION,
             )
-        ],
-    )
+            if snapshot is not None:
+                summary.similarity_score = snapshot.similarity_score
+        results.append(summary)
+    return ProfileSearchResponse(results=results)
 
 
 def update_my_visibility(

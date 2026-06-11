@@ -237,3 +237,62 @@ def test_is_followed_by_reports_reverse_follow_direction(client: TestClient):
     ).json()
     assert mutual_view["is_following"] is True
     assert mutual_view["is_followed_by"] is True
+
+
+def test_profile_search_includes_similarity_when_snapshot_exists(
+    client: TestClient,
+    db_session,
+):
+    """User search rows carry similarity_score so the UI can show a taste match."""
+    from src.sqlalchemy_tables.user_similarity_snapshot import UserSimilaritySnapshot
+
+    viewer_token = _register(
+        client,
+        "viewer2@example.com",
+        "viewer2",
+        "Viewer Two",
+    )
+    _register(
+        client,
+        "match@example.com",
+        "matchuser",
+        "Match User",
+    )
+
+    viewer_id = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {viewer_token}"},
+    ).json()["id"]
+    target = client.get(
+        "/api/v1/profile/matchuser",
+        headers={"Authorization": f"Bearer {viewer_token}"},
+    ).json()
+
+    # No snapshot yet: similarity is null rather than fabricated.
+    no_snapshot_results = client.get(
+        "/api/v1/profile/search?q=matchuser",
+        headers={"Authorization": f"Bearer {viewer_token}"},
+    ).json()["results"]
+    assert no_snapshot_results[0]["similarity_score"] is None
+
+    a, b = sorted([viewer_id, target["user_id"]])
+    db_session.add(
+        UserSimilaritySnapshot(
+            user_a_id=a,
+            user_b_id=b,
+            similarity_score=0.87,
+            shared_song_count=9,
+            score_distance_avg=1.0,
+            shared_genres=["R&B"],
+            shared_top_artists=["Frank Ocean"],
+            algorithm_version="v1_cosine",
+        )
+    )
+    db_session.commit()
+
+    results = client.get(
+        "/api/v1/profile/search?q=matchuser",
+        headers={"Authorization": f"Bearer {viewer_token}"},
+    ).json()["results"]
+    assert results[0]["username"] == "matchuser"
+    assert results[0]["similarity_score"] == 0.87
