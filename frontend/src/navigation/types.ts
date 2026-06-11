@@ -29,6 +29,8 @@ export type AppStackParamList = {
     OtherProfile: { username: string };
     ProfileList: { username: string; listType: "followers" | "following" };
     Settings: undefined;
+    Privacy: undefined;
+    BlockedUsers: undefined;
     LegalPlaceholder: { kind: "support" | "privacy" | "terms" | "guidelines" };
     Reorder: undefined;
     VersusHistory: undefined;

@@ -21,8 +21,10 @@ import FullRankingsScreen from "../features/rankings/FullRankingsScreen"
 import ReorderScreen from "../features/rankings/ReorderScreen"
 import VersusHistoryScreen from "../features/rankings/VersusHistoryScreen"
 import DiscoverScreen from "../features/discover/DiscoverScreen"
+import BlockedUsersScreen from "../features/profile/BlockedUsersScreen"
 import LegalPlaceholderScreen from "../features/profile/LegalPlaceholderScreen"
 import OtherProfileScreen from "../features/profile/OtherProfileScreen"
+import PrivacyScreen from "../features/profile/PrivacyScreen"
 import ProfileListScreen from "../features/profile/ProfileListScreen"
 import ProfileScreen from "../features/profile/ProfileScreen"
 import SettingsScreen from "../features/profile/SettingsScreen"
@@ -205,6 +207,8 @@ export default function AppNavigator() {
             <Stack.Screen name="OtherProfile" component={OtherProfileScreen} />
             <Stack.Screen name="ProfileList" component={ProfileListScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} />
+            <Stack.Screen name="Privacy" component={PrivacyScreen} />
+            <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} />
             <Stack.Screen name="LegalPlaceholder" component={LegalPlaceholderScreen} />
             <Stack.Screen name="Reorder" component={ReorderScreen} />
             <Stack.Screen name="VersusHistory" component={VersusHistoryScreen} />

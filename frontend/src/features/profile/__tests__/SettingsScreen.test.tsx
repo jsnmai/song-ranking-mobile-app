@@ -1,4 +1,4 @@
-// Tests for account-level Settings controls.
+// Tests for the Settings menu: navigation rows + account deletion flow.
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native"
 
 import SettingsScreen from "../SettingsScreen"
@@ -10,8 +10,14 @@ const mockLogout = jest.fn()
 const mockDeleteAccount = jest.fn()
 const mockGetMyProfile = jest.fn()
 const mockGetBlockedProfiles = jest.fn()
-const mockUpdateMyVisibility = jest.fn()
-const mockUnblockUser = jest.fn()
+
+jest.mock("@react-navigation/native", () => {
+    const actual = jest.requireActual("@react-navigation/native")
+    const React = jest.requireActual("react")
+    // Run the focus callback once on mount (like a focused screen) without
+    // re-firing on every render, which would loop.
+    return { ...actual, useFocusEffect: (cb: () => void) => React.useEffect(cb, [cb]) }
+})
 
 jest.mock("../../auth/AuthContext", () => ({
     useAuth: () => ({
@@ -24,8 +30,6 @@ jest.mock("../../auth/AuthContext", () => ({
 jest.mock("../apiRequests", () => ({
     getMyProfile: (...args: unknown[]) => mockGetMyProfile(...args),
     getBlockedProfiles: (...args: unknown[]) => mockGetBlockedProfiles(...args),
-    updateMyVisibility: (...args: unknown[]) => mockUpdateMyVisibility(...args),
-    unblockUser: (...args: unknown[]) => mockUnblockUser(...args),
 }))
 
 const profile: Profile = {
@@ -34,7 +38,7 @@ const profile: Profile = {
     username: "demo_power",
     display_name: "Demo Power",
     is_public: true,
-    visibility: "public",
+    visibility: "friends_only",
     created_at: "2026-01-01T00:00:00Z",
     follower_count: 4,
     following_count: 8,
@@ -64,24 +68,41 @@ beforeEach(() => {
     jest.resetAllMocks()
     mockGetMyProfile.mockResolvedValue(profile)
     mockGetBlockedProfiles.mockResolvedValue({ profiles: [blockedProfile] })
-    mockUpdateMyVisibility.mockResolvedValue({ ...profile, visibility: "friends_only" })
-    mockUnblockUser.mockResolvedValue({ ...blockedProfile, is_blocked: false })
     mockDeleteAccount.mockResolvedValue(undefined)
 })
 
 describe("SettingsScreen", () => {
-    it("renders privacy and blocked user controls", async () => {
+    it("renders grouped menu rows with current visibility and blocked count", async () => {
         render(<SettingsScreen navigation={navigationProp} route={{} as never} />)
 
         await waitFor(() => {
-            expect(screen.getByText("PRIVACY")).toBeTruthy()
-            expect(screen.getByText("BLOCKED USERS")).toBeTruthy()
-            expect(screen.getByText("ACCOUNT")).toBeTruthy()
-            expect(screen.getByText("HELP & LEGAL")).toBeTruthy()
-            expect(screen.getByText("Demo Blocked")).toBeTruthy()
-            expect(screen.getByText("Log Out")).toBeTruthy()
-            expect(screen.getByText("Delete account")).toBeTruthy()
+            expect(screen.getByText("PRIVACY & SAFETY")).toBeTruthy()
         })
+        expect(screen.getByText("Privacy")).toBeTruthy()
+        expect(screen.getByText("Friends only")).toBeTruthy()
+        expect(screen.getByText("Blocked users")).toBeTruthy()
+        expect(screen.getByText("1")).toBeTruthy()
+        expect(screen.getByText("ABOUT")).toBeTruthy()
+        expect(screen.getByText("Log out")).toBeTruthy()
+        expect(screen.getByText("Delete account")).toBeTruthy()
+    })
+
+    it("opens the Privacy screen", async () => {
+        render(<SettingsScreen navigation={navigationProp} route={{} as never} />)
+
+        await waitFor(() => expect(screen.getByText("Privacy")).toBeTruthy())
+        fireEvent.press(screen.getByText("Privacy"))
+
+        expect(mockNavigate).toHaveBeenCalledWith("Privacy")
+    })
+
+    it("opens the Blocked users screen", async () => {
+        render(<SettingsScreen navigation={navigationProp} route={{} as never} />)
+
+        await waitFor(() => expect(screen.getByText("Blocked users")).toBeTruthy())
+        fireEvent.press(screen.getByText("Blocked users"))
+
+        expect(mockNavigate).toHaveBeenCalledWith("BlockedUsers")
     })
 
     it.each([
@@ -89,50 +110,28 @@ describe("SettingsScreen", () => {
         ["Privacy Policy", "privacy"],
         ["Terms", "terms"],
         ["Community Guidelines", "guidelines"],
-    ])("opens %s from Help & Legal", async (label, kind) => {
+    ])("opens %s from About", async (label, kind) => {
         render(<SettingsScreen navigation={navigationProp} route={{} as never} />)
 
-        await waitFor(() => {
-            expect(screen.getByText(label)).toBeTruthy()
-        })
+        await waitFor(() => expect(screen.getByText(label)).toBeTruthy())
         fireEvent.press(screen.getByText(label))
 
         expect(mockNavigate).toHaveBeenCalledWith("LegalPlaceholder", { kind })
     })
 
-    it("updates profile visibility", async () => {
+    it("logs out", async () => {
         render(<SettingsScreen navigation={navigationProp} route={{} as never} />)
 
-        await waitFor(() => {
-            expect(screen.getByText("Friends only")).toBeTruthy()
-        })
-        fireEvent.press(screen.getByText("Friends only"))
+        await waitFor(() => expect(screen.getByText("Log out")).toBeTruthy())
+        fireEvent.press(screen.getByText("Log out"))
 
-        await waitFor(() => {
-            expect(mockUpdateMyVisibility).toHaveBeenCalledWith("friends_only", "test-token")
-        })
-    })
-
-    it("unblocks a user", async () => {
-        render(<SettingsScreen navigation={navigationProp} route={{} as never} />)
-
-        await waitFor(() => {
-            expect(screen.getByText("Unblock")).toBeTruthy()
-        })
-        fireEvent.press(screen.getByText("Unblock"))
-
-        await waitFor(() => {
-            expect(mockUnblockUser).toHaveBeenCalledWith("demo_blocked", "test-token")
-            expect(screen.queryByText("Demo Blocked")).toBeNull()
-        })
+        expect(mockLogout).toHaveBeenCalled()
     })
 
     it("requires DELETE before deleting the account", async () => {
         render(<SettingsScreen navigation={navigationProp} route={{} as never} />)
 
-        await waitFor(() => {
-            expect(screen.getByText("Delete account")).toBeTruthy()
-        })
+        await waitFor(() => expect(screen.getByText("Delete account")).toBeTruthy())
         fireEvent.press(screen.getByText("Delete account"))
         fireEvent.press(screen.getByText("Delete"))
         expect(mockDeleteAccount).not.toHaveBeenCalled()
@@ -149,9 +148,7 @@ describe("SettingsScreen", () => {
         mockDeleteAccount.mockRejectedValue(new Error("Could not delete right now."))
         render(<SettingsScreen navigation={navigationProp} route={{} as never} />)
 
-        await waitFor(() => {
-            expect(screen.getByText("Delete account")).toBeTruthy()
-        })
+        await waitFor(() => expect(screen.getByText("Delete account")).toBeTruthy())
         fireEvent.press(screen.getByText("Delete account"))
         fireEvent.changeText(screen.getByPlaceholderText("DELETE"), "DELETE")
         fireEvent.press(screen.getByText("Delete"))

@@ -1,26 +1,40 @@
-// Settings holds account-level controls that should not crowd the Profile identity surface.
-import { useEffect, useState } from "react"
+// Settings is the home for privacy, blocking, account controls, and legal links.
+// It presents grouped menu rows (Bento Orbit design); privacy levels and the
+// blocked list live on their own dedicated sub-screens.
+import { ComponentType, ReactNode, useCallback, useState } from "react"
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
+import { useFocusEffect } from "@react-navigation/native"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 
 import { ApiError } from "../../api/client"
 import { AppStackParamList } from "../../navigation/types"
 import { colors, fonts } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
-import { getBlockedProfiles, getMyProfile, unblockUser, updateMyVisibility } from "./apiRequests"
+import { getBlockedProfiles, getMyProfile } from "./apiRequests"
+import {
+    BackIcon,
+    BlockIcon,
+    ChevronIcon,
+    InfoIcon,
+    LockIcon,
+    LogoutIcon,
+    TrashIcon,
+} from "./settingsIcons"
 import { Profile, ProfileVisibility } from "./types"
 
 type SettingsProps = NativeStackScreenProps<AppStackParamList, "Settings">
 
-const VISIBILITY_OPTIONS: readonly [ProfileVisibility, string][] = [
-    ["public", "Public"],
-    ["friends_only", "Friends only"],
-    ["only_me", "Only me"],
-]
+type IconComponent = ComponentType<{ size?: number; color?: string }>
 
-const HELP_LEGAL_ROWS: readonly {
+const VISIBILITY_LABELS: Record<ProfileVisibility, string> = {
+    public: "Public",
+    friends_only: "Friends only",
+    only_me: "Only me",
+}
+
+const ABOUT_ROWS: readonly {
     label: string;
-    kind: "support" | "privacy" | "terms" | "guidelines";
+    kind: AppStackParamList["LegalPlaceholder"]["kind"];
 }[] = [
     { label: "Support", kind: "support" },
     { label: "Privacy Policy", kind: "privacy" },
@@ -31,42 +45,49 @@ const HELP_LEGAL_ROWS: readonly {
 export default function SettingsScreen({ navigation }: SettingsProps) {
     const { token, deleteAccount, logout } = useAuth()
     const [profile, setProfile] = useState<Profile | null>(null)
-    const [blockedProfiles, setBlockedProfiles] = useState<Profile[]>([])
+    const [blockedCount, setBlockedCount] = useState(0)
     const [isLoading, setIsLoading] = useState(true)
-    const [visibilitySaving, setVisibilitySaving] = useState<ProfileVisibility | null>(null)
     const [deleteConfirmation, setDeleteConfirmation] = useState("")
     const [isDeleteOpen, setIsDeleteOpen] = useState(false)
     const [isDeleting, setIsDeleting] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
-    const changeVisibility = async (visibility: ProfileVisibility) => {
-        if (!token || visibilitySaving !== null) {
-            return
-        }
-        setVisibilitySaving(visibility)
-        setError(null)
-        try {
-            const updated = await updateMyVisibility(visibility, token)
-            setProfile(updated)
-        } catch (err) {
-            setError(errorMessage(err, "Could not update visibility."))
-        } finally {
-            setVisibilitySaving(null)
-        }
-    }
-
-    const unblockProfile = async (username: string) => {
-        if (!token) {
-            return
-        }
-        setError(null)
-        try {
-            await unblockUser(username, token)
-            setBlockedProfiles((profiles) => profiles.filter((item) => item.username !== username))
-        } catch (err) {
-            setError(errorMessage(err, "Could not unblock user."))
-        }
-    }
+    // Re-fetch whenever Settings regains focus so visibility + blocked count
+    // stay current after the user edits them on the sub-screens.
+    useFocusEffect(
+        useCallback(() => {
+            let active = true
+            async function fetchSettings() {
+                if (!token) {
+                    return
+                }
+                setError(null)
+                try {
+                    const [profileData, blockedData] = await Promise.all([
+                        getMyProfile(token),
+                        getBlockedProfiles(token),
+                    ])
+                    if (!active) {
+                        return
+                    }
+                    setProfile(profileData)
+                    setBlockedCount(blockedData.profiles.length)
+                } catch (err) {
+                    if (active) {
+                        setError(errorMessage(err, "Failed to load settings."))
+                    }
+                } finally {
+                    if (active) {
+                        setIsLoading(false)
+                    }
+                }
+            }
+            fetchSettings()
+            return () => {
+                active = false
+            }
+        }, [token]),
+    )
 
     const closeDeleteAccount = () => {
         if (isDeleting) {
@@ -90,175 +111,169 @@ export default function SettingsScreen({ navigation }: SettingsProps) {
         }
     }
 
-    useEffect(() => {
-        async function fetchSettings() {
-            if (!token) {
-                return
-            }
-            setIsLoading(true)
-            setError(null)
-            try {
-                const [profileData, blockedData] = await Promise.all([
-                    getMyProfile(token),
-                    getBlockedProfiles(token),
-                ])
-                setProfile(profileData)
-                setBlockedProfiles(blockedData.profiles)
-            } catch (err) {
-                setError(errorMessage(err, "Failed to load settings."))
-            } finally {
-                setIsLoading(false)
-            }
-        }
-        fetchSettings()
-    }, [token])
-
     return (
-        <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-            <View style={styles.headerRow}>
-                <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-                    <Text style={styles.backText}>Back</Text>
-                </TouchableOpacity>
-                <Text style={styles.kicker}>SETTINGS</Text>
+        <View style={styles.container}>
+            <View style={styles.navBar}>
+                <View style={styles.navSide}>
+                    <TouchableOpacity
+                        style={styles.iconBtn}
+                        onPress={() => navigation.goBack()}
+                        accessibilityLabel="Back"
+                    >
+                        <BackIcon />
+                    </TouchableOpacity>
+                </View>
+                <Text style={styles.navTitle}>Settings</Text>
+                <View style={[styles.navSide, { alignItems: "flex-end" }]} />
             </View>
 
-            <Text style={styles.title}>Settings</Text>
-
             {isLoading ? (
-                <ActivityIndicator color={colors.clay} style={styles.loader} />
+                <ActivityIndicator color={colors.accent} style={styles.loader} />
             ) : (
-                <>
-                    <View style={styles.section}>
-                        <Text style={styles.sectionKicker}>PRIVACY</Text>
-                        <Text style={styles.sectionCopy}>
-                            Controls who can see your ratings, rankings, profile taste stats, and social music activity.
-                        </Text>
-                        <View style={styles.visibilityGroup}>
-                            {VISIBILITY_OPTIONS.map(([value, label]) => (
-                                <TouchableOpacity
-                                    key={value}
-                                    style={[
-                                        styles.visibilityButton,
-                                        profile?.visibility === value && styles.visibilityButtonActive,
-                                    ]}
-                                    onPress={() => changeVisibility(value)}
-                                    disabled={visibilitySaving !== null}
-                                >
-                                    <Text
-                                        style={[
-                                            styles.visibilityText,
-                                            profile?.visibility === value && styles.visibilityTextActive,
-                                        ]}
-                                    >
-                                        {visibilitySaving === value ? "Saving..." : label}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </View>
+                <ScrollView style={styles.body} contentContainerStyle={styles.content}>
+                    <Group label="PRIVACY & SAFETY">
+                        <Row
+                            icon={LockIcon}
+                            label="Privacy"
+                            meta={profile ? VISIBILITY_LABELS[profile.visibility] : undefined}
+                            onPress={() => navigation.navigate("Privacy")}
+                            isFirst
+                        />
+                        <Row
+                            icon={BlockIcon}
+                            label="Blocked users"
+                            meta={blockedCount > 0 ? String(blockedCount) : undefined}
+                            onPress={() => navigation.navigate("BlockedUsers")}
+                        />
+                    </Group>
 
-                    <View style={styles.section}>
-                        <Text style={styles.sectionKicker}>BLOCKED USERS</Text>
-                        {blockedProfiles.length === 0 ? (
-                            <Text style={styles.emptyText}>No blocked users.</Text>
-                        ) : blockedProfiles.map((blocked) => (
-                            <View key={blocked.username} style={styles.blockedRow}>
-                                <View>
-                                    <Text style={styles.blockedName}>{blocked.display_name}</Text>
-                                    <Text style={styles.blockedUsername}>@{blocked.username}</Text>
-                                </View>
-                                <TouchableOpacity
-                                    style={styles.unblockButton}
-                                    onPress={() => unblockProfile(blocked.username)}
-                                >
-                                    <Text style={styles.unblockText}>Unblock</Text>
-                                </TouchableOpacity>
-                            </View>
+                    <Group label="ABOUT">
+                        {ABOUT_ROWS.map((row, index) => (
+                            <Row
+                                key={row.kind}
+                                icon={InfoIcon}
+                                label={row.label}
+                                onPress={() => navigation.navigate("LegalPlaceholder", { kind: row.kind })}
+                                isFirst={index === 0}
+                            />
                         ))}
-                    </View>
+                    </Group>
 
-                    <View style={styles.section}>
-                        <Text style={styles.sectionKicker}>ACCOUNT</Text>
-                        <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-                            <Text style={styles.logoutText}>Log Out</Text>
-                        </TouchableOpacity>
-                        <View style={styles.deleteBlock}>
-                            <TouchableOpacity
-                                style={styles.deleteOpenButton}
+                    <Group>
+                        <Row icon={LogoutIcon} label="Log out" onPress={logout} isFirst />
+                    </Group>
+
+                    {/* Delete account is isolated far below the rest so it can't be
+                        fat-fingered next to Log out; opening it still requires typing DELETE. */}
+                    <View style={styles.dangerZone}>
+                        <Text style={styles.dangerLabel}>DANGER ZONE</Text>
+                        <View style={styles.card}>
+                            <Row
+                                icon={TrashIcon}
+                                label="Delete account"
                                 onPress={() => {
                                     setError(null)
-                                    setIsDeleteOpen(true)
+                                    setIsDeleteOpen((open) => !open)
                                 }}
-                            >
-                                <Text style={styles.deleteOpenText}>Delete account</Text>
-                            </TouchableOpacity>
-
-                            {isDeleteOpen && (
-                                <View style={styles.deletePanel}>
-                                    <Text style={styles.deleteTitle}>Delete account?</Text>
-                                    <Text style={styles.deleteCopy}>
-                                        This removes your profile, rankings, ratings, comparisons, follows, blocks,
-                                        and feed activity. Songs remain in LISTn only as catalog metadata.
-                                    </Text>
-                                    <Text style={styles.deleteInstruction}>Type DELETE to confirm.</Text>
-                                    <TextInput
-                                        value={deleteConfirmation}
-                                        onChangeText={setDeleteConfirmation}
-                                        autoCapitalize="characters"
-                                        autoCorrect={false}
-                                        editable={!isDeleting}
-                                        placeholder="DELETE"
-                                        placeholderTextColor={colors.inkSoft}
-                                        style={styles.deleteInput}
-                                    />
-                                    <View style={styles.deleteActions}>
-                                        <TouchableOpacity
-                                            style={styles.cancelDeleteButton}
-                                            onPress={closeDeleteAccount}
-                                            disabled={isDeleting}
-                                        >
-                                            <Text style={styles.cancelDeleteText}>Cancel</Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
-                                            accessibilityState={{
-                                                disabled: deleteConfirmation !== "DELETE" || isDeleting,
-                                            }}
-                                            style={[
-                                                styles.confirmDeleteButton,
-                                                (deleteConfirmation !== "DELETE" || isDeleting)
-                                                    && styles.confirmDeleteButtonDisabled,
-                                            ]}
-                                            onPress={confirmDeleteAccount}
-                                            disabled={deleteConfirmation !== "DELETE" || isDeleting}
-                                        >
-                                            <Text style={styles.confirmDeleteText}>
-                                                {isDeleting ? "Deleting..." : "Delete"}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                            )}
+                                danger
+                                isFirst
+                            />
                         </View>
                     </View>
 
-                    <View style={styles.section}>
-                        <Text style={styles.sectionKicker}>HELP & LEGAL</Text>
-                        {HELP_LEGAL_ROWS.map((row) => (
-                            <TouchableOpacity
-                                key={row.kind}
-                                style={styles.legalRow}
-                                onPress={() => navigation.navigate("LegalPlaceholder", { kind: row.kind })}
-                            >
-                                <Text style={styles.legalRowText}>{row.label}</Text>
-                                <Text style={styles.legalRowArrow}>{">"}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                </>
-            )}
+                    {isDeleteOpen && (
+                        <View style={styles.deletePanel}>
+                            <Text style={styles.deleteTitle}>Delete account?</Text>
+                            <Text style={styles.deleteCopy}>
+                                This removes your profile, rankings, ratings, comparisons, follows, blocks,
+                                and feed activity. Songs remain in LISTn only as catalog metadata.
+                            </Text>
+                            <Text style={styles.deleteInstruction}>Type DELETE to confirm.</Text>
+                            <TextInput
+                                value={deleteConfirmation}
+                                onChangeText={setDeleteConfirmation}
+                                autoCapitalize="characters"
+                                autoCorrect={false}
+                                editable={!isDeleting}
+                                placeholder="DELETE"
+                                placeholderTextColor={colors.inkDim}
+                                style={styles.deleteInput}
+                            />
+                            <View style={styles.deleteActions}>
+                                <TouchableOpacity
+                                    style={styles.cancelDeleteButton}
+                                    onPress={closeDeleteAccount}
+                                    disabled={isDeleting}
+                                >
+                                    <Text style={styles.cancelDeleteText}>Cancel</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    accessibilityState={{
+                                        disabled: deleteConfirmation !== "DELETE" || isDeleting,
+                                    }}
+                                    style={[
+                                        styles.confirmDeleteButton,
+                                        (deleteConfirmation !== "DELETE" || isDeleting)
+                                            && styles.confirmDeleteButtonDisabled,
+                                    ]}
+                                    onPress={confirmDeleteAccount}
+                                    disabled={deleteConfirmation !== "DELETE" || isDeleting}
+                                >
+                                    <Text style={styles.confirmDeleteText}>
+                                        {isDeleting ? "Deleting..." : "Delete"}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    )}
 
-            {error !== null && <Text style={styles.error}>{error}</Text>}
-        </ScrollView>
+                    {error !== null && <Text style={styles.error}>{error}</Text>}
+
+                    <Text style={styles.footer}>LISTn v1.0 · MADE FOR LISTENERS</Text>
+                </ScrollView>
+            )}
+        </View>
+    )
+}
+
+function Group({ label, children }: { label?: string; children: ReactNode }) {
+    return (
+        <View style={styles.group}>
+            {label && <Text style={styles.groupLabel}>{label}</Text>}
+            <View style={styles.card}>{children}</View>
+        </View>
+    )
+}
+
+function Row({
+    icon: Icon,
+    label,
+    meta,
+    onPress,
+    danger,
+    isFirst,
+}: {
+    icon: IconComponent;
+    label: string;
+    meta?: string;
+    onPress: () => void;
+    danger?: boolean;
+    isFirst?: boolean;
+}) {
+    const tint = danger ? colors.danger : colors.ink
+    return (
+        <TouchableOpacity
+            style={[styles.row, !isFirst && styles.rowDivider]}
+            onPress={onPress}
+            activeOpacity={0.7}
+        >
+            <View style={[styles.iconTile, danger && styles.iconTileDanger]}>
+                <Icon size={16} color={danger ? colors.danger : colors.inkSoft} />
+            </View>
+            <Text style={[styles.rowLabel, { color: tint }]}>{label}</Text>
+            {meta && <Text style={styles.rowMeta}>{meta}</Text>}
+            {!danger && <ChevronIcon size={14} color={colors.inkDim} />}
+        </TouchableOpacity>
     )
 }
 
@@ -277,157 +292,111 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: colors.bg,
     },
-    content: {
-        paddingHorizontal: 18,
+    navBar: {
         paddingTop: 58,
-        paddingBottom: 36,
-    },
-    headerRow: {
-        alignItems: "center",
+        paddingHorizontal: 14,
+        paddingBottom: 8,
         flexDirection: "row",
+        alignItems: "center",
         justifyContent: "space-between",
-        marginBottom: 24,
     },
-    backButton: {
-        paddingVertical: 8,
-        paddingRight: 12,
+    navSide: {
+        width: 60,
+        flexDirection: "row",
     },
-    backText: {
-        fontFamily: fonts.mono,
-        color: colors.ink,
-        fontSize: 13,
-        letterSpacing: 0.4,
-    },
-    kicker: {
-        fontFamily: fonts.mono,
-        color: colors.inkSoft,
-        fontSize: 10,
-        letterSpacing: 1.8,
-    },
-    title: {
-        fontFamily: fonts.serif,
-        color: colors.ink,
-        fontSize: 34,
-        lineHeight: 38,
-        marginBottom: 20,
-    },
-    loader: {
-        marginTop: 32,
-    },
-    section: {
-        borderTopWidth: 1,
-        borderTopColor: colors.line,
-        paddingTop: 16,
-        marginBottom: 24,
-    },
-    sectionKicker: {
-        fontFamily: fonts.mono,
-        color: colors.inkSoft,
-        fontSize: 10,
-        letterSpacing: 1.6,
-        marginBottom: 8,
-    },
-    sectionCopy: {
-        color: colors.inkSoft,
+    navTitle: {
+        fontFamily: fonts.display,
         fontSize: 14,
-        lineHeight: 20,
-        marginBottom: 12,
+        letterSpacing: 0.3,
+        color: colors.ink,
     },
-    visibilityGroup: {
-        gap: 8,
-    },
-    visibilityButton: {
+    iconBtn: {
+        width: 32,
+        height: 32,
+        borderRadius: 9,
+        backgroundColor: colors.paper,
         borderWidth: 1,
         borderColor: colors.line,
-        borderRadius: 8,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    loader: {
+        marginTop: 40,
+    },
+    body: {
+        flex: 1,
+    },
+    content: {
+        paddingHorizontal: 14,
+        paddingBottom: 40,
+    },
+    group: {
+        marginTop: 18,
+    },
+    groupLabel: {
+        fontFamily: fonts.mono,
+        fontSize: 8.5,
+        letterSpacing: 1.5,
+        color: colors.inkDim,
+        fontWeight: "700",
+        marginBottom: 7,
+        marginLeft: 4,
+    },
+    card: {
         backgroundColor: colors.paper,
-        paddingVertical: 12,
+        borderWidth: 1,
+        borderColor: colors.line,
+        borderRadius: 14,
         paddingHorizontal: 14,
     },
-    visibilityButtonActive: {
-        borderColor: colors.ink,
-        backgroundColor: colors.ink,
-    },
-    visibilityText: {
-        fontFamily: fonts.mono,
-        color: colors.ink,
-        fontSize: 12,
-        letterSpacing: 0.4,
-    },
-    visibilityTextActive: {
-        color: colors.paper,
-    },
-    emptyText: {
-        color: colors.inkSoft,
-        fontSize: 14,
-    },
-    blockedRow: {
+    row: {
         flexDirection: "row",
         alignItems: "center",
-        justifyContent: "space-between",
-        borderBottomWidth: 1,
-        borderBottomColor: colors.line,
+        gap: 12,
         paddingVertical: 12,
     },
-    blockedName: {
-        fontFamily: fonts.serif,
-        color: colors.ink,
-        fontSize: 18,
+    rowDivider: {
+        borderTopWidth: 1,
+        borderTopColor: colors.line,
     },
-    blockedUsername: {
-        fontFamily: fonts.mono,
-        color: colors.inkSoft,
-        fontSize: 11,
-    },
-    unblockButton: {
-        borderWidth: 1,
-        borderColor: colors.ink,
+    iconTile: {
+        width: 30,
+        height: 30,
         borderRadius: 8,
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-    },
-    unblockText: {
-        fontFamily: fonts.mono,
-        color: colors.ink,
-        fontSize: 11,
-    },
-    logoutButton: {
+        backgroundColor: colors.bg,
         alignItems: "center",
-        borderWidth: 1,
-        borderColor: colors.ink,
-        borderRadius: 8,
-        backgroundColor: colors.paper,
-        paddingVertical: 12,
-        paddingHorizontal: 32,
+        justifyContent: "center",
     },
-    logoutText: {
-        fontFamily: fonts.mono,
-        color: colors.ink,
+    iconTileDanger: {
+        backgroundColor: "rgba(224,73,46,0.1)",
+    },
+    rowLabel: {
+        flex: 1,
+        fontFamily: fonts.display,
         fontSize: 13,
-        letterSpacing: 0.4,
     },
-    deleteBlock: {
-        marginTop: 12,
-    },
-    deleteOpenButton: {
-        alignItems: "center",
-        borderWidth: 1,
-        borderColor: colors.dislike,
-        borderRadius: 8,
-        backgroundColor: colors.paper,
-        paddingVertical: 12,
-        paddingHorizontal: 32,
-    },
-    deleteOpenText: {
+    rowMeta: {
         fontFamily: fonts.mono,
-        color: colors.dislike,
-        fontSize: 13,
-        letterSpacing: 0.4,
+        fontSize: 9,
+        color: colors.inkDim,
+        letterSpacing: 0.5,
+    },
+    dangerZone: {
+        marginTop: 44,
+    },
+    dangerLabel: {
+        fontFamily: fonts.mono,
+        fontSize: 8.5,
+        letterSpacing: 1.5,
+        color: colors.danger,
+        fontWeight: "700",
+        marginBottom: 7,
+        marginLeft: 4,
     },
     deletePanel: {
         borderWidth: 1,
-        borderColor: colors.dislike,
-        borderRadius: 8,
+        borderColor: colors.danger,
+        borderRadius: 14,
         backgroundColor: colors.paper,
         marginTop: 12,
         padding: 14,
@@ -483,7 +452,7 @@ const styles = StyleSheet.create({
     confirmDeleteButton: {
         alignItems: "center",
         borderRadius: 8,
-        backgroundColor: colors.dislike,
+        backgroundColor: colors.danger,
         flex: 1,
         paddingVertical: 10,
     },
@@ -495,29 +464,19 @@ const styles = StyleSheet.create({
         color: colors.paper,
         fontSize: 12,
     },
-    legalRow: {
-        alignItems: "center",
-        backgroundColor: colors.paper,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.line,
-        flexDirection: "row",
-        justifyContent: "space-between",
-        paddingVertical: 14,
-        paddingHorizontal: 12,
-    },
-    legalRowText: {
-        color: colors.ink,
-        fontSize: 15,
-    },
-    legalRowArrow: {
-        color: colors.inkSoft,
-        fontSize: 20,
-        lineHeight: 22,
-    },
     error: {
-        color: colors.dislike,
+        color: colors.danger,
         fontSize: 14,
         lineHeight: 20,
         textAlign: "center",
+        marginTop: 14,
+    },
+    footer: {
+        fontFamily: fonts.mono,
+        fontSize: 8.5,
+        color: colors.inkDim,
+        letterSpacing: 1,
+        textAlign: "center",
+        marginTop: 22,
     },
 })
