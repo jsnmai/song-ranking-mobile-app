@@ -3,7 +3,11 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-GLOBAL_AVG_MIN_RATINGS = 20
+# Tunable minimum sample before responses expose a global average score.
+# Currently 0 (gate disabled): early averages are shown from the first rating because the
+# rating count is always displayed alongside, which keeps thin samples honest. Raise this
+# value to hide low-sample averages everywhere SongResponse is used.
+GLOBAL_AVG_MIN_RATINGS = 0
 
 
 class SongCreate(BaseModel):
