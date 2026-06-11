@@ -135,6 +135,12 @@ def _build_profile_summary(
             current_user_id,
             profile.user_id,
         ) is not None,
+        # Reverse direction powers mutual-follow UI like the MUTUAL chip on follow lists.
+        is_followed_by=get_follow(
+            db,
+            profile.user_id,
+            current_user_id,
+        ) is not None,
         is_own_profile=current_user_id == profile.user_id,
         can_view_taste=taste_visible,
         is_blocked=is_blocked,

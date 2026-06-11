@@ -136,6 +136,7 @@ class ProfileSummaryResponse(ProfileResponse):
     follower_count: int
     following_count: int
     is_following: bool
+    is_followed_by: bool
     is_own_profile: bool
     can_view_taste: bool
     is_blocked: bool

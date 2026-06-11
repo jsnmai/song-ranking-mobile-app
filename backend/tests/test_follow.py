@@ -186,3 +186,54 @@ def test_cannot_follow_self(client: TestClient):
 
     assert response.status_code == 400
     assert response.json()["detail"] == "You cannot follow yourself."
+
+
+def test_is_followed_by_reports_reverse_follow_direction(client: TestClient):
+    """Profile summaries expose the reverse follow direction so mutual-follow UI can render."""
+    a_token = _register(
+        client,
+        "a@example.com",
+        "usera",
+        "User A",
+    )
+    b_token = _register(
+        client,
+        "b@example.com",
+        "userb",
+        "User B",
+    )
+
+    # A follows B: A's view of B is one-way outgoing.
+    follow_response = client.post(
+        "/api/v1/profile/userb/follow",
+        headers={"Authorization": f"Bearer {a_token}"},
+    )
+    assert follow_response.status_code == 200
+
+    a_view_of_b = client.get(
+        "/api/v1/profile/userb",
+        headers={"Authorization": f"Bearer {a_token}"},
+    ).json()
+    assert a_view_of_b["is_following"] is True
+    assert a_view_of_b["is_followed_by"] is False
+
+    b_view_of_a = client.get(
+        "/api/v1/profile/usera",
+        headers={"Authorization": f"Bearer {b_token}"},
+    ).json()
+    assert b_view_of_a["is_following"] is False
+    assert b_view_of_a["is_followed_by"] is True
+
+    # B follows A back: both directions are now true for both viewers.
+    follow_back_response = client.post(
+        "/api/v1/profile/usera/follow",
+        headers={"Authorization": f"Bearer {b_token}"},
+    )
+    assert follow_back_response.status_code == 200
+
+    mutual_view = client.get(
+        "/api/v1/profile/userb",
+        headers={"Authorization": f"Bearer {a_token}"},
+    ).json()
+    assert mutual_view["is_following"] is True
+    assert mutual_view["is_followed_by"] is True
