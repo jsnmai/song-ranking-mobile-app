@@ -281,8 +281,8 @@ describe("ProfileScreen profile modules", () => {
 
         await waitFor(() => {
             expect(screen.getByTestId("most-compatible-item-maya")).toBeTruthy()
-            expect(screen.getByText("87% match")).toBeTruthy()
-            expect(screen.getByText("Based on 14 shared ratings")).toBeTruthy()
+            expect(screen.getByText("@maya")).toBeTruthy()
+            expect(screen.getByText("87%")).toBeTruthy()
         })
     })
 

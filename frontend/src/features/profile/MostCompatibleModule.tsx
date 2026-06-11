@@ -10,13 +10,24 @@ type Props = {
     onViewAll: () => void;
 }
 
+// Deterministic avatar background per user, matching the profile-list palette.
+const AVATAR_COLORS = [colors.accent, colors.sky, colors.plum, colors.mint, colors.gold]
+
+function avatarColor(username: string): string {
+    let hash = 0
+    for (let i = 0; i < username.length; i++) {
+        hash = (hash * 31 + username.charCodeAt(i)) % 997
+    }
+    return AVATAR_COLORS[hash % AVATAR_COLORS.length]
+}
+
 export default function MostCompatibleModule({ users, isLoading, onUserPress, onViewAll }: Props) {
     const preview = users?.slice(0, 3) ?? []
 
     return (
-        <View style={styles.container} testID="most-compatible-module">
+        <View style={styles.card} testID="most-compatible-module">
             <View style={styles.headerRow}>
-                <Text style={styles.sectionTitle}>MOST COMPATIBLE</Text>
+                <Text style={styles.sectionTitle}>COMPATIBILITY</Text>
                 {users && users.length > 0 && (
                     <TouchableOpacity onPress={onViewAll} testID="most-compatible-view-all">
                         <Text style={styles.viewAll}>View all →</Text>
@@ -27,50 +38,60 @@ export default function MostCompatibleModule({ users, isLoading, onUserPress, on
             {!isLoading && users !== null && users.length === 0 && (
                 <Text style={styles.empty}>Rate more songs to find compatible listeners.</Text>
             )}
-            {!isLoading && preview.map((user) => (
-                <TouchableOpacity
-                    key={user.username}
-                    style={styles.row}
-                    onPress={() => onUserPress(user.username)}
-                    testID={`most-compatible-item-${user.username}`}
-                >
-                    <View style={styles.userInfo}>
-                        <Text style={styles.displayName} numberOfLines={1}>{user.display_name}</Text>
+            {!isLoading && preview.map((user, i) => {
+                const pct = Math.min(100, Math.max(0, Math.round(user.similarity_score * 100)))
+                const color = avatarColor(user.username)
+                const initial = (user.display_name || user.username || "?").charAt(0).toUpperCase()
+                return (
+                    <TouchableOpacity
+                        key={user.username}
+                        style={[styles.row, i === 0 ? styles.rowFirst : styles.rowRest]}
+                        onPress={() => onUserPress(user.username)}
+                        testID={`most-compatible-item-${user.username}`}
+                        activeOpacity={0.7}
+                    >
+                        <View style={[styles.avatar, { backgroundColor: color }]}>
+                            <Text style={styles.avatarLetter}>{initial}</Text>
+                        </View>
                         <Text style={styles.username} numberOfLines={1}>@{user.username}</Text>
-                    </View>
-                    <View style={styles.scoreInfo}>
-                        <Text style={styles.percent}>{Math.round(user.similarity_score * 100)}% match</Text>
-                        <Text style={styles.sharedCount}>Based on {user.shared_song_count} shared ratings</Text>
-                    </View>
-                </TouchableOpacity>
-            ))}
+                        <View style={styles.barTrack}>
+                            <View style={[styles.barFill, { width: `${pct}%`, backgroundColor: color }]} />
+                        </View>
+                        <Text style={[styles.percent, { color }]}>{pct}%</Text>
+                    </TouchableOpacity>
+                )
+            })}
         </View>
     )
 }
 
 const styles = StyleSheet.create({
-    container: {
-        marginTop: 20,
-        paddingHorizontal: 16,
+    card: {
+        backgroundColor: colors.paper,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: colors.line,
+        padding: 12,
     },
     headerRow: {
         flexDirection: "row",
-        alignItems: "center",
+        alignItems: "baseline",
         justifyContent: "space-between",
-        marginBottom: 10,
     },
     sectionTitle: {
         fontFamily: fonts.mono,
-        color: colors.inkSoft,
-        fontSize: 10,
+        color: colors.inkDim,
+        fontSize: 9,
         letterSpacing: 1.8,
+        fontWeight: "700",
         textTransform: "uppercase",
     },
     viewAll: {
         fontFamily: fonts.mono,
         color: colors.clay,
-        fontSize: 11,
-        letterSpacing: 0.4,
+        fontSize: 9,
+        letterSpacing: 0.5,
+        fontWeight: "700",
     },
     loader: {
         marginVertical: 12,
@@ -78,48 +99,57 @@ const styles = StyleSheet.create({
     empty: {
         color: colors.inkSoft,
         fontSize: 13,
-        marginVertical: 8,
+        marginTop: 10,
         lineHeight: 18,
     },
     row: {
         flexDirection: "row",
         alignItems: "center",
-        justifyContent: "space-between",
-        paddingVertical: 12,
-        borderTopWidth: 1,
-        borderTopColor: colors.line,
-        gap: 10,
+        gap: 9,
     },
-    userInfo: {
+    rowFirst: {
+        marginTop: 10,
+    },
+    rowRest: {
+        marginTop: 8,
+    },
+    avatar: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+    },
+    avatarLetter: {
+        fontFamily: fonts.display,
+        color: "#fff",
+        fontSize: 11,
+    },
+    username: {
+        fontFamily: fonts.display,
+        color: colors.ink,
+        fontSize: 13,
         flex: 1,
         minWidth: 0,
     },
-    displayName: {
-        fontFamily: fonts.serif,
-        color: colors.ink,
-        fontSize: 15,
-        lineHeight: 20,
+    barTrack: {
+        width: 108,
+        height: 7,
+        backgroundColor: colors.bg,
+        borderRadius: 4,
+        overflow: "hidden",
+        flexShrink: 0,
     },
-    username: {
-        fontFamily: fonts.mono,
-        color: colors.inkSoft,
-        fontSize: 11,
-        marginTop: 2,
-    },
-    scoreInfo: {
-        alignItems: "flex-end",
+    barFill: {
+        height: 7,
+        borderRadius: 4,
     },
     percent: {
-        fontFamily: fonts.mono,
-        color: colors.like,
+        fontFamily: fonts.display,
         fontSize: 13,
-        letterSpacing: 0.2,
-    },
-    sharedCount: {
-        fontFamily: fonts.mono,
-        color: colors.inkDim,
-        fontSize: 10,
-        marginTop: 2,
-        letterSpacing: 0.2,
+        width: 42,
+        textAlign: "right",
+        flexShrink: 0,
     },
 })
