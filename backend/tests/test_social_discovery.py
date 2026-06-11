@@ -1,4 +1,4 @@
-"""Integration tests for Friends' 9s and Co-Sign discovery."""
+"""Integration tests for Co-Sign discovery."""
 from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
@@ -117,32 +117,32 @@ def _get(
 
 
 def test_social_discovery_requires_auth(client: TestClient):
-    """Both social discovery surfaces require authentication."""
-    assert client.get("/api/v1/discover/friends-9s").status_code == 401
+    """Co-Sign discovery requires authentication."""
     assert client.get("/api/v1/discover/co-signs").status_code == 401
 
 
-def test_friends_nines_returns_only_unrated_scores_at_or_above_nine(
+def test_co_sign_requires_two_visible_friends(
     client: TestClient,
     db_session: Session,
 ):
-    """Friends' 9s excludes low scores, viewer ratings, and already-rated songs."""
+    """A song with only one visible high score does not appear in Co-Signs."""
     viewer_token = _register(client, "viewer")
-    _register(client, "friend")
-    _follow(client, viewer_token, "friend")
-    _create_ranking(db_session, "friend", 101, "High Song", 9.0)
-    _create_ranking(db_session, "friend", 102, "Low Song", 8.99)
-    _create_ranking(db_session, "viewer", 103, "Already Rated Song", 9.9)
-    _create_ranking(db_session, "friend", 103, "Already Rated Song", 9.9)
+    _register(client, "first")
+    _register(client, "second")
+    for username in ["first", "second"]:
+        _follow(client, viewer_token, username)
+    _create_ranking(db_session, "first", 301, "Co-Signed Song", 9.2)
+    _create_ranking(db_session, "second", 301, "Co-Signed Song", 9.6)
+    _create_ranking(db_session, "first", 302, "Single Song", 9.9)
 
-    body = _get(client, viewer_token, "/api/v1/discover/friends-9s")
+    co_sign_items = _get(client, viewer_token, "/api/v1/discover/co-signs")["items"]
 
-    assert [item["song"]["title"] for item in body["items"]] == ["High Song"]
-    assert body["items"][0]["visible_high_score_friend_count"] == 1
-    assert body["items"][0]["contributors"][0]["username"] == "friend"
+    assert [item["song"]["title"] for item in co_sign_items] == ["Co-Signed Song"]
+    assert co_sign_items[0]["co_sign_count"] == 2
+    assert co_sign_items[0]["average_visible_friend_score"] == 9.4
 
 
-def test_friends_nines_counts_only_visible_non_blocked_non_deleted_contributors(
+def test_co_sign_counts_only_visible_non_blocked_non_deleted_contributors(
     client: TestClient,
     db_session: Session,
 ):
@@ -182,39 +182,42 @@ def test_friends_nines_counts_only_visible_non_blocked_non_deleted_contributors(
     )
     assert delete_response.status_code == 204
 
-    item = _get(client, viewer_token, "/api/v1/discover/friends-9s")["items"][0]
+    items = _get(client, viewer_token, "/api/v1/discover/co-signs")["items"]
 
-    assert item["visible_high_score_friend_count"] == 2
-    assert {contributor["username"] for contributor in item["contributors"]} == {
+    assert items[0]["co_sign_count"] == 2
+    assert {contributor["username"] for contributor in items[0]["contributors"]} == {
         "publicfriend",
         "mutualfriend",
     }
 
 
-def test_co_sign_requires_two_visible_friends_and_groups_by_song(
+def test_co_sign_excludes_low_scores_and_already_rated(
     client: TestClient,
     db_session: Session,
 ):
-    """One visible high score is a Friend's 9, while two form one Co-Sign."""
+    """Co-Signs excludes low scores, viewer's own ratings, and songs the viewer already rated."""
     viewer_token = _register(client, "viewer")
-    _register(client, "first")
-    _register(client, "second")
-    for username in ["first", "second"]:
+    _register(client, "friend_a")
+    _register(client, "friend_b")
+    for username in ["friend_a", "friend_b"]:
         _follow(client, viewer_token, username)
-    _create_ranking(db_session, "first", 301, "Co-Signed Song", 9.2)
-    _create_ranking(db_session, "second", 301, "Co-Signed Song", 9.6)
-    _create_ranking(db_session, "first", 302, "Single Song", 9.9)
+    _create_ranking(db_session, "friend_a", 101, "High Song", 9.0)
+    _create_ranking(db_session, "friend_b", 101, "High Song", 9.2)
+    _create_ranking(db_session, "friend_a", 102, "Low Song", 8.99)
+    _create_ranking(db_session, "friend_b", 102, "Low Song", 8.5)
+    _create_ranking(db_session, "viewer", 103, "Already Rated Song", 9.9)
+    _create_ranking(db_session, "friend_a", 103, "Already Rated Song", 9.9)
+    _create_ranking(db_session, "friend_b", 103, "Already Rated Song", 9.8)
 
-    friends_items = _get(client, viewer_token, "/api/v1/discover/friends-9s")["items"]
-    co_sign_items = _get(client, viewer_token, "/api/v1/discover/co-signs")["items"]
+    items = _get(client, viewer_token, "/api/v1/discover/co-signs")["items"]
 
-    assert {item["song"]["title"] for item in friends_items} == {"Co-Signed Song", "Single Song"}
-    assert [item["song"]["title"] for item in co_sign_items] == ["Co-Signed Song"]
-    assert co_sign_items[0]["co_sign_count"] == 2
-    assert co_sign_items[0]["average_visible_friend_score"] == 9.4
+    titles = [item["song"]["title"] for item in items]
+    assert "High Song" in titles
+    assert "Low Song" not in titles
+    assert "Already Rated Song" not in titles
 
 
-def test_social_discovery_sorts_by_count_then_score_then_recency(
+def test_co_sign_sorts_by_count_then_score_then_recency(
     client: TestClient,
     db_session: Session,
 ):
@@ -222,39 +225,47 @@ def test_social_discovery_sorts_by_count_then_score_then_recency(
     viewer_token = _register(client, "viewer")
     _register(client, "first")
     _register(client, "second")
-    for username in ["first", "second"]:
+    _register(client, "third")
+    for username in ["first", "second", "third"]:
         _follow(client, viewer_token, username)
     older = datetime.now(timezone.utc) - timedelta(days=2)
     newer = datetime.now(timezone.utc) - timedelta(days=1)
     for username, deezer_id, title, score, updated_at in [
-        ("first", 401, "Two Friends", 9.0, older),
-        ("second", 401, "Two Friends", 9.0, older),
-        ("first", 402, "Higher Score", 9.8, older),
-        ("first", 403, "Newer Same Score", 9.4, newer),
-        ("first", 404, "Older Same Score", 9.4, older),
+        ("first", 401, "Three Friends", 9.0, older),
+        ("second", 401, "Three Friends", 9.0, older),
+        ("third", 401, "Three Friends", 9.0, older),
+        ("first", 402, "Two Friends Higher Score", 9.8, older),
+        ("second", 402, "Two Friends Higher Score", 9.6, older),
+        ("first", 403, "Two Friends Newer", 9.4, newer),
+        ("second", 403, "Two Friends Newer", 9.4, newer),
+        ("first", 404, "Two Friends Older", 9.4, older),
+        ("second", 404, "Two Friends Older", 9.4, older),
     ]:
         _create_ranking(db_session, username, deezer_id, title, score, updated_at)
 
-    items = _get(client, viewer_token, "/api/v1/discover/friends-9s")["items"]
+    items = _get(client, viewer_token, "/api/v1/discover/co-signs")["items"]
 
     assert [item["song"]["title"] for item in items] == [
-        "Two Friends",
-        "Higher Score",
-        "Newer Same Score",
-        "Older Same Score",
+        "Three Friends",
+        "Two Friends Higher Score",
+        "Two Friends Newer",
+        "Two Friends Older",
     ]
 
 
-def test_social_discovery_returns_bookmarked_state(
+def test_co_sign_returns_bookmarked_state(
     client: TestClient,
     db_session: Session,
 ):
-    """Discovery cards can render the viewer's private Bookmark state."""
+    """Co-Sign cards can render the viewer's private Bookmark state."""
     viewer_token = _register(client, "viewer")
-    _register(client, "friend")
-    _follow(client, viewer_token, "friend")
-    _create_ranking(db_session, "friend", 501, "Bookmarked Recommendation", 9.5)
-    song_response = _get(client, viewer_token, "/api/v1/discover/friends-9s")["items"][0]["song"]
+    _register(client, "friend_a")
+    _register(client, "friend_b")
+    for username in ["friend_a", "friend_b"]:
+        _follow(client, viewer_token, username)
+    _create_ranking(db_session, "friend_a", 501, "Bookmarked Recommendation", 9.5)
+    _create_ranking(db_session, "friend_b", 501, "Bookmarked Recommendation", 9.3)
+    song_response = _get(client, viewer_token, "/api/v1/discover/co-signs")["items"][0]["song"]
     bookmark_response = client.post(
         "/api/v1/bookmarks",
         json={"song": song_response, "source": "discovery"},
@@ -262,6 +273,6 @@ def test_social_discovery_returns_bookmarked_state(
     )
     assert bookmark_response.status_code == 200
 
-    item = _get(client, viewer_token, "/api/v1/discover/friends-9s")["items"][0]
+    item = _get(client, viewer_token, "/api/v1/discover/co-signs")["items"][0]
 
     assert item["is_bookmarked"] is True

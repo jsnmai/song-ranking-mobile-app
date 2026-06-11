@@ -47,7 +47,7 @@ from scripts.demo_seed_data import (
     DEMO_EMAIL_DOMAIN,
     DEMO_PASSWORD,
     DEMO_USERNAMES,
-    DISCO_FRIENDS_NINE_DEEZER_ID,
+    DISCO_CO_SIGN_DEEZER_ID,
     FEED_EVENT_SPECS,
     FOLLOW_EDGES,
     LEGACY_DEMO_EMAIL_DOMAINS,
@@ -574,7 +574,7 @@ def seed_bookmarks(
 ) -> None:
     """Seed one pre-bookmarked discovery song for demo_power so the Bookmark state is visible on first load."""
     power_id = user_ids["demo_power"]
-    song_id = song_ids[DISCO_FRIENDS_NINE_DEEZER_ID]
+    song_id = song_ids[DISCO_CO_SIGN_DEEZER_ID]
     db.add(Bookmark(user_id=power_id, song_id=song_id, source="discovery"))
     db.flush()
 

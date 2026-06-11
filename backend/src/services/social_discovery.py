@@ -1,4 +1,4 @@
-"""Business logic for Friends' 9s and Co-Sign discovery."""
+"""Business logic for Co-Sign discovery."""
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -8,8 +8,6 @@ from src.crud.social_discovery import SocialHighScoreRow, list_visible_followed_
 from src.pydantic_schemas.social_discovery import (
     CoSignItem,
     CoSignsResponse,
-    FriendsNineItem,
-    FriendsNinesResponse,
     SocialDiscoveryContributor,
 )
 from src.pydantic_schemas.song import SongResponse
@@ -29,31 +27,6 @@ class SocialDiscoveryGroup:
     average_score: float
     latest_at: datetime
     is_bookmarked: bool
-
-
-def list_friends_nines(
-    db: Session,
-    user_id: int,
-) -> FriendsNinesResponse:
-    """Return songs with at least one visible followed-user score of 9+."""
-    groups = _list_groups(
-        db,
-        user_id=user_id,
-        minimum_count=1,
-    )
-    return FriendsNinesResponse(
-        items=[
-            FriendsNineItem(
-                song=SongResponse.model_validate(group.song),
-                visible_high_score_friend_count=len(group.rows),
-                average_visible_friend_score=group.average_score,
-                latest_visible_rating_at=group.latest_at,
-                contributors=_contributors(group),
-                is_bookmarked=group.is_bookmarked,
-            )
-            for group in groups
-        ],
-    )
 
 
 def list_co_signs(

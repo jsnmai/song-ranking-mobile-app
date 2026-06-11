@@ -12,8 +12,8 @@ from scripts.demo_seed_data import (
     DISCO_ALREADY_RATED_DEEZER_ID,
     DISCO_BLOCKED_DEEZER_ID,
     DISCO_CO_SIGN_DEEZER_ID,
-    DISCO_FRIENDS_NINE_DEEZER_ID,
     demo_email,
+    seed_email,
 )
 from scripts.seed_dev_demo import (
     SeedAbortedError,
@@ -61,8 +61,13 @@ def test_demo_accounts_use_demo_listn_dev_domain() -> None:
     assert DEMO_EMAIL_DOMAIN == "@listn.demo"
     for account in DEMO_ACCOUNTS:
         assert account.email.endswith(DEMO_EMAIL_DOMAIN)
-        assert account.email == demo_email(account.username)
+        # Seed accounts use seed_email (strips seed_ prefix); all others use demo_email.
+        if account.username.startswith("seed_"):
+            assert account.email == seed_email(account.username)
+        else:
+            assert account.email == demo_email(account.username)
         assert not account.email.startswith("demo_")
+        assert not account.email.startswith("seed_")
 
 
 def test_demo_accounts_cover_visibility_states() -> None:
@@ -329,30 +334,6 @@ def test_discovery_seed_co_sign_present(
     assert contributor_usernames == {"demo_disc_a", "demo_disc_b"}
 
 
-def test_discovery_seed_friends_nine_solo_present(
-    client,
-    db_session,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """demo_power sees a Friends' 9s card that does not qualify as a Co-Sign."""
-    _run_seed(db_session, monkeypatch)
-    token = _login(client, demo_email("demo_power"))
-
-    friends_items = client.get(
-        "/api/v1/discover/friends-9s",
-        headers={"Authorization": f"Bearer {token}"},
-    ).json()["items"]
-    co_sign_items = client.get(
-        "/api/v1/discover/co-signs",
-        headers={"Authorization": f"Bearer {token}"},
-    ).json()["items"]
-
-    friends_nine_ids = {item["song"]["deezer_id"] for item in friends_items}
-    co_sign_ids = {item["song"]["deezer_id"] for item in co_sign_items}
-    solo_ids = friends_nine_ids - co_sign_ids
-    assert DISCO_FRIENDS_NINE_DEEZER_ID in solo_ids
-
-
 def test_discovery_seed_blocked_user_song_excluded(
     client,
     db_session,
@@ -362,13 +343,6 @@ def test_discovery_seed_blocked_user_song_excluded(
     _run_seed(db_session, monkeypatch)
     token = _login(client, demo_email("demo_power"))
 
-    friends_ids = {
-        item["song"]["deezer_id"]
-        for item in client.get(
-            "/api/v1/discover/friends-9s",
-            headers={"Authorization": f"Bearer {token}"},
-        ).json()["items"]
-    }
     co_sign_ids = {
         item["song"]["deezer_id"]
         for item in client.get(
@@ -377,7 +351,6 @@ def test_discovery_seed_blocked_user_song_excluded(
         ).json()["items"]
     }
 
-    assert DISCO_BLOCKED_DEEZER_ID not in friends_ids
     assert DISCO_BLOCKED_DEEZER_ID not in co_sign_ids
 
 
@@ -390,15 +363,15 @@ def test_discovery_seed_already_rated_excluded(
     _run_seed(db_session, monkeypatch)
     token = _login(client, demo_email("demo_power"))
 
-    friends_ids = {
+    co_sign_ids = {
         item["song"]["deezer_id"]
         for item in client.get(
-            "/api/v1/discover/friends-9s",
+            "/api/v1/discover/co-signs",
             headers={"Authorization": f"Bearer {token}"},
         ).json()["items"]
     }
 
-    assert DISCO_ALREADY_RATED_DEEZER_ID not in friends_ids
+    assert DISCO_ALREADY_RATED_DEEZER_ID not in co_sign_ids
 
 
 def test_discovery_seed_bookmarked_state_present(
@@ -406,17 +379,17 @@ def test_discovery_seed_bookmarked_state_present(
     db_session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """demo_power's pre-seeded bookmarked discovery song reports is_bookmarked=True on Friends' 9s."""
+    """demo_power's pre-seeded bookmarked co-sign song reports is_bookmarked=True."""
     _run_seed(db_session, monkeypatch)
     token = _login(client, demo_email("demo_power"))
 
     items = client.get(
-        "/api/v1/discover/friends-9s",
+        "/api/v1/discover/co-signs",
         headers={"Authorization": f"Bearer {token}"},
     ).json()["items"]
 
     bookmarked_item = next(
-        (item for item in items if item["song"]["deezer_id"] == DISCO_FRIENDS_NINE_DEEZER_ID),
+        (item for item in items if item["song"]["deezer_id"] == DISCO_CO_SIGN_DEEZER_ID),
         None,
     )
     assert bookmarked_item is not None

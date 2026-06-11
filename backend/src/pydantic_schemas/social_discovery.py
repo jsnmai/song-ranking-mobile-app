@@ -1,4 +1,4 @@
-"""Schemas for Friends' 9s and Co-Sign discovery surfaces."""
+"""Schemas for Co-Sign social discovery."""
 from datetime import datetime
 
 from pydantic import BaseModel
@@ -13,23 +13,6 @@ class SocialDiscoveryContributor(BaseModel):
     username: str
     display_name: str
     score: float
-
-
-class FriendsNineItem(BaseModel):
-    """One song with at least one visible friend's high score."""
-
-    song: SongResponse
-    visible_high_score_friend_count: int
-    average_visible_friend_score: float
-    latest_visible_rating_at: datetime
-    contributors: list[SocialDiscoveryContributor]
-    is_bookmarked: bool
-
-
-class FriendsNinesResponse(BaseModel):
-    """Current-user Friends' 9s recommendations."""
-
-    items: list[FriendsNineItem]
 
 
 class CoSignItem(BaseModel):
