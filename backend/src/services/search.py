@@ -2,7 +2,9 @@
 # Search calls Deezer server-side and returns normalized DTOs without writing to the database.
 import httpx
 from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
 
+from src.crud.rating import list_user_rankings_by_deezer_ids
 from src.pydantic_schemas.search import SongSearchResponse, SongSearchResult
 
 DEEZER_SEARCH_URL = "https://api.deezer.com/search"
@@ -10,14 +12,19 @@ DEEZER_SEARCH_TIMEOUT_SECONDS = 5.0
 DEEZER_SEARCH_LIMIT = 10
 
 
-def search_deezer_songs(query: str) -> SongSearchResponse:
+def search_deezer_songs(
+    db: Session,
+    user_id: int,
+    query: str,
+) -> SongSearchResponse:
     """
     Search Deezer and normalize the response for LISTn clients.
 
     1. Call Deezer server-side so provider details never leak into the frontend.
     2. Normalize each track into LISTn's stable search DTO.
     3. Skip malformed provider rows instead of failing the whole search.
-    4. Return transient results only — no DB writes happen in Phase 3 search.
+    4. Annotate results with the viewer's existing ratings in one batch query.
+    5. Return transient results only — search itself never writes songs.
     """
     try:
         response = httpx.get(
@@ -49,7 +56,31 @@ def search_deezer_songs(query: str) -> SongSearchResponse:
         if normalized_track is not None:
             results.append(normalized_track)
 
+    _annotate_viewer_ratings(
+        db,
+        user_id,
+        results,
+    )
     return SongSearchResponse(results=results)
+
+
+def _annotate_viewer_ratings(
+    db: Session,
+    user_id: int,
+    results: list[SongSearchResult],
+) -> None:
+    """Fill my_bucket/my_score on results the viewer has already rated."""
+    rows = list_user_rankings_by_deezer_ids(
+        db,
+        user_id=user_id,
+        deezer_ids=[result.deezer_id for result in results],
+    )
+    rankings_by_deezer_id = {row.song.deezer_id: row.ranking for row in rows}
+    for result in results:
+        ranking = rankings_by_deezer_id.get(result.deezer_id)
+        if ranking is not None:
+            result.my_bucket = ranking.bucket
+            result.my_score = ranking.score
 
 
 def _normalize_deezer_track(raw_track: object) -> SongSearchResult | None:

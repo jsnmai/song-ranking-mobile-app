@@ -59,6 +59,35 @@ def get_user_ranking_by_deezer_id(
     )
 
 
+def list_user_rankings_by_deezer_ids(
+    db: Session,
+    user_id: int,
+    deezer_ids: list[int],
+) -> list[RankingRow]:
+    """Return a user's current rankings for a batch of Deezer songs in one query."""
+    if not deezer_ids:
+        return []
+    rows = db.execute(
+        select(
+            Ranking,
+            Song,
+        )
+        .join(
+            Song,
+            Song.id == Ranking.song_id,
+        )
+        .where(Ranking.user_id == user_id)
+        .where(Song.deezer_id.in_(deezer_ids))
+    ).all()
+    return [
+        RankingRow(
+            ranking=row[0],
+            song=row[1],
+        )
+        for row in rows
+    ]
+
+
 def list_user_bucket_rankings(
     db: Session,
     user_id: int,

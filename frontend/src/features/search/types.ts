@@ -14,6 +14,9 @@ export type SongSearchResult = {
     // Aggregate fields present when the song is persisted to the DB; absent for raw search results.
     global_avg_score?: number | null;
     global_rating_count?: number;
+    // Viewer's existing rating, present on search results so rows can show a rated state.
+    my_bucket?: string | null;
+    my_score?: number | null;
 }
 
 // Mirrors SongSearchResponse.

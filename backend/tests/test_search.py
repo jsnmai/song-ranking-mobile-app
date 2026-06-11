@@ -131,6 +131,8 @@ def test_search_returns_normalized_results(client: TestClient, monkeypatch):
                 "album": "Blonde",
                 "cover_url": "https://example.com/cover.jpg",
                 "preview_url": "https://example.com/preview.mp3",
+                "my_bucket": None,
+                "my_score": None,
             },
         ],
     }
@@ -246,6 +248,8 @@ def test_search_skips_malformed_deezer_rows(client: TestClient, monkeypatch):
                 "album": "Good Album",
                 "cover_url": "https://example.com/fallback-cover.jpg",
                 "preview_url": None,
+                "my_bucket": None,
+                "my_score": None,
             },
         ],
     }
@@ -273,3 +277,41 @@ def test_search_does_not_write_database_rows(
     assert db_session.scalar(select(func.count()).select_from(User)) == user_count_before
     assert db_session.scalar(select(func.count()).select_from(Profile)) == profile_count_before
     assert db_session.scalar(select(func.count()).select_from(Song)) == song_count_before
+
+
+def test_search_annotates_results_the_viewer_already_rated(
+    client: TestClient,
+    monkeypatch,
+):
+    """Search rows carry my_bucket/my_score for songs the viewer rated, so the UI can show a rated state."""
+    token = _get_token(client)
+    finalize_response = client.post(
+        "/api/v1/ratings/finalize",
+        json={
+            "song": {
+                "deezer_id": 123,
+                "isrc": "USUG11900842",
+                "title": "Nights",
+                "artist": "Frank Ocean",
+                "artist_deezer_id": 456,
+                "album": "Blonde",
+                "cover_url": "https://example.com/cover.jpg",
+                "preview_url": "https://example.com/preview.mp3",
+            },
+            "bucket": "like",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert finalize_response.status_code == 201
+    expected_score = finalize_response.json()["ranking"]["score"]
+    _mock_successful_deezer_search(monkeypatch)
+
+    response = client.get(
+        "/api/v1/search/songs?q=ocean",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    result = response.json()["results"][0]
+    assert result["my_bucket"] == "like"
+    assert result["my_score"] == expected_score

@@ -13,6 +13,9 @@ class SongSearchResult(BaseModel):
     album: str
     cover_url: str
     preview_url: str | None = None
+    # Viewer's existing rating, so search rows can show a rated state instead of a Rate action.
+    my_bucket: str | None = None
+    my_score: float | None = None
 
 
 class SongSearchResponse(BaseModel):
