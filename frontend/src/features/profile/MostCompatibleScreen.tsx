@@ -43,8 +43,7 @@ export default function MostCompatibleScreen({ navigation }: Props) {
                 <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
                     <Text style={styles.backText}>Back</Text>
                 </TouchableOpacity>
-                <Text style={styles.kicker}>TASTE COMPATIBILITY</Text>
-                <Text style={styles.title}>Most Compatible</Text>
+                <Text style={styles.title}>Taste Compatibility</Text>
             </View>
 
             {users === null && error === null && (
@@ -106,13 +105,6 @@ const styles = StyleSheet.create({
         color: colors.ink,
         fontSize: 14,
         letterSpacing: 0.4,
-    },
-    kicker: {
-        fontFamily: fonts.mono,
-        color: colors.inkSoft,
-        fontSize: 10,
-        letterSpacing: 1.8,
-        marginBottom: 6,
     },
     title: {
         fontFamily: fonts.serif,
