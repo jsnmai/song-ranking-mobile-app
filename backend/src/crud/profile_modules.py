@@ -49,6 +49,24 @@ def list_profile_recent_verdicts(
     return [VerdictRow(event=row[0], song=row[1]) for row in rows]
 
 
+def list_profile_bucket_rankings(
+    db: Session,
+    viewer_id: int,
+    owner_id: int,
+    bucket: str,
+) -> list[RankingRow]:
+    """Return visible bucket rankings for owner_id ordered by position."""
+    rows = db.execute(
+        select(Ranking, Song)
+        .join(Song, Song.id == Ranking.song_id)
+        .where(Ranking.user_id == owner_id)
+        .where(Ranking.bucket == bucket)
+        .where(visible_taste_owner_predicate(viewer_id, Ranking.user_id))
+        .order_by(Ranking.position.asc(), Ranking.id.asc())
+    ).all()
+    return [RankingRow(ranking=row[0], song=row[1]) for row in rows]
+
+
 def list_profile_rankings(
     db: Session,
     viewer_id: int,

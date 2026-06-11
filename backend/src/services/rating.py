@@ -482,6 +482,19 @@ def list_my_rankings(
     )
 
 
+def list_my_bucket_rankings(
+    db: Session,
+    user_id: int,
+    bucket: str,
+) -> RankingListResponse:
+    """Return all rankings for one user in a specific bucket, ordered by position."""
+    rows = list_user_bucket_rankings_with_songs(db, user_id=user_id, bucket=bucket)
+    return RankingListResponse(
+        rankings=[_ranking_with_song_response(row) for row in rows],
+        next_cursor=None,
+    )
+
+
 def get_my_ranking_anchors(
     db: Session,
     user_id: int,

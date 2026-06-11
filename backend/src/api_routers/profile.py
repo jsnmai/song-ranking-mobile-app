@@ -21,7 +21,7 @@ from src.pydantic_schemas.profile import (
     TasteProfileResponse,
 )
 from src.pydantic_schemas.profile_modules import RecentVerdictsResponse
-from src.pydantic_schemas.rating import RankingListResponse
+from src.pydantic_schemas.rating import RankingAnchorsResponse, RankingListResponse
 from src.pydantic_schemas.bookmarks import BookmarkListResponse
 from src.services.profile import (
     block_profile,
@@ -43,6 +43,7 @@ from src.services.profile import (
 )
 from src.services.profile_modules import (
     get_my_recent_verdicts,
+    get_profile_ranking_anchors_by_username,
     get_profile_rankings_by_username,
     get_profile_recent_verdicts,
 )
@@ -248,6 +249,25 @@ def profile_recent_verdicts(
 ) -> RecentVerdictsResponse:
     """Return a profile's recent verdicts, enforcing taste visibility rules."""
     return get_profile_recent_verdicts(db, viewer_id=current_user.id, username=username)
+
+
+@router.get(
+    "/{username}/rankings/anchors",
+    response_model=RankingAnchorsResponse,
+)
+@limiter.limit("300/minute")
+def profile_ranking_anchors(
+    request: Request,
+    username: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RankingAnchorsResponse:
+    """Return a profile's ranking calibration anchors, enforcing taste visibility rules."""
+    return get_profile_ranking_anchors_by_username(
+        db,
+        viewer_id=current_user.id,
+        username=username,
+    )
 
 
 @router.get(

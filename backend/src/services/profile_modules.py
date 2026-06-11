@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from src.crud import profile as crud_profile
 from src.crud import profile_modules as crud
 from src.pydantic_schemas.profile_modules import RecentVerdictItem, RecentVerdictsResponse
-from src.pydantic_schemas.rating import RankingListResponse, RankingResponse
+from src.pydantic_schemas.rating import RankingAnchorsResponse, RankingListResponse, RankingResponse
 from src.pydantic_schemas.song import SongResponse
 
 RANKING_PAGE_LIMIT = 30
@@ -72,6 +72,45 @@ def get_profile_rankings_by_username(
             for row in page
         ],
         next_cursor=next_cursor,
+    )
+
+
+def get_profile_ranking_anchors_by_username(
+    db: Session,
+    viewer_id: int,
+    username: str,
+) -> RankingAnchorsResponse:
+    """Return calibration anchors for a profile, enforcing taste visibility rules."""
+    profile = crud_profile.get_by_username(db, username)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Profile not found.")
+
+    like_rows = crud.list_profile_bucket_rankings(
+        db, viewer_id=viewer_id, owner_id=profile.user_id, bucket="like"
+    )
+    okay_rows = crud.list_profile_bucket_rankings(
+        db, viewer_id=viewer_id, owner_id=profile.user_id, bucket="alright"
+    )
+    dislike_rows = crud.list_profile_bucket_rankings(
+        db, viewer_id=viewer_id, owner_id=profile.user_id, bucket="dislike"
+    )
+
+    def _row(row) -> RankingResponse:
+        return RankingResponse(
+            id=row.ranking.id,
+            song_id=row.ranking.song_id,
+            bucket=row.ranking.bucket,
+            position=row.ranking.position,
+            score=row.ranking.score,
+            created_at=row.ranking.created_at,
+            updated_at=row.ranking.updated_at,
+            song=SongResponse.model_validate(row.song),
+        )
+
+    return RankingAnchorsResponse(
+        top_like=_row(like_rows[0]) if like_rows else None,
+        median_okay=_row(okay_rows[(len(okay_rows) - 1) // 2]) if okay_rows else None,
+        lowest_dislike=_row(dislike_rows[-1]) if dislike_rows else None,
     )
 
 
