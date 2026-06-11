@@ -26,9 +26,9 @@ import Svg, { Circle, Path } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
 import { AppStackParamList, TabParamList } from "../../navigation/types"
-import { colors, fonts } from "../../theme"
+import { bucketColor, colors, fonts } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
-import { getMostCompatible, searchProfiles } from "../profile/apiRequests"
+import { followUser, getMostCompatible, searchProfiles, unfollowUser } from "../profile/apiRequests"
 import { MostCompatibleItem, Profile } from "../profile/types"
 import { getMyRankingByDeezerId } from "../rankings/apiRequests"
 import { searchSongs } from "../search/apiRequests"
@@ -82,6 +82,40 @@ function MiniSearchIcon() {
 
 type RecentEntry = { query: string; mode: "songs" | "users" }
 
+// Deterministic avatar background per user, matching the follow-list palette.
+const AVATAR_COLORS = [colors.accent, colors.sky, colors.plum, colors.mint, colors.gold]
+
+function avatarColor(username: string): string {
+    let hash = 0
+    for (let i = 0; i < username.length; i++) {
+        hash = (hash * 31 + username.charCodeAt(i)) % 997
+    }
+    return AVATAR_COLORS[hash % AVATAR_COLORS.length]
+}
+
+// Render text with the matched query substring highlighted in accent.
+function HighlightedText({
+    text,
+    query,
+    style,
+}: {
+    text: string
+    query: string
+    style: object
+}) {
+    const i = query.length > 0 ? text.toLowerCase().indexOf(query.toLowerCase()) : -1
+    if (i < 0) {
+        return <Text style={style} numberOfLines={1}>{text}</Text>
+    }
+    return (
+        <Text style={style} numberOfLines={1}>
+            {text.slice(0, i)}
+            <Text style={{ color: colors.accent }}>{text.slice(i, i + query.length)}</Text>
+            {text.slice(i + query.length)}
+        </Text>
+    )
+}
+
 export default function DiscoverScreen() {
     const route = useRoute<DiscoverRouteProp>()
     const navigation = useNavigation<DiscoverNavigationProp>()
@@ -95,6 +129,7 @@ export default function DiscoverScreen() {
     const recentLoaded = useRef(false)
     const [songResults, setSongResults] = useState<SongSearchResult[]>([])
     const [profileResults, setProfileResults] = useState<Profile[]>([])
+    const [followBusy, setFollowBusy] = useState<Set<string>>(new Set())
     const [isLoading, setIsLoading] = useState(false)
     const [openingDeezerId, setOpeningDeezerId] = useState<number | null>(null)
     const [error, setError] = useState<string | null>(null)
@@ -209,6 +244,35 @@ export default function DiscoverScreen() {
             return
         }
         navigation.navigate("OtherProfile", { username: p.username })
+    }
+
+    const handleSearchRatePress = (song: SongSearchResult) => {
+        // Skip Song Detail and drop straight into the rating flow.
+        addToRecent(query, "songs")
+        navigation.navigate("BucketSelection", { song })
+    }
+
+    const handleToggleFollow = async (p: Profile) => {
+        if (!token || followBusy.has(p.username)) {
+            return
+        }
+        setFollowBusy((prev) => new Set(prev).add(p.username))
+        try {
+            const updated = p.is_following
+                ? await unfollowUser(p.username, token)
+                : await followUser(p.username, token)
+            setProfileResults((prev) =>
+                prev.map((row) => (row.username === updated.username ? { ...row, ...updated } : row))
+            )
+        } catch {
+            // Leave the row unchanged; the user can retry or follow from the profile.
+        } finally {
+            setFollowBusy((prev) => {
+                const next = new Set(prev)
+                next.delete(p.username)
+                return next
+            })
+        }
     }
 
     const handleDiscoverySongPress = (item: CoSignItem) => {
@@ -446,59 +510,107 @@ export default function DiscoverScreen() {
                             <Text style={styles.emptyText}>No users found.</Text>
                         )}
 
-                        {/* Song results */}
+                        {/* Song results — rated rows show your score, others a Rate pill */}
                         {!isLoading && error === null && searchMode === "songs" && songResults.length > 0 && (
                             <View style={styles.resultCard}>
-                                {songResults.map((song, i) => (
-                                    <TouchableOpacity
-                                        key={song.deezer_id}
-                                        style={[styles.resultRow, i > 0 && styles.resultRowBorder]}
-                                        onPress={() => handleSongPress(song)}
-                                        disabled={openingDeezerId !== null}
-                                        activeOpacity={0.75}
-                                    >
-                                        <View style={styles.cover}>
-                                            {song.cover_url ? (
-                                                <Image source={{ uri: song.cover_url }} style={styles.coverImg} />
-                                            ) : null}
-                                        </View>
-                                        <View style={styles.resultText}>
-                                            <Text style={styles.resultTitle} numberOfLines={1}>{song.title}</Text>
-                                            <Text style={styles.resultArtist} numberOfLines={1}>{song.artist}</Text>
-                                            <Text style={styles.resultAlbum} numberOfLines={1}>{song.album}</Text>
-                                        </View>
-                                        {openingDeezerId === song.deezer_id && (
-                                            <ActivityIndicator color={colors.accent} size="small" />
-                                        )}
-                                    </TouchableOpacity>
-                                ))}
+                                {songResults.map((song, i) => {
+                                    const rated = song.my_bucket != null && song.my_score != null
+                                    return (
+                                        <TouchableOpacity
+                                            key={song.deezer_id}
+                                            style={[styles.resultRow, i > 0 && styles.resultRowBorder]}
+                                            onPress={() => handleSongPress(song)}
+                                            disabled={openingDeezerId !== null}
+                                            activeOpacity={0.75}
+                                        >
+                                            <View style={styles.cover}>
+                                                {song.cover_url ? (
+                                                    <Image source={{ uri: song.cover_url }} style={styles.coverImg} />
+                                                ) : null}
+                                            </View>
+                                            <View style={styles.resultText}>
+                                                <HighlightedText text={song.title} query={trimmedQuery} style={styles.resultTitle} />
+                                                <HighlightedText text={song.artist} query={trimmedQuery} style={styles.resultArtist} />
+                                            </View>
+                                            {openingDeezerId === song.deezer_id ? (
+                                                <ActivityIndicator color={colors.accent} size="small" />
+                                            ) : rated ? (
+                                                <View style={styles.ratedCluster}>
+                                                    <View style={styles.ratedTagRow}>
+                                                        <View style={[styles.ratedDot, { backgroundColor: bucketColor(song.my_bucket!) }]} />
+                                                        <Text style={styles.ratedTagText}>RATED</Text>
+                                                    </View>
+                                                    <Text style={[styles.ratedScore, { color: bucketColor(song.my_bucket!) }]}>
+                                                        {song.my_score!.toFixed(1)}
+                                                    </Text>
+                                                </View>
+                                            ) : (
+                                                <TouchableOpacity
+                                                    style={styles.ratePill}
+                                                    onPress={() => handleSearchRatePress(song)}
+                                                    disabled={openingDeezerId !== null}
+                                                >
+                                                    <Text style={styles.ratePillLabel}>Rate</Text>
+                                                </TouchableOpacity>
+                                            )}
+                                        </TouchableOpacity>
+                                    )
+                                })}
                             </View>
                         )}
 
-                        {/* People results */}
+                        {/* People results — taste match + relationship note + follow action */}
                         {!isLoading && error === null && searchMode === "users" && profileResults.length > 0 && (
                             <View style={styles.resultCard}>
-                                {profileResults.map((p, i) => (
-                                    <TouchableOpacity
-                                        key={p.id}
-                                        style={[styles.resultRow, i > 0 && styles.resultRowBorder]}
-                                        onPress={() => handleProfilePress(p)}
-                                        activeOpacity={0.75}
-                                    >
-                                        <View style={[styles.userBust, { backgroundColor: colors.inkSoft }]}>
-                                            <Text style={styles.userBustLetter}>
-                                                {(p.display_name || p.username).charAt(0).toUpperCase()}
-                                            </Text>
-                                        </View>
-                                        <View style={styles.resultText}>
-                                            <Text style={styles.resultTitle} numberOfLines={1}>{p.display_name}</Text>
-                                            <Text style={styles.resultArtist} numberOfLines={1}>@{p.username}</Text>
-                                            <Text style={styles.resultAlbum} numberOfLines={1}>
-                                                {p.follower_count} followers · {p.following_count} following
-                                            </Text>
-                                        </View>
-                                    </TouchableOpacity>
-                                ))}
+                                {profileResults.map((p, i) => {
+                                    const mutual = p.is_following && p.is_followed_by
+                                    const note = mutual
+                                        ? "MUTUAL"
+                                        : p.is_followed_by
+                                            ? "FOLLOWS YOU"
+                                            : `${p.follower_count} FOLLOWERS`
+                                    const matchPct = p.similarity_score != null
+                                        ? Math.round(p.similarity_score * 100)
+                                        : null
+                                    const busy = followBusy.has(p.username)
+                                    return (
+                                        <TouchableOpacity
+                                            key={p.id}
+                                            style={[styles.resultRow, i > 0 && styles.resultRowBorder]}
+                                            onPress={() => handleProfilePress(p)}
+                                            activeOpacity={0.75}
+                                        >
+                                            <View style={[styles.userBust, { backgroundColor: avatarColor(p.username) }]}>
+                                                <Text style={styles.userBustLetter}>
+                                                    {(p.display_name || p.username).charAt(0).toUpperCase()}
+                                                </Text>
+                                            </View>
+                                            <View style={styles.resultText}>
+                                                <HighlightedText text={p.display_name} query={trimmedQuery} style={styles.resultTitle} />
+                                                <Text style={styles.matchNote} numberOfLines={1}>
+                                                    {matchPct !== null && (
+                                                        <Text style={styles.matchPct}>{matchPct}% MATCH · </Text>
+                                                    )}
+                                                    {note}
+                                                </Text>
+                                            </View>
+                                            {!p.is_own_profile && (
+                                                <TouchableOpacity
+                                                    style={[
+                                                        p.is_following ? styles.followingPill : styles.followPill,
+                                                        busy && { opacity: 0.5 },
+                                                    ]}
+                                                    onPress={() => handleToggleFollow(p)}
+                                                    disabled={busy}
+                                                >
+                                                    <Text style={p.is_following ? styles.followingPillLabel : styles.followPillLabel}>
+                                                        {p.is_following ? "Following" : "Follow"}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            )}
+                                        </TouchableOpacity>
+                                    )
+                                })}
                             </View>
                         )}
                     </>
@@ -954,24 +1066,98 @@ const styles = StyleSheet.create({
         minWidth: 0,
     },
     resultTitle: {
-        fontWeight: "700",
+        fontFamily: fonts.display,
         fontSize: 14,
         color: colors.ink,
-        lineHeight: 17,
-        marginBottom: 2,
+        lineHeight: 18,
     },
     resultArtist: {
-        fontFamily: fonts.mono,
-        color: colors.inkSoft,
-        fontSize: 10,
-        letterSpacing: 0.4,
-        marginBottom: 1,
-    },
-    resultAlbum: {
-        fontFamily: fonts.mono,
         color: colors.inkDim,
-        fontSize: 9,
-        letterSpacing: 0.2,
+        fontSize: 11.5,
+        marginTop: 1.5,
+    },
+    // Song rows: rated state cluster
+    ratedCluster: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 7,
+        flexShrink: 0,
+    },
+    ratedTagRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+    },
+    ratedDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+    },
+    ratedTagText: {
+        fontFamily: fonts.mono,
+        fontSize: 7,
+        letterSpacing: 0.7,
+        fontWeight: "700",
+        color: colors.inkDim,
+    },
+    ratedScore: {
+        fontFamily: fonts.display,
+        fontSize: 16,
+        letterSpacing: -0.3,
+    },
+    ratePill: {
+        backgroundColor: colors.ink,
+        borderRadius: 999,
+        paddingVertical: 8,
+        paddingHorizontal: 15,
+        flexShrink: 0,
+    },
+    ratePillLabel: {
+        fontFamily: fonts.display,
+        fontSize: 12,
+        color: "#fff",
+    },
+    // People rows: match note + follow actions
+    matchNote: {
+        fontFamily: fonts.mono,
+        fontSize: 8,
+        letterSpacing: 0.6,
+        color: colors.inkDim,
+        marginTop: 3,
+    },
+    matchPct: {
+        color: colors.mint,
+        fontWeight: "700",
+    },
+    followPill: {
+        backgroundColor: colors.accent,
+        borderRadius: 999,
+        paddingVertical: 8,
+        paddingHorizontal: 15,
+        flexShrink: 0,
+        shadowColor: colors.ink,
+        shadowOpacity: 1,
+        shadowRadius: 0,
+        shadowOffset: { width: 2, height: 2 },
+    },
+    followPillLabel: {
+        fontFamily: fonts.display,
+        fontSize: 11.5,
+        color: "#fff",
+    },
+    followingPill: {
+        backgroundColor: colors.bg,
+        borderWidth: 1.5,
+        borderColor: colors.line,
+        borderRadius: 999,
+        paddingVertical: 7,
+        paddingHorizontal: 14,
+        flexShrink: 0,
+    },
+    followingPillLabel: {
+        fontFamily: fonts.display,
+        fontSize: 11.5,
+        color: colors.inkSoft,
     },
     // ── Discovery sections ─────────────────────────────────────────────
     discoverSectionRow: {

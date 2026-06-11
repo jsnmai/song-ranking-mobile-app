@@ -9,6 +9,8 @@ const mockNavigate = jest.fn()
 const mockSetParams = jest.fn()
 const mockSearchSongs = jest.fn()
 const mockSearchProfiles = jest.fn()
+const mockFollowUser = jest.fn()
+const mockUnfollowUser = jest.fn()
 const mockGetMyRankingByDeezerId = jest.fn()
 const mockListCoSigns = jest.fn()
 const mockGetMostCompatible = jest.fn()
@@ -52,6 +54,8 @@ jest.mock("../../search/apiRequests", () => ({
 jest.mock("../../profile/apiRequests", () => ({
     searchProfiles: (...args: unknown[]) => mockSearchProfiles(...args),
     getMostCompatible: (...args: unknown[]) => mockGetMostCompatible(...args),
+    followUser: (...args: unknown[]) => mockFollowUser(...args),
+    unfollowUser: (...args: unknown[]) => mockUnfollowUser(...args),
 }))
 
 jest.mock("../../rankings/apiRequests", () => ({
@@ -235,5 +239,54 @@ describe("DiscoverScreen", () => {
 
         expect(mockSearchProfiles).toHaveBeenCalledWith("jason", "test-token")
         expect(mockNavigate).toHaveBeenCalledWith("OtherProfile", { username: "jasonmai" })
+    })
+
+    it("shows a rated state for already-rated song results and a Rate pill otherwise", async () => {
+        mockSearchSongs.mockResolvedValue({
+            results: [
+                { ...song, my_bucket: "like", my_score: 9.4 },
+                { ...song, deezer_id: 456, title: "Pink + White", my_bucket: null, my_score: null },
+            ],
+        })
+        render(<DiscoverScreen />)
+
+        fireEvent(screen.getByPlaceholderText("Search songs or people…"), "focus")
+        fireEvent.changeText(screen.getByPlaceholderText("Search songs or people…"), "nights")
+        act(() => {
+            jest.advanceTimersByTime(350)
+        })
+
+        expect(await screen.findByText("RATED")).toBeTruthy()
+        expect(screen.getByText("9.4")).toBeTruthy()
+
+        // The Rate pill skips Song Detail and goes straight into the rating flow.
+        fireEvent.press(screen.getByText("Rate"))
+        expect(mockNavigate).toHaveBeenCalledWith("BucketSelection", {
+            song: { ...song, deezer_id: 456, title: "Pink + White", my_bucket: null, my_score: null },
+        })
+    })
+
+    it("shows taste match and follows-you note on people results and follows from the row", async () => {
+        mockSearchProfiles.mockResolvedValue({
+            results: [{ ...profile, similarity_score: 0.87, is_followed_by: true }],
+        })
+        mockFollowUser.mockResolvedValue({ ...profile, is_following: true, is_followed_by: true })
+        render(<DiscoverScreen />)
+
+        fireEvent(screen.getByPlaceholderText("Search songs or people…"), "focus")
+        fireEvent.press(screen.getByText("People"))
+        fireEvent.changeText(screen.getByPlaceholderText("Search songs or people…"), "jason")
+        act(() => {
+            jest.advanceTimersByTime(350)
+        })
+
+        expect(await screen.findByText(/87% MATCH/)).toBeTruthy()
+        expect(screen.getByText(/FOLLOWS YOU/)).toBeTruthy()
+
+        fireEvent.press(screen.getByText("Follow"))
+        await waitFor(() => {
+            expect(mockFollowUser).toHaveBeenCalledWith("jasonmai", "test-token")
+            expect(screen.getByText("Following")).toBeTruthy()
+        })
     })
 })
