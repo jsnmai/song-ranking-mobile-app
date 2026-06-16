@@ -603,3 +603,111 @@ def test_feed_rate_limit_enforced(client: TestClient):
     ]
 
     assert responses[-1].status_code == 429
+
+
+# ── Shared social-access visibility (M1 refactor edge coverage) ──────────────────
+
+
+def _block(
+    client: TestClient,
+    token: str,
+    username: str,
+) -> None:
+    """Block a user by username."""
+    response = client.post(
+        f"/api/v1/profile/{username}/block",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+
+
+def _set_visibility(
+    db_session: Session,
+    username: str,
+    visibility: str,
+) -> None:
+    """Set a user's taste visibility directly."""
+    profile = db_session.execute(
+        select(Profile)
+        .where(Profile.username == username)
+    ).scalar_one()
+    profile.visibility = visibility
+    db_session.commit()
+
+
+def _feed_titles(
+    client: TestClient,
+    token: str,
+) -> list[str]:
+    """Return the song titles in the viewer's feed."""
+    response = client.get(
+        "/api/v1/feed",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    return [event["song"]["title"] for event in response.json()["events"]]
+
+
+def test_feed_excludes_user_blocked_by_viewer(client: TestClient):
+    """A followed user the viewer has blocked is excluded from the feed."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    actor = _register(client, "actor@example.com", "actor")
+    _follow(client, viewer, "actor")
+    _finalize_rating(client, actor, 301, "Blocked Song")
+
+    _block(client, viewer, "actor")
+
+    assert _feed_titles(client, viewer) == []
+
+
+def test_feed_excludes_user_who_blocked_viewer(client: TestClient):
+    """A followed user who has blocked the viewer is excluded from the feed."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    actor = _register(client, "actor@example.com", "actor")
+    _follow(client, viewer, "actor")
+    _finalize_rating(client, actor, 302, "Blocker Song")
+
+    _block(client, actor, "viewer")
+
+    assert _feed_titles(client, viewer) == []
+
+
+def test_feed_excludes_deleted_followed_user(client: TestClient):
+    """A followed user's activity disappears from the feed once they delete their account."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    actor = _register(client, "actor@example.com", "actor")
+    _follow(client, viewer, "actor")
+    _finalize_rating(client, actor, 303, "Doomed Song")
+    assert _feed_titles(client, viewer) == ["Doomed Song"]
+
+    response = client.request(
+        "DELETE",
+        "/api/v1/auth/me",
+        json={"confirmation": "DELETE"},
+        headers={"Authorization": f"Bearer {actor}"},
+    )
+    assert response.status_code == 204
+
+    assert _feed_titles(client, viewer) == []
+
+
+def test_feed_friends_only_requires_mutual_follow(
+    client: TestClient,
+    db_session: Session,
+):
+    """Friends-only activity is visible only when the follow is mutual."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    mutual = _register(client, "mutual@example.com", "mutual")
+    oneway = _register(client, "oneway@example.com", "oneway")
+    # Viewer follows both; only `mutual` follows back.
+    _follow(client, viewer, "mutual")
+    _follow(client, mutual, "viewer")
+    _follow(client, viewer, "oneway")
+    _set_visibility(db_session, "mutual", "friends_only")
+    _set_visibility(db_session, "oneway", "friends_only")
+    _finalize_rating(client, mutual, 304, "Mutual Friend Song")
+    _finalize_rating(client, oneway, 305, "One Way Song")
+
+    titles = _feed_titles(client, viewer)
+    assert "Mutual Friend Song" in titles   # friends_only + mutual follow → visible
+    assert "One Way Song" not in titles      # friends_only + one-way follow → hidden

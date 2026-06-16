@@ -1,13 +1,14 @@
 # Database access layer for the social feed.
-# Phase 9b uses fan-out-on-read: query rating_events from followed users.
+# Fan-out-on-read: query rating_events from the viewer and the visible users they follow.
+# Visibility/block/deleted-user enforcement is delegated to the shared social-access predicate
+# so the feed shares one privacy implementation with Profile, Discover, and the circle modules.
 from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import and_, or_, select
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session
 
-from src.sqlalchemy_tables.block import Block
-from src.sqlalchemy_tables.follow import Follow
+from src.crud.social_access import followed_visible_taste_owner_predicate
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.rating_event import RatingEvent
 from src.sqlalchemy_tables.song import Song
@@ -29,10 +30,14 @@ def list_feed_events(
     cursor_created_at: datetime | None = None,
     cursor_id: int | None = None,
 ) -> list[FeedEventRow]:
-    """Return feed events from the current user and users they follow."""
-    mutual_follow = aliased(Follow)
-    viewer_blocks_actor = aliased(Block)
-    actor_blocks_viewer = aliased(Block)
+    """Return feed events from the current user and the visible users they follow.
+
+    The followed-user branch delegates taste visibility, mutual-follow access for
+    friends-only profiles, blocks in both directions, and deleted-user exclusion to the
+    shared `followed_visible_taste_owner_predicate`, so the feed no longer reimplements
+    that privacy logic inline. Own events are always shown (a private viewer still sees
+    their own activity).
+    """
     latest_event_ids = (
         select(RatingEvent.id)
         .distinct(
@@ -57,34 +62,6 @@ def list_feed_events(
             latest_event_ids,
             latest_event_ids.c.id == RatingEvent.id,
         )
-        .outerjoin(
-            Follow,
-            and_(
-                Follow.following_id == RatingEvent.user_id,
-                Follow.follower_id == user_id,
-            ),
-        )
-        .outerjoin(
-            mutual_follow,
-            and_(
-                mutual_follow.follower_id == RatingEvent.user_id,
-                mutual_follow.following_id == user_id,
-            ),
-        )
-        .outerjoin(
-            viewer_blocks_actor,
-            and_(
-                viewer_blocks_actor.blocker_id == user_id,
-                viewer_blocks_actor.blocked_id == RatingEvent.user_id,
-            ),
-        )
-        .outerjoin(
-            actor_blocks_viewer,
-            and_(
-                actor_blocks_viewer.blocker_id == RatingEvent.user_id,
-                actor_blocks_viewer.blocked_id == user_id,
-            ),
-        )
         .join(
             Profile,
             Profile.user_id == RatingEvent.user_id,
@@ -97,18 +74,11 @@ def list_feed_events(
             or_(
                 # Own events are always visible.
                 RatingEvent.user_id == user_id,
-                # Followed-user events are subject to visibility and block checks.
-                and_(
-                    Follow.id.is_not(None),
-                    or_(
-                        Profile.visibility == "public",
-                        and_(
-                            Profile.visibility == "friends_only",
-                            mutual_follow.id.is_not(None),
-                        ),
-                    ),
-                    viewer_blocks_actor.id.is_(None),
-                    actor_blocks_viewer.id.is_(None),
+                # Followed-user events: visibility, friends-only mutual access, blocks (both
+                # directions), and deleted-user exclusion are all enforced by the shared predicate.
+                followed_visible_taste_owner_predicate(
+                    user_id,
+                    RatingEvent.user_id,
                 ),
             )
         )
