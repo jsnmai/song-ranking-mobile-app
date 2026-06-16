@@ -14,6 +14,8 @@ const mockUnfollowUser = jest.fn()
 const mockGetMyRankingByDeezerId = jest.fn()
 const mockListCoSigns = jest.fn()
 const mockGetMostCompatible = jest.fn()
+const mockGetCircleTrending = jest.fn()
+const mockGetCircleMostRated = jest.fn()
 const mockBookmarkSong = jest.fn()
 const mockRemoveBookmark = jest.fn()
 const mockCreatePlayer = jest.fn()
@@ -70,6 +72,8 @@ jest.mock("../../rankings/apiRequests", () => ({
 
 jest.mock("../apiRequests", () => ({
     listCoSigns: (...args: unknown[]) => mockListCoSigns(...args),
+    getCircleTrending: (...args: unknown[]) => mockGetCircleTrending(...args),
+    getCircleMostRated: (...args: unknown[]) => mockGetCircleMostRated(...args),
 }))
 
 jest.mock("../../bookmarks/apiRequests", () => ({
@@ -144,6 +148,24 @@ const coSignItem = {
     is_bookmarked: false,
 }
 
+const trendingItem = {
+    song: ranking.song,
+    recent_circle_rating_count: 5,
+    average_circle_score: 8.4,
+    contributors: [],
+    viewer_rating: { score: 9.0, bucket: "like" },
+    latest_circle_rating_at: "2026-01-02T00:00:00Z",
+}
+
+const mostRatedItem = {
+    song: ranking.song,
+    circle_rating_count: 12,
+    average_circle_score: 7.8,
+    contributors: [],
+    viewer_rating: null,
+    latest_circle_rating_at: "2026-01-02T00:00:00Z",
+}
+
 beforeEach(() => {
     jest.useFakeTimers()
     jest.resetAllMocks()
@@ -153,6 +175,8 @@ beforeEach(() => {
     mockSearchProfiles.mockResolvedValue({ results: [profile] })
     mockListCoSigns.mockResolvedValue({ items: [] })
     mockGetMostCompatible.mockResolvedValue({ users: [] })
+    mockGetCircleTrending.mockResolvedValue({ items: [], window_days: 7 })
+    mockGetCircleMostRated.mockResolvedValue({ items: [] })
     mockBookmarkSong.mockResolvedValue({ id: 9 })
     mockRemoveBookmark.mockResolvedValue({ song_id: 42, removed: true })
     mockCreatePlayer.mockReturnValue({
@@ -227,6 +251,36 @@ describe("DiscoverScreen", () => {
             expect(mockGetMyRankingByDeezerId).toHaveBeenCalledWith(123, "test-token")
             expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
         })
+    })
+
+    it("renders the live Trending card from the top circle song and opens it", async () => {
+        mockGetCircleTrending.mockResolvedValue({ items: [trendingItem], window_days: 7 })
+        render(<DiscoverScreen />)
+
+        expect(await screen.findByText("THIS WEEK")).toBeTruthy()
+        // Most-rated had no items, so its locked state remains.
+        expect(screen.getByText("TOTAL RATINGS")).toBeTruthy()
+
+        fireEvent.press(screen.getByLabelText("Open Nights"))
+        expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { song: ranking.song })
+    })
+
+    it("renders the live Most-rated card with the circle rating count, song, and artist", async () => {
+        mockGetCircleMostRated.mockResolvedValue({ items: [mostRatedItem] })
+        render(<DiscoverScreen />)
+
+        expect(await screen.findByText("TOTAL RATINGS")).toBeTruthy()
+        expect(screen.getByText("12")).toBeTruthy()
+        expect(screen.getByText("FRANK OCEAN")).toBeTruthy()
+        // Trending had no items, so its locked state remains.
+        expect(screen.getByText("Locked for now")).toBeTruthy()
+    })
+
+    it("keeps both circle cards locked when there is no circle data", async () => {
+        render(<DiscoverScreen />)
+
+        expect(await screen.findByText("Locked for now")).toBeTruthy()
+        expect(screen.getByText("TOTAL RATINGS")).toBeTruthy()
     })
 
     it("switches to user search and opens another user's profile", async () => {

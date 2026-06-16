@@ -33,9 +33,9 @@ import { MostCompatibleItem, Profile } from "../profile/types"
 import { getMyRankingByDeezerId } from "../rankings/apiRequests"
 import { searchSongs } from "../search/apiRequests"
 import { SongSearchResult } from "../search/types"
-import { listCoSigns } from "./apiRequests"
+import { getCircleMostRated, getCircleTrending, listCoSigns } from "./apiRequests"
 import SocialDiscoveryCard from "./SocialDiscoveryCard"
-import { CoSignItem } from "./types"
+import { CircleMostRatedItem, CircleTrendingItem, CoSignItem } from "./types"
 
 const RECENT_KEY = "discover_recent_searches"
 
@@ -133,6 +133,8 @@ export default function DiscoverScreen() {
     const [isDiscoveryLoading, setIsDiscoveryLoading] = useState(false)
     const [discoveryError, setDiscoveryError] = useState<string | null>(null)
     const [topCompatUser, setTopCompatUser] = useState<MostCompatibleItem | null>(null)
+    const [trending, setTrending] = useState<CircleTrendingItem[]>([])
+    const [mostRated, setMostRated] = useState<CircleMostRatedItem[]>([])
 
     // Load persisted recent searches on mount
     useEffect(() => {
@@ -371,11 +373,15 @@ export default function DiscoverScreen() {
             Promise.all([
                 listCoSigns(token),
                 getMostCompatible(token),
+                getCircleTrending(token),
+                getCircleMostRated(token),
             ])
-                .then(([coSignResponse, compatResponse]) => {
+                .then(([coSignResponse, compatResponse, trendingResponse, mostRatedResponse]) => {
                     if (!isCurrentRequest) return
                     setCoSigns(coSignResponse.items)
                     setTopCompatUser(compatResponse.users[0] ?? null)
+                    setTrending(trendingResponse.items)
+                    setMostRated(mostRatedResponse.items)
                 })
                 .catch((err) => {
                     if (isCurrentRequest) {
@@ -670,26 +676,52 @@ export default function DiscoverScreen() {
                                     </View>
                                 )}
 
-                                {/* Trending in your circle — locked until trending API ships; show friend progress */}
-                                <View style={styles.trendingCard}>
-                                    <Text style={styles.trendingKicker}>TRENDING IN YOUR CIRCLE</Text>
-                                    <View style={styles.trendingRow}>
-                                        <View style={styles.trendingLockCircle}>
-                                            <Svg width={17} height={17} viewBox="0 0 24 24" fill="none">
-                                                <Path d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4"
-                                                    stroke="rgba(17,19,28,0.5)" strokeWidth={2}
-                                                    strokeLinecap="round" strokeLinejoin="round" />
-                                            </Svg>
+                                {/* Trending in your circle — live (top song this week) once the circle backend returns items, else locked */}
+                                {trending.length > 0 ? (
+                                    <TouchableOpacity
+                                        style={styles.trendingCard}
+                                        activeOpacity={0.85}
+                                        onPress={() => navigation.navigate("SongDetail", { song: trending[0].song })}
+                                        accessibilityLabel={`Open ${trending[0].song.title}`}
+                                    >
+                                        <Text style={styles.trendingKicker}>TRENDING IN YOUR CIRCLE</Text>
+                                        <View style={styles.trendingRow}>
+                                            <View style={styles.circleCoverFrame}>
+                                                {trending[0].song.cover_url
+                                                    ? <Image source={{ uri: trending[0].song.cover_url }} style={styles.circleCover} />
+                                                    : null}
+                                            </View>
+                                            <View style={styles.trendingTextBlock}>
+                                                <Text style={styles.trendingTitle} numberOfLines={1}>{trending[0].song.title}</Text>
+                                                <Text style={styles.trendingBody} numberOfLines={1}>{trending[0].song.artist.toUpperCase()}</Text>
+                                            </View>
+                                            <View style={styles.trendingStatBlock}>
+                                                <Text style={styles.trendingStatNum}>{trending[0].recent_circle_rating_count}</Text>
+                                                <Text style={styles.trendingStatLabel}>THIS WEEK</Text>
+                                            </View>
                                         </View>
-                                        <View style={styles.trendingTextBlock}>
-                                            <Text style={styles.trendingTitle}>Locked for now</Text>
-                                            <Text style={styles.trendingBody}>
-                                                Follow friends to see what's hot in your circle.
-                                            </Text>
+                                    </TouchableOpacity>
+                                ) : (
+                                    <View style={styles.trendingCard}>
+                                        <Text style={styles.trendingKicker}>TRENDING IN YOUR CIRCLE</Text>
+                                        <View style={styles.trendingRow}>
+                                            <View style={styles.trendingLockCircle}>
+                                                <Svg width={17} height={17} viewBox="0 0 24 24" fill="none">
+                                                    <Path d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4"
+                                                        stroke="rgba(17,19,28,0.5)" strokeWidth={2}
+                                                        strokeLinecap="round" strokeLinejoin="round" />
+                                                </Svg>
+                                            </View>
+                                            <View style={styles.trendingTextBlock}>
+                                                <Text style={styles.trendingTitle}>Locked for now</Text>
+                                                <Text style={styles.trendingBody}>
+                                                    Follow friends to see what's hot in your circle.
+                                                </Text>
+                                            </View>
+                                            <Text style={styles.trendingCounter}>{Math.min(followingCount, 3)}/3</Text>
                                         </View>
-                                        <Text style={styles.trendingCounter}>{Math.min(followingCount, 3)}/3</Text>
                                     </View>
-                                </View>
+                                )}
 
                                 {/* 2-col: Compatibility (live or locked) + Most-Rated (locked) */}
                                 <View style={styles.twoColRow}>
@@ -740,28 +772,58 @@ export default function DiscoverScreen() {
                                         )}
                                     </View>
 
-                                    <View style={[styles.twoColCard, styles.circleCard]}>
-                                        <View style={styles.circlePill}>
-                                            <Text style={styles.circlePillText}>Most-rated · circle</Text>
-                                        </View>
-                                        <View style={styles.circleLockRow}>
-                                            <View style={styles.circleLockSquare}>
-                                                <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                                                    <Path d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4"
-                                                        stroke={colors.gold} strokeWidth={2}
-                                                        strokeLinecap="round" strokeLinejoin="round" />
-                                                </Svg>
+                                    {mostRated.length > 0 ? (
+                                        <TouchableOpacity
+                                            style={[styles.twoColCard, styles.circleCard]}
+                                            activeOpacity={0.85}
+                                            onPress={() => navigation.navigate("SongDetail", { song: mostRated[0].song })}
+                                            accessibilityLabel={`Open ${mostRated[0].song.title}`}
+                                        >
+                                            <View style={styles.circlePill}>
+                                                <Text style={styles.circlePillText}>Most-rated · circle</Text>
                                             </View>
-                                            <View style={styles.circleBars}>
-                                                <View style={[styles.circleBar, { width: "72%" }]} />
-                                                <View style={[styles.circleBar, { width: "44%" }]} />
+                                            <View style={styles.circleLiveRow}>
+                                                <View style={styles.circleCoverGlow}>
+                                                    <View style={styles.circleCoverCircle}>
+                                                        {mostRated[0].song.cover_url
+                                                            ? <Image source={{ uri: mostRated[0].song.cover_url }} style={styles.circleCover} />
+                                                            : null}
+                                                    </View>
+                                                </View>
+                                                <View style={styles.circleSongText}>
+                                                    <Text style={styles.circleSongTitle} numberOfLines={1}>{mostRated[0].song.title}</Text>
+                                                    <Text style={styles.circleSongArtist} numberOfLines={1}>{mostRated[0].song.artist.toUpperCase()}</Text>
+                                                </View>
+                                            </View>
+                                            <View style={[styles.circleCountRow, styles.circleCountRowTop]}>
+                                                <Text style={styles.circleCountNum}>{mostRated[0].circle_rating_count}</Text>
+                                                <Text style={styles.circleCountLabel}>TOTAL RATINGS</Text>
+                                            </View>
+                                        </TouchableOpacity>
+                                    ) : (
+                                        <View style={[styles.twoColCard, styles.circleCard]}>
+                                            <View style={styles.circlePill}>
+                                                <Text style={styles.circlePillText}>Most-rated · circle</Text>
+                                            </View>
+                                            <View style={styles.circleLockRow}>
+                                                <View style={styles.circleLockSquare}>
+                                                    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                                                        <Path d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4"
+                                                            stroke={colors.gold} strokeWidth={2}
+                                                            strokeLinecap="round" strokeLinejoin="round" />
+                                                    </Svg>
+                                                </View>
+                                                <View style={styles.circleBars}>
+                                                    <View style={[styles.circleBar, { width: "72%" }]} />
+                                                    <View style={[styles.circleBar, { width: "44%" }]} />
+                                                </View>
+                                            </View>
+                                            <View style={styles.circleCountRow}>
+                                                <Text style={styles.circleCountNum}>—</Text>
+                                                <Text style={styles.circleCountLabel}>TOTAL RATINGS</Text>
                                             </View>
                                         </View>
-                                        <View style={styles.circleCountRow}>
-                                            <Text style={styles.circleCountNum}>—</Text>
-                                            <Text style={styles.circleCountLabel}>TOTAL RATINGS</Text>
-                                        </View>
-                                    </View>
+                                    )}
                                 </View>
 
                                 {/* Curated Lists — locked with rated count progress */}
@@ -1290,7 +1352,15 @@ const styles = StyleSheet.create({
     twoColCard: {
         flex: 1,
         borderRadius: 16,
-        padding: 11,
+        paddingHorizontal: 11,
+        paddingTop: 11,
+        // Slightly tighter bottom padding offsets the line-box space under the
+        // big stat number, so the card doesn't read bottom-heavy.
+        paddingBottom: 9,
+        // Header pill hugs the top, headline stat hugs the bottom — leftover
+        // height (the cards stretch to equal heights) spreads between sections
+        // instead of pooling under the last row.
+        justifyContent: "space-between",
     },
     compatCard: {
         backgroundColor: colors.teal,
@@ -1445,6 +1515,10 @@ const styles = StyleSheet.create({
         alignItems: "baseline",
         gap: 6,
     },
+    // The live count row follows the song row, so it needs its own top gap.
+    circleCountRowTop: {
+        marginTop: 9,
+    },
     circleCountNum: {
         fontFamily: fonts.display,
         fontSize: 26,
@@ -1456,6 +1530,79 @@ const styles = StyleSheet.create({
         fontSize: 8,
         color: colors.cdim,
         letterSpacing: 1.4,
+    },
+    // --- Live circle cards (Trending / Most-rated): reuse the locked containers above ---
+    circleCoverFrame: {
+        width: 40,
+        height: 40,
+        borderRadius: 8,
+        backgroundColor: "rgba(0,0,0,0.14)",
+        overflow: "hidden",
+        flexShrink: 0,
+    },
+    circleCover: {
+        width: "100%",
+        height: "100%",
+    },
+    // Most-rated cover is circular with a soft gold glow (design: orbCover). The
+    // glow lives on an outer view because the inner clip (overflow: hidden) would
+    // otherwise crop the shadow.
+    circleCoverGlow: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        shadowColor: colors.gold,
+        shadowOpacity: 0.4,
+        shadowRadius: 5,
+        shadowOffset: { width: 0, height: 0 },
+        flexShrink: 0,
+    },
+    circleCoverCircle: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        overflow: "hidden",
+        backgroundColor: "rgba(0,0,0,0.14)",
+    },
+    trendingStatBlock: {
+        alignItems: "flex-end",
+        flexShrink: 0,
+    },
+    trendingStatNum: {
+        fontFamily: fonts.display,
+        fontSize: 22,
+        color: colors.ink,
+        lineHeight: 22,
+    },
+    trendingStatLabel: {
+        fontFamily: fonts.mono,
+        fontSize: 7.5,
+        letterSpacing: 1.2,
+        color: "rgba(17,19,28,0.5)",
+        fontWeight: "700",
+        marginTop: 2,
+    },
+    circleLiveRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+    },
+    circleSongText: {
+        flex: 1,
+        minWidth: 0,
+    },
+    circleSongTitle: {
+        fontFamily: fonts.display,
+        fontSize: 13,
+        color: "#fff",
+        lineHeight: 14,
+    },
+    circleSongArtist: {
+        fontFamily: fonts.mono,
+        fontSize: 7,
+        color: colors.cdim,
+        letterSpacing: 0.5,
+        marginTop: 2,
     },
     curatedCard: {
         backgroundColor: colors.paper,

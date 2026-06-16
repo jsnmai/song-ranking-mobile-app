@@ -339,7 +339,7 @@ def seed_songs(
             artist=str(entry["artist"]),
             artist_deezer_id=900_000 + (deezer_id % 100),
             album=str(entry["album"]),
-            cover_url=f"https://example.com/demo-cover-{deezer_id}.jpg",
+            cover_url=f"https://picsum.photos/seed/listn{deezer_id}/300/300",
             preview_url=(
                 None
                 if entry["preview_url"] is None
