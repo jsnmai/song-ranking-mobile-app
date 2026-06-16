@@ -12,6 +12,7 @@ from slowapi.errors import RateLimitExceeded
 from src.api_routers import (
     auth,
     bookmarks,
+    circle_aggregates,
     comparison,
     comparison_history,
     events,
@@ -108,6 +109,10 @@ app.include_router(
 )
 app.include_router(
     social_discovery.router,
+    prefix="/api/v1",
+)
+app.include_router(
+    circle_aggregates.router,
     prefix="/api/v1",
 )
 app.include_router(
