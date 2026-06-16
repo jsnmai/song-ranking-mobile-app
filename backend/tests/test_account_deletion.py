@@ -6,15 +6,17 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from src.sqlalchemy_tables.auxstrology_snapshot import AuxstrologySnapshot
 from src.sqlalchemy_tables.block import Block
+from src.sqlalchemy_tables.bookmark import Bookmark
 from src.sqlalchemy_tables.comparison import Comparison
 from src.sqlalchemy_tables.comparison_session import ComparisonSession
 from src.sqlalchemy_tables.follow import Follow
+from src.sqlalchemy_tables.interaction_event import InteractionEvent
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
 from src.sqlalchemy_tables.report import Report
-from src.sqlalchemy_tables.bookmark import Bookmark
 from src.sqlalchemy_tables.song import Song
 from src.sqlalchemy_tables.user import User
 from src.sqlalchemy_tables.user_similarity_snapshot import UserSimilaritySnapshot
@@ -333,3 +335,119 @@ def test_delete_me_requires_confirmation_body(
         .select_from(User)
         .where(User.id == user_id)
     ).scalar_one() == 1
+
+
+def test_account_deletion_leaves_no_user_owned_orphans(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    """Exhaustive regression guard: deletion clears every user-owned/taste/privacy table.
+
+    Populates the deleting user across all tables that reference users.id, deletes the
+    account, and asserts the intended deletion semantics: explicit-delete + CASCADE tables
+    retain no rows referencing the user, while SET NULL tables (reports, and interaction
+    events *about* the user) preserve the row but null the deleted-user reference. When a new
+    user-owned table is added (e.g. likes), add a row + assertion here.
+    """
+    # Registration order fixes user-id ordering so the canonical (user_a_id < user_b_id)
+    # similarity rows can place the deleted user as both user_a and user_b.
+    _early_token, early_id = _register(client, "early@example.com", "earlyuser")
+    deleting_token, deleting_id = _register(client, "deleting@example.com", "deletinguser")
+    _other_token, other_id = _register(client, "bystander@example.com", "bystander")
+    assert early_id < deleting_id < other_id
+
+    song_a = Song(
+        deezer_id=950001, isrc=None, title="Song A", artist="A", artist_deezer_id=1,
+        album="Al", cover_url="https://example.com/a.jpg", preview_url=None, genre_deezer=None,
+    )
+    song_b = Song(
+        deezer_id=950002, isrc=None, title="Song B", artist="B", artist_deezer_id=2,
+        album="Al", cover_url="https://example.com/b.jpg", preview_url=None, genre_deezer=None,
+    )
+    db_session.add_all([song_a, song_b])
+    db_session.flush()
+
+    db_session.add_all([
+        Ranking(user_id=deleting_id, song_id=song_a.id, bucket="like", position=1, score=9.0),
+        RatingEvent(user_id=deleting_id, song_id=song_a.id, event_type="rated", new_bucket="like", new_score=9.0),
+        Bookmark(user_id=deleting_id, song_id=song_b.id, source="song_detail"),
+        Follow(follower_id=deleting_id, following_id=other_id),
+        Follow(follower_id=other_id, following_id=deleting_id),
+        Block(blocker_id=deleting_id, blocked_id=other_id),
+        Block(blocker_id=other_id, blocked_id=deleting_id),
+        Comparison(
+            session_uuid=uuid.uuid4(), user_id=deleting_id, song_a_id=song_a.id,
+            song_b_id=song_b.id, winner_id=song_a.id, finalized_at=datetime.now(timezone.utc),
+        ),
+        ComparisonSession(
+            session_uuid=uuid.uuid4(), user_id=deleting_id,
+            song_payload={"deezer_id": 950003, "title": "Temp"}, bucket="like",
+            low_index=0, high_index=0, decisions=[],
+        ),
+        AuxstrologySnapshot(user_id=deleting_id, algorithm_version="v1_cosine", status="active", payload={}),
+        # Canonical similarity rows place the deleted user as both user_a and user_b.
+        UserSimilaritySnapshot(user_a_id=early_id, user_b_id=deleting_id, similarity_score=0.7, shared_song_count=3),
+        UserSimilaritySnapshot(user_a_id=deleting_id, user_b_id=other_id, similarity_score=0.8, shared_song_count=5),
+        # Interaction events: authored BY the deleted user (CASCADE) and ABOUT them (SET NULL).
+        InteractionEvent(user_id=deleting_id, event_type="preview_started"),
+        InteractionEvent(user_id=other_id, subject_user_id=deleting_id, event_type="preview_started"),
+        # Reports: deleted user as reporter, as reported, and as reviewer — all SET NULL, rows preserved.
+        Report(reporter_user_id=deleting_id, reported_user_id=other_id, target_type="profile", reason="other"),
+        Report(reporter_user_id=other_id, reported_user_id=deleting_id, target_type="profile", reason="spam"),
+        Report(
+            reporter_user_id=early_id, reported_user_id=other_id, reviewed_by=deleting_id,
+            status="reviewed", reviewed_at=datetime.now(timezone.utc),
+            target_type="profile", reason="harassment",
+        ),
+    ])
+    db_session.commit()
+
+    # (1) Deletion succeeds.
+    response = client.request(
+        "DELETE",
+        "/api/v1/auth/me",
+        json={"confirmation": "DELETE"},
+        headers={"Authorization": f"Bearer {deleting_token}"},
+    )
+    assert response.status_code == 204
+
+    db_session.expire_all()
+
+    def _count(model, *conditions) -> int:
+        stmt = select(func.count()).select_from(model)
+        for condition in conditions:
+            stmt = stmt.where(condition)
+        return db_session.scalar(stmt)
+
+    # (2) User + profile gone.
+    assert _count(User, User.id == deleting_id) == 0
+    assert _count(Profile, Profile.user_id == deleting_id) == 0
+
+    # (3 + 4) Explicit-delete + CASCADE tables retain nothing referencing the deleted user.
+    assert _count_user_rows(db_session, Ranking, deleting_id) == 0
+    assert _count_user_rows(db_session, RatingEvent, deleting_id) == 0
+    assert _count_user_rows(db_session, Bookmark, deleting_id) == 0
+    assert _count_user_rows(db_session, Comparison, deleting_id) == 0
+    assert _count_user_rows(db_session, ComparisonSession, deleting_id) == 0
+    assert _count_user_rows(db_session, AuxstrologySnapshot, deleting_id) == 0
+    assert _count(Follow, or_(Follow.follower_id == deleting_id, Follow.following_id == deleting_id)) == 0
+    assert _count(Block, or_(Block.blocker_id == deleting_id, Block.blocked_id == deleting_id)) == 0
+    assert _count(
+        UserSimilaritySnapshot,
+        or_(UserSimilaritySnapshot.user_a_id == deleting_id, UserSimilaritySnapshot.user_b_id == deleting_id),
+    ) == 0
+
+    # Interaction events: authored-by-deleted cascaded away; about-deleted preserved but anonymized.
+    assert _count(InteractionEvent, InteractionEvent.user_id == deleting_id) == 0
+    assert _count(InteractionEvent, InteractionEvent.subject_user_id == deleting_id) == 0
+    assert _count(InteractionEvent, InteractionEvent.user_id == other_id) == 1
+
+    # (5) Reports: all rows preserved (moderation history) with every deleted-user reference nulled.
+    assert _count(Report) == 3
+    assert _count(Report, Report.reporter_user_id == deleting_id) == 0
+    assert _count(Report, Report.reported_user_id == deleting_id) == 0
+    assert _count(Report, Report.reviewed_by == deleting_id) == 0
+
+    # (6) Deletion is scoped to the deleting user — bystanders untouched.
+    assert _count(User, User.id == early_id) == 1
+    assert _count(User, User.id == other_id) == 1
