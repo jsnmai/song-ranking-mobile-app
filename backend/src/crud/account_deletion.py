@@ -7,6 +7,7 @@ from src.sqlalchemy_tables.block import Block
 from src.sqlalchemy_tables.comparison import Comparison
 from src.sqlalchemy_tables.comparison_session import ComparisonSession
 from src.sqlalchemy_tables.follow import Follow
+from src.sqlalchemy_tables.like import Like
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
@@ -47,7 +48,15 @@ def delete_taste_history_for_user(
     db: Session,
     user_id: int,
 ) -> None:
-    """Remove row-level Bookmarks, rankings, rating events, comparisons, and active sessions."""
+    """Remove row-level likes, Bookmarks, rankings, rating events, comparisons, and sessions.
+
+    Likes the user authored are removed here; likes *on* the user's events are cleared by the
+    rating_events delete below (FK ondelete=CASCADE).
+    """
+    db.execute(
+        delete(Like)
+        .where(Like.user_id == user_id)
+    )
     db.execute(
         delete(Bookmark)
         .where(Bookmark.user_id == user_id)

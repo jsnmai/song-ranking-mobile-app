@@ -17,6 +17,7 @@ from src.api_routers import (
     comparison_history,
     events,
     feed,
+    like,
     profile,
     rating,
     search,
@@ -101,6 +102,10 @@ app.include_router(
 )
 app.include_router(
     feed.router,
+    prefix="/api/v1",
+)
+app.include_router(
+    like.router,
     prefix="/api/v1",
 )
 app.include_router(

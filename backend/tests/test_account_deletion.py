@@ -13,6 +13,7 @@ from src.sqlalchemy_tables.comparison import Comparison
 from src.sqlalchemy_tables.comparison_session import ComparisonSession
 from src.sqlalchemy_tables.follow import Follow
 from src.sqlalchemy_tables.interaction_event import InteractionEvent
+from src.sqlalchemy_tables.like import Like
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
@@ -367,10 +368,19 @@ def test_account_deletion_leaves_no_user_owned_orphans(
     db_session.add_all([song_a, song_b])
     db_session.flush()
 
+    # The deleting user's own activity event — flushed so likes can reference its id.
+    deleting_event = RatingEvent(
+        user_id=deleting_id, song_id=song_a.id, event_type="rated", new_bucket="like", new_score=9.0,
+    )
+    db_session.add(deleting_event)
+    db_session.flush()
+
     db_session.add_all([
         Ranking(user_id=deleting_id, song_id=song_a.id, bucket="like", position=1, score=9.0),
-        RatingEvent(user_id=deleting_id, song_id=song_a.id, event_type="rated", new_bucket="like", new_score=9.0),
         Bookmark(user_id=deleting_id, song_id=song_b.id, source="song_detail"),
+        # Likes: one the deleting user authored, one ON the deleting user's own event.
+        Like(user_id=deleting_id, rating_event_id=deleting_event.id),
+        Like(user_id=other_id, rating_event_id=deleting_event.id),
         Follow(follower_id=deleting_id, following_id=other_id),
         Follow(follower_id=other_id, following_id=deleting_id),
         Block(blocker_id=deleting_id, blocked_id=other_id),
@@ -447,6 +457,10 @@ def test_account_deletion_leaves_no_user_owned_orphans(
     assert _count(Report, Report.reporter_user_id == deleting_id) == 0
     assert _count(Report, Report.reported_user_id == deleting_id) == 0
     assert _count(Report, Report.reviewed_by == deleting_id) == 0
+
+    # Likes: authored-by-user removed; likes ON the user's events cascade with the events.
+    assert _count(Like, Like.user_id == deleting_id) == 0
+    assert _count(Like) == 0
 
     # (6) Deletion is scoped to the deleting user — bystanders untouched.
     assert _count(User, User.id == early_id) == 1
