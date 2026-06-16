@@ -20,7 +20,6 @@ import {
     AuxstrologyResponse, MostCompatibleItem, Profile, RecentVerdictItem, TasteProfileResponse,
 } from "./types"
 import MostCompatibleModule from "./MostCompatibleModule"
-import RecentVerdictsModule from "./RecentVerdictsModule"
 
 type ProfileNavigationProp = NativeStackNavigationProp<AppStackParamList, "MainTabs">
 
@@ -453,15 +452,6 @@ export default function ProfileScreen() {
                         isLoading={mostCompatible === null}
                         onUserPress={(username) => navigation.navigate("OtherProfile", { username })}
                         onViewAll={() => navigation.navigate("MostCompatible")}
-                    />
-
-                    {/* Your Recent Verdicts — compact 3-row preview */}
-                    <RecentVerdictsModule
-                        verdicts={verdicts}
-                        isLoading={verdicts === null}
-                        onItemPress={(item) => {
-                            navigation.navigate("SongDetail", { song: item.song as never })
-                        }}
                     />
 
                     {/* Your Activity — full cards */}

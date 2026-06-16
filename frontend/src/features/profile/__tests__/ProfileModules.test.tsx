@@ -203,11 +203,11 @@ describe("ProfileScreen profile modules", () => {
         })
     })
 
-    it("renders Recent Verdicts module on the profile tab", async () => {
+    it("renders the activity feed on the profile tab", async () => {
         render(<ProfileScreen />)
 
         await waitFor(() => {
-            expect(screen.getByTestId("recent-verdicts-module")).toBeTruthy()
+            expect(screen.getByTestId(`activity-card-${verdictItem.rating_event_id}`)).toBeTruthy()
         })
     })
 
@@ -271,38 +271,37 @@ describe("ProfileScreen profile modules", () => {
         expect(mockNavigate).toHaveBeenCalledWith("Bookmarks")
     })
 
-    it("verdict item shows song title, artist, note, and bucket", async () => {
+    it("activity card shows song title, artist, note, and bucket", async () => {
         render(<ProfileScreen />)
 
         await waitFor(() => {
-            // Song appears in both verdicts and activity rows
-            expect(screen.getAllByText("Redbone").length).toBeGreaterThanOrEqual(1)
-            expect(screen.getAllByText("Childish Gambino").length).toBeGreaterThanOrEqual(1)
-            // Note shown as italic quote in both compact row and full activity card
-            expect(screen.getAllByText('"love the bassline"').length).toBeGreaterThanOrEqual(1)
-            expect(screen.getAllByText("LIKE").length).toBeGreaterThanOrEqual(1)
+            expect(screen.getByText("Redbone")).toBeTruthy()
+            expect(screen.getByText("Childish Gambino")).toBeTruthy()
+            expect(screen.getByText('"love the bassline"')).toBeTruthy()
+            expect(screen.getByText("LIKE")).toBeTruthy()
         })
     })
 
-    it("tapping a verdict navigates to SongDetail", async () => {
+    it("tapping an activity card navigates to SongDetail", async () => {
         render(<ProfileScreen />)
 
         await waitFor(() => {
-            expect(screen.getByTestId(`verdict-item-${verdictItem.rating_event_id}`)).toBeTruthy()
+            expect(screen.getByTestId(`activity-card-${verdictItem.rating_event_id}`)).toBeTruthy()
         })
-        fireEvent.press(screen.getByTestId(`verdict-item-${verdictItem.rating_event_id}`))
+        fireEvent.press(screen.getByTestId(`activity-card-${verdictItem.rating_event_id}`))
 
         expect(mockNavigate).toHaveBeenCalledWith("SongDetail", expect.anything())
     })
 
-    it("renders no verdicts module when verdicts list is empty", async () => {
+    it("renders no activity when verdicts list is empty", async () => {
         mockGetMyRecentVerdicts.mockResolvedValue(emptyVerdictsResponse)
 
         render(<ProfileScreen />)
 
         await waitFor(() => {
-            expect(screen.queryByTestId("recent-verdicts-module")).toBeNull()
+            expect(screen.getByText("42")).toBeTruthy()
         })
+        expect(screen.queryByText("Your Activity")).toBeNull()
     })
 
     it("renders Most Compatible module", async () => {
