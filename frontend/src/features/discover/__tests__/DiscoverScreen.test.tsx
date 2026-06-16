@@ -171,8 +171,7 @@ describe("DiscoverScreen", () => {
     it("shows new-user discovery state when no co-signs exist", async () => {
         render(<DiscoverScreen />)
 
-        expect(await screen.findByText("POPULAR ON LISTN · THIS WEEK")).toBeTruthy()
-        expect(screen.getByText("No lists yet")).toBeTruthy()
+        expect(await screen.findByText("No lists yet")).toBeTruthy()
     })
 
     it("renders social discovery cards and opens song detail", async () => {

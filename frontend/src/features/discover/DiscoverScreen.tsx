@@ -39,13 +39,6 @@ import { CoSignItem } from "./types"
 
 const RECENT_KEY = "discover_recent_searches"
 
-const POPULAR_PLACEHOLDERS = [
-    { id: 1, title: "Redbone", artist: "CHILDISH GAMBINO" },
-    { id: 2, title: "After Hours", artist: "THE WEEKND" },
-    { id: 3, title: "Saturn", artist: "SZA" },
-    { id: 4, title: "Pink + White", artist: "FRANK OCEAN" },
-]
-
 type DiscoverRouteProp = RouteProp<DiscoverStackParamList, "DiscoverHome">
 type DiscoverNavigationProp = CompositeNavigationProp<
     NativeStackNavigationProp<DiscoverStackParamList, "DiscoverHome">,
@@ -635,31 +628,6 @@ export default function DiscoverScreen() {
                         )}
                         {!isDiscoveryLoading && !discoveryError && (
                             <>
-                                {/* Popular on LISTn — always visible */}
-                                <View style={styles.discoverSectionRow}>
-                                    <Text style={styles.discoverSectionLabel}>POPULAR ON LISTN · THIS WEEK</Text>
-                                </View>
-                                <ScrollView
-                                    horizontal
-                                    showsHorizontalScrollIndicator={false}
-                                    style={styles.popularScroll}
-                                    contentContainerStyle={styles.popularScrollContent}
-                                >
-                                    {POPULAR_PLACEHOLDERS.map((song) => (
-                                        <View key={song.id} style={styles.popularTile}>
-                                            <View style={styles.popularCoverBox}>
-                                                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                                                    <Path d="M9 18V5l12-2v13M9 18a3 3 0 01-6 0 3 3 0 016 0zm12-2a3 3 0 01-6 0 3 3 0 016 0z"
-                                                        stroke={colors.inkDim} strokeWidth={1.5}
-                                                        strokeLinecap="round" strokeLinejoin="round" />
-                                                </Svg>
-                                            </View>
-                                            <Text style={styles.popularTileTitle} numberOfLines={1}>{song.title}</Text>
-                                            <Text style={styles.popularTileArtist} numberOfLines={1}>{song.artist}</Text>
-                                        </View>
-                                    ))}
-                                </ScrollView>
-
                                 {/* Co-Sign — live when friends co-sign exist, locked otherwise */}
                                 {coSigns.length > 0 ? (
                                     <>
@@ -1181,42 +1149,6 @@ const styles = StyleSheet.create({
         letterSpacing: 1.6,
         color: colors.inkDim,
         fontWeight: "700",
-    },
-    popularScroll: {
-        marginHorizontal: -14,
-    },
-    popularScrollContent: {
-        paddingHorizontal: 14,
-        gap: 10,
-        paddingBottom: 12,
-    },
-    popularTile: {
-        width: 80,
-        alignItems: "center",
-    },
-    popularCoverBox: {
-        width: 76,
-        height: 76,
-        borderRadius: 12,
-        backgroundColor: colors.paper2,
-        alignItems: "center",
-        justifyContent: "center",
-        marginBottom: 6,
-    },
-    popularTileTitle: {
-        fontWeight: "700",
-        fontSize: 11.5,
-        color: colors.ink,
-        textAlign: "center",
-        lineHeight: 14,
-        marginBottom: 2,
-    },
-    popularTileArtist: {
-        fontFamily: fonts.mono,
-        fontSize: 8,
-        color: colors.inkDim,
-        textAlign: "center",
-        letterSpacing: 0.3,
     },
     coSignLockedCard: {
         backgroundColor: colors.mint,

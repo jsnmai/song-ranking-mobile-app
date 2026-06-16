@@ -860,16 +860,6 @@ export default function FeedScreen() {
                                 />
                             </Svg>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
-                            <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-                                <Path
-                                    d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
-                                    stroke={colors.inkDim}
-                                    strokeWidth="1.8"
-                                    strokeLinejoin="round"
-                                />
-                            </Svg>
-                        </TouchableOpacity>
                     </View>
                     {!isOwnEvent && (
                         <TouchableOpacity
