@@ -3,6 +3,8 @@
 
 // Mirrors ProfileResponse in backend/src/pydantic_schemas/profile.py
 export type ProfileVisibility = "public" | "friends_only" | "only_me"
+// Mirrors AvatarColor in backend/src/pydantic_schemas/profile.py — fixed palette of design tokens.
+export type AvatarColor = "accent" | "sky" | "plum" | "mint" | "gold"
 export type ReportTargetType = "user" | "profile" | "rating_event" | "rating_note"
 export type ReportReason =
     | "harassment"
@@ -19,6 +21,9 @@ export type ProfileBase = {
     user_id: number;
     username: string;
     display_name: string;
+    avatar_color: AvatarColor | null;
+    // IANA timezone captured silently from the device (see AuthContext).
+    timezone: string | null;
     is_public: boolean;
     visibility: ProfileVisibility;
     created_at: string;
@@ -62,6 +67,15 @@ export type BlockedProfileListResponse = {
 export type ProfileSetupRequest = {
     display_name: string;
     username: string;
+}
+
+// Mirrors ProfileEdit in backend/src/pydantic_schemas/profile.py — partial update of
+// the user's own profile. Only the fields present are changed.
+export type ProfileEditRequest = {
+    display_name?: string;
+    username?: string;
+    avatar_color?: AvatarColor;
+    timezone?: string;
 }
 
 export type ProfileReportRequest = {
@@ -125,6 +139,24 @@ export type TasteProfileResponse = {
         okay: TasteBucketSection;
         dislike: TasteBucketSection;
     };
+}
+
+// Mirrors AuxstrologySign in backend/src/pydantic_schemas/auxstrology.py
+export type AuxstrologySign = {
+    name: string;
+    summary: string;
+}
+
+// Mirrors AuxstrologyResponse in backend/src/pydantic_schemas/auxstrology.py
+export type AuxstrologyResponse = {
+    status: "locked" | "first_contact" | "active";
+    current_ratings: number;
+    required_ratings: number | null;
+    sign: AuxstrologySign | null;
+    caption: string | null;
+    adjectives: string[];
+    evidence: string[];
+    axes: Record<string, string>;
 }
 
 export type RecentVerdictSong = {

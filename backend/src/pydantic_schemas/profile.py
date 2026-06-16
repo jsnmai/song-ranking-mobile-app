@@ -2,6 +2,7 @@
 import re
 from datetime import datetime
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -30,6 +31,67 @@ class ProfileSetup(BaseModel):
     @classmethod
     def display_name_strip(cls, value: str) -> str:
         """Strip leading and trailing whitespace from the display name."""
+        return value.strip()
+
+
+# Avatar colors are chosen from a fixed palette of design tokens (mirrored in the
+# frontend theme). Stored as the token name; null means "use the deterministic default".
+AvatarColor = Literal["accent", "sky", "plum", "mint", "gold"]
+
+
+class ProfileEdit(BaseModel):
+    """Request body for PATCH /profile/me — a partial update of the user's own profile.
+
+    Every field is optional; only the ones provided are changed. username and
+    display_name reuse the same validation rules as ProfileSetup.
+    """
+
+    display_name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=30,
+    )
+    username: str | None = Field(
+        default=None,
+        min_length=3,
+        max_length=20,
+    )
+    avatar_color: AvatarColor | None = None
+    # IANA timezone captured silently by the client (e.g. "America/Los_Angeles").
+    timezone: str | None = Field(
+        default=None,
+        max_length=50,
+    )
+
+    @field_validator("timezone")
+    @classmethod
+    def timezone_is_valid_iana(cls, value: str | None) -> str | None:
+        """Reject strings that are not real IANA timezone keys — they are later
+        interpolated into AT TIME ZONE queries, so only known keys may be stored."""
+        if value is None:
+            return None
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ValueError("Unknown timezone.")
+        return value
+
+    @field_validator("username")
+    @classmethod
+    def username_valid_chars(cls, value: str | None) -> str | None:
+        """Reject usernames that contain anything other than letters, numbers, or underscores."""
+        if value is None:
+            return None
+        if not re.match(r"^[a-zA-Z0-9_]+$", value):
+            raise ValueError("Username may only contain letters, numbers, and underscores.")
+        return value.lower()  # store and compare as lowercase
+
+    @field_validator("display_name")
+    @classmethod
+    def display_name_strip(cls, value: str | None) -> str | None:
+        """Strip leading and trailing whitespace from the display name."""
+        if value is None:
+            return None
         return value.strip()
 
 
@@ -118,6 +180,8 @@ class ProfileResponse(BaseModel):
     user_id: int
     username: str
     display_name: str
+    avatar_color: AvatarColor | None = None
+    timezone: str | None = None
     is_public: bool
     visibility: ProfileVisibility
     created_at: datetime

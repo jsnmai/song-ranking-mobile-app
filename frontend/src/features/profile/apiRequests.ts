@@ -3,11 +3,13 @@
 
 import { apiClient } from "../../api/client"
 import {
+    AuxstrologyResponse,
     BlockedProfileListResponse,
     CompatibilityResponse,
     MostCompatibleResponse,
     Profile,
     ProfileBase,
+    ProfileEditRequest,
     ProfileListResponse,
     ProfileReportRequest,
     ProfileReportResponse,
@@ -74,6 +76,15 @@ export async function updateMyVisibility(
     return apiClient.put<Profile>("/api/v1/profile/me/visibility", { visibility }, token)
 }
 
+// Calls PATCH /api/v1/profile/me
+// Partial update of the user's own display name, username, and/or avatar color.
+export async function updateMyProfile(
+    data: ProfileEditRequest,
+    token: string,
+): Promise<Profile> {
+    return apiClient.patch<Profile>("/api/v1/profile/me", data, token)
+}
+
 // Calls GET /api/v1/profile/me/blocked
 export async function getBlockedProfiles(token: string): Promise<BlockedProfileListResponse> {
     return apiClient.get<BlockedProfileListResponse>("/api/v1/profile/me/blocked", token)
@@ -106,6 +117,16 @@ export async function getMyTasteProfile(token: string): Promise<TasteProfileResp
 // Calls GET /api/v1/profile/{username}/taste
 export async function getUserTasteProfile(username: string, token: string): Promise<TasteProfileResponse> {
     return apiClient.get<TasteProfileResponse>(`/api/v1/profile/${username}/taste`, token)
+}
+
+// Calls GET /api/v1/profile/me/auxstrology
+export async function getMyAuxstrology(token: string): Promise<AuxstrologyResponse> {
+    return apiClient.get<AuxstrologyResponse>("/api/v1/profile/me/auxstrology", token)
+}
+
+// Calls GET /api/v1/profile/{username}/auxstrology
+export async function getUserAuxstrology(username: string, token: string): Promise<AuxstrologyResponse> {
+    return apiClient.get<AuxstrologyResponse>(`/api/v1/profile/${username}/auxstrology`, token)
 }
 
 // Calls GET /api/v1/profile/{username}/compatibility

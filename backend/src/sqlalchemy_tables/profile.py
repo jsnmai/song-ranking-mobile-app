@@ -48,6 +48,17 @@ class Profile(Base):
         String(30),
         nullable=False,
     )
+    avatar_color: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,  # null = client falls back to the deterministic palette color
+    )
+    # IANA timezone (e.g. "America/Los_Angeles"), captured silently from the client.
+    # Used to interpret event timestamps in the user's local clock (auxstrology
+    # nocturnality/active-days). Null = fall back to UTC interpretation.
+    timezone: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
     is_public: Mapped[bool] = mapped_column(
         nullable=False,
         default=True,  # profiles are public by default

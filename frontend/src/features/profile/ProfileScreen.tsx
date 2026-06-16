@@ -10,13 +10,15 @@ import Svg, { Circle, Line, Path } from "react-native-svg"
 import { ApiError } from "../../api/client"
 import { AppStackParamList } from "../../navigation/types"
 import { bucketColor } from "../../theme"
-import { colors, fonts } from "../../theme"
+import { avatarColorToken, colors, fonts } from "../../theme"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
 import { useAuth } from "../auth/AuthContext"
 import {
-    getMostCompatible, getMyProfile, getMyRecentVerdicts, getMyTasteProfile,
+    getMostCompatible, getMyAuxstrology, getMyProfile, getMyRecentVerdicts, getMyTasteProfile,
 } from "./apiRequests"
-import { MostCompatibleItem, Profile, RecentVerdictItem, TasteProfileResponse } from "./types"
+import {
+    AuxstrologyResponse, MostCompatibleItem, Profile, RecentVerdictItem, TasteProfileResponse,
+} from "./types"
 import MostCompatibleModule from "./MostCompatibleModule"
 import RecentVerdictsModule from "./RecentVerdictsModule"
 
@@ -44,6 +46,7 @@ export default function ProfileScreen() {
     const [profileError, setProfileError] = useState<string | null>(null)
     const [taste, setTaste] = useState<TasteProfileResponse | null>(null)
     const [tasteLoading, setTasteLoading] = useState(false)
+    const [aux, setAux] = useState<AuxstrologyResponse | null>(null)
     const [verdicts, setVerdicts] = useState<RecentVerdictItem[] | null>(null)
     const [mostCompatible, setMostCompatible] = useState<MostCompatibleItem[] | null>(null)
 
@@ -104,7 +107,16 @@ export default function ProfileScreen() {
                 setTasteLoading(false)
             }
         }
+        async function fetchAuxstrology() {
+            try {
+                const data = await getMyAuxstrology(token!)
+                setAux(data)
+            } catch {
+                // non-critical — the Auxstrology card falls back to its locked state
+            }
+        }
         fetchTaste()
+        fetchAuxstrology()
     }, [token])
 
     const profileInitial = profile
@@ -156,7 +168,10 @@ export default function ProfileScreen() {
                 {profile ? (
                     <View style={styles.identityCard}>
                         <View style={styles.identityRow}>
-                            <View style={styles.avatar} testID="profile-star-avatar">
+                            <View
+                                style={[styles.avatar, { backgroundColor: avatarColorToken(profile?.avatar_color, colors.ink) }]}
+                                testID="profile-star-avatar"
+                            >
                                 <Text style={styles.avatarLetter}>{profileInitial}</Text>
                             </View>
                             <View style={styles.identityInfo}>
@@ -295,7 +310,7 @@ export default function ProfileScreen() {
                         <View style={styles.auxInner}>
                             <View style={styles.auxTextBlock}>
                                 <Text style={styles.auxKicker}>AUXSTROLOGY</Text>
-                                {isNew || !taste ? (
+                                {!aux || aux.status === "locked" || !aux.sign ? (
                                     <>
                                         <Text style={styles.auxTitle}>Locked{"\n"}for now</Text>
                                         <Text style={styles.auxBody}>
@@ -305,10 +320,10 @@ export default function ProfileScreen() {
                                 ) : (
                                     <>
                                         <Text style={styles.auxTitle}>
-                                            {topGenreLabel ?? "Your\nSound"}
+                                            {aux.sign.name.replace(/^The /, "The\n")}
                                         </Text>
                                         <Text style={styles.auxBody}>
-                                            Your scores reveal a distinct sonic taste worth knowing.
+                                            {aux.caption ?? aux.sign.summary}
                                         </Text>
                                     </>
                                 )}
@@ -317,7 +332,7 @@ export default function ProfileScreen() {
                                 width={72}
                                 height={72}
                                 viewBox="0 0 80 80"
-                                opacity={isNew ? 0.35 : 0.9}
+                                opacity={aux?.status === "active" ? 0.9 : 0.35}
                             >
                                 {CONST_EDGES.map(([a, b], i) => (
                                     <Line
@@ -474,7 +489,7 @@ export default function ProfileScreen() {
                                     >
                                         {/* Byline */}
                                         <View style={styles.actByline}>
-                                            <View style={styles.actAvatar}>
+                                            <View style={[styles.actAvatar, { backgroundColor: avatarColorToken(profile?.avatar_color, colors.ink) }]}>
                                                 <Text style={styles.actAvatarLetter}>{profileInitial}</Text>
                                             </View>
                                             <Text style={styles.actBylineText}>

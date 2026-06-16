@@ -10,6 +10,8 @@ const mockLogout = jest.fn()
 const mockDeleteAccount = jest.fn()
 const mockGetMyProfile = jest.fn()
 const mockGetBlockedProfiles = jest.fn()
+const mockUpdateMyProfile = jest.fn()
+const mockRefreshProfile = jest.fn()
 
 jest.mock("@react-navigation/native", () => {
     const actual = jest.requireActual("@react-navigation/native")
@@ -24,12 +26,14 @@ jest.mock("../../auth/AuthContext", () => ({
         token: "test-token",
         deleteAccount: mockDeleteAccount,
         logout: mockLogout,
+        refreshProfile: mockRefreshProfile,
     }),
 }))
 
 jest.mock("../apiRequests", () => ({
     getMyProfile: (...args: unknown[]) => mockGetMyProfile(...args),
     getBlockedProfiles: (...args: unknown[]) => mockGetBlockedProfiles(...args),
+    updateMyProfile: (...args: unknown[]) => mockUpdateMyProfile(...args),
 }))
 
 const profile: Profile = {
@@ -37,6 +41,7 @@ const profile: Profile = {
     user_id: 1,
     username: "demo_power",
     display_name: "Demo Power",
+    avatar_color: null, timezone: null,
     is_public: true,
     visibility: "friends_only",
     created_at: "2026-01-01T00:00:00Z",
@@ -69,6 +74,8 @@ beforeEach(() => {
     mockGetMyProfile.mockResolvedValue(profile)
     mockGetBlockedProfiles.mockResolvedValue({ profiles: [blockedProfile] })
     mockDeleteAccount.mockResolvedValue(undefined)
+    mockUpdateMyProfile.mockImplementation(async (data) => ({ ...profile, ...data }))
+    mockRefreshProfile.mockResolvedValue(undefined)
 })
 
 describe("SettingsScreen", () => {
@@ -157,5 +164,55 @@ describe("SettingsScreen", () => {
             expect(screen.getByText("Could not delete right now.")).toBeTruthy()
             expect(mockLogout).not.toHaveBeenCalled()
         })
+    })
+
+    it("seeds the edit fields from the profile and disables Save until something changes", async () => {
+        render(<SettingsScreen navigation={navigationProp} route={{} as never} />)
+
+        await waitFor(() => expect(screen.getByTestId("edit-display-name").props.value).toBe("Demo Power"))
+        expect(screen.getByTestId("edit-username").props.value).toBe("demo_power")
+        expect(screen.getByTestId("edit-save").props.accessibilityState.disabled).toBe(true)
+    })
+
+    it("saves edited name, username, and color, then refreshes the profile", async () => {
+        render(<SettingsScreen navigation={navigationProp} route={{} as never} />)
+
+        await waitFor(() => expect(screen.getByTestId("edit-display-name")).toBeTruthy())
+        fireEvent.changeText(screen.getByTestId("edit-display-name"), "Demo Renamed")
+        fireEvent.changeText(screen.getByTestId("edit-username"), "demo_renamed")
+        fireEvent.press(screen.getByTestId("edit-color-mint"))
+        fireEvent.press(screen.getByTestId("edit-save"))
+
+        await waitFor(() => {
+            expect(mockUpdateMyProfile).toHaveBeenCalledWith(
+                { display_name: "Demo Renamed", username: "demo_renamed", avatar_color: "mint" },
+                "test-token",
+            )
+            expect(mockRefreshProfile).toHaveBeenCalled()
+        })
+        await waitFor(() => expect(screen.getByText("Saved ✓")).toBeTruthy())
+    })
+
+    it("blocks save and shows a hint for an invalid username", async () => {
+        render(<SettingsScreen navigation={navigationProp} route={{} as never} />)
+
+        await waitFor(() => expect(screen.getByTestId("edit-username")).toBeTruthy())
+        fireEvent.changeText(screen.getByTestId("edit-username"), "ab")
+
+        expect(screen.getByTestId("edit-save").props.accessibilityState.disabled).toBe(true)
+        fireEvent.press(screen.getByTestId("edit-save"))
+        expect(mockUpdateMyProfile).not.toHaveBeenCalled()
+    })
+
+    it("surfaces a server error (e.g. taken username) without crashing", async () => {
+        const { ApiError } = jest.requireActual("../../../api/client")
+        mockUpdateMyProfile.mockRejectedValue(new ApiError(409, "That username is already taken.", null))
+        render(<SettingsScreen navigation={navigationProp} route={{} as never} />)
+
+        await waitFor(() => expect(screen.getByTestId("edit-username")).toBeTruthy())
+        fireEvent.changeText(screen.getByTestId("edit-username"), "taken")
+        fireEvent.press(screen.getByTestId("edit-save"))
+
+        await waitFor(() => expect(screen.getByText("That username is already taken.")).toBeTruthy())
     })
 })

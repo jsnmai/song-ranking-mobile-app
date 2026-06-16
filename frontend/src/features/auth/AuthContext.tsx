@@ -12,7 +12,7 @@ import {
     me,
     register as registerRequest,
 } from "./apiRequests"
-import { getMyProfile } from "../profile/apiRequests"
+import { getMyProfile, updateMyProfile } from "../profile/apiRequests"
 import { Profile } from "../profile/types"
 import { User } from "./types"
 
@@ -54,8 +54,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
         try {
             const p = await getMyProfile(jwt)
             setProfile(p)
+            await trySyncTimezone(jwt, p)
         } catch {
             // profile may not exist yet (new user pre-setup) — silently ignore
+        }
+    }
+
+    // Keep the profile's IANA timezone in step with the device so the backend can
+    // interpret rating timestamps in the user's local clock (auxstrology nocturnality).
+    // Best-effort: a failure here must never disturb login or profile load.
+    const trySyncTimezone = async (jwt: string, p: Profile) => {
+        try {
+            const deviceTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+            if (!deviceTimezone || p.timezone === deviceTimezone) return
+            const updated = await updateMyProfile({ timezone: deviceTimezone }, jwt)
+            setProfile(updated)
+        } catch {
+            // silently ignore — timezone capture is best-effort analytics context
         }
     }
 

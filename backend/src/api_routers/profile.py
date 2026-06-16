@@ -10,6 +10,7 @@ from src.pydantic_schemas.profile import (
     BlockedProfileListResponse,
     CompatibilityResponse,
     MostCompatibleResponse,
+    ProfileEdit,
     ProfileListResponse,
     ProfileReportCreate,
     ProfileReportResponse,
@@ -39,6 +40,7 @@ from src.services.profile import (
     setup_profile,
     unblock_profile,
     unfollow_profile,
+    update_my_profile,
     update_my_visibility,
 )
 from src.services.profile_modules import (
@@ -46,6 +48,11 @@ from src.services.profile_modules import (
     get_profile_ranking_anchors_by_username,
     get_profile_rankings_by_username,
     get_profile_recent_verdicts,
+)
+from src.pydantic_schemas.auxstrology import AuxstrologyResponse
+from src.services.auxstrology import (
+    get_my_auxstrology,
+    get_user_auxstrology_by_username,
 )
 from src.services.taste import (
     get_my_taste_profile,
@@ -71,6 +78,23 @@ def profile_me(
     return get_my_profile(
         db,
         user_id=current_user.id,
+    )
+
+
+@router.patch(
+    "/me",
+    response_model=ProfileSummaryResponse,
+)
+def profile_edit(
+    data: ProfileEdit,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProfileSummaryResponse:
+    """Update the authenticated user's display name, username, and/or avatar color."""
+    return update_my_profile(
+        db,
+        user_id=current_user.id,
+        data=data,
     )
 
 
@@ -179,6 +203,42 @@ def user_taste_profile(
 ) -> TasteProfileResponse:
     """Return a public profile's taste data; 404 for private profiles."""
     return get_user_taste_profile_by_username(
+        db,
+        current_user_id=current_user.id,
+        username=username,
+    )
+
+
+@router.get(
+    "/me/auxstrology",
+    response_model=AuxstrologyResponse,
+)
+@limiter.limit("60/minute")
+def my_auxstrology(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AuxstrologyResponse:
+    """Return the authenticated user's auxstrology reading."""
+    return get_my_auxstrology(
+        db,
+        user_id=current_user.id,
+    )
+
+
+@router.get(
+    "/{username}/auxstrology",
+    response_model=AuxstrologyResponse,
+)
+@limiter.limit("60/minute")
+def user_auxstrology(
+    request: Request,
+    username: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AuxstrologyResponse:
+    """Return a public profile's auxstrology reading; 404 for private profiles."""
+    return get_user_auxstrology_by_username(
         db,
         current_user_id=current_user.id,
         username=username,

@@ -48,3 +48,21 @@ export function bucketColor(bucket: string): string {
     if (bucket === "dislike") return colors.dislike
     return colors.inkDim
 }
+
+// The fixed palette a user can choose for their avatar. The token names mirror
+// AvatarColor in backend/src/pydantic_schemas/profile.py.
+export const AVATAR_COLOR_TOKENS = ["accent", "sky", "plum", "mint", "gold"] as const
+
+const AVATAR_PALETTE: Record<string, string> = {
+    accent: colors.accent,
+    sky: colors.sky,
+    plum: colors.plum,
+    mint: colors.mint,
+    gold: colors.gold,
+}
+
+// Resolve a stored avatar-color token to a hex color, falling back to `fallback`
+// (the surface's established default) when the user has not chosen one.
+export function avatarColorToken(token: string | null | undefined, fallback: string): string {
+    return (token && AVATAR_PALETTE[token]) || fallback
+}

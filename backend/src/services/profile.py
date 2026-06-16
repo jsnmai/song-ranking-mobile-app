@@ -31,6 +31,7 @@ from src.pydantic_schemas.profile import (
     CompatibilityResponse,
     MostCompatibleItem,
     MostCompatibleResponse,
+    ProfileEdit,
     ProfileListResponse,
     ProfileReportCreate,
     ProfileReportResponse,
@@ -290,6 +291,65 @@ def update_my_visibility(
     try:
         db.commit()
         db.refresh(profile)
+    except Exception:
+        db.rollback()
+        raise
+
+    return _build_profile_summary(
+        db,
+        user_id,
+        profile,
+    )
+
+
+def update_my_profile(
+    db: Session,
+    user_id: int,
+    data: ProfileEdit,
+) -> ProfileSummaryResponse:
+    """Apply a partial update to the current user's own profile.
+
+    Only fields present on the request are changed. A username collision with
+    another user raises 409; the username is already lowercased by the schema.
+    """
+    profile = get_by_user_id(
+        db,
+        user_id,
+    )
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Profile not found.",
+        )
+
+    if data.username is not None and data.username != profile.username:
+        existing = get_by_username(
+            db,
+            data.username,
+        )
+        if existing is not None and existing.user_id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="That username is already taken.",
+            )
+        profile.username = data.username
+    if data.display_name is not None:
+        profile.display_name = data.display_name
+    if data.avatar_color is not None:
+        profile.avatar_color = data.avatar_color
+    if data.timezone is not None:
+        profile.timezone = data.timezone
+
+    try:
+        db.commit()
+        db.refresh(profile)
+    except IntegrityError:
+        # A concurrent insert claimed the username between the check and commit.
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="That username is already taken.",
+        )
     except Exception:
         db.rollback()
         raise

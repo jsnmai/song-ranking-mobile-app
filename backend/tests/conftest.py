@@ -7,10 +7,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+import src.sqlalchemy_tables.auxstrology_snapshot  # noqa: F401 — registers AuxstrologySnapshot with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.block  # noqa: F401 — registers Block with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.comparison  # noqa: F401 — registers Comparison with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.comparison_session  # noqa: F401 — registers ComparisonSession with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.follow  # noqa: F401 — registers Follow with Base.metadata so create_all() creates the table
+import src.sqlalchemy_tables.interaction_event  # noqa: F401 — registers InteractionEvent with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.profile  # noqa: F401 — registers Profile with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.ranking  # noqa: F401 — registers Ranking with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.rating_event  # noqa: F401 — registers RatingEvent with Base.metadata so create_all() creates the table

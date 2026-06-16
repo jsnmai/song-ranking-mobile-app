@@ -22,6 +22,7 @@ const profile: Profile = {
     user_id: 1,
     username: "demo_power",
     display_name: "Demo Power",
+    avatar_color: null, timezone: null,
     is_public: true,
     visibility: "public",
     created_at: "2026-01-01T00:00:00Z",

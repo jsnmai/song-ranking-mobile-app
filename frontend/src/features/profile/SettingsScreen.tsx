@@ -1,16 +1,16 @@
 // Settings is the home for privacy, blocking, account controls, and legal links.
 // It presents grouped menu rows (Bento Orbit design); privacy levels and the
 // blocked list live on their own dedicated sub-screens.
-import { ComponentType, ReactNode, useCallback, useState } from "react"
+import { ComponentType, ReactNode, useCallback, useEffect, useState } from "react"
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { useFocusEffect } from "@react-navigation/native"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 
 import { ApiError } from "../../api/client"
 import { AppStackParamList } from "../../navigation/types"
-import { colors, fonts } from "../../theme"
+import { AVATAR_COLOR_TOKENS, avatarColorToken, colors, fonts } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
-import { getBlockedProfiles, getMyProfile } from "./apiRequests"
+import { getBlockedProfiles, getMyProfile, updateMyProfile } from "./apiRequests"
 import {
     BackIcon,
     BlockIcon,
@@ -20,7 +20,7 @@ import {
     LogoutIcon,
     TrashIcon,
 } from "./settingsIcons"
-import { Profile, ProfileVisibility } from "./types"
+import { AvatarColor, Profile, ProfileEditRequest, ProfileVisibility } from "./types"
 
 type SettingsProps = NativeStackScreenProps<AppStackParamList, "Settings">
 
@@ -43,7 +43,7 @@ const ABOUT_ROWS: readonly {
 ]
 
 export default function SettingsScreen({ navigation }: SettingsProps) {
-    const { token, deleteAccount, logout } = useAuth()
+    const { token, deleteAccount, logout, refreshProfile } = useAuth()
     const [profile, setProfile] = useState<Profile | null>(null)
     const [blockedCount, setBlockedCount] = useState(0)
     const [isLoading, setIsLoading] = useState(true)
@@ -51,6 +51,66 @@ export default function SettingsScreen({ navigation }: SettingsProps) {
     const [isDeleteOpen, setIsDeleteOpen] = useState(false)
     const [isDeleting, setIsDeleting] = useState(false)
     const [error, setError] = useState<string | null>(null)
+
+    // Edit-profile form state, seeded from the loaded profile.
+    const [name, setName] = useState("")
+    const [username, setUsername] = useState("")
+    const [color, setColor] = useState<AvatarColor | null>(null)
+    const [isSaving, setIsSaving] = useState(false)
+    const [editError, setEditError] = useState<string | null>(null)
+    const [savedOk, setSavedOk] = useState(false)
+
+    // Seed the form whenever the profile (re)loads.
+    useEffect(() => {
+        if (profile) {
+            setName(profile.display_name)
+            setUsername(profile.username)
+            setColor(profile.avatar_color)
+        }
+    }, [profile])
+
+    const trimmedName = name.trim()
+    const normUsername = username.trim().toLowerCase()
+    const usernameValid = normUsername.length >= 3
+        && normUsername.length <= 20
+        && /^[a-z0-9_]+$/.test(normUsername)
+    const nameValid = trimmedName.length >= 1 && trimmedName.length <= 30
+    const dirty = profile !== null && (
+        trimmedName !== profile.display_name
+        || normUsername !== profile.username
+        || (color ?? null) !== (profile.avatar_color ?? null)
+    )
+    const canSave = dirty && nameValid && usernameValid && !isSaving
+
+    const saveProfile = async () => {
+        if (!token || !profile || !canSave) {
+            return
+        }
+        setIsSaving(true)
+        setEditError(null)
+        setSavedOk(false)
+        const patch: ProfileEditRequest = {}
+        if (trimmedName !== profile.display_name) {
+            patch.display_name = trimmedName
+        }
+        if (normUsername !== profile.username) {
+            patch.username = normUsername
+        }
+        if ((color ?? null) !== (profile.avatar_color ?? null) && color) {
+            patch.avatar_color = color
+        }
+        try {
+            const updated = await updateMyProfile(patch, token)
+            setProfile(updated)
+            // Keep the global auth profile in sync so the user's avatar updates everywhere.
+            await refreshProfile()
+            setSavedOk(true)
+        } catch (err) {
+            setEditError(errorMessage(err, "Could not save profile."))
+        } finally {
+            setIsSaving(false)
+        }
+    }
 
     // Re-fetch whenever Settings regains focus so visibility + blocked count
     // stay current after the user edits them on the sub-screens.
@@ -131,6 +191,88 @@ export default function SettingsScreen({ navigation }: SettingsProps) {
                 <ActivityIndicator color={colors.accent} style={styles.loader} />
             ) : (
                 <ScrollView style={styles.body} contentContainerStyle={styles.content}>
+                    <View style={styles.group}>
+                        <Text style={styles.groupLabel}>PROFILE</Text>
+                        <View style={styles.card}>
+                            <View style={styles.editRow}>
+                                <View
+                                    style={[styles.avatarPreview, { backgroundColor: avatarColorToken(color, colors.ink) }]}
+                                    testID="edit-avatar-preview"
+                                >
+                                    <Text style={styles.avatarPreviewLetter}>
+                                        {(trimmedName || normUsername || "?").charAt(0).toUpperCase()}
+                                    </Text>
+                                </View>
+                                <View style={styles.editField}>
+                                    <Text style={styles.editFieldLabel}>DISPLAY NAME</Text>
+                                    <TextInput
+                                        value={name}
+                                        onChangeText={(t) => { setName(t); setSavedOk(false) }}
+                                        placeholder="Your name"
+                                        placeholderTextColor={colors.inkDim}
+                                        maxLength={30}
+                                        style={styles.editInput}
+                                        testID="edit-display-name"
+                                    />
+                                </View>
+                            </View>
+
+                            <View style={[styles.editField, styles.editFieldDivider]}>
+                                <Text style={styles.editFieldLabel}>USERNAME</Text>
+                                <View style={styles.usernameWrap}>
+                                    <Text style={styles.usernameAt}>@</Text>
+                                    <TextInput
+                                        value={username}
+                                        onChangeText={(t) => { setUsername(t.toLowerCase()); setSavedOk(false) }}
+                                        placeholder="username"
+                                        placeholderTextColor={colors.inkDim}
+                                        autoCapitalize="none"
+                                        autoCorrect={false}
+                                        maxLength={20}
+                                        style={[styles.editInput, styles.usernameInput]}
+                                        testID="edit-username"
+                                    />
+                                </View>
+                                {username.length > 0 && !usernameValid && (
+                                    <Text style={styles.fieldHint}>
+                                        3–20 characters · letters, numbers, and underscores only.
+                                    </Text>
+                                )}
+                            </View>
+
+                            <View style={[styles.editField, styles.editFieldDivider]}>
+                                <Text style={styles.editFieldLabel}>ICON COLOR</Text>
+                                <View style={styles.swatchRow}>
+                                    {AVATAR_COLOR_TOKENS.map((token) => (
+                                        <TouchableOpacity
+                                            key={token}
+                                            onPress={() => { setColor(token); setSavedOk(false) }}
+                                            style={[
+                                                styles.swatch,
+                                                { backgroundColor: avatarColorToken(token, colors.ink) },
+                                                color === token && styles.swatchSelected,
+                                            ]}
+                                            accessibilityLabel={`Icon color ${token}`}
+                                            testID={`edit-color-${token}`}
+                                        />
+                                    ))}
+                                </View>
+                            </View>
+
+                            <TouchableOpacity
+                                style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}
+                                onPress={saveProfile}
+                                disabled={!canSave}
+                                testID="edit-save"
+                            >
+                                <Text style={styles.saveButtonText}>
+                                    {isSaving ? "Saving…" : savedOk ? "Saved ✓" : "Save changes"}
+                                </Text>
+                            </TouchableOpacity>
+                            {editError !== null && <Text style={styles.editErrorText}>{editError}</Text>}
+                        </View>
+                    </View>
+
                     <Group label="PRIVACY & SAFETY">
                         <Row
                             icon={LockIcon}
@@ -348,6 +490,103 @@ const styles = StyleSheet.create({
         borderColor: colors.line,
         borderRadius: 14,
         paddingHorizontal: 14,
+    },
+    editRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingVertical: 14,
+    },
+    avatarPreview: {
+        width: 52,
+        height: 52,
+        borderRadius: 26,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    avatarPreviewLetter: {
+        fontFamily: fonts.display,
+        color: "#fff",
+        fontSize: 22,
+    },
+    editField: {
+        flex: 1,
+    },
+    editFieldDivider: {
+        borderTopWidth: 1,
+        borderTopColor: colors.line,
+        paddingVertical: 14,
+    },
+    editFieldLabel: {
+        fontFamily: fonts.mono,
+        fontSize: 8.5,
+        letterSpacing: 1.5,
+        color: colors.inkDim,
+        fontWeight: "700",
+        marginBottom: 6,
+    },
+    editInput: {
+        fontFamily: fonts.display,
+        fontSize: 15,
+        color: colors.ink,
+        paddingVertical: 0,
+    },
+    usernameWrap: {
+        flexDirection: "row",
+        alignItems: "center",
+    },
+    usernameAt: {
+        fontFamily: fonts.display,
+        fontSize: 15,
+        color: colors.inkDim,
+        marginRight: 2,
+    },
+    usernameInput: {
+        flex: 1,
+    },
+    fieldHint: {
+        fontFamily: fonts.mono,
+        fontSize: 9,
+        color: colors.danger,
+        marginTop: 6,
+        letterSpacing: 0.2,
+    },
+    swatchRow: {
+        flexDirection: "row",
+        gap: 12,
+    },
+    swatch: {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        borderWidth: 2,
+        borderColor: "transparent",
+    },
+    swatchSelected: {
+        borderColor: colors.ink,
+    },
+    saveButton: {
+        backgroundColor: colors.ink,
+        borderRadius: 10,
+        alignItems: "center",
+        paddingVertical: 12,
+        marginVertical: 14,
+    },
+    saveButtonDisabled: {
+        opacity: 0.4,
+    },
+    saveButtonText: {
+        fontFamily: fonts.display,
+        fontSize: 13,
+        color: colors.paper,
+        letterSpacing: 0.3,
+    },
+    editErrorText: {
+        color: colors.danger,
+        fontFamily: fonts.mono,
+        fontSize: 10,
+        marginBottom: 12,
+        letterSpacing: 0.2,
     },
     row: {
         flexDirection: "row",

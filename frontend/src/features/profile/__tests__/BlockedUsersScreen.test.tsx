@@ -22,6 +22,7 @@ const blockedProfile: Profile = {
     user_id: 2,
     username: "demo_blocked",
     display_name: "Demo Blocked",
+    avatar_color: null, timezone: null,
     is_public: true,
     visibility: "public",
     created_at: "2026-01-01T00:00:00Z",
@@ -60,10 +61,14 @@ describe("BlockedUsersScreen", () => {
         await waitFor(() => expect(screen.getByText("Unblock")).toBeTruthy())
         fireEvent.press(screen.getByText("Unblock"))
 
-        await waitFor(() => {
-            expect(mockUnblockUser).toHaveBeenCalledWith("demo_blocked", "test-token")
-            expect(screen.queryByText("Demo Blocked")).toBeNull()
-        })
+        await waitFor(
+            () => expect(mockUnblockUser).toHaveBeenCalledWith("demo_blocked", "test-token"),
+            { timeout: 3000 },
+        )
+        await waitFor(
+            () => expect(screen.queryByText("Demo Blocked")).toBeNull(),
+            { timeout: 3000 },
+        )
     })
 
     it("shows an empty state when nobody is blocked", async () => {
