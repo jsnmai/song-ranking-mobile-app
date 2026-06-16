@@ -269,6 +269,13 @@ function ReorderRow({
             // Always claim the responder — panHandlers are placed on the handle area only
             onStartShouldSetPanResponder: () => true,
             onMoveShouldSetPanResponder: () => true,
+            // Refuse to hand the gesture back to the enclosing ScrollView once we have
+            // it. Without this the ScrollView's scroll recognizer reclaims the touch on
+            // the first vertical move, terminating the drag — the row flashes active and
+            // snaps back instead of dragging. onShouldBlockNativeResponder does the same
+            // for the native scroll recognizer on Android.
+            onPanResponderTerminationRequest: () => false,
+            onShouldBlockNativeResponder: () => true,
             onPanResponderGrant: () => {
                 dragStartIndex.current = indexRef.current
                 latestTargetIndex.current = indexRef.current
