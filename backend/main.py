@@ -14,6 +14,7 @@ from src.api_routers import (
     bookmarks,
     comparison,
     comparison_history,
+    events,
     feed,
     profile,
     rating,
@@ -127,6 +128,10 @@ app.include_router(
 )
 app.include_router(
     bookmarks.router,
+    prefix="/api/v1",
+)
+app.include_router(
+    events.router,
     prefix="/api/v1",
 )
 

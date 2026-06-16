@@ -51,6 +51,19 @@ def get_user_comparison_session(
     ).scalar_one_or_none()
 
 
+def get_expired_comparison_sessions(
+    db: Session,
+    expires_before: datetime,
+) -> list[ComparisonSession]:
+    """Return abandoned active sessions so they can be tombstoned before deletion."""
+    return list(
+        db.execute(
+            select(ComparisonSession)
+            .where(ComparisonSession.updated_at < expires_before)
+        ).scalars()
+    )
+
+
 def delete_expired_comparison_sessions(
     db: Session,
     expires_before: datetime,

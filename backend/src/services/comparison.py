@@ -10,10 +10,12 @@ from src.crud.comparison import (
     create_comparison_session,
     delete_comparison_session,
     delete_expired_comparison_sessions,
+    get_expired_comparison_sessions,
     get_user_comparison_session,
     refresh_comparison_session,
     update_session_progress,
 )
+from src.crud.interaction_event import create_interaction_event
 from src.crud.rating import get_user_ranking_by_song, list_user_bucket_rankings
 from src.crud.song import get_by_deezer_id, get_by_id
 from src.pydantic_schemas.comparison import (
@@ -250,13 +252,20 @@ def cancel_comparison_session(
     user_id: int,
     session_uuid: UUID,
 ) -> ComparisonSessionCancelResponse:
-    """Cancel a comparison session and delete all temporary state."""
+    """Cancel a comparison session, tombstoning it before deleting temporary state."""
     session = _get_session_or_404(
         db,
         user_id,
         session_uuid,
     )
     try:
+        # Hesitation signal: a started-then-abandoned verdict is un-backfillable
+        # behavioral data (AUXSTROLOGY.md §14) — record it before the delete.
+        _tombstone_session(
+            db,
+            session,
+            event_type="comparison_canceled",
+        )
         delete_comparison_session(
             db,
             session,
@@ -448,9 +457,49 @@ def _delete_expired_sessions(
     db: Session,
 ) -> None:
     """Remove abandoned active sessions opportunistically before creating a new one."""
+    cutoff = _session_expiry_cutoff()
+    for session in get_expired_comparison_sessions(
+        db,
+        cutoff,
+    ):
+        _tombstone_session(
+            db,
+            session,
+            event_type="comparison_abandoned",
+        )
     delete_expired_comparison_sessions(
         db,
-        _session_expiry_cutoff(),
+        cutoff,
+    )
+
+
+def _tombstone_session(
+    db: Session,
+    session: ComparisonSession,
+    event_type: str,
+) -> None:
+    """
+    Write an interaction event capturing a session that ended without a verdict.
+
+    Context follows the collection charter: ids, counts, and durations only.
+    The target song may not have a songs row yet (songs persist only on action),
+    so the payload's deezer_id is kept in context instead of a song_id FK.
+    """
+    payload = session.song_payload or {}
+    elapsed_ms = int(
+        (session.updated_at - session.created_at).total_seconds() * 1000
+    )
+    create_interaction_event(
+        db,
+        user_id=session.user_id,
+        event_type=event_type,
+        song_id=session.candidate_song_id,
+        context={
+            "bucket": session.bucket,
+            "decisions_count": len(session.decisions or []),
+            "elapsed_ms": max(elapsed_ms, 0),
+            "deezer_id": payload.get("deezer_id"),
+        },
     )
 
 

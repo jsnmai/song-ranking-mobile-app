@@ -10,6 +10,8 @@ from src.pydantic_schemas.song import SongCreate, SongResponse
 BucketName = Literal["like", "alright", "dislike"]
 RatingEventType = Literal["rated", "rerated", "removed", "reordered"]
 RatingEventSource = Literal["direct", "comparison", "remove", "reorder"]
+# Where the user found the song they are rating (AUXSTROLOGY.md §14).
+RatingDiscoverySource = Literal["search", "discover", "cosign", "profile", "bookmark", "feed"]
 
 
 class RatingFinalizeRequest(BaseModel):
@@ -25,6 +27,10 @@ class RatingFinalizeRequest(BaseModel):
         default=None,
         max_length=280,
     )
+    # Capture-now decision context (AUXSTROLOGY.md §14): both optional, stored
+    # in rating_events.event_metadata, ignored by all current read paths.
+    discovery_source: RatingDiscoverySource | None = None
+    rating_started_at: datetime | None = None
 
     @field_validator("note")
     @classmethod

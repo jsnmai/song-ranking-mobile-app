@@ -1,5 +1,7 @@
 """Business logic for ratings, rankings, and rating events."""
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -184,12 +186,40 @@ def persist_finalized_rating(
         note=data.note,
         source=source,
         comparison_session_uuid=comparison_session_uuid,
+        event_metadata=_decision_context_metadata(data),
     )
     return FinalizedRatingState(
         ranking=placement.ranking,
         rating_event=rating_event,
         song=song,
     )
+
+
+def _decision_context_metadata(
+    data: RatingFinalizeRequest,
+) -> dict[str, Any] | None:
+    """
+    Build capture-now decision context for rating_events.event_metadata.
+
+    getattr-based because comparison finalization reuses persist_finalized_rating
+    with request shapes that may not carry these fields. deliberation_ms is
+    computed server-side so a skewed client clock can only distort, not break,
+    the value (clamped to 0..24h).
+    """
+    metadata: dict[str, Any] = {}
+    discovery_source = getattr(data, "discovery_source", None)
+    if discovery_source is not None:
+        metadata["discovery_source"] = discovery_source
+    rating_started_at = getattr(data, "rating_started_at", None)
+    if rating_started_at is not None and rating_started_at.tzinfo is not None:
+        elapsed_ms = int(
+            (datetime.now(timezone.utc) - rating_started_at).total_seconds() * 1000
+        )
+        metadata["deliberation_ms"] = min(
+            max(elapsed_ms, 0),
+            24 * 60 * 60 * 1000,
+        )
+    return metadata or None
 
 
 def build_rating_finalize_response(
