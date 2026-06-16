@@ -14,10 +14,10 @@ import { avatarColorToken, colors, fonts } from "../../theme"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
 import { useAuth } from "../auth/AuthContext"
 import {
-    getMostCompatible, getMyAuxstrology, getMyProfile, getMyRecentVerdicts, getMyTasteProfile,
+    getMostCompatible, getMyAuxstrology, getMyProfile, getMyRecentRatings, getMyTasteProfile,
 } from "./apiRequests"
 import {
-    AuxstrologyResponse, MostCompatibleItem, Profile, RecentVerdictItem, TasteProfileResponse,
+    AuxstrologyResponse, MostCompatibleItem, Profile, RecentRatingItem, TasteProfileResponse,
 } from "./types"
 import MostCompatibleModule from "./MostCompatibleModule"
 
@@ -46,7 +46,7 @@ export default function ProfileScreen() {
     const [taste, setTaste] = useState<TasteProfileResponse | null>(null)
     const [tasteLoading, setTasteLoading] = useState(false)
     const [aux, setAux] = useState<AuxstrologyResponse | null>(null)
-    const [verdicts, setVerdicts] = useState<RecentVerdictItem[] | null>(null)
+    const [ratings, setRatings] = useState<RecentRatingItem[] | null>(null)
     const [mostCompatible, setMostCompatible] = useState<MostCompatibleItem[] | null>(null)
 
     const openFollowers = () => {
@@ -78,13 +78,13 @@ export default function ProfileScreen() {
             async function fetchModules() {
                 try {
                     const [vData, mcData] = await Promise.all([
-                        getMyRecentVerdicts(token!),
+                        getMyRecentRatings(token!),
                         getMostCompatible(token!),
                     ])
-                    setVerdicts(vData.items)
+                    setRatings(vData.items)
                     setMostCompatible(mcData.users)
                 } catch {
-                    setVerdicts([])
+                    setRatings([])
                     setMostCompatible([])
                 }
             }
@@ -455,10 +455,10 @@ export default function ProfileScreen() {
                     />
 
                     {/* Your Activity — full cards */}
-                    {verdicts !== null && verdicts.length > 0 && (
+                    {ratings !== null && ratings.length > 0 && (
                         <View>
                             <Text style={styles.activityKicker}>Your Activity</Text>
-                            {verdicts.map((item) => {
+                            {ratings.map((item) => {
                                 const col = bucketColor(item.bucket)
                                 const when = formatRelativeTime(item.created_at)
                                 const bucketLabel = item.bucket === "alright" ? "OKAY"

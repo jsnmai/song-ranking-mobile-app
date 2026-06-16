@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from src.crud import profile as crud_profile
 from src.crud import profile_modules as crud
-from src.pydantic_schemas.profile_modules import RecentVerdictItem, RecentVerdictsResponse
+from src.pydantic_schemas.profile_modules import RecentRatingItem, RecentRatingsResponse
 from src.pydantic_schemas.rating import RankingAnchorsResponse, RankingListResponse, RankingResponse
 from src.pydantic_schemas.song import SongResponse
 
@@ -11,24 +11,24 @@ RANKING_PAGE_LIMIT = 30
 MAX_RANKING_PAGE_LIMIT = 100
 
 
-def get_my_recent_verdicts(
+def get_my_recent_ratings(
     db: Session,
     user_id: int,
-) -> RecentVerdictsResponse:
-    rows = crud.list_profile_recent_verdicts(db, viewer_id=user_id, owner_id=user_id)
-    return _verdicts_response(rows)
+) -> RecentRatingsResponse:
+    rows = crud.list_profile_recent_ratings(db, viewer_id=user_id, owner_id=user_id)
+    return _ratings_response(rows)
 
 
-def get_profile_recent_verdicts(
+def get_profile_recent_ratings(
     db: Session,
     viewer_id: int,
     username: str,
-) -> RecentVerdictsResponse:
+) -> RecentRatingsResponse:
     profile = crud_profile.get_by_username(db, username)
     if profile is None:
         raise HTTPException(status_code=404, detail="Profile not found.")
-    rows = crud.list_profile_recent_verdicts(db, viewer_id=viewer_id, owner_id=profile.user_id)
-    return _verdicts_response(rows)
+    rows = crud.list_profile_recent_ratings(db, viewer_id=viewer_id, owner_id=profile.user_id)
+    return _ratings_response(rows)
 
 
 def get_profile_rankings_by_username(
@@ -114,10 +114,10 @@ def get_profile_ranking_anchors_by_username(
     )
 
 
-def _verdicts_response(rows) -> RecentVerdictsResponse:
-    return RecentVerdictsResponse(
+def _ratings_response(rows) -> RecentRatingsResponse:
+    return RecentRatingsResponse(
         items=[
-            RecentVerdictItem(
+            RecentRatingItem(
                 rating_event_id=row.event.id,
                 song=SongResponse.model_validate(row.song),
                 bucket=row.event.new_bucket,

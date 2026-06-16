@@ -1,4 +1,4 @@
-"""Integration tests for profile Recent Verdicts and Rankings Preview endpoints.
+"""Integration tests for profile Recent Ratings and Rankings Preview endpoints.
 
 Privacy matrix tested:
 - owner can always see own data
@@ -7,7 +7,7 @@ Privacy matrix tested:
 - only-me: no other viewer
 - blocked: no other viewer
 - newest-first ordering and note presence
-- rankings privacy mirrors verdicts privacy
+- rankings privacy mirrors ratings privacy
 """
 from datetime import datetime, timezone
 
@@ -82,7 +82,7 @@ def _create_song(db: Session, deezer_id: int, title: str) -> Song:
     return song
 
 
-def _create_verdict(
+def _create_rating(
     db: Session,
     username: str,
     song: Song,
@@ -131,12 +131,12 @@ def _create_ranking(
     return ranking
 
 
-def _get_verdicts(client: TestClient, token: str, username: str | None = None) -> dict:
+def _get_ratings(client: TestClient, token: str, username: str | None = None) -> dict:
     limiter._storage.reset()
     if username is None:
-        path = "/api/v1/profile/me/recent-verdicts"
+        path = "/api/v1/profile/me/recent-ratings"
     else:
-        path = f"/api/v1/profile/{username}/recent-verdicts"
+        path = f"/api/v1/profile/{username}/recent-ratings"
     response = client.get(path, headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     return response.json()
@@ -152,118 +152,118 @@ def _get_rankings(client: TestClient, token: str, username: str) -> dict:
     return response.json()
 
 
-# ── Recent Verdicts ──────────────────────────────────────────────────────────
+# ── Recent Ratings ──────────────────────────────────────────────────────────
 
 
-def test_owner_sees_own_recent_verdicts(client: TestClient, db_session: Session):
-    """Owner always sees their own verdicts via the /me endpoint."""
+def test_owner_sees_own_recent_ratings(client: TestClient, db_session: Session):
+    """Owner always sees their own ratings via the /me endpoint."""
     token = _register(client, "owner1")
     song = _create_song(db_session, 10001, "Owner Song")
-    _create_verdict(db_session, "owner1", song)
+    _create_rating(db_session, "owner1", song)
 
-    data = _get_verdicts(client, token)
+    data = _get_ratings(client, token)
 
     assert len(data["items"]) == 1
     assert data["items"][0]["song"]["title"] == "Owner Song"
 
 
-def test_public_viewer_sees_public_recent_verdicts(client: TestClient, db_session: Session):
-    """A public viewer can see verdicts from a public profile."""
+def test_public_viewer_sees_public_recent_ratings(client: TestClient, db_session: Session):
+    """A public viewer can see ratings from a public profile."""
     owner_token = _register(client, "pubowner")
     viewer_token = _register(client, "pubviewer")
     song = _create_song(db_session, 10002, "Public Song")
-    _create_verdict(db_session, "pubowner", song)
+    _create_rating(db_session, "pubowner", song)
 
-    data = _get_verdicts(client, viewer_token, "pubowner")
+    data = _get_ratings(client, viewer_token, "pubowner")
 
     assert len(data["items"]) == 1
     assert data["items"][0]["song"]["title"] == "Public Song"
     _ = owner_token  # used for setup only
 
 
-def test_friends_only_allowed_viewer_sees_verdicts(client: TestClient, db_session: Session):
-    """Mutual-follow viewer can see friends-only verdicts."""
+def test_friends_only_allowed_viewer_sees_ratings(client: TestClient, db_session: Session):
+    """Mutual-follow viewer can see friends-only ratings."""
     owner_token = _register(client, "fowner")
     viewer_token = _register(client, "fviewer")
     _set_visibility(client, owner_token, "friends_only")
     _follow(client, viewer_token, "fowner")
     _follow(client, owner_token, "fviewer")
     song = _create_song(db_session, 10003, "Friends Song")
-    _create_verdict(db_session, "fowner", song)
+    _create_rating(db_session, "fowner", song)
 
-    data = _get_verdicts(client, viewer_token, "fowner")
+    data = _get_ratings(client, viewer_token, "fowner")
 
     assert len(data["items"]) == 1
 
 
-def test_friends_only_disallowed_viewer_gets_empty_verdicts(client: TestClient, db_session: Session):
-    """Non-mutual viewer cannot see friends-only verdicts — notes never leak."""
+def test_friends_only_disallowed_viewer_gets_empty_ratings(client: TestClient, db_session: Session):
+    """Non-mutual viewer cannot see friends-only ratings — notes never leak."""
     owner_token = _register(client, "fowner2")
     viewer_token = _register(client, "fviewer2")
     _set_visibility(client, owner_token, "friends_only")
     song = _create_song(db_session, 10004, "Hidden Song")
-    _create_verdict(db_session, "fowner2", song, note="secret note")
+    _create_rating(db_session, "fowner2", song, note="secret note")
 
-    data = _get_verdicts(client, viewer_token, "fowner2")
+    data = _get_ratings(client, viewer_token, "fowner2")
 
     assert data["items"] == []
 
 
-def test_only_me_viewer_gets_empty_verdicts(client: TestClient, db_session: Session):
-    """Only-me profile: no other user sees verdicts."""
+def test_only_me_viewer_gets_empty_ratings(client: TestClient, db_session: Session):
+    """Only-me profile: no other user sees ratings."""
     owner_token = _register(client, "private1")
     viewer_token = _register(client, "viewer_pm")
     _set_visibility(client, owner_token, "only_me")
     song = _create_song(db_session, 10005, "Private Song")
-    _create_verdict(db_session, "private1", song)
+    _create_rating(db_session, "private1", song)
 
-    data = _get_verdicts(client, viewer_token, "private1")
+    data = _get_ratings(client, viewer_token, "private1")
 
     assert data["items"] == []
 
 
-def test_blocked_user_gets_empty_verdicts(client: TestClient, db_session: Session):
-    """Owner-blocked viewer cannot see verdicts."""
+def test_blocked_user_gets_empty_ratings(client: TestClient, db_session: Session):
+    """Owner-blocked viewer cannot see ratings."""
     owner_token = _register(client, "blockowner")
     viewer_token = _register(client, "blockviewer")
     _block(client, owner_token, "blockviewer")
     song = _create_song(db_session, 10006, "Blocked Song")
-    _create_verdict(db_session, "blockowner", song)
+    _create_rating(db_session, "blockowner", song)
 
-    data = _get_verdicts(client, viewer_token, "blockowner")
+    data = _get_ratings(client, viewer_token, "blockowner")
 
     assert data["items"] == []
     _ = owner_token
 
 
-def test_verdicts_returned_newest_first(client: TestClient, db_session: Session):
-    """Verdicts are ordered newest first."""
+def test_ratings_returned_newest_first(client: TestClient, db_session: Session):
+    """Ratings are ordered newest first."""
     token = _register(client, "ordowner")
     song_a = _create_song(db_session, 10007, "Older Song")
     song_b = _create_song(db_session, 10008, "Newer Song")
-    _create_verdict(
+    _create_rating(
         db_session, "ordowner", song_a,
         created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
     )
-    _create_verdict(
+    _create_rating(
         db_session, "ordowner", song_b,
         created_at=datetime(2025, 6, 1, tzinfo=timezone.utc),
     )
 
-    data = _get_verdicts(client, token)
+    data = _get_ratings(client, token)
 
     titles = [item["song"]["title"] for item in data["items"]]
     assert titles[0] == "Newer Song"
     assert titles[1] == "Older Song"
 
 
-def test_note_included_in_visible_verdict(client: TestClient, db_session: Session):
-    """Note field is returned when the verdict is visible."""
+def test_note_included_in_visible_rating(client: TestClient, db_session: Session):
+    """Note field is returned when the rating is visible."""
     token = _register(client, "noteowner")
     song = _create_song(db_session, 10009, "Note Song")
-    _create_verdict(db_session, "noteowner", song, note="great bassline")
+    _create_rating(db_session, "noteowner", song, note="great bassline")
 
-    data = _get_verdicts(client, token)
+    data = _get_ratings(client, token)
 
     assert data["items"][0]["note"] == "great bassline"
 

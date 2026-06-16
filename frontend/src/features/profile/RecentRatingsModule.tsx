@@ -3,22 +3,22 @@ import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { bucketColor } from "../../theme"
 import { colors, fonts } from "../../theme"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
-import { RecentVerdictItem } from "./types"
+import { RecentRatingItem } from "./types"
 
 type Props = {
-    verdicts: RecentVerdictItem[] | null;
+    ratings: RecentRatingItem[] | null;
     isLoading: boolean;
-    onItemPress: (item: RecentVerdictItem) => void;
+    onItemPress: (item: RecentRatingItem) => void;
     title?: string;
 }
 
-export default function RecentVerdictsModule({ verdicts, isLoading, onItemPress, title = "Your Recent Verdicts" }: Props) {
-    const items = verdicts?.slice(0, 3) ?? []
+export default function RecentRatingsModule({ ratings, isLoading, onItemPress, title = "Your Recent Ratings" }: Props) {
+    const items = ratings?.slice(0, 3) ?? []
 
     if (isLoading || items.length === 0) return null
 
     return (
-        <View style={styles.container} testID="recent-verdicts-module">
+        <View style={styles.container} testID="recent-ratings-module">
             <Text style={styles.sectionTitle}>{title}</Text>
             <View style={styles.card}>
                 {items.map((item, i) => {
@@ -30,7 +30,7 @@ export default function RecentVerdictsModule({ verdicts, isLoading, onItemPress,
                             key={item.rating_event_id}
                             style={[styles.row, i > 0 && styles.rowBorder]}
                             onPress={() => onItemPress(item)}
-                            testID={`verdict-item-${item.rating_event_id}`}
+                            testID={`rating-item-${item.rating_event_id}`}
                             activeOpacity={0.7}
                         >
                             {item.song.cover_url ? (

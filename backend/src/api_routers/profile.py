@@ -21,7 +21,7 @@ from src.pydantic_schemas.profile import (
     ProfileVisibilityUpdate,
     TasteProfileResponse,
 )
-from src.pydantic_schemas.profile_modules import RecentVerdictsResponse
+from src.pydantic_schemas.profile_modules import RecentRatingsResponse
 from src.pydantic_schemas.rating import RankingAnchorsResponse, RankingListResponse
 from src.pydantic_schemas.bookmarks import BookmarkListResponse
 from src.services.profile import (
@@ -44,10 +44,10 @@ from src.services.profile import (
     update_my_visibility,
 )
 from src.services.profile_modules import (
-    get_my_recent_verdicts,
+    get_my_recent_ratings,
     get_profile_ranking_anchors_by_username,
     get_profile_rankings_by_username,
-    get_profile_recent_verdicts,
+    get_profile_recent_ratings,
 )
 from src.pydantic_schemas.auxstrology import AuxstrologyResponse
 from src.services.auxstrology import (
@@ -160,17 +160,17 @@ def profile_search(
 
 
 @router.get(
-    "/me/recent-verdicts",
-    response_model=RecentVerdictsResponse,
+    "/me/recent-ratings",
+    response_model=RecentRatingsResponse,
 )
 @limiter.limit("300/minute")
-def my_recent_verdicts(
+def my_recent_ratings(
     request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> RecentVerdictsResponse:
-    """Return the authenticated user's own recent rating verdicts."""
-    return get_my_recent_verdicts(db, user_id=current_user.id)
+) -> RecentRatingsResponse:
+    """Return the authenticated user's own recent ratings."""
+    return get_my_recent_ratings(db, user_id=current_user.id)
 
 
 @router.get(
@@ -297,18 +297,18 @@ def my_most_compatible(
 
 
 @router.get(
-    "/{username}/recent-verdicts",
-    response_model=RecentVerdictsResponse,
+    "/{username}/recent-ratings",
+    response_model=RecentRatingsResponse,
 )
 @limiter.limit("300/minute")
-def profile_recent_verdicts(
+def profile_recent_ratings(
     request: Request,
     username: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> RecentVerdictsResponse:
-    """Return a profile's recent verdicts, enforcing taste visibility rules."""
-    return get_profile_recent_verdicts(db, viewer_id=current_user.id, username=username)
+) -> RecentRatingsResponse:
+    """Return a profile's recent ratings, enforcing taste visibility rules."""
+    return get_profile_recent_ratings(db, viewer_id=current_user.id, username=username)
 
 
 @router.get(

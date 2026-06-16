@@ -1,9 +1,9 @@
-// Tests for RecentVerdictsModule, RankingsPreviewModule, and MostCompatibleModule on ProfileScreen and OtherProfileScreen.
+// Tests for RecentRatingsModule, RankingsPreviewModule, and MostCompatibleModule on ProfileScreen and OtherProfileScreen.
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native"
 
 import OtherProfileScreen from "../OtherProfileScreen"
 import ProfileScreen from "../ProfileScreen"
-import { CompatibilityResponse, MostCompatibleItem, MostCompatibleResponse, Profile, RecentVerdictsResponse, TasteProfileResponse } from "../types"
+import { CompatibilityResponse, MostCompatibleItem, MostCompatibleResponse, Profile, RecentRatingsResponse, TasteProfileResponse } from "../types"
 import { RankingListResponse, RankingResponse } from "../../comparison/types"
 
 // ── Navigation mocks ─────────────────────────────────────────────────────────
@@ -28,11 +28,11 @@ jest.mock("../../auth/AuthContext", () => ({
 const mockGetMyProfile = jest.fn()
 const mockGetMyTasteProfile = jest.fn()
 const mockGetMyAuxstrology = jest.fn()
-const mockGetMyRecentVerdicts = jest.fn()
+const mockGetMyRecentRatings = jest.fn()
 const mockGetProfileByUsername = jest.fn()
 const mockGetCompatibility = jest.fn()
 const mockGetUserTasteProfile = jest.fn()
-const mockGetProfileRecentVerdicts = jest.fn()
+const mockGetProfileRecentRatings = jest.fn()
 const mockGetProfileRankings = jest.fn()
 const mockFollowUser = jest.fn()
 const mockUnfollowUser = jest.fn()
@@ -48,11 +48,11 @@ jest.mock("../apiRequests", () => ({
     getMyProfile: (...args: unknown[]) => mockGetMyProfile(...args),
     getMyTasteProfile: (...args: unknown[]) => mockGetMyTasteProfile(...args),
     getMyAuxstrology: (...args: unknown[]) => mockGetMyAuxstrology(...args),
-    getMyRecentVerdicts: (...args: unknown[]) => mockGetMyRecentVerdicts(...args),
+    getMyRecentRatings: (...args: unknown[]) => mockGetMyRecentRatings(...args),
     getProfileByUsername: (...args: unknown[]) => mockGetProfileByUsername(...args),
     getCompatibility: (...args: unknown[]) => mockGetCompatibility(...args),
     getUserTasteProfile: (...args: unknown[]) => mockGetUserTasteProfile(...args),
-    getProfileRecentVerdicts: (...args: unknown[]) => mockGetProfileRecentVerdicts(...args),
+    getProfileRecentRatings: (...args: unknown[]) => mockGetProfileRecentRatings(...args),
     getProfileRankings: (...args: unknown[]) => mockGetProfileRankings(...args),
     getProfileBookmarks: (...args: unknown[]) => mockGetProfileBookmarks(...args),
     getMostCompatible: (...args: unknown[]) => mockGetMostCompatible(...args),
@@ -137,7 +137,7 @@ const song = {
     created_at: "2026-01-01T00:00:00Z",
 }
 
-const verdictItem = {
+const ratingItem = {
     rating_event_id: 42,
     song,
     bucket: "like",
@@ -146,8 +146,8 @@ const verdictItem = {
     created_at: "2026-05-01T10:00:00Z",
 }
 
-const verdictsResponse: RecentVerdictsResponse = { items: [verdictItem] }
-const emptyVerdictsResponse: RecentVerdictsResponse = { items: [] }
+const ratingsResponse: RecentRatingsResponse = { items: [ratingItem] }
+const emptyRatingsResponse: RecentRatingsResponse = { items: [] }
 
 const ranking: RankingResponse = {
     id: 7,
@@ -194,7 +194,7 @@ describe("ProfileScreen profile modules", () => {
         jest.resetAllMocks()
         mockGetMyProfile.mockResolvedValue(myProfile)
         mockGetMyTasteProfile.mockResolvedValue({ total_rated: 0, avg_score: null, bucket_breakdown: { like: 0, okay: 0, dislike: 0 }, overall: { genres: [], top_artists: [] }, by_bucket: { like: { genres: [], top_artists: [], avg_score: null, count: 0 }, okay: { genres: [], top_artists: [], avg_score: null, count: 0 }, dislike: { genres: [], top_artists: [], avg_score: null, count: 0 } } })
-        mockGetMyRecentVerdicts.mockResolvedValue(verdictsResponse)
+        mockGetMyRecentRatings.mockResolvedValue(ratingsResponse)
         mockListMyRankings.mockResolvedValue(rankingsResponse)
         mockGetMostCompatible.mockResolvedValue(mostCompatibleResponse)
         mockGetMyAuxstrology.mockResolvedValue({
@@ -207,7 +207,7 @@ describe("ProfileScreen profile modules", () => {
         render(<ProfileScreen />)
 
         await waitFor(() => {
-            expect(screen.getByTestId(`activity-card-${verdictItem.rating_event_id}`)).toBeTruthy()
+            expect(screen.getByTestId(`activity-card-${ratingItem.rating_event_id}`)).toBeTruthy()
         })
     })
 
@@ -286,15 +286,15 @@ describe("ProfileScreen profile modules", () => {
         render(<ProfileScreen />)
 
         await waitFor(() => {
-            expect(screen.getByTestId(`activity-card-${verdictItem.rating_event_id}`)).toBeTruthy()
+            expect(screen.getByTestId(`activity-card-${ratingItem.rating_event_id}`)).toBeTruthy()
         })
-        fireEvent.press(screen.getByTestId(`activity-card-${verdictItem.rating_event_id}`))
+        fireEvent.press(screen.getByTestId(`activity-card-${ratingItem.rating_event_id}`))
 
         expect(mockNavigate).toHaveBeenCalledWith("SongDetail", expect.anything())
     })
 
-    it("renders no activity when verdicts list is empty", async () => {
-        mockGetMyRecentVerdicts.mockResolvedValue(emptyVerdictsResponse)
+    it("renders no activity when ratings list is empty", async () => {
+        mockGetMyRecentRatings.mockResolvedValue(emptyRatingsResponse)
 
         render(<ProfileScreen />)
 
@@ -383,7 +383,7 @@ describe("OtherProfileScreen profile modules", () => {
         jest.resetAllMocks()
         mockGetProfileByUsername.mockResolvedValue(otherProfile)
         mockGetCompatibility.mockResolvedValue(compatNoOverlap)
-        mockGetProfileRecentVerdicts.mockResolvedValue(verdictsResponse)
+        mockGetProfileRecentRatings.mockResolvedValue(ratingsResponse)
         mockGetProfileRankings.mockResolvedValue(rankingsResponse)
         mockGetProfileBookmarks.mockResolvedValue({ bookmarks: [] })
         mockReportUser.mockResolvedValue({ id: 1, status: "open" })

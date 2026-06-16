@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from src.pydantic_schemas.song import SongResponse
 
 
-class RecentVerdictItem(BaseModel):
+class RecentRatingItem(BaseModel):
     rating_event_id: int
     song: SongResponse
     bucket: str
@@ -14,5 +14,5 @@ class RecentVerdictItem(BaseModel):
     created_at: datetime
 
 
-class RecentVerdictsResponse(BaseModel):
-    items: list[RecentVerdictItem]
+class RecentRatingsResponse(BaseModel):
+    items: list[RecentRatingItem]

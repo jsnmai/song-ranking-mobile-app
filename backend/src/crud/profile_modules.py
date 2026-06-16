@@ -11,17 +11,17 @@ from src.sqlalchemy_tables.song import Song
 
 
 @dataclass(frozen=True)
-class VerdictRow:
+class RatingRow:
     event: RatingEvent
     song: Song
 
 
-def list_profile_recent_verdicts(
+def list_profile_recent_ratings(
     db: Session,
     viewer_id: int,
     owner_id: int,
     limit: int = 5,
-) -> list[VerdictRow]:
+) -> list[RatingRow]:
     """Return the latest visible rating event per song for owner_id, newest first."""
     latest_event_ids = (
         select(RatingEvent.id)
@@ -46,7 +46,7 @@ def list_profile_recent_verdicts(
         .order_by(RatingEvent.created_at.desc(), RatingEvent.id.desc())
         .limit(limit)
     ).all()
-    return [VerdictRow(event=row[0], song=row[1]) for row in rows]
+    return [RatingRow(event=row[0], song=row[1]) for row in rows]
 
 
 def list_profile_bucket_rankings(

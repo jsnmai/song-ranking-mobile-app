@@ -16,7 +16,7 @@ import {
     ProfileSearchResponse,
     ProfileSetupRequest,
     ProfileVisibility,
-    RecentVerdictsResponse,
+    RecentRatingsResponse,
     TasteProfileResponse,
 } from "./types"
 import { RankingAnchorsResponse, RankingListResponse } from "../comparison/types"
@@ -134,17 +134,17 @@ export async function getCompatibility(username: string, token: string): Promise
     return apiClient.get<CompatibilityResponse>(`/api/v1/profile/${username}/compatibility`, token)
 }
 
-// Calls GET /api/v1/profile/me/recent-verdicts
-export async function getMyRecentVerdicts(token: string): Promise<RecentVerdictsResponse> {
-    return apiClient.get<RecentVerdictsResponse>("/api/v1/profile/me/recent-verdicts", token)
+// Calls GET /api/v1/profile/me/recent-ratings
+export async function getMyRecentRatings(token: string): Promise<RecentRatingsResponse> {
+    return apiClient.get<RecentRatingsResponse>("/api/v1/profile/me/recent-ratings", token)
 }
 
-// Calls GET /api/v1/profile/{username}/recent-verdicts
-export async function getProfileRecentVerdicts(
+// Calls GET /api/v1/profile/{username}/recent-ratings
+export async function getProfileRecentRatings(
     username: string,
     token: string,
-): Promise<RecentVerdictsResponse> {
-    return apiClient.get<RecentVerdictsResponse>(`/api/v1/profile/${username}/recent-verdicts`, token)
+): Promise<RecentRatingsResponse> {
+    return apiClient.get<RecentRatingsResponse>(`/api/v1/profile/${username}/recent-ratings`, token)
 }
 
 // Calls GET /api/v1/profile/{username}/rankings

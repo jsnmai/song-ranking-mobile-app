@@ -159,7 +159,7 @@ export type AuxstrologyResponse = {
     axes: Record<string, string>;
 }
 
-export type RecentVerdictSong = {
+export type RecentRatingSong = {
     id: number;
     deezer_id: number;
     title: string;
@@ -169,17 +169,17 @@ export type RecentVerdictSong = {
     preview_url: string | null;
 }
 
-export type RecentVerdictItem = {
+export type RecentRatingItem = {
     rating_event_id: number;
-    song: RecentVerdictSong;
+    song: RecentRatingSong;
     bucket: string;
     score: number;
     note: string | null;
     created_at: string;
 }
 
-export type RecentVerdictsResponse = {
-    items: RecentVerdictItem[];
+export type RecentRatingsResponse = {
+    items: RecentRatingItem[];
 }
 
 // Mirrors CompatibilityResponse in backend/src/pydantic_schemas/profile.py

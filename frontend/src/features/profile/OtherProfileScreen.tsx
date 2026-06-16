@@ -1,7 +1,7 @@
 // OtherProfile — another user's profile per the Bento Orbit design: identity card
 // mirroring the You profile (no inline buttons), Follow + To LISTn side by side,
 // Compatibility + Top Artist tiles, Their Top Songs (uniform rows), Top Genres,
-// their Auxstrology signature, and Recent Verdicts. Report/block live under the
+// their Auxstrology signature, and Recent Ratings. Report/block live under the
 // nav flag button; privacy states are kept.
 import { Fragment, useEffect, useState } from "react"
 import {
@@ -28,7 +28,7 @@ import {
     getCompatibility,
     getProfileByUsername,
     getProfileRankings,
-    getProfileRecentVerdicts,
+    getProfileRecentRatings,
     getUserAuxstrology,
     getUserTasteProfile,
     reportUser,
@@ -36,10 +36,10 @@ import {
     unfollowUser,
 } from "./apiRequests"
 import {
-    AuxstrologyResponse, CompatibilityResponse, Profile, RecentVerdictItem, ReportReason,
+    AuxstrologyResponse, CompatibilityResponse, Profile, RecentRatingItem, ReportReason,
     TasteProfileResponse,
 } from "./types"
-import RecentVerdictsModule from "./RecentVerdictsModule"
+import RecentRatingsModule from "./RecentRatingsModule"
 
 type OtherProfileProps = NativeStackScreenProps<AppStackParamList, "OtherProfile">
 
@@ -149,7 +149,7 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
     const [isReporting, setIsReporting] = useState(false)
     const [reportError, setReportError] = useState<string | null>(null)
     const [reportSuccess, setReportSuccess] = useState(false)
-    const [verdicts, setVerdicts] = useState<RecentVerdictItem[] | null>(null)
+    const [ratings, setRatings] = useState<RecentRatingItem[] | null>(null)
     const [topSongs, setTopSongs] = useState<RankingResponse[] | null>(null)
 
     const openFollowers = () => navigation.navigate("ProfileList", { username, listType: "followers" })
@@ -282,14 +282,14 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
             try {
                 const [tasteData, vData, rData] = await Promise.all([
                     getUserTasteProfile(username, token),
-                    getProfileRecentVerdicts(username, token),
+                    getProfileRecentRatings(username, token),
                     getProfileRankings(username, token),
                 ])
                 setTaste(tasteData)
-                setVerdicts(vData.items)
+                setRatings(vData.items)
                 setTopSongs(rData.rankings.slice(0, 3))
             } catch {
-                setVerdicts([])
+                setRatings([])
                 setTopSongs([])
             }
         }
@@ -712,13 +712,13 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
                             </View>
                         )}
 
-                        {/* Recent verdicts — their freshest written takes */}
-                        {profile.can_view_taste && verdicts !== null && verdicts.length > 0 && (
-                            <View style={styles.verdictsWrap}>
-                                <RecentVerdictsModule
-                                    verdicts={verdicts}
+                        {/* Recent ratings — their freshest written takes */}
+                        {profile.can_view_taste && ratings !== null && ratings.length > 0 && (
+                            <View style={styles.ratingsWrap}>
+                                <RecentRatingsModule
+                                    ratings={ratings}
                                     isLoading={false}
-                                    title="Recent Verdicts"
+                                    title="Recent Ratings"
                                     onItemPress={(item) => {
                                         navigation.navigate("SongDetail", { song: item.song as never })
                                     }}
@@ -1242,7 +1242,7 @@ const styles = StyleSheet.create({
         color: colors.cdim,
         lineHeight: 14,
     },
-    verdictsWrap: {
+    ratingsWrap: {
         marginTop: 13,
     },
     // ── Report panel ─────────────────────────────────────────────────
