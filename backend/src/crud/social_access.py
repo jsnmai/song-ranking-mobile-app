@@ -105,3 +105,39 @@ def followed_visible_taste_owner_predicate(
             include_self=False,
         ),
     )
+
+
+def circle_visible_taste_owner_predicate(
+    viewer_id: int,
+    owner_id_column: ColumnElement[int],
+) -> ColumnElement[bool]:
+    """Return circle members: mutual follows whose taste is visible to the viewer.
+
+    "Your circle" means mutual follows whose taste is visible to the viewer. This
+    is stricter than followed_visible_taste_owner_predicate, which only requires a
+    one-way follow — circle aggregates require the follow to go both directions.
+    Visibility, blocks, only_me, and deleted-user exclusion are delegated to
+    visible_taste_owner_predicate so circle modules share one source of truth.
+    """
+    viewer_follow = aliased(Follow)
+    owner_follow = aliased(Follow)
+    viewer_follows_owner = exists(
+        select(viewer_follow.id)
+        .where(viewer_follow.follower_id == viewer_id)
+        .where(viewer_follow.following_id == owner_id_column)
+    )
+    owner_follows_viewer = exists(
+        select(owner_follow.id)
+        .where(owner_follow.follower_id == owner_id_column)
+        .where(owner_follow.following_id == viewer_id)
+    )
+    return and_(
+        owner_id_column != viewer_id,
+        viewer_follows_owner,
+        owner_follows_viewer,
+        visible_taste_owner_predicate(
+            viewer_id,
+            owner_id_column,
+            include_self=False,
+        ),
+    )
