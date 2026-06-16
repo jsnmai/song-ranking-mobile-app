@@ -82,7 +82,7 @@ export default function SocialDiscoveryCard({ item, onOpen }: SocialDiscoveryCar
 
 const styles = StyleSheet.create({
     card: {
-        backgroundColor: colors.mint,
+        backgroundColor: colors.berry,
         borderRadius: 16,
         paddingTop: 5,
         paddingBottom: 12,
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
         height: 26,
         borderRadius: 13,
         borderWidth: 1.5,
-        borderColor: colors.mint,
+        borderColor: colors.berry,
         alignItems: "center",
         justifyContent: "center",
     },

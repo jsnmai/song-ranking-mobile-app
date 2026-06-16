@@ -18,7 +18,9 @@ export const colors = {
     accent: "#ff5a3c",
     sky: "#5b8def",
     plum: "#7a3ad0",
-    mint: "#1f9d77",     // success / co-sign / compatibility
+    mint: "#1f9d77",     // success / match moment
+    berry: "#bf3f68",    // co-sign
+    teal: "#0fa3a8",     // taste compatibility
     butter: "#f5c343",   // trending / highlight
     gold: "#f5b840",     // FAB / cosmic orbit
     danger: "#e0492e",

@@ -950,7 +950,7 @@ const styles = StyleSheet.create({
     },
     compatTile: {
         flex: 1,
-        backgroundColor: colors.sky,
+        backgroundColor: colors.teal,
         borderRadius: 14,
         paddingVertical: 11,
         paddingHorizontal: 12,

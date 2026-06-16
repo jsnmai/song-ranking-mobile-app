@@ -1154,7 +1154,7 @@ const styles = StyleSheet.create({
         fontWeight: "700",
     },
     coSignLockedCard: {
-        backgroundColor: colors.mint,
+        backgroundColor: colors.berry,
         borderRadius: 14,
         padding: 12,
         marginBottom: 8,
@@ -1293,7 +1293,7 @@ const styles = StyleSheet.create({
         padding: 11,
     },
     compatCard: {
-        backgroundColor: colors.sky,
+        backgroundColor: colors.teal,
     },
     compatPill: {
         backgroundColor: "rgba(255,255,255,0.20)",

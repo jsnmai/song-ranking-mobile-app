@@ -342,21 +342,24 @@ export default function FeedScreen() {
                 </View>
             </View>
 
-            {/* Row: Re-rate (locked, 150px) + Co-Sign (locked, 150px, 1.25×) */}
+            {/* Row: Re-rate Radar (locked, 150px) + Match Moment (locked, 150px) */}
             <View style={styles.fullRow}>
                 {/* Re-rate Radar */}
                 <View style={[styles.fullCell, { height: 150, backgroundColor: colors.navy }]}>
                     <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
                         <View style={styles.fullCellTop}>
-                            <View style={styles.goldPill}><Text style={styles.goldPillText}>Re-rate</Text></View>
+                            <View style={styles.goldPill}><Text style={styles.goldPillText}>Re-rate radar</Text></View>
                             <View style={styles.lockTagRow}>
                                 <LockIcon color="rgba(255,255,255,0.85)" size={10} />
                                 <Text style={styles.lockTagLabel}>LOCKED</Text>
                             </View>
                         </View>
+                        {/* Placeholder text pill next to the empty square */}
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                             <View style={styles.ghostBoxSm} />
-                            <Text style={[styles.lockCardDesc, { flex: 1, color: "rgba(255,255,255,0.55)" }]}>When a friend changes a score</Text>
+                            <View style={{ flex: 1 }}>
+                                <View style={[styles.skBar, { width: "62%", height: 10, backgroundColor: "rgba(255,255,255,0.3)" }]} />
+                            </View>
                         </View>
                         {/* Sparkline as flex child 3/4 */}
                         <Svg width="100%" height={34} viewBox="0 0 100 34" preserveAspectRatio="none">
@@ -371,34 +374,38 @@ export default function FeedScreen() {
                                 strokeLinejoin="round"
                             />
                         </Svg>
+                        {/* Caption next to the lock */}
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                             <View style={styles.lockDotSm}><LockIcon color="#fff" size={13} /></View>
-                            <View style={[styles.skBar, { width: "30%", height: 10, backgroundColor: "rgba(255,255,255,0.3)" }]} />
+                            <Text style={[styles.lockCardDesc, { flex: 1, color: "rgba(255,255,255,0.55)" }]}>When a friend changes a score</Text>
                         </View>
                     </View>
                 </View>
 
-                {/* Co-Sign — locked, 150px, 1.25× */}
-                <View style={[styles.fullCell, { height: 150, flex: 1.25, backgroundColor: colors.mint }]}>
+                {/* Match Moment — locked, 150px, mint */}
+                <View style={[styles.fullCell, { height: 150, backgroundColor: colors.mint }]}>
+                    <View style={styles.matchMomentBlob} />
                     <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
                         <View style={styles.fullCellTop}>
-                            <View style={styles.darkMintPill}><Text style={styles.darkMintPillText}>Co-sign</Text></View>
+                            <View style={styles.lightPill}><Text style={styles.lightPillText}>Match moment</Text></View>
                             <View style={styles.lockTagRow}>
                                 <LockIcon color="rgba(255,255,255,0.85)" size={10} />
                                 <Text style={styles.lockTagLabel}>LOCKED</Text>
                             </View>
                         </View>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 11 }}>
-                            <View style={styles.ghostBoxLg} />
-                            <Text style={[styles.lockCardDesc, { flex: 1 }]}>Songs your circle all rate 9+</Text>
-                        </View>
-                        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                            <View style={{ flexDirection: "row", alignItems: "center" }}>
-                                {[0, 1, 2].map((i) => (
-                                    <View key={i} style={[styles.fullCoSignCircle, i > 0 && styles.coSignCircleOverlap]} />
-                                ))}
+                        {/* Head-to-head: winner (check badge) › loser */}
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
+                            <View>
+                                <View style={styles.ghostBoxLg} />
+                                <View style={styles.matchMomentCheck} />
                             </View>
+                            <Text style={styles.matchMomentGt}>›</Text>
+                            <View style={styles.ghostBoxMatchLose} />
+                        </View>
+                        {/* Caption next to the lock */}
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
                             <View style={styles.lockDotSm}><LockIcon color="#fff" size={13} /></View>
+                            <Text style={[styles.lockCardDesc, { flex: 1 }]}>Head-to-head picks from your circle</Text>
                         </View>
                     </View>
                 </View>
@@ -537,10 +544,9 @@ export default function FeedScreen() {
                 </View>
 
                 <View style={[styles.miniTile, { backgroundColor: colors.mint }]}>
-                    <View style={styles.coSignCircles}>
-                        {[0, 1, 2].map((i) => (
-                            <View key={i} style={[styles.coSignCircle, i > 0 && styles.coSignCircleOverlap]} />
-                        ))}
+                    <View style={styles.versusDecoration}>
+                        <View style={styles.versusWin} />
+                        <View style={styles.versusLose} />
                     </View>
                     <View style={styles.miniTileInner}>
                         <View style={styles.miniTileTop}>
@@ -548,8 +554,8 @@ export default function FeedScreen() {
                             <Text style={[styles.miniLockedTag, { color: "rgba(255,255,255,0.6)" }]}>LOCKED</Text>
                         </View>
                         <View>
-                            <Text style={[styles.miniTileLabel, { color: "#fff" }]}>Co-Sign</Text>
-                            <Text style={[styles.miniTileSub, { color: "rgba(255,255,255,0.78)" }]}>Songs friends all rate 9+</Text>
+                            <Text style={[styles.miniTileLabel, { color: "#fff" }]}>Match Moment</Text>
+                            <Text style={[styles.miniTileSub, { color: "rgba(255,255,255,0.78)" }]}>Head-to-head picks</Text>
                         </View>
                     </View>
                 </View>
@@ -1682,20 +1688,6 @@ const styles = StyleSheet.create({
         letterSpacing: 0.8,
         textTransform: "uppercase",
     },
-    darkMintPill: {
-        backgroundColor: "rgba(0,0,0,0.22)",
-        borderRadius: 999,
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-    },
-    darkMintPillText: {
-        fontFamily: fonts.mono,
-        fontSize: 8.5,
-        color: "#fff",
-        fontWeight: "700",
-        letterSpacing: 0.8,
-        textTransform: "uppercase",
-    },
     butterPill: {
         backgroundColor: colors.butter,
         borderRadius: 999,
@@ -1815,15 +1807,44 @@ const styles = StyleSheet.create({
         borderColor: colors.inkDim,
         flexShrink: 0,
     },
-    // Co-sign circles (full card, larger than mini)
-    fullCoSignCircle: {
-        width: 22,
-        height: 22,
-        borderRadius: 11,
+    // Match Moment (full card) — head-to-head ghost squares + accents
+    ghostBoxMatchLose: {
+        width: 32,
+        height: 32,
+        borderRadius: 7,
+        backgroundColor: "rgba(255,255,255,0.08)",
         borderWidth: 1.5,
         borderStyle: "dashed",
-        borderColor: "rgba(255,255,255,0.6)",
-        backgroundColor: colors.mint,
+        borderColor: "rgba(255,255,255,0.4)",
+        flexShrink: 0,
+    },
+    matchMomentBlob: {
+        position: "absolute",
+        top: -30,
+        right: -30,
+        width: 90,
+        height: 90,
+        borderRadius: 45,
+        backgroundColor: "#fff",
+        opacity: 0.08,
+    },
+    matchMomentCheck: {
+        position: "absolute",
+        right: -4,
+        bottom: -4,
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        backgroundColor: "rgba(255,255,255,0.85)",
+        borderWidth: 2,
+        borderColor: colors.mint,
+    },
+    matchMomentGt: {
+        fontFamily: fonts.display,
+        fontSize: 18,
+        lineHeight: 20,
+        color: "rgba(255,255,255,0.72)",
+        flexShrink: 0,
     },
     // Disagreement Spotlight full locked card
     fullDisagreeCard: {
@@ -1971,23 +1992,33 @@ const styles = StyleSheet.create({
         opacity: 0.12,
         borderRadius: 1,
     },
-    coSignCircles: {
+    // Match Moment (compact tile) — head-to-head versus decoration
+    versusDecoration: {
         position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
         flexDirection: "row",
-        alignSelf: "center",
-        top: 18,
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 7,
+        paddingBottom: 26,
     },
-    coSignCircle: {
-        width: 25,
-        height: 25,
-        borderRadius: 12.5,
-        borderWidth: 1.5,
-        borderStyle: "dashed",
-        borderColor: "rgba(255,255,255,0.45)",
-        backgroundColor: colors.mint,
+    versusWin: {
+        width: 27,
+        height: 27,
+        borderRadius: 6,
+        backgroundColor: "rgba(255,255,255,0.14)",
+        borderWidth: 2,
+        borderColor: "#fff",
     },
-    coSignCircleOverlap: {
-        marginLeft: -9,
+    versusLose: {
+        width: 21,
+        height: 21,
+        borderRadius: 5,
+        backgroundColor: "rgba(255,255,255,0.1)",
+        opacity: 0.7,
     },
     // ── Find friends card ─────────────────────────────────────────────────
     findFriendsCard: {
