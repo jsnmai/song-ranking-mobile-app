@@ -19,6 +19,7 @@ jest.mock("@react-navigation/native", () => {
         ...actual,
         useNavigation: () => ({
             navigate: mockNavigate,
+            getParent: jest.fn(() => ({ addListener: jest.fn(() => jest.fn()) })),
         }),
         useFocusEffect: (callback: () => void) => {
             React.useEffect(() => {
@@ -109,6 +110,7 @@ const feedEvent: FeedEvent = {
         user_id: 4,
         username: "maya",
         display_name: "Maya",
+        avatar_color: null, timezone: null,
         is_public: true,
         visibility: "public",
         created_at: "2026-01-01T00:00:00Z",
@@ -269,8 +271,8 @@ describe("FeedScreen", () => {
         fireEvent.press(screen.getByText("Connect contacts"))
 
         expect(mockNavigate).toHaveBeenCalledWith("Discover", {
-            focusSearch: true,
-            searchMode: "users",
+            screen: "DiscoverHome",
+            params: { focusSearch: true, searchMode: "users" },
         })
     })
 })

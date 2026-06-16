@@ -116,7 +116,7 @@ export default function RankingsScreen() {
     const handleReorderPress = () => navigation.navigate("Reorder")
     const handleVersusHistoryPress = () => navigation.navigate("VersusHistory")
     const handleFullRankingsPress = () => navigation.navigate("FullRankings")
-    const handleRateFirstSong = () => navigation.navigate("Discover", { focusSearch: true })
+    const handleRateFirstSong = () => navigation.navigate("Discover", { screen: "DiscoverHome", params: { focusSearch: true } })
 
     const renderRankMap = () => {
         const screenW = Dimensions.get("window").width
@@ -592,7 +592,7 @@ export default function RankingsScreen() {
                     <View style={styles.headerActions}>
                         <TouchableOpacity
                             style={styles.iconBtn}
-                            onPress={() => navigation.navigate("Discover", { focusSearch: true })}
+                            onPress={() => navigation.navigate("Discover", { screen: "DiscoverHome", params: { focusSearch: true } })}
                         >
                             <Svg width={16} height={16} viewBox="0 0 24 24" fill="none"
                                 stroke={colors.ink} strokeWidth={2} strokeLinecap="round">

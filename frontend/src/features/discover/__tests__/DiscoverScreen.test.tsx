@@ -28,18 +28,24 @@ jest.mock("expo-secure-store", () => ({
     setItemAsync: jest.fn(),
 }))
 
-jest.mock("@react-navigation/native", () => ({
-    useNavigation: () => ({
-        navigate: mockNavigate,
-        setParams: mockSetParams,
-        addListener: jest.fn(() => jest.fn()),
-        isFocused: jest.fn(() => true),
-    }),
-    useRoute: () => ({
-        params: undefined,
-    }),
-    useFocusEffect: jest.fn(),
-}))
+jest.mock("@react-navigation/native", () => {
+    const React = jest.requireActual("react")
+    return {
+        useNavigation: () => ({
+            navigate: mockNavigate,
+            setParams: mockSetParams,
+            addListener: jest.fn(() => jest.fn()),
+            isFocused: jest.fn(() => true),
+            getParent: jest.fn(() => ({ addListener: jest.fn(() => jest.fn()) })),
+        }),
+        useRoute: () => ({
+            params: undefined,
+        }),
+        // Run the focus callback like a focused screen (once per stable callback)
+        // so focus-driven data loads execute under test without re-render loops.
+        useFocusEffect: (cb: () => void) => React.useEffect(cb, [cb]),
+    }
+})
 
 jest.mock("../../auth/AuthContext", () => ({
     useAuth: () => ({

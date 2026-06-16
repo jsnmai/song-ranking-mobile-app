@@ -25,7 +25,7 @@ import * as SecureStore from "expo-secure-store"
 import Svg, { Circle, Path } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
-import { AppStackParamList, TabParamList } from "../../navigation/types"
+import { AppStackParamList, DiscoverStackParamList, TabParamList } from "../../navigation/types"
 import { bucketColor, colors, fonts } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
 import { followUser, getMostCompatible, searchProfiles, unfollowUser } from "../profile/apiRequests"
@@ -46,10 +46,13 @@ const POPULAR_PLACEHOLDERS = [
     { id: 4, title: "Pink + White", artist: "FRANK OCEAN" },
 ]
 
-type DiscoverRouteProp = RouteProp<TabParamList, "Discover">
+type DiscoverRouteProp = RouteProp<DiscoverStackParamList, "DiscoverHome">
 type DiscoverNavigationProp = CompositeNavigationProp<
-    BottomTabNavigationProp<TabParamList, "Discover">,
-    NativeStackNavigationProp<AppStackParamList>
+    NativeStackNavigationProp<DiscoverStackParamList, "DiscoverHome">,
+    CompositeNavigationProp<
+        BottomTabNavigationProp<TabParamList, "Discover">,
+        NativeStackNavigationProp<AppStackParamList>
+    >
 >
 
 function SearchIcon({ size = 16 }: { size?: number }) {
@@ -175,8 +178,11 @@ export default function DiscoverScreen() {
     )
 
     // Pressing the Discover tab while already on it and searching → reset to home.
+    // tabPress fires on the parent tab navigator, not this screen's stack.
     useEffect(() => {
-        return navigation.addListener("tabPress", (e) => {
+        const tabNavigation = navigation.getParent<BottomTabNavigationProp<TabParamList, "Discover">>()
+        if (!tabNavigation) return
+        return tabNavigation.addListener("tabPress", (e) => {
             if (navigation.isFocused() && searchFocused) {
                 e.preventDefault()
                 handleCancel()
@@ -360,34 +366,39 @@ export default function DiscoverScreen() {
         }
     }, [query, searchMode, token])
 
-    useEffect(() => {
-        if (!token) return
-        let isCurrentRequest = true
-        setIsDiscoveryLoading(true)
-        setDiscoveryError(null)
-        Promise.all([
-            listCoSigns(token),
-            getMostCompatible(token),
-        ])
-            .then(([coSignResponse, compatResponse]) => {
-                if (!isCurrentRequest) return
-                setCoSigns(coSignResponse.items)
-                setTopCompatUser(compatResponse.users[0] ?? null)
-            })
-            .catch((err) => {
-                if (isCurrentRequest) {
-                    setDiscoveryError(
-                        err instanceof ApiError
-                            ? err.detail
-                            : "Social discovery is temporarily unavailable.",
-                    )
-                }
-            })
-            .finally(() => {
-                if (isCurrentRequest) setIsDiscoveryLoading(false)
-            })
-        return () => { isCurrentRequest = false }
-    }, [token])
+    // Refetch on focus (not just on token change) so a transient backend error
+    // can't leave the discovery section permanently stuck on a stale error —
+    // matching how Feed and Profile recover when the tab regains focus.
+    useFocusEffect(
+        useCallback(() => {
+            if (!token) return
+            let isCurrentRequest = true
+            setIsDiscoveryLoading(true)
+            setDiscoveryError(null)
+            Promise.all([
+                listCoSigns(token),
+                getMostCompatible(token),
+            ])
+                .then(([coSignResponse, compatResponse]) => {
+                    if (!isCurrentRequest) return
+                    setCoSigns(coSignResponse.items)
+                    setTopCompatUser(compatResponse.users[0] ?? null)
+                })
+                .catch((err) => {
+                    if (isCurrentRequest) {
+                        setDiscoveryError(
+                            err instanceof ApiError
+                                ? err.detail
+                                : "Social discovery is temporarily unavailable.",
+                        )
+                    }
+                })
+                .finally(() => {
+                    if (isCurrentRequest) setIsDiscoveryLoading(false)
+                })
+            return () => { isCurrentRequest = false }
+        }, [token]),
+    )
 
     const trimmedQuery = query.trim()
     const hasQuery = trimmedQuery.length > 0

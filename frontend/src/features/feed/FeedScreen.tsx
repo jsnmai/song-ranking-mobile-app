@@ -1,5 +1,5 @@
 // Feed tab — shows rating activity from users the current user follows.
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import {
     ActivityIndicator,
     Image,
@@ -11,13 +11,13 @@ import {
     View,
 } from "react-native"
 import { FlashList } from "@shopify/flash-list"
-import { CompositeNavigationProp, useFocusEffect, useNavigation } from "@react-navigation/native"
+import { CompositeNavigationProp, useNavigation } from "@react-navigation/native"
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import Svg, { Circle, Ellipse, Path, Polygon, Polyline } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
-import { AppStackParamList, TabParamList } from "../../navigation/types"
+import { AppStackParamList, FeedStackParamList, TabParamList } from "../../navigation/types"
 import { colors, fonts, bucketColor } from "../../theme"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
 import { useAuth } from "../auth/AuthContext"
@@ -28,8 +28,11 @@ import { listMyFeed, reportRatingEvent } from "./apiRequests"
 import { FeedEvent } from "./types"
 
 type FeedNavigation = CompositeNavigationProp<
-    BottomTabNavigationProp<TabParamList, "Feed">,
-    NativeStackNavigationProp<AppStackParamList>
+    NativeStackNavigationProp<FeedStackParamList, "FeedHome">,
+    CompositeNavigationProp<
+        BottomTabNavigationProp<TabParamList, "Feed">,
+        NativeStackNavigationProp<AppStackParamList>
+    >
 >
 
 const DAY_ABBRS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
@@ -172,7 +175,7 @@ export default function FeedScreen() {
     }
 
     const handleFindUsers = () => {
-        navigation.navigate("Discover", { focusSearch: true, searchMode: "users" })
+        navigation.navigate("Discover", { screen: "DiscoverHome", params: { focusSearch: true, searchMode: "users" } })
     }
 
     const handleActorPress = (event: FeedEvent) => {
@@ -614,7 +617,7 @@ export default function FeedScreen() {
                     <View style={styles.bannerBtns}>
                         <TouchableOpacity
                             style={styles.bannerBtnGold}
-                            onPress={() => navigation.navigate("Discover", { focusSearch: true })}
+                            onPress={() => navigation.navigate("Discover", { screen: "DiscoverHome", params: { focusSearch: true } })}
                         >
                             <Text style={styles.bannerBtnGoldText}>+ Rate songs</Text>
                         </TouchableOpacity>
@@ -654,7 +657,7 @@ export default function FeedScreen() {
                 {/* Search bar — taps into Discover */}
                 <TouchableOpacity
                     style={styles.searchBar}
-                    onPress={() => navigation.navigate("Discover", { focusSearch: true })}
+                    onPress={() => navigation.navigate("Discover", { screen: "DiscoverHome", params: { focusSearch: true } })}
                     activeOpacity={0.7}
                 >
                     <SearchIcon />
@@ -898,12 +901,20 @@ export default function FeedScreen() {
         return <ActivityIndicator color={colors.accent} style={styles.footerSpinner} />
     }
 
-    useFocusEffect(
-        useCallback(() => {
+    // Load on mount and reload when the Feed tab regains focus from another tab.
+    // Deliberately not useFocusEffect: that also fires when popping back from a
+    // screen pushed on the Feed stack (a user's profile, a follow list), and the
+    // mid-transition reload visibly yanks the list to the top before the scroll
+    // position settles back.
+    useEffect(() => {
+        loadFeed(null, true)
+        refreshProfile()
+        const tabNavigation = navigation.getParent<BottomTabNavigationProp<TabParamList, "Feed">>()
+        return tabNavigation?.addListener("focus", () => {
             loadFeed(null, true)
             refreshProfile()
-        }, [loadFeed, refreshProfile]),
-    )
+        })
+    }, [loadFeed, refreshProfile, navigation])
 
     if (error !== null && events.length === 0) {
         return (
@@ -940,7 +951,7 @@ export default function FeedScreen() {
                 {/* Search bar */}
                 <TouchableOpacity
                     style={styles.searchBar}
-                    onPress={() => navigation.navigate("Discover", { focusSearch: true })}
+                    onPress={() => navigation.navigate("Discover", { screen: "DiscoverHome", params: { focusSearch: true } })}
                     activeOpacity={0.7}
                 >
                     <SearchIcon />

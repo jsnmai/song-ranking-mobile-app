@@ -282,7 +282,8 @@ export default function ProfileListScreen({ navigation, route }: ProfileListProp
                         })}
                     </View>
                 )}
-                <View style={{ height: 24 }} />
+                {/* Clear the floating tab bar */}
+                <View style={{ height: 96 }} />
             </ScrollView>
         </View>
     )

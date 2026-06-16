@@ -4,6 +4,7 @@
 // Tab bar uses a frosted-glass overlay so content scrolls behind it.
 
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { StackActions } from "@react-navigation/native"
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { BottomTabBarProps } from "@react-navigation/bottom-tabs"
@@ -11,7 +12,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import Svg, { Path, Rect, Circle } from "react-native-svg"
 import { BlurView } from "expo-blur"
 
-import { AppStackParamList, RankingsStackParamList, TabParamList } from "./types"
+import {
+    AppStackParamList,
+    DiscoverStackParamList,
+    FeedStackParamList,
+    ProfileStackParamList,
+    RankingsStackParamList,
+    TabParamList,
+} from "./types"
 import BucketSelectionScreen from "../features/comparison/BucketSelectionScreen"
 import ComparisonFlowScreen from "../features/comparison/ComparisonFlowScreen"
 import ScoreRevealScreen from "../features/comparison/ScoreRevealScreen"
@@ -38,6 +46,9 @@ import { colors, fonts } from "../theme"
 const Tab = createBottomTabNavigator<TabParamList>()
 const Stack = createNativeStackNavigator<AppStackParamList>()
 const RankingsStack = createNativeStackNavigator<RankingsStackParamList>()
+const FeedStack = createNativeStackNavigator<FeedStackParamList>()
+const DiscoverStack = createNativeStackNavigator<DiscoverStackParamList>()
+const ProfileStack = createNativeStackNavigator<ProfileStackParamList>()
 
 // ── Tab bar icons (SVG) ───────────────────────────────────────────────────
 const S = 22  // icon size
@@ -113,9 +124,28 @@ function FrostedTabBar({ state, descriptors: _desc, navigation }: BottomTabBarPr
     function onTabPress(name: string) {
         const index = routeIndex(name)
         if (index === -1) return
-        const event = navigation.emit({ type: "tabPress", target: state.routes[index].key, canPreventDefault: true })
-        if (!event.defaultPrevented && state.index !== index) {
-            navigation.navigate(state.routes[index].name)
+        const route = state.routes[index]
+        const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true })
+        if (event.defaultPrevented) return
+
+        if (state.index !== index) {
+            // Switching in from another tab: just focus it, preserving whatever
+            // screen was left pushed on its stack.
+            navigation.navigate(name)
+            return
+        }
+
+        // Re-pressing the tab we're already on: reset its stack to the home
+        // screen rather than leaving a pushed screen (another user's profile, a
+        // follow list) in place. popToTop keeps the existing home screen instance
+        // and its scroll position, animating back to it as a single pop instead
+        // of a push-then-pop. route.state is undefined until the stack moves past
+        // its initial route, so a missing/shallow state means we're already home
+        // and there's nothing to pop.
+        const nestedKey = route.state?.key
+        const nestedDepth = route.state?.routes?.length ?? 1
+        if (nestedKey && nestedDepth > 1) {
+            navigation.dispatch({ ...StackActions.popToTop(), target: nestedKey })
         }
     }
 
@@ -151,7 +181,7 @@ function FrostedTabBar({ state, descriptors: _desc, navigation }: BottomTabBarPr
             <View style={styles.fabSlot}>
                 <TouchableOpacity
                     style={styles.fab}
-                    onPress={() => navigation.navigate("Discover", { focusSearch: true } as never)}
+                    onPress={() => navigation.navigate("Discover", { screen: "DiscoverHome", params: { focusSearch: true } } as never)}
                     accessibilityRole="button"
                     accessibilityLabel="Rate a song"
                     activeOpacity={0.88}
@@ -180,21 +210,54 @@ function RankingsNavigator() {
     )
 }
 
+// Feed, Discover, and Profile each get a stack so that other-profile and
+// follow-list screens render inside the tab navigator, keeping the frosted
+// tab bar visible while browsing people.
+function FeedNavigator() {
+    return (
+        <FeedStack.Navigator screenOptions={{ headerShown: false }}>
+            <FeedStack.Screen name="FeedHome" component={FeedScreen} />
+            <FeedStack.Screen name="OtherProfile" component={OtherProfileScreen} />
+            <FeedStack.Screen name="ProfileList" component={ProfileListScreen} />
+        </FeedStack.Navigator>
+    )
+}
+
+function DiscoverNavigator() {
+    return (
+        <DiscoverStack.Navigator screenOptions={{ headerShown: false }}>
+            <DiscoverStack.Screen name="DiscoverHome" component={DiscoverScreen} />
+            <DiscoverStack.Screen name="OtherProfile" component={OtherProfileScreen} />
+            <DiscoverStack.Screen name="ProfileList" component={ProfileListScreen} />
+        </DiscoverStack.Navigator>
+    )
+}
+
+function ProfileNavigator() {
+    return (
+        <ProfileStack.Navigator screenOptions={{ headerShown: false }}>
+            <ProfileStack.Screen name="ProfileHome" component={ProfileScreen} />
+            <ProfileStack.Screen name="OtherProfile" component={OtherProfileScreen} />
+            <ProfileStack.Screen name="ProfileList" component={ProfileListScreen} />
+        </ProfileStack.Navigator>
+    )
+}
+
 function MainTabs() {
     return (
         <Tab.Navigator
             tabBar={(props) => <FrostedTabBar {...props} />}
             screenOptions={{ headerShown: false }}
         >
-            <Tab.Screen name="Feed" component={FeedScreen} />
+            <Tab.Screen name="Feed" component={FeedNavigator} />
             <Tab.Screen name="Rankings" component={RankingsNavigator} />
             <Tab.Screen
                 name="FABPlaceholder"
                 component={FABPlaceholderScreen}
                 options={{ tabBarButton: () => null }}
             />
-            <Tab.Screen name="Discover" component={DiscoverScreen} />
-            <Tab.Screen name="Profile" component={ProfileScreen} />
+            <Tab.Screen name="Discover" component={DiscoverNavigator} />
+            <Tab.Screen name="Profile" component={ProfileNavigator} />
         </Tab.Navigator>
     )
 }
