@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 # Bump when pools, axes, or selection logic change in a way that should
 # invalidate stored snapshots / re-seed adjective picks.
-ALGORITHM_VERSION = "v1"
+ALGORITHM_VERSION = "v2"
 
 # Five zones every axis is bucketed into by its z-score.
 ZONES = ("very_low", "low", "mid", "high", "very_high")
@@ -248,7 +248,7 @@ SKELETON_PHRASES: tuple[str, ...] = (
     "Your scores lean {a}, {b}, and a little {c}.",
     "You rate like someone {a}, {b}, and {c} all at once.",
     "Equal parts {a} and {b} — and quietly {c}.",
-    "A taste that runs {a}, {b}, with a {c} streak.",
+    "A taste that's {a}, {b}, and {c} underneath.",
     "Lately you're sounding {a}, {b}, and unmistakably {c}.",
     "On the aux you read as {a}, {b}, and just slightly {c}.",
     "The chart says {a}, {b}, and — when nobody's watching — {c}.",
@@ -261,7 +261,7 @@ ADJECTIVE_POOLS: dict[str, dict[str, list[str]]] = {
     "deliberation": {
         "very_low": [
             "instant", "gut-driven", "snap-judging", "verdict-ready", "trigger-quick",
-            "reflexive", "lightning-sure", "unhesitating", "point-blank", "first-take",
+            "reflexive", "lightning-sure", "unhesitating", "point-blank", "off-the-cuff",
         ],
         "low": [
             "quick", "decisive", "assured", "brisk", "sure-footed",
@@ -279,7 +279,7 @@ ADJECTIVE_POOLS: dict[str, dict[str, list[str]]] = {
     },
     "comparison_depth": {
         "very_low": [
-            "breezy", "first-instinct", "one-look", "easygoing", "unfussy",
+            "breezy", "instinct-led", "one-and-done", "easygoing", "unfussy",
             "freehand", "loose", "intuitive", "offhand", "casual-handed",
         ],
         "low": [
@@ -308,7 +308,7 @@ ADJECTIVE_POOLS: dict[str, dict[str, list[str]]] = {
         "mid": [],
         "high": [
             "restless", "revising", "shifting", "fluid", "evolving",
-            "reconsidering", "in-motion", "changeable", "open-ended", "unfixed",
+            "reconsidering", "unsettled", "changeable", "open-ended", "unfixed",
         ],
         "very_high": [
             "mercurial", "ever-revising", "volatile", "quicksilver", "tempestuous",
@@ -317,8 +317,8 @@ ADJECTIVE_POOLS: dict[str, dict[str, list[str]]] = {
     },
     "pruning": {
         "very_low": [
-            "archival", "completist", "keeping", "collecting", "preservationist",
-            "sentimental-handed", "pack-rat", "all-saving", "museum-minded", "hoarding",
+            "archival", "completist", "keeping", "collecting", "preservation-minded",
+            "sentimental-handed", "keepsake-minded", "all-saving", "museum-minded", "hoarding",
         ],
         "low": [
             "retentive", "loyal-to-the-record", "steady-shelved", "accumulating", "patient-shelved",
@@ -455,22 +455,22 @@ ADJECTIVE_POOLS: dict[str, dict[str, list[str]]] = {
         ],
         "low": [
             "familiar", "accessible", "well-trodden", "known", "recognizable",
-            "canon-friendly", "household", "beaten-path", "approachable", "common-ground",
+            "canon-friendly", "household", "tried-and-true", "approachable", "broadly-loved",
         ],
         "mid": [],
         "high": [
-            "off-radar", "deep-cut", "under-the-surface", "obscure", "left-field",
+            "off-radar", "deep-cut", "seldom-streamed", "obscure", "left-field",
             "B-side-loving", "tucked-away", "low-mileage", "uncharted", "word-of-mouth",
         ],
         "very_high": [
-            "crate-digging", "subterranean", "fiercely-obscure", "buried-treasure", "spelunking",
+            "crate-digging", "subterranean", "fiercely-obscure", "deeply-buried", "fathoms-deep",
             "catacomb-deep", "unindexed", "secret-keeping", "vault-dwelling", "undiscovered",
         ],
     },
     "eclecticism": {
         "very_low": [
             "devoted", "single-lane", "monogamous", "purist", "laser-focused",
-            "deep-rooted", "specialist", "one-true-genre", "faithful", "home-keeping",
+            "deep-rooted", "specialized", "genre-loyal", "faithful", "home-keeping",
         ],
         "low": [
             "focused", "selective-ranged", "core-loyal", "narrow-cast", "homebound",
