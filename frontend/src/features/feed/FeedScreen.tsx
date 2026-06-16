@@ -1113,7 +1113,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: colors.line,
         borderRadius: 12,
-        paddingVertical: 10,
+        height: 40,
         paddingHorizontal: 13,
         shadowColor: colors.ink,
         shadowOpacity: 0.05,
@@ -1121,7 +1121,6 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
     },
     searchPlaceholder: {
-        fontFamily: fonts.mono,
         fontSize: 12.5,
         color: colors.inkDim,
         flex: 1,
