@@ -45,6 +45,10 @@ export default function ReorderScreen({ navigation }: ReorderScreenProps) {
     const [isSaving, setIsSaving] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [dragPreview, setDragPreview] = useState<DragPreview | null>(null)
+    // Locks the list scroll for the whole gesture, set the instant a handle is grabbed.
+    // dragPreview alone is too late — it isn't set until the first move, so the ScrollView
+    // eats the opening pixels of the drag and the list jerks up/down at drag start.
+    const [isDragging, setIsDragging] = useState(false)
 
     const loadAllRankings = useCallback(async () => {
         if (!token) {
@@ -103,10 +107,15 @@ export default function ReorderScreen({ navigation }: ReorderScreenProps) {
         })
     }, [rankings])
 
+    const handleDragStart = useCallback(() => {
+        setIsDragging(true)
+    }, [])
+
     const handleDragEnd = useCallback((
         songId: number,
         targetIndex: number,
     ) => {
+        setIsDragging(false)
         setDragPreview(null)
         setRankings((currentRankings) => applyDragMove(currentRankings, songId, targetIndex))
     }, [])
@@ -175,7 +184,7 @@ export default function ReorderScreen({ navigation }: ReorderScreenProps) {
                 </View>
             </View>
             {error !== null && <Text style={styles.errorText}>{error}</Text>}
-            <ScrollView contentContainerStyle={styles.listContent} scrollEnabled={dragPreview === null}>
+            <ScrollView contentContainerStyle={styles.listContent} scrollEnabled={!isDragging}>
                 <View style={styles.infoBanner}>
                     <Svg
                         width={14}
@@ -211,6 +220,7 @@ export default function ReorderScreen({ navigation }: ReorderScreenProps) {
                             totalRows={rankings.length}
                             dragPreview={dragPreview}
                             previewBucket={dragPreview?.songId === ranking.song_id ? dragPreview.draftBucket : null}
+                            onDragStart={handleDragStart}
                             onDragPreview={handleDragPreview}
                             onDragEnd={handleDragEnd}
                         />
@@ -232,6 +242,7 @@ function ReorderRow({
     totalRows,
     dragPreview,
     previewBucket,
+    onDragStart,
     onDragPreview,
     onDragEnd,
 }: {
@@ -240,6 +251,7 @@ function ReorderRow({
     totalRows: number;
     dragPreview: DragPreview | null;
     previewBucket: BucketName | null;
+    onDragStart: () => void;
     onDragPreview: (songId: number, startIndex: number, targetIndex: number) => void;
     onDragEnd: (songId: number, targetIndex: number) => void;
 }) {
@@ -260,6 +272,8 @@ function ReorderRow({
     totalRowsRef.current = totalRows
     const onDragPreviewRef = useRef(onDragPreview)
     onDragPreviewRef.current = onDragPreview
+    const onDragStartRef = useRef(onDragStart)
+    onDragStartRef.current = onDragStart
     const onDragEndRef = useRef(onDragEnd)
     onDragEndRef.current = onDragEnd
 
@@ -277,6 +291,9 @@ function ReorderRow({
             onPanResponderTerminationRequest: () => false,
             onShouldBlockNativeResponder: () => true,
             onPanResponderGrant: () => {
+                // Lock the list scroll immediately so the opening pixels of the drag don't
+                // scroll the ScrollView before dragPreview takes over.
+                onDragStartRef.current()
                 dragStartIndex.current = indexRef.current
                 latestTargetIndex.current = indexRef.current
                 // Clear any leftover offset from a previous drag of this same row before
@@ -335,7 +352,9 @@ function ReorderRow({
         Animated.spring(shiftOffset, {
             toValue: targetOffset,
             useNativeDriver: false,
-            speed: 20,
+            // Softer than the RN default (speed 12) so neighbor rows glide out of the way
+            // rather than snapping — a higher speed here reads as "too snappy" while dragging.
+            speed: 11,
             bounciness: 0,
         }).start()
     }, [dragPreview, index, isBeingDragged, ranking.song_id, shiftOffset])
