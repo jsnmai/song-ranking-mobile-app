@@ -3,7 +3,7 @@
 # All reads and writes go through src/crud/profile.py.
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, func
+from sqlalchemy import DateTime, ForeignKey, Index, String, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.db.base import Base
@@ -68,6 +68,13 @@ class Profile(Base):
         nullable=False,
         default="public",
         server_default="public",
+    )
+    # Display-only privacy: when true, other viewers don't see this user's like counts or
+    # likers list. The owner still sees their own counts/likers and is still notified of likes.
+    hide_like_counts: Mapped[bool] = mapped_column(
+        nullable=False,
+        default=False,
+        server_default=text("false"),
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

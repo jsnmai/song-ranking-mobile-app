@@ -29,6 +29,7 @@ from src.crud.similarity import get_most_compatible_users, get_snapshot_for_pair
 from src.pydantic_schemas.profile import (
     BlockedProfileListResponse,
     CompatibilityResponse,
+    LikePrivacyUpdate,
     MostCompatibleItem,
     MostCompatibleResponse,
     ProfileEdit,
@@ -145,6 +146,7 @@ def _build_profile_summary(
         is_own_profile=current_user_id == profile.user_id,
         can_view_taste=taste_visible,
         is_blocked=is_blocked,
+        hide_like_counts=profile.hide_like_counts,
         user_stats=user_stats,
     )
 
@@ -288,6 +290,37 @@ def update_my_visibility(
 
     profile.visibility = data.visibility
     profile.is_public = data.visibility == "public"
+    try:
+        db.commit()
+        db.refresh(profile)
+    except Exception:
+        db.rollback()
+        raise
+
+    return _build_profile_summary(
+        db,
+        user_id,
+        profile,
+    )
+
+
+def update_my_like_privacy(
+    db: Session,
+    user_id: int,
+    data: LikePrivacyUpdate,
+) -> ProfileSummaryResponse:
+    """Toggle whether the current user hides their like counts from other viewers."""
+    profile = get_by_user_id(
+        db,
+        user_id,
+    )
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Profile not found.",
+        )
+
+    profile.hide_like_counts = data.hide_like_counts
     try:
         db.commit()
         db.refresh(profile)

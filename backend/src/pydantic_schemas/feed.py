@@ -21,6 +21,9 @@ class FeedEventResponse(BaseModel):
     created_at: datetime
     actor_profile: ProfileResponse
     song: SongResponse
+    # like_count is None when the actor hides their like counts and the viewer isn't them.
+    like_count: int | None = None
+    liked_by_viewer: bool = False
 
 
 class FeedListResponse(BaseModel):

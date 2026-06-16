@@ -83,6 +83,14 @@ def _likers(client: TestClient, token: str, event_id: int):
     )
 
 
+def _set_hide_like_counts(client: TestClient, token: str, hide: bool):
+    return client.put(
+        "/api/v1/profile/me/like-privacy",
+        json={"hide_like_counts": hide},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+
 def test_like_and_unlike_are_idempotent(client: TestClient, db_session: Session):
     """Liking is idempotent and reflects the count + viewer state; unlike reverses it."""
     author_token, author_id = _register(client, "author@example.com", "authoruser")
@@ -167,3 +175,98 @@ def test_cannot_like_nonexistent_activity(client: TestClient):
 def test_like_requires_auth(client: TestClient):
     """Liking requires authentication."""
     assert client.post("/api/v1/activity/1/likes").status_code == 401
+
+
+def test_hide_like_counts_hides_count_and_likers_from_others(client: TestClient, db_session: Session):
+    """Hiding like counts suppresses the count + likers for others; the owner still sees both."""
+    author_token, author_id = _register(client, "author@example.com", "authoruser")
+    viewer_token, _ = _register(client, "viewer@example.com", "vieweruser")
+    _rate(client, author_token, 105)
+    event_id = _latest_event_id(db_session, author_id)
+
+    privacy = _set_hide_like_counts(client, author_token, True)
+    assert privacy.status_code == 200
+    assert privacy.json()["hide_like_counts"] is True
+
+    # The viewer's like succeeds, but the count is hidden while their own state stays accurate.
+    body = _like(client, viewer_token, event_id).json()
+    assert body["like_count"] is None
+    assert body["liked_by_viewer"] is True
+
+    # The likers list is empty for the viewer but the owner still sees who liked.
+    assert _likers(client, viewer_token, event_id).json()["profiles"] == []
+    assert {p["username"] for p in _likers(client, author_token, event_id).json()["profiles"]} == {
+        "vieweruser",
+    }
+
+    # The owner still sees the real count on their own activity.
+    owner_view = _like(client, author_token, event_id).json()
+    assert owner_view["like_count"] == 2  # viewer + owner
+
+
+def test_unhiding_like_counts_restores_visibility(client: TestClient, db_session: Session):
+    """Turning the setting back off makes counts visible to others again."""
+    author_token, author_id = _register(client, "author@example.com", "authoruser")
+    viewer_token, _ = _register(client, "viewer@example.com", "vieweruser")
+    _rate(client, author_token, 106)
+    event_id = _latest_event_id(db_session, author_id)
+    _set_hide_like_counts(client, author_token, True)
+    _like(client, viewer_token, event_id)
+
+    assert _like(client, viewer_token, event_id).json()["like_count"] is None
+    _set_hide_like_counts(client, author_token, False)
+    assert _like(client, viewer_token, event_id).json()["like_count"] == 1
+
+
+def test_recent_ratings_reflect_like_state_and_hidden_counts(client: TestClient, db_session: Session):
+    """Recent-ratings items carry viewer-aware like_count + liked_by_viewer."""
+    author_token, author_id = _register(client, "author@example.com", "authoruser")
+    viewer_token, _ = _register(client, "viewer@example.com", "vieweruser")
+    _rate(client, author_token, 107)
+    event_id = _latest_event_id(db_session, author_id)
+    _like(client, viewer_token, event_id)
+
+    def _item(token: str):
+        items = client.get(
+            "/api/v1/profile/authoruser/recent-ratings",
+            headers={"Authorization": f"Bearer {token}"},
+        ).json()["items"]
+        return next(i for i in items if i["rating_event_id"] == event_id)
+
+    visible = _item(viewer_token)
+    assert visible["like_count"] == 1
+    assert visible["liked_by_viewer"] is True
+
+    _set_hide_like_counts(client, author_token, True)
+    hidden = _item(viewer_token)
+    assert hidden["like_count"] is None
+    assert hidden["liked_by_viewer"] is True  # the viewer still knows their own like
+
+    # The owner's own recent ratings always show the real count.
+    me_items = client.get(
+        "/api/v1/profile/me/recent-ratings",
+        headers={"Authorization": f"Bearer {author_token}"},
+    ).json()["items"]
+    me_item = next(i for i in me_items if i["rating_event_id"] == event_id)
+    assert me_item["like_count"] == 1
+
+
+def test_feed_reflects_like_state(client: TestClient, db_session: Session):
+    """Feed events carry like_count + liked_by_viewer for the viewer."""
+    author_token, author_id = _register(client, "author@example.com", "authoruser")
+    viewer_token, _ = _register(client, "viewer@example.com", "vieweruser")
+    client.post(
+        "/api/v1/profile/authoruser/follow",
+        headers={"Authorization": f"Bearer {viewer_token}"},
+    )
+    _rate(client, author_token, 108)
+    event_id = _latest_event_id(db_session, author_id)
+    _like(client, viewer_token, event_id)
+
+    feed = client.get(
+        "/api/v1/feed",
+        headers={"Authorization": f"Bearer {viewer_token}"},
+    ).json()["events"]
+    event = next(e for e in feed if e["id"] == event_id)
+    assert event["like_count"] == 1
+    assert event["liked_by_viewer"] is True

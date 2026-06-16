@@ -9,6 +9,7 @@ from src.core.limiter import limiter
 from src.pydantic_schemas.profile import (
     BlockedProfileListResponse,
     CompatibilityResponse,
+    LikePrivacyUpdate,
     MostCompatibleResponse,
     ProfileEdit,
     ProfileListResponse,
@@ -40,6 +41,7 @@ from src.services.profile import (
     setup_profile,
     unblock_profile,
     unfollow_profile,
+    update_my_like_privacy,
     update_my_profile,
     update_my_visibility,
 )
@@ -133,6 +135,23 @@ def profile_visibility(
 ) -> ProfileSummaryResponse:
     """Update the authenticated user's taste visibility."""
     return update_my_visibility(
+        db,
+        user_id=current_user.id,
+        data=data,
+    )
+
+
+@router.put(
+    "/me/like-privacy",
+    response_model=ProfileSummaryResponse,
+)
+def profile_like_privacy(
+    data: LikePrivacyUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProfileSummaryResponse:
+    """Toggle whether the user's like counts are hidden from other viewers."""
+    return update_my_like_privacy(
         db,
         user_id=current_user.id,
         data=data,

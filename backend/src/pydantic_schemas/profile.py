@@ -115,6 +115,12 @@ class ProfileVisibilityUpdate(BaseModel):
     visibility: ProfileVisibility
 
 
+class LikePrivacyUpdate(BaseModel):
+    """Request body for toggling display-only privacy of the user's like counts."""
+
+    hide_like_counts: bool
+
+
 class ProfileReportCreate(BaseModel):
     """Request body for reporting a user/profile."""
 
@@ -204,6 +210,8 @@ class ProfileSummaryResponse(ProfileResponse):
     is_own_profile: bool
     can_view_taste: bool
     is_blocked: bool
+    # Display-only privacy: whether this user hides their like counts from other viewers.
+    hide_like_counts: bool = False
     user_stats: UserStats | None = None
     # Taste similarity with the viewer, populated only on surfaces that need it (user search).
     similarity_score: float | None = None

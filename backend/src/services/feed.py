@@ -8,6 +8,7 @@ from src.crud.feed import FeedEventRow, list_feed_events
 from src.pydantic_schemas.feed import FeedEventResponse, FeedListResponse
 from src.pydantic_schemas.profile import ProfileResponse
 from src.pydantic_schemas.song import SongResponse
+from src.services.like import like_states_for_events
 from src.sqlalchemy_tables.rating_event import RatingEvent
 
 DEFAULT_FEED_LIMIT = 20
@@ -37,9 +38,18 @@ def list_my_feed(
     page_rows = rows[:safe_limit]
     next_cursor = _build_cursor(page_rows[-1].event) if has_next_page and page_rows else None
 
+    like_states = like_states_for_events(
+        db,
+        user_id,
+        [
+            (row.event.id, row.actor_profile.user_id, row.actor_profile.hide_like_counts)
+            for row in page_rows
+        ],
+    )
+
     return FeedListResponse(
         events=[
-            _feed_event_response(row)
+            _feed_event_response(row, like_states[row.event.id])
             for row in page_rows
         ],
         next_cursor=next_cursor,
@@ -48,8 +58,10 @@ def list_my_feed(
 
 def _feed_event_response(
     row: FeedEventRow,
+    like_state: tuple[int | None, bool],
 ) -> FeedEventResponse:
     """Build the public feed event response from joined rows."""
+    like_count, liked_by_viewer = like_state
     return FeedEventResponse(
         id=row.event.id,
         event_type=row.event.event_type,
@@ -59,6 +71,8 @@ def _feed_event_response(
         created_at=row.event.created_at,
         actor_profile=ProfileResponse.model_validate(row.actor_profile),
         song=SongResponse.model_validate(row.song),
+        like_count=like_count,
+        liked_by_viewer=liked_by_viewer,
     )
 
 

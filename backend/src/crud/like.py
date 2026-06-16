@@ -83,6 +83,38 @@ def has_liked(
     ) > 0
 
 
+def count_likes_for_events(
+    db: Session,
+    rating_event_ids: list[int],
+) -> dict[int, int]:
+    """Return {rating_event_id: like_count} for the given events (missing = 0 likes)."""
+    if not rating_event_ids:
+        return {}
+    rows = db.execute(
+        select(Like.rating_event_id, func.count())
+        .where(Like.rating_event_id.in_(rating_event_ids))
+        .group_by(Like.rating_event_id)
+    ).all()
+    return {event_id: count for event_id, count in rows}
+
+
+def liked_event_ids(
+    db: Session,
+    user_id: int,
+    rating_event_ids: list[int],
+) -> set[int]:
+    """Return the subset of the given events that the user has liked."""
+    if not rating_event_ids:
+        return set()
+    return set(
+        db.execute(
+            select(Like.rating_event_id)
+            .where(Like.user_id == user_id)
+            .where(Like.rating_event_id.in_(rating_event_ids))
+        ).scalars()
+    )
+
+
 def list_liker_profiles(
     db: Session,
     rating_event_id: int,

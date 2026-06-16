@@ -6,6 +6,7 @@ from src.crud import profile_modules as crud
 from src.pydantic_schemas.profile_modules import RecentRatingItem, RecentRatingsResponse
 from src.pydantic_schemas.rating import RankingAnchorsResponse, RankingListResponse, RankingResponse
 from src.pydantic_schemas.song import SongResponse
+from src.services.like import like_states_for_events
 
 RANKING_PAGE_LIMIT = 30
 MAX_RANKING_PAGE_LIMIT = 100
@@ -16,7 +17,8 @@ def get_my_recent_ratings(
     user_id: int,
 ) -> RecentRatingsResponse:
     rows = crud.list_profile_recent_ratings(db, viewer_id=user_id, owner_id=user_id)
-    return _ratings_response(rows)
+    # The owner always sees their own counts, so hide_like_counts is irrelevant here.
+    return _ratings_response(db, viewer_id=user_id, owner_id=user_id, owner_hides=False, rows=rows)
 
 
 def get_profile_recent_ratings(
@@ -28,7 +30,13 @@ def get_profile_recent_ratings(
     if profile is None:
         raise HTTPException(status_code=404, detail="Profile not found.")
     rows = crud.list_profile_recent_ratings(db, viewer_id=viewer_id, owner_id=profile.user_id)
-    return _ratings_response(rows)
+    return _ratings_response(
+        db,
+        viewer_id=viewer_id,
+        owner_id=profile.user_id,
+        owner_hides=profile.hide_like_counts,
+        rows=rows,
+    )
 
 
 def get_profile_rankings_by_username(
@@ -114,7 +122,18 @@ def get_profile_ranking_anchors_by_username(
     )
 
 
-def _ratings_response(rows) -> RecentRatingsResponse:
+def _ratings_response(
+    db: Session,
+    viewer_id: int,
+    owner_id: int,
+    owner_hides: bool,
+    rows,
+) -> RecentRatingsResponse:
+    like_states = like_states_for_events(
+        db,
+        viewer_id,
+        [(row.event.id, owner_id, owner_hides) for row in rows],
+    )
     return RecentRatingsResponse(
         items=[
             RecentRatingItem(
@@ -124,6 +143,8 @@ def _ratings_response(rows) -> RecentRatingsResponse:
                 score=row.event.new_score,
                 note=row.event.note,
                 created_at=row.event.created_at,
+                like_count=like_states[row.event.id][0],
+                liked_by_viewer=like_states[row.event.id][1],
             )
             for row in rows
         ]
