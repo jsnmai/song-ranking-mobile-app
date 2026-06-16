@@ -227,7 +227,7 @@ export default function FullRankingsScreen({ navigation }: FullRankingsScreenPro
 
             <View style={styles.summary}>
                 <Text style={styles.summaryText}>
-                    {filteredRankings.length} {filteredRankings.length === 1 ? "SONG" : "SONGS"} · HIGH → LOW
+                    {filteredRankings.length} {filteredRankings.length === 1 ? "SONG" : "SONGS"}
                 </Text>
                 <View style={styles.summaryRight}>
                     <TouchableOpacity

@@ -197,6 +197,11 @@ export default function ReorderScreen({ navigation }: ReorderScreenProps) {
                     </Text>
                 </View>
 
+                <View style={[styles.bandMarker, styles.bandMarkerTop]}>
+                    <Text style={styles.bandMarkerLabel}>TOP</Text>
+                    <View style={styles.bandMarkerLine} />
+                </View>
+
                 <View style={styles.card}>
                     {rankings.map((ranking, index) => (
                         <ReorderRow
@@ -212,7 +217,10 @@ export default function ReorderScreen({ navigation }: ReorderScreenProps) {
                     ))}
                 </View>
 
-                <Text style={styles.footerHint}>Top of the list is your #1.</Text>
+                <View style={[styles.bandMarker, styles.bandMarkerBottom]}>
+                    <Text style={styles.bandMarkerLabel}>BOTTOM</Text>
+                    <View style={styles.bandMarkerLine} />
+                </View>
             </ScrollView>
         </View>
     )
@@ -533,9 +541,10 @@ const styles = StyleSheet.create({
     },
     headerActionCancel: {
         fontFamily: fonts.mono,
-        color: colors.inkDim,
-        fontSize: 13,
-        letterSpacing: 0.5,
+        color: colors.ink,
+        fontSize: 11,
+        letterSpacing: 0.6,
+        fontWeight: "600",
     },
     headerActionSave: {
         fontFamily: fonts.display,
@@ -646,11 +655,28 @@ const styles = StyleSheet.create({
         paddingLeft: 4,
         paddingVertical: 8,
     },
-    footerHint: {
+    bandMarker: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 9,
+        paddingHorizontal: 2,
+    },
+    bandMarkerTop: {
+        paddingBottom: 7,
+    },
+    bandMarkerBottom: {
+        paddingTop: 7,
+    },
+    bandMarkerLabel: {
+        fontFamily: fonts.mono,
+        fontSize: 8.5,
+        letterSpacing: 1.4,
         color: colors.inkDim,
-        fontSize: 11,
-        textAlign: "center",
-        marginTop: 12,
-        letterSpacing: 0.2,
+        fontWeight: "700",
+    },
+    bandMarkerLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: colors.line,
     },
 })
