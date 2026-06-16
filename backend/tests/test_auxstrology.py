@@ -1,8 +1,10 @@
 # Tests for GET /profile/me/auxstrology and GET /profile/{username}/auxstrology.
 from fastapi.testclient import TestClient
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from src.data.auxstrology_pools import ACTIVE_MIN_RATED, ADJECTIVE_POOLS, AXES, SIGNS
+from src.sqlalchemy_tables.auxstrology_snapshot import AuxstrologySnapshot
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.song import Song
 
@@ -271,3 +273,33 @@ def test_pools_cover_every_axis_and_direction() -> None:
         for direction in ("low", "high"):
             assert SIGNS[key][direction]["name"], f"missing sign {key}/{direction}"
             assert SIGNS[key][direction]["summary"], f"missing summary {key}/{direction}"
+
+
+def test_other_user_view_does_not_persist_auxstrology_snapshot(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    """A GET on another user's reading recomputes read-only — it must not write their snapshot."""
+    viewer_token, _ = _register(client, "viewer@example.com", "vieweruser")
+    owner_token, owner_id = _register(client, "owner@example.com", "owneruser")
+    _rate(client, owner_token, 700, "Artist A", "like")
+
+    def _snapshot_count() -> int:
+        db_session.expire_all()
+        return db_session.scalar(
+            select(func.count())
+            .select_from(AuxstrologySnapshot)
+            .where(AuxstrologySnapshot.user_id == owner_id)
+        )
+
+    assert _snapshot_count() == 0
+
+    # Another user views the owner's reading — it succeeds but writes nothing.
+    response = _get_aux(client, viewer_token, "owneruser")
+    assert response.status_code == 200
+    assert _snapshot_count() == 0
+
+    # The owner viewing their own reading DOES persist a snapshot (self/background only).
+    own_response = _get_aux(client, owner_token)
+    assert own_response.status_code == 200
+    assert _snapshot_count() == 1

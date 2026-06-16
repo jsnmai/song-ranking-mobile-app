@@ -112,14 +112,21 @@ def get_user_auxstrology_by_username(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Profile not found.",
         )
-    return _get_or_compute(db, profile.user_id)
+    # Read-only: viewing another user's reading must never write their snapshot row.
+    return _get_or_compute(db, profile.user_id, persist=False)
 
 
 def _get_or_compute(
     db: Session,
     user_id: int,
+    persist: bool = True,
 ) -> AuxstrologyResponse:
-    """Serve the latest fresh snapshot, or recompute and append a new one."""
+    """Serve the latest fresh snapshot, or recompute.
+
+    The recomputed reading is persisted only when `persist=True` — the user's own view and
+    background refresh. Viewing another user's reading recomputes read-only, so a GET by one
+    user can never write another user's snapshot (avoids a side-effecting / abusable GET).
+    """
     latest = get_latest_snapshot(
         db,
         user_id,
@@ -132,15 +139,16 @@ def _get_or_compute(
         return AuxstrologyResponse(**latest.payload)
 
     response = _compute(db, user_id)
-    insert_snapshot(
-        db,
-        user_id=user_id,
-        algorithm_version=ALGORITHM_VERSION,
-        status=response.status,
-        sign_key=_sign_key_of(response),
-        payload=response.model_dump(),
-    )
-    db.commit()
+    if persist:
+        insert_snapshot(
+            db,
+            user_id=user_id,
+            algorithm_version=ALGORITHM_VERSION,
+            status=response.status,
+            sign_key=_sign_key_of(response),
+            payload=response.model_dump(),
+        )
+        db.commit()
     return response
 
 

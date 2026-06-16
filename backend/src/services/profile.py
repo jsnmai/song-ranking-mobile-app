@@ -449,6 +449,15 @@ def unfollow_profile(
     )
 
 
+def _follow_list_visible(profile, current_user_id: int) -> bool:
+    """Follow lists are gated for only_me profiles — only the owner sees the usernames.
+
+    Follower/following COUNTS stay visible on the profile summary (social-graph metadata,
+    matching the convention that a private account still shows its counts).
+    """
+    return profile.visibility != "only_me" or profile.user_id == current_user_id
+
+
 def get_profile_followers(
     db: Session,
     current_user_id: int,
@@ -460,6 +469,8 @@ def get_profile_followers(
         current_user_id,
         username,
     )
+    if not _follow_list_visible(profile, current_user_id):
+        return ProfileListResponse(profiles=[])
     return ProfileListResponse(
         profiles=[
             _build_profile_summary(
@@ -491,6 +502,8 @@ def get_profile_following(
         current_user_id,
         username,
     )
+    if not _follow_list_visible(profile, current_user_id):
+        return ProfileListResponse(profiles=[])
     return ProfileListResponse(
         profiles=[
             _build_profile_summary(

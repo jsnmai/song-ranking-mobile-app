@@ -296,3 +296,59 @@ def test_profile_search_includes_similarity_when_snapshot_exists(
     ).json()["results"]
     assert results[0]["username"] == "matchuser"
     assert results[0]["similarity_score"] == 0.87
+
+
+def test_only_me_profile_hides_follow_lists_but_keeps_counts(client: TestClient):
+    """only_me profiles keep follower/following COUNTS but hide the lists from non-owners."""
+    owner_token = _register(client, "owner@example.com", "owneruser", "Owner")
+    follower_token = _register(client, "follower@example.com", "followeruser", "Follower")
+    _register(client, "third@example.com", "thirduser", "Third")
+
+    # The owner gains one follower and follows one user.
+    assert client.post(
+        "/api/v1/profile/owneruser/follow",
+        headers={"Authorization": f"Bearer {follower_token}"},
+    ).status_code == 200
+    assert client.post(
+        "/api/v1/profile/thirduser/follow",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    ).status_code == 200
+    # The owner sets their taste to only_me.
+    assert client.put(
+        "/api/v1/profile/me/visibility",
+        json={"visibility": "only_me"},
+        headers={"Authorization": f"Bearer {owner_token}"},
+    ).status_code == 200
+
+    # A non-owner sees EMPTY follow lists for the only_me profile.
+    followers = client.get(
+        "/api/v1/profile/owneruser/followers",
+        headers={"Authorization": f"Bearer {follower_token}"},
+    )
+    following = client.get(
+        "/api/v1/profile/owneruser/following",
+        headers={"Authorization": f"Bearer {follower_token}"},
+    )
+    assert followers.status_code == 200
+    assert followers.json()["profiles"] == []
+    assert following.json()["profiles"] == []
+
+    # ...but the COUNTS are still visible on the profile summary.
+    summary = client.get(
+        "/api/v1/profile/owneruser",
+        headers={"Authorization": f"Bearer {follower_token}"},
+    ).json()
+    assert summary["follower_count"] == 1
+    assert summary["following_count"] == 1
+
+    # The owner still sees their own lists in full.
+    own_followers = client.get(
+        "/api/v1/profile/owneruser/followers",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    own_following = client.get(
+        "/api/v1/profile/owneruser/following",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert [p["username"] for p in own_followers.json()["profiles"]] == ["followeruser"]
+    assert [p["username"] for p in own_following.json()["profiles"]] == ["thirduser"]
