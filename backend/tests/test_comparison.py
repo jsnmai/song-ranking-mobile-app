@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from src.sqlalchemy_tables.comparison import Comparison
 from src.sqlalchemy_tables.comparison_session import ComparisonSession
+from src.sqlalchemy_tables.interaction_event import InteractionEvent
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
 from src.sqlalchemy_tables.song import Song
@@ -1072,3 +1073,115 @@ def test_undo_returns_conflict_when_bucket_ladder_changed(
     session_row = db_session.execute(select(ComparisonSession)).scalar_one()
     assert len(session_row.decisions) == 2
     assert session_row.candidate_index == 0
+
+
+# --- Active-session resume (crash/kill recovery) -------------------------------
+
+
+def _get_active(
+    client: TestClient,
+    token: str,
+):
+    """Call the resume endpoint and return the raw response."""
+    return client.get(
+        "/api/v1/comparison-sessions/active",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+
+def _count_abandoned(
+    db_session: Session,
+) -> int:
+    """Count comparison_abandoned tombstones."""
+    return db_session.scalar(
+        select(func.count())
+        .select_from(InteractionEvent)
+        .where(InteractionEvent.event_type == "comparison_abandoned")
+    )
+
+
+def test_get_active_session_returns_in_progress_session(
+    client: TestClient,
+    db_session: Session,
+):
+    """A killed/reopened client can rehydrate its in-flight session via GET /active."""
+    token = _get_token(client)
+    _seed_like_bucket(client, token, 2)
+    session = _start_session(client, token)
+    choice = _choose(client, token, session["session_uuid"], "target")
+    assert choice["comparison_count"] == 1
+
+    response = _get_active(client, token)
+    assert response.status_code == 200
+    body = response.json()
+    assert body is not None
+    assert body["session_uuid"] == session["session_uuid"]
+    assert body["comparison_count"] == 1
+    assert body["status"] == "active"
+    assert body["candidate"] is not None
+
+
+def test_get_active_session_returns_null_when_none(
+    client: TestClient,
+):
+    """With no in-flight session, resume returns null (nothing to recover)."""
+    token = _get_token(client)
+    response = _get_active(client, token)
+    assert response.status_code == 200
+    assert response.json() is None
+
+
+def test_get_active_session_cleans_up_expired(
+    client: TestClient,
+    db_session: Session,
+):
+    """An expired session is abandoned (tombstoned + deleted) and reported as null."""
+    token = _get_token(client)
+    _seed_like_bucket(client, token, 2)
+    session = _start_session(client, token)
+    db_session.expire_all()
+    row = db_session.execute(
+        select(ComparisonSession)
+        .where(ComparisonSession.session_uuid == session["session_uuid"])
+    ).scalar_one()
+    row.updated_at = datetime.now(timezone.utc) - timedelta(hours=25)
+    db_session.commit()
+
+    response = _get_active(client, token)
+    assert response.status_code == 200
+    assert response.json() is None
+
+    db_session.expire_all()
+    assert db_session.scalar(select(func.count()).select_from(ComparisonSession)) == 0
+    assert _count_abandoned(db_session) == 1
+
+
+def test_starting_new_session_abandons_prior_active_session(
+    client: TestClient,
+    db_session: Session,
+):
+    """One active session per user: starting a new calibration abandons the prior one."""
+    token = _get_token(client)
+    _seed_like_bucket(client, token, 2)
+    first = _start_session(client, token, deezer_id=901, title="First Target")
+    _choose(client, token, first["session_uuid"], "target")
+
+    second = _start_session(client, token, deezer_id=902, title="Second Target")
+    assert second["session_uuid"] != first["session_uuid"]
+
+    db_session.expire_all()
+    sessions = list(db_session.execute(select(ComparisonSession)).scalars())
+    assert len(sessions) == 1
+    assert str(sessions[0].session_uuid) == second["session_uuid"]
+    assert _count_abandoned(db_session) == 1
+
+    active = _get_active(client, token)
+    assert active.json()["session_uuid"] == second["session_uuid"]
+
+
+def test_get_active_session_requires_auth(
+    client: TestClient,
+):
+    """The resume endpoint requires authentication."""
+    response = client.get("/api/v1/comparison-sessions/active")
+    assert response.status_code == 401

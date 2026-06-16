@@ -11,6 +11,7 @@ from src.crud.comparison import (
     create_comparison_session,
     delete_comparison_session,
     delete_expired_comparison_sessions,
+    get_active_comparison_session_for_user,
     get_expired_comparison_sessions,
     get_user_comparison_session,
     refresh_comparison_session,
@@ -49,6 +50,13 @@ def start_comparison_session(
     """Start one comparison session for one target song in one non-empty bucket."""
     try:
         _delete_expired_sessions(db)
+        # One active session per user: abandoning the previous in-flight calibration keeps
+        # "your active session" singular so the resume endpoint is unambiguous, and records
+        # the abandonment signal instead of silently orphaning the row.
+        _abandon_active_session_for_user(
+            db,
+            user_id,
+        )
         bucket_rankings = _rankings_in_session_bucket(
             db,
             user_id=user_id,
@@ -94,6 +102,57 @@ def start_comparison_session(
         user_id,
         session,
     )
+
+
+def get_active_comparison_session(
+    db: Session,
+    user_id: int,
+) -> ComparisonSessionResponse | None:
+    """Return the user's resumable comparison session, or None.
+
+    Used by the client to rehydrate an in-flight calibration after a kill/crash/reinstall.
+    A session that is expired or can no longer be rebuilt (e.g. its bucket changed
+    underneath) is abandoned and reported as None, so the client never resumes into a
+    dead end. A `ready_to_finalize` session is returned as-is so a crash right after the
+    final choice can still be completed by the client.
+    """
+    session = get_active_comparison_session_for_user(
+        db,
+        user_id,
+    )
+    if session is None:
+        return None
+    if _is_session_expired(session):
+        try:
+            _abandon_session(
+                db,
+                session,
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        return None
+
+    try:
+        return _session_response(
+            db,
+            user_id,
+            session,
+        )
+    except HTTPException:
+        # The session can no longer be rebuilt against the current bucket — abandon it
+        # rather than offering an un-resumable session.
+        try:
+            _abandon_session(
+                db,
+                session,
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        return None
 
 
 def record_comparison_choice(
@@ -546,6 +605,38 @@ def _delete_expired_sessions(
     delete_expired_comparison_sessions(
         db,
         cutoff,
+    )
+
+
+def _abandon_active_session_for_user(
+    db: Session,
+    user_id: int,
+) -> None:
+    """Abandon the user's existing active session, if any, before a new one starts."""
+    existing = get_active_comparison_session_for_user(
+        db,
+        user_id,
+    )
+    if existing is not None:
+        _abandon_session(
+            db,
+            existing,
+        )
+
+
+def _abandon_session(
+    db: Session,
+    session: ComparisonSession,
+) -> None:
+    """Tombstone a session as abandoned and delete its temporary state (uncommitted)."""
+    _tombstone_session(
+        db,
+        session,
+        event_type="comparison_abandoned",
+    )
+    delete_comparison_session(
+        db,
+        session,
     )
 
 

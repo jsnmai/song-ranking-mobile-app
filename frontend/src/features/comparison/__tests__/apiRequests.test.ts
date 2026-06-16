@@ -4,6 +4,7 @@ import {
     chooseComparisonWinner,
     finalizeComparisonSession,
     finalizeRating,
+    getActiveComparisonSession,
     startComparisonSession,
     undoComparisonChoice,
 } from "../apiRequests"
@@ -72,6 +73,17 @@ describe("comparison API requests", () => {
                 winner: "target",
                 decision_duration_ms: 912,
             },
+            "test-token",
+        )
+    })
+
+    it("fetches the active comparison session for resume through the backend", async () => {
+        mockGet.mockResolvedValue(null)
+
+        await getActiveComparisonSession("test-token")
+
+        expect(mockGet).toHaveBeenCalledWith(
+            "/api/v1/comparison-sessions/active",
             "test-token",
         )
     })

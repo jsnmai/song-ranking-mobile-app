@@ -17,6 +17,7 @@ from src.pydantic_schemas.comparison import (
 from src.services.comparison import (
     cancel_comparison_session,
     finalize_comparison_session,
+    get_active_comparison_session,
     record_comparison_choice,
     start_comparison_session,
     undo_comparison_choice,
@@ -48,6 +49,23 @@ def start_session(
         db,
         user_id=current_user.id,
         data=data,
+    )
+
+
+@router.get(
+    "/active",
+    response_model=ComparisonSessionResponse | None,
+)
+@limiter.limit("60/minute")
+def active_session(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ComparisonSessionResponse | None:
+    """Return the current user's resumable comparison session, or null, for client rehydration."""
+    return get_active_comparison_session(
+        db,
+        user_id=current_user.id,
     )
 
 

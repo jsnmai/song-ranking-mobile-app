@@ -37,6 +37,15 @@ export async function startComparisonSession(
     return apiClient.post<ComparisonSessionResponse>("/api/v1/comparison-sessions", request, token)
 }
 
+export async function getActiveComparisonSession(
+    token: string,
+): Promise<ComparisonSessionResponse | null> {
+    return apiClient.get<ComparisonSessionResponse | null>(
+        "/api/v1/comparison-sessions/active",
+        token,
+    )
+}
+
 export async function chooseComparisonWinner(
     sessionUuid: string,
     winner: "target" | "candidate",

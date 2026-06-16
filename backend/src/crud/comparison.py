@@ -51,6 +51,22 @@ def get_user_comparison_session(
     ).scalar_one_or_none()
 
 
+def get_active_comparison_session_for_user(
+    db: Session,
+    user_id: int,
+) -> ComparisonSession | None:
+    """Return the user's current comparison session, or None.
+
+    One active session per user is enforced at the service layer, so at most one row
+    exists; ordering newest-first is defensive in case two ever coexist transiently.
+    """
+    return db.execute(
+        select(ComparisonSession)
+        .where(ComparisonSession.user_id == user_id)
+        .order_by(ComparisonSession.created_at.desc())
+    ).scalars().first()
+
+
 def get_expired_comparison_sessions(
     db: Session,
     expires_before: datetime,
