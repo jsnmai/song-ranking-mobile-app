@@ -106,7 +106,8 @@ DEMO_ACCOUNTS: tuple[DemoAccountSpec, ...] = (
     DemoAccountSpec(demo_email("demo_friends_only"), "demo_friends_only", "Demo Friends Only", "friends_only"),
     DemoAccountSpec(demo_email("demo_blocked"), "demo_blocked", "Demo Blocked", "public"),
     DemoAccountSpec(demo_email("demo_feed"), "demo_feed", "Demo Feed", "public"),
-    # Discovery demo contributors — followed by demo_power for Discover testing.
+    # Discovery demo contributors — followed by demo_power for Co-Sign; demo_disc_a is also a
+    # mutual follow, so it counts toward demo_power's circle (Trending / Most-rated).
     DemoAccountSpec(demo_email("demo_disc_a"), "demo_disc_a", "Demo Disc A", "public"),
     DemoAccountSpec(demo_email("demo_disc_b"), "demo_disc_b", "Demo Disc B", "public"),
     # Calibration UI demo accounts — for testing the comparison ranked-list ladder states.
@@ -354,6 +355,15 @@ FOLLOW_EDGES: tuple[tuple[str, str], ...] = (
     ("demo_feed", "demo_friends_only"),
     ("demo_friends_only", "demo_power"),
     ("demo_blocked", "demo_power"),
+    # Mutual follows that give demo_power a circle of >=3 visible members, so the live
+    # "Trending in your circle" and "Most-rated in your circle" Discover cards unlock.
+    # demo_power already follows these three; they already share rated songs with the rest
+    # of the circle (and have recent rating events), so both the all-time count and the
+    # 7-day Trending window populate without adding any ratings. demo_blocked stays blocked
+    # (excluded), and demo_empty / demo_newbie keep no circle so their locked states still demo.
+    ("demo_friend", "demo_power"),
+    ("demo_opposite", "demo_power"),
+    ("demo_disc_a", "demo_power"),
     # seed_cosign follows both disc accounts so 9_000_031 qualifies as a co-sign (min_count=2).
     ("seed_cosign", "demo_disc_a"),
     ("seed_cosign", "demo_disc_b"),
