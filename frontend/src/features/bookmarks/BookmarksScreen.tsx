@@ -62,9 +62,7 @@ export default function BookmarksScreen({ navigation }: BookmarksScreenProps) {
                 <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
                     <Text style={styles.backText}>Back</Text>
                 </TouchableOpacity>
-                <Text style={styles.kicker}>BOOKMARKS</Text>
                 <Text style={styles.heading}>Bookmarks</Text>
-                <Text style={styles.subheading}>Songs you bookmark. Private, free, and unlimited.</Text>
             </View>
 
             {isLoading ? (
@@ -155,23 +153,11 @@ const styles = StyleSheet.create({
         color: colors.ink,
         fontSize: 14,
     },
-    kicker: {
-        fontFamily: fonts.mono,
-        color: colors.inkSoft,
-        fontSize: 10,
-        letterSpacing: 1.8,
-        marginBottom: 4,
-    },
     heading: {
         fontFamily: fonts.serif,
         color: colors.ink,
         fontSize: 30,
         lineHeight: 34,
-    },
-    subheading: {
-        color: colors.inkSoft,
-        fontSize: 13,
-        marginTop: 4,
     },
     status: {
         marginTop: 42,
