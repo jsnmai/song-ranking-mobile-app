@@ -274,11 +274,11 @@ export default function FeedScreen() {
                                 <Text style={styles.lockTagLabel}>LOCKED</Text>
                             </View>
                         </View>
-                        <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 12, marginTop: 12 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 12 }}>
                             <View style={styles.lockDotXl}><LockIcon color="#fff" size={24} /></View>
-                            <View style={{ flex: 1, paddingBottom: 4 }}>
-                                <View style={[styles.skBar, { width: "46%", height: 8, backgroundColor: "rgba(255,255,255,0.28)" }]} />
-                                <View style={[styles.skBar, { width: "82%", height: 13, backgroundColor: "rgba(255,255,255,0.2)", marginTop: 8 }]} />
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.lvLockedTitle}>Locked for now</Text>
+                                <Text style={styles.lvLockedBody}>Follow friends to see their freshest ratings.</Text>
                             </View>
                         </View>
                     </View>
@@ -311,7 +311,7 @@ export default function FeedScreen() {
                         </View>
                         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 8 }}>
                             <View style={styles.lockDotLg}><LockIcon color="#fff" size={18} /></View>
-                            <Text style={styles.fullLockHint}>Unlocks when two friends rate the same song</Text>
+                            <Text style={styles.fullLockHint}>When two friends split on a song</Text>
                         </View>
                     </View>
                 </View>
@@ -328,7 +328,7 @@ export default function FeedScreen() {
                         </View>
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                             <View style={styles.lockDotLg}><LockIcon color="#fff" size={18} /></View>
-                            <View style={[styles.skBar, { width: "40%", height: 8, backgroundColor: "rgba(255,255,255,0.4)" }]} />
+                            <Text style={[styles.lockCardDesc, { flex: 1 }]}>How your circle scores a track</Text>
                         </View>
                         <View>
                             <View style={styles.consensusFullBars}>
@@ -346,11 +346,6 @@ export default function FeedScreen() {
             <View style={styles.fullRow}>
                 {/* Re-rate Radar */}
                 <View style={[styles.fullCell, { height: 150, backgroundColor: colors.navy }]}>
-                    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
-                        {ORBIT_STARS.slice(0, 8).map((s, i) => (
-                            <Circle key={i} cx={`${s.x}%`} cy={`${s.y}%`} r={s.r} fill="white" fillOpacity={s.o * 0.6} />
-                        ))}
-                    </Svg>
                     <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
                         <View style={styles.fullCellTop}>
                             <View style={styles.goldPill}><Text style={styles.goldPillText}>Re-rate</Text></View>
@@ -361,10 +356,7 @@ export default function FeedScreen() {
                         </View>
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                             <View style={styles.ghostBoxSm} />
-                            <View style={{ flex: 1 }}>
-                                <View style={[styles.skBar, { width: "70%", height: 9, backgroundColor: "rgba(255,255,255,0.3)" }]} />
-                                <View style={[styles.skBar, { width: "44%", height: 7, backgroundColor: "rgba(255,255,255,0.2)", marginTop: 6 }]} />
-                            </View>
+                            <Text style={[styles.lockCardDesc, { flex: 1, color: "rgba(255,255,255,0.55)" }]}>When a friend changes a score</Text>
                         </View>
                         {/* Sparkline as flex child 3/4 */}
                         <Svg width="100%" height={34} viewBox="0 0 100 34" preserveAspectRatio="none">
@@ -398,10 +390,7 @@ export default function FeedScreen() {
                         </View>
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 11 }}>
                             <View style={styles.ghostBoxLg} />
-                            <View style={{ flex: 1 }}>
-                                <View style={[styles.skBar, { width: "72%", height: 10, backgroundColor: "rgba(255,255,255,0.32)" }]} />
-                                <View style={[styles.skBar, { width: "48%", height: 7, backgroundColor: "rgba(255,255,255,0.2)", marginTop: 6 }]} />
-                            </View>
+                            <Text style={[styles.lockCardDesc, { flex: 1 }]}>Songs your circle all rate 9+</Text>
                         </View>
                         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                             <View style={{ flexDirection: "row", alignItems: "center" }}>
@@ -1772,6 +1761,27 @@ const styles = StyleSheet.create({
         textAlign: "center",
         lineHeight: 14,
         maxWidth: 160,
+    },
+    // Descriptive microcopy on the locked cards — replaces placeholder skeleton bars
+    // so each locked module reads as what it will become.
+    lvLockedTitle: {
+        fontFamily: fonts.display,
+        fontSize: 14,
+        color: "#fff",
+    },
+    lvLockedBody: {
+        fontSize: 10.5,
+        color: "rgba(255,255,255,0.8)",
+        marginTop: 3,
+        lineHeight: 14,
+    },
+    lockCardDesc: {
+        fontSize: 11,
+        // Soft white reads evenly on the sky/mint cards; the navy Re-rate card overrides
+        // this with a dimmer white (~0.55) so it reads at the same weight — white-on-navy
+        // stays crisp at full opacity, so it needs knocking back to match the others.
+        color: "rgba(255,255,255,0.78)",
+        lineHeight: 14,
     },
     // Consensus histogram (full card)
     consensusFullBars: {
