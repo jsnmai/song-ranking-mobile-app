@@ -1,6 +1,6 @@
 // Full-list reorder screen for Phase 7.
 // Uses PanResponder and React Native Animated — Reanimated worklets crash Expo Go with SIGABRT.
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import {
     ActivityIndicator,
     Animated,
@@ -13,6 +13,7 @@ import {
     View,
 } from "react-native"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
+import Svg, { Circle, Path } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
 import BucketBadge from "../../components/BucketBadge"
@@ -33,7 +34,9 @@ type DragPreview = {
     draftBucket: BucketName;
 }
 
-const ROW_HEIGHT = 82
+// Row pitch used by the drag math — must match the rendered row height so the
+// finger offset maps cleanly onto list positions.
+const ROW_HEIGHT = 72
 
 export default function ReorderScreen({ navigation }: ReorderScreenProps) {
     const { token } = useAuth()
@@ -147,38 +150,69 @@ export default function ReorderScreen({ navigation }: ReorderScreenProps) {
         )
     }
 
+    const saveDisabled = isSaving || rankings.length === 0
+
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={handleCancel} disabled={isSaving}>
-                    <Text style={styles.headerActionCancel}>Cancel</Text>
-                </TouchableOpacity>
+                <View style={styles.headerSlotLeft}>
+                    <TouchableOpacity onPress={handleCancel} disabled={isSaving}>
+                        <Text style={styles.headerActionCancel}>Cancel</Text>
+                    </TouchableOpacity>
+                </View>
                 <Text style={styles.heading}>Reorder</Text>
-                <TouchableOpacity onPress={handleSave} disabled={isSaving || rankings.length === 0}>
-                    <Text
-                        style={[
-                            styles.headerActionSave,
-                            (isSaving || rankings.length === 0) && styles.headerActionSaveDisabled,
-                        ]}
-                    >
-                        {isSaving ? "Saving..." : "Save"}
-                    </Text>
-                </TouchableOpacity>
+                <View style={styles.headerSlotRight}>
+                    <TouchableOpacity onPress={handleSave} disabled={saveDisabled}>
+                        <Text
+                            style={[
+                                styles.headerActionSave,
+                                saveDisabled && styles.headerActionSaveDisabled,
+                            ]}
+                        >
+                            {isSaving ? "Saving..." : "Save"}
+                        </Text>
+                    </TouchableOpacity>
+                </View>
             </View>
             {error !== null && <Text style={styles.errorText}>{error}</Text>}
             <ScrollView contentContainerStyle={styles.listContent} scrollEnabled={dragPreview === null}>
-                {rankings.map((ranking, index) => (
-                    <ReorderRow
-                        key={ranking.id}
-                        ranking={ranking}
-                        index={index}
-                        totalRows={rankings.length}
-                        dragPreview={dragPreview}
-                        previewBucket={dragPreview?.songId === ranking.song_id ? dragPreview.draftBucket : null}
-                        onDragPreview={handleDragPreview}
-                        onDragEnd={handleDragEnd}
-                    />
-                ))}
+                <View style={styles.infoBanner}>
+                    <Svg
+                        width={14}
+                        height={14}
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke={colors.inkDim}
+                        strokeWidth={1.9}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        style={styles.infoIcon}
+                    >
+                        <Circle cx={12} cy={12} r={9} />
+                        <Path d="M12 11v5M12 8h.01" />
+                    </Svg>
+                    <Text style={styles.infoText}>
+                        Drag to hand-tune your ranking order. A song&apos;s bucket follows wherever you
+                        drop it across a boundary.
+                    </Text>
+                </View>
+
+                <View style={styles.card}>
+                    {rankings.map((ranking, index) => (
+                        <ReorderRow
+                            key={ranking.id}
+                            ranking={ranking}
+                            index={index}
+                            totalRows={rankings.length}
+                            dragPreview={dragPreview}
+                            previewBucket={dragPreview?.songId === ranking.song_id ? dragPreview.draftBucket : null}
+                            onDragPreview={handleDragPreview}
+                            onDragEnd={handleDragEnd}
+                        />
+                    ))}
+                </View>
+
+                <Text style={styles.footerHint}>Top of the list is your #1.</Text>
             </ScrollView>
         </View>
     )
@@ -230,6 +264,9 @@ function ReorderRow({
             onPanResponderGrant: () => {
                 dragStartIndex.current = indexRef.current
                 latestTargetIndex.current = indexRef.current
+                // Clear any leftover offset from a previous drag of this same row before
+                // it binds to translateY again (it is still showing shiftOffset at grant).
+                translateY.setValue(0)
             },
             onPanResponderMove: (_, gestureState) => {
                 translateY.setValue(gestureState.dy)
@@ -246,12 +283,13 @@ function ReorderRow({
                 )
             },
             onPanResponderRelease: () => {
-                // Reset to 0 before the re-render so the row snaps cleanly to its new list position
-                translateY.setValue(0)
+                // Do NOT reset translateY here. Once dragPreview clears, this row stops
+                // reading translateY and binds to shiftOffset (0) at its new list index,
+                // so it travels straight to its final slot. Resetting translateY first
+                // would snap it back to its origin for one frame — the release flicker.
                 onDragEndRef.current(ranking.song_id, latestTargetIndex.current)
             },
             onPanResponderTerminate: () => {
-                translateY.setValue(0)
                 onDragEndRef.current(ranking.song_id, latestTargetIndex.current)
             },
         })
@@ -262,7 +300,9 @@ function ReorderRow({
     // Slide neighboring rows into position as the drag preview changes.
     // On drag-end (dragPreview goes null) snap immediately instead of springing —
     // the list has already been reordered so a spring from the shifted offset looks wrong.
-    useEffect(() => {
+    // useLayoutEffect (not useEffect) so the snap-to-0 runs before paint: otherwise a
+    // just-reordered neighbor paints one frame carrying its stale ±ROW_HEIGHT offset.
+    useLayoutEffect(() => {
         if (isBeingDragged) {
             prevDragPreviewRef.current = dragPreview
             return
@@ -285,10 +325,14 @@ function ReorderRow({
         }).start()
     }, [dragPreview, index, isBeingDragged, ranking.song_id, shiftOffset])
 
+    const dotColor = isBeingDragged ? colors.accent : colors.inkSoft
+
     return (
         <Animated.View
             style={[
                 styles.row,
+                index > 0 && styles.rowDivider,
+                isBeingDragged && styles.rowActive,
                 {
                     zIndex: isBeingDragged ? 2 : 0,
                     transform: [{ translateY: isBeingDragged ? translateY : shiftOffset }],
@@ -296,6 +340,7 @@ function ReorderRow({
             ]}
             testID={`reorder-row-${ranking.id}`}
         >
+            {isBeingDragged && <View style={styles.rowActiveBar} />}
             <View style={styles.coverFrame}>
                 {ranking.song.cover_url ? (
                     <Image source={{ uri: ranking.song.cover_url }} style={styles.coverImage} />
@@ -304,11 +349,20 @@ function ReorderRow({
             <View style={styles.songText}>
                 <Text style={styles.title} numberOfLines={1}>{ranking.song.title}</Text>
                 <Text style={styles.artist} numberOfLines={1}>{ranking.song.artist}</Text>
-                <BucketBadge bucket={previewBucket ?? ranking.draftBucket} />
+                <View style={styles.bucketRow}>
+                    <BucketBadge bucket={previewBucket ?? ranking.draftBucket} />
+                </View>
             </View>
             {/* panHandlers on the handle area only — touching art or text does not start a drag */}
-            <View {...panResponder.panHandlers}>
-                <Text style={styles.dragHandle}>≡</Text>
+            <View style={styles.dragHandle} {...panResponder.panHandlers}>
+                <Svg width={20} height={20} viewBox="0 0 24 24">
+                    <Circle cx={9} cy={6} r={1.4} fill={dotColor} />
+                    <Circle cx={15} cy={6} r={1.4} fill={dotColor} />
+                    <Circle cx={9} cy={12} r={1.4} fill={dotColor} />
+                    <Circle cx={15} cy={12} r={1.4} fill={dotColor} />
+                    <Circle cx={9} cy={18} r={1.4} fill={dotColor} />
+                    <Circle cx={15} cy={18} r={1.4} fill={dotColor} />
+                </Svg>
             </View>
         </Animated.View>
     )
@@ -460,31 +514,34 @@ const styles = StyleSheet.create({
         backgroundColor: colors.bg,
     },
     header: {
-        paddingTop: 56,
+        paddingTop: 58,
         paddingHorizontal: 16,
         paddingBottom: 14,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.line,
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
-        backgroundColor: colors.bg,
     },
+    headerSlotLeft: { width: 70 },
+    headerSlotRight: { width: 70, alignItems: "flex-end" },
     heading: {
-        fontFamily: fonts.serif,
+        flex: 1,
+        textAlign: "center",
+        fontFamily: fonts.display,
         color: colors.ink,
-        fontSize: 22,
-        lineHeight: 26,
+        fontSize: 18,
+        letterSpacing: -0.3,
     },
     headerActionCancel: {
         fontFamily: fonts.mono,
-        color: colors.ink,
-        fontSize: 15,
+        color: colors.inkDim,
+        fontSize: 13,
+        letterSpacing: 0.5,
     },
     headerActionSave: {
-        fontFamily: fonts.mono,
-        color: colors.clay,
-        fontSize: 15,
+        fontFamily: fonts.display,
+        color: colors.accent,
+        fontSize: 14,
+        letterSpacing: -0.2,
     },
     headerActionSaveDisabled: {
         color: colors.inkDim,
@@ -497,23 +554,64 @@ const styles = StyleSheet.create({
         paddingTop: 12,
     },
     listContent: {
-        paddingHorizontal: 16,
+        paddingHorizontal: 14,
         paddingBottom: 32,
     },
+    infoBanner: {
+        flexDirection: "row",
+        alignItems: "flex-start",
+        gap: 8,
+        paddingHorizontal: 4,
+        paddingTop: 2,
+        paddingBottom: 12,
+    },
+    infoIcon: {
+        marginTop: 1,
+    },
+    infoText: {
+        flex: 1,
+        color: colors.inkDim,
+        fontSize: 11,
+        lineHeight: 16,
+    },
+    card: {
+        backgroundColor: colors.paper,
+        borderWidth: 1,
+        borderColor: colors.line,
+        borderRadius: 16,
+        shadowColor: colors.ink,
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: 1,
+    },
     row: {
-        minHeight: ROW_HEIGHT,
+        height: ROW_HEIGHT,
         flexDirection: "row",
         alignItems: "center",
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.line,
-        backgroundColor: colors.paper,
+        paddingLeft: 16,
+        paddingRight: 14,
+        gap: 13,
+    },
+    rowDivider: {
+        borderTopWidth: 1,
+        borderTopColor: colors.line,
+    },
+    rowActive: {
+        backgroundColor: "#fff",
+    },
+    rowActiveBar: {
+        position: "absolute",
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: 3,
+        backgroundColor: colors.accent,
     },
     coverFrame: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        marginRight: 12,
+        width: 46,
+        height: 46,
+        borderRadius: 10,
         backgroundColor: colors.sand,
         overflow: "hidden",
     },
@@ -526,22 +624,33 @@ const styles = StyleSheet.create({
         minWidth: 0,
     },
     title: {
-        fontFamily: fonts.serif,
+        fontFamily: fonts.display,
         color: colors.ink,
-        fontSize: 16,
-        lineHeight: 20,
-        marginBottom: 3,
+        fontSize: 15,
+        lineHeight: 17,
     },
     artist: {
         fontFamily: fonts.mono,
         color: colors.inkSoft,
-        fontSize: 14,
-        marginBottom: 5,
+        fontSize: 9,
+        letterSpacing: 0.8,
+        textTransform: "uppercase",
+        marginTop: 4,
+    },
+    bucketRow: {
+        flexDirection: "row",
+        marginTop: 5,
     },
     dragHandle: {
-        fontFamily: fonts.mono,
+        flex: 0,
+        paddingLeft: 4,
+        paddingVertical: 8,
+    },
+    footerHint: {
         color: colors.inkDim,
-        fontSize: 28,
-        paddingHorizontal: 10,
+        fontSize: 11,
+        textAlign: "center",
+        marginTop: 12,
+        letterSpacing: 0.2,
     },
 })
