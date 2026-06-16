@@ -11,6 +11,7 @@ const mockNavigate = jest.fn()
 const mockGetProfileByUsername = jest.fn()
 const mockGetCompatibility = jest.fn()
 const mockGetUserTasteProfile = jest.fn()
+const mockGetUserAuxstrology = jest.fn()
 const mockGetProfileRecentVerdicts = jest.fn()
 const mockGetProfileRankings = jest.fn()
 const mockFollowUser = jest.fn()
@@ -29,6 +30,7 @@ jest.mock("../apiRequests", () => ({
     getProfileByUsername: (...args: unknown[]) => mockGetProfileByUsername(...args),
     getCompatibility: (...args: unknown[]) => mockGetCompatibility(...args),
     getUserTasteProfile: (...args: unknown[]) => mockGetUserTasteProfile(...args),
+    getUserAuxstrology: (...args: unknown[]) => mockGetUserAuxstrology(...args),
     getProfileRecentVerdicts: (...args: unknown[]) => mockGetProfileRecentVerdicts(...args),
     getProfileRankings: (...args: unknown[]) => mockGetProfileRankings(...args),
     followUser: (...args: unknown[]) => mockFollowUser(...args),
@@ -43,6 +45,7 @@ const profile: Profile = {
     user_id: 4,
     username: "maya",
     display_name: "Maya",
+    avatar_color: null, timezone: null,
     is_public: true,
     visibility: "public",
     created_at: "2026-01-01T00:00:00Z",
@@ -72,6 +75,77 @@ const compatNoOverlap: CompatibilityResponse = {
     is_plus: false,
 }
 
+const auxLocked = {
+    status: "locked",
+    current_ratings: 2,
+    required_ratings: 10,
+    sign: null,
+    caption: null,
+    adjectives: [],
+    evidence: [],
+    axes: {},
+}
+
+const auxActive = {
+    status: "active",
+    current_ratings: 24,
+    required_ratings: null,
+    sign: { name: "The Late-night Romantic", summary: "Lush, nocturnal, and a little dramatic." },
+    caption: "Big choruses and a soft spot for the sad bridge.",
+    adjectives: ["Nocturnal", "Lush"],
+    evidence: [],
+    axes: {},
+}
+
+const tasteFixture = {
+    total_rated: 24,
+    avg_score: 7.1,
+    bucket_breakdown: { like: 10, okay: 0, dislike: 0 },
+    overall: {
+        genres: [{ name: "R&B", count: 9, percentage: 38 }],
+        top_artists: [{ name: "Frank Ocean", count: 6 }],
+    },
+    by_bucket: {
+        like: { genres: [], top_artists: [], avg_score: null, count: 0 },
+        okay: { genres: [], top_artists: [], avg_score: null, count: 0 },
+        dislike: { genres: [], top_artists: [], avg_score: null, count: 0 },
+    },
+}
+
+const rankingFixture = {
+    id: 7,
+    song_id: 42,
+    bucket: "like",
+    position: 1,
+    score: 9.4,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+    song: {
+        id: 42,
+        deezer_id: 123,
+        isrc: null,
+        title: "Nights",
+        artist: "Frank Ocean",
+        artist_deezer_id: 456,
+        album: "Blonde",
+        cover_url: "https://example.com/cover.jpg",
+        preview_url: null,
+        genre_deezer: null,
+        musicbrainz_id: null,
+        genres_mb: null,
+        release_year: null,
+        spotify_energy: null,
+        spotify_valence: null,
+        spotify_tempo: null,
+        spotify_danceability: null,
+        metadata_enriched_at: null,
+        spotify_enriched_at: null,
+        global_avg_score: null,
+        global_rating_count: 0,
+        created_at: "2026-01-01T00:00:00Z",
+    },
+}
+
 const navigationProp = {
     navigate: mockNavigate,
     goBack: mockGoBack,
@@ -87,6 +161,8 @@ beforeEach(() => {
     mockGetCompatibility.mockResolvedValue(compatNoOverlap)
     mockGetProfileRecentVerdicts.mockResolvedValue({ items: [] })
     mockGetProfileRankings.mockResolvedValue({ rankings: [], next_cursor: null })
+    mockGetUserTasteProfile.mockResolvedValue(tasteFixture)
+    mockGetUserAuxstrology.mockResolvedValue(auxLocked)
     mockReportUser.mockResolvedValue({
         id: 1,
         status: "open",
@@ -94,14 +170,15 @@ beforeEach(() => {
 })
 
 describe("OtherProfileScreen compatibility card", () => {
-    it("shows score and explanation phrase when has_overlap is true", async () => {
+    it("shows score and shared-ratings meta when has_overlap is true", async () => {
         mockGetCompatibility.mockResolvedValue(compatOverlap)
 
         render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
 
         await waitFor(() => {
-            expect(screen.getByText(/78% match/)).toBeTruthy()
-            expect(screen.getByText(/Both love Frank Ocean/)).toBeTruthy()
+            expect(screen.getByText("78%")).toBeTruthy()
+            expect(screen.getByText("ALIGNED")).toBeTruthy()
+            expect(screen.getByText(/FROM 9 SHARED RATINGS/)).toBeTruthy()
         })
     })
 
@@ -139,16 +216,55 @@ describe("OtherProfileScreen compatibility card", () => {
         })
     })
 
-    it("profile and taste tabs remain accessible when compatibility is loaded", async () => {
+    it("renders top songs and genres sections alongside the compat tile", async () => {
         mockGetCompatibility.mockResolvedValue(compatOverlap)
+        mockGetUserTasteProfile.mockResolvedValue(tasteFixture)
+        mockGetProfileRankings.mockResolvedValue({ rankings: [rankingFixture], next_cursor: null })
 
         render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
 
         await waitFor(() => {
-            // Both tab labels should be present alongside the compat card
-            expect(screen.getByText("Profile")).toBeTruthy()
-            expect(screen.getByText("Taste")).toBeTruthy()
-            expect(screen.getByText(/78% match/)).toBeTruthy()
+            expect(screen.getByText("78%")).toBeTruthy()
+            expect(screen.getByText("THEIR TOP SONGS")).toBeTruthy()
+            expect(screen.getByText("TOP GENRES")).toBeTruthy()
+            expect(screen.getByText("TOP ARTIST")).toBeTruthy()
+        })
+    })
+
+    it("renders the Auxstrology card when the user's reading is active", async () => {
+        mockGetUserAuxstrology.mockResolvedValue(auxActive)
+
+        render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("other-profile-auxstrology")).toBeTruthy()
+            expect(screen.getByText("AUXSTROLOGY")).toBeTruthy()
+            expect(screen.getByText(/Late-night Romantic/)).toBeTruthy()
+        })
+    })
+
+    it("hides the Auxstrology card while the reading is locked", async () => {
+        render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
+
+        await waitFor(() => {
+            expect(screen.getByText("Maya")).toBeTruthy()
+        })
+        expect(screen.queryByTestId("other-profile-auxstrology")).toBeNull()
+    })
+
+    it("blocks the user from the report panel's block row", async () => {
+        mockBlockUser.mockResolvedValue({ ...profile, is_blocked: true, can_view_taste: false })
+
+        render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
+
+        await waitFor(() => {
+            expect(screen.getByLabelText("Report user")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByLabelText("Report user"))
+        fireEvent.press(screen.getByText("Block @maya"))
+
+        await waitFor(() => {
+            expect(mockBlockUser).toHaveBeenCalledWith("maya", "test-token")
         })
     })
 
@@ -172,9 +288,9 @@ describe("OtherProfileScreen compatibility card", () => {
         render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
 
         await waitFor(() => {
-            expect(screen.getByText("Report user")).toBeTruthy()
+            expect(screen.getByLabelText("Report user")).toBeTruthy()
         })
-        fireEvent.press(screen.getByText("Report user"))
+        fireEvent.press(screen.getByLabelText("Report user"))
         fireEvent.press(screen.getByText("Submit report"))
         expect(mockReportUser).not.toHaveBeenCalled()
 
@@ -201,9 +317,9 @@ describe("OtherProfileScreen compatibility card", () => {
         render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
 
         await waitFor(() => {
-            expect(screen.getByText("Report user")).toBeTruthy()
+            expect(screen.getByLabelText("Report user")).toBeTruthy()
         })
-        fireEvent.press(screen.getByText("Report user"))
+        fireEvent.press(screen.getByLabelText("Report user"))
         fireEvent.press(screen.getByText("Other"))
         fireEvent.press(screen.getByText("Submit report"))
 
@@ -225,5 +341,74 @@ describe("OtherProfileScreen compatibility card", () => {
             expect(screen.getByText("Maya")).toBeTruthy()
         })
         expect(screen.queryByText("Report user")).toBeNull()
+    })
+})
+
+describe("OtherProfileScreen follow relationship label", () => {
+    it("shows FRIENDS when the follow is mutual", async () => {
+        mockGetProfileByUsername.mockResolvedValue({
+            ...profile,
+            is_following: true,
+            is_followed_by: true,
+        })
+
+        render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
+
+        await waitFor(() => {
+            expect(screen.getByText(/· FRIENDS/)).toBeTruthy()
+        })
+        expect(screen.queryByText(/FOLLOWS YOU/)).toBeNull()
+    })
+
+    it("shows FOLLOWS YOU when they follow you but you don't follow back", async () => {
+        mockGetProfileByUsername.mockResolvedValue({
+            ...profile,
+            is_following: false,
+            is_followed_by: true,
+        })
+
+        render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
+
+        await waitFor(() => {
+            expect(screen.getByText(/· FOLLOWS YOU/)).toBeTruthy()
+        })
+        expect(screen.queryByText(/FRIENDS/)).toBeNull()
+    })
+
+    it("shows no relationship marker when they don't follow you", async () => {
+        mockGetProfileByUsername.mockResolvedValue({
+            ...profile,
+            is_following: true,
+            is_followed_by: false,
+        })
+
+        render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
+
+        await waitFor(() => {
+            expect(screen.getByText("Maya")).toBeTruthy()
+        })
+        expect(screen.queryByText(/FOLLOWS YOU/)).toBeNull()
+        expect(screen.queryByText(/FRIENDS/)).toBeNull()
+    })
+
+    it("does not refetch taste sections when following toggles (no flicker)", async () => {
+        mockGetCompatibility.mockResolvedValue(compatOverlap)
+        mockFollowUser.mockResolvedValue({ ...profile, is_following: true, follower_count: 13 })
+
+        render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
+
+        await waitFor(() => expect(screen.getByText("Follow")).toBeTruthy())
+        // Taste-dependent sections fetched exactly once on initial load.
+        expect(mockGetCompatibility).toHaveBeenCalledTimes(1)
+        expect(mockGetUserTasteProfile).toHaveBeenCalledTimes(1)
+        expect(mockGetUserAuxstrology).toHaveBeenCalledTimes(1)
+
+        fireEvent.press(screen.getByText("Follow"))
+
+        await waitFor(() => expect(screen.getByText("Following")).toBeTruthy())
+        // The follow toggle must not re-trigger the taste/compat fetches.
+        expect(mockGetCompatibility).toHaveBeenCalledTimes(1)
+        expect(mockGetUserTasteProfile).toHaveBeenCalledTimes(1)
+        expect(mockGetUserAuxstrology).toHaveBeenCalledTimes(1)
     })
 })

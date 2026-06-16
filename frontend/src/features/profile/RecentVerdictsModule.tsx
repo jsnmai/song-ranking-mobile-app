@@ -9,16 +9,17 @@ type Props = {
     verdicts: RecentVerdictItem[] | null;
     isLoading: boolean;
     onItemPress: (item: RecentVerdictItem) => void;
+    title?: string;
 }
 
-export default function RecentVerdictsModule({ verdicts, isLoading, onItemPress }: Props) {
+export default function RecentVerdictsModule({ verdicts, isLoading, onItemPress, title = "Your Recent Verdicts" }: Props) {
     const items = verdicts?.slice(0, 3) ?? []
 
     if (isLoading || items.length === 0) return null
 
     return (
         <View style={styles.container} testID="recent-verdicts-module">
-            <Text style={styles.sectionTitle}>Your Recent Verdicts</Text>
+            <Text style={styles.sectionTitle}>{title}</Text>
             <View style={styles.card}>
                 {items.map((item, i) => {
                     const col = bucketColor(item.bucket)

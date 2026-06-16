@@ -4,7 +4,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react-nativ
 import OtherProfileScreen from "../OtherProfileScreen"
 import ProfileScreen from "../ProfileScreen"
 import { CompatibilityResponse, MostCompatibleItem, MostCompatibleResponse, Profile, RecentVerdictsResponse, TasteProfileResponse } from "../types"
-import { RankingAnchorsResponse, RankingListResponse, RankingResponse } from "../../comparison/types"
+import { RankingListResponse, RankingResponse } from "../../comparison/types"
 
 // ── Navigation mocks ─────────────────────────────────────────────────────────
 
@@ -27,6 +27,7 @@ jest.mock("../../auth/AuthContext", () => ({
 
 const mockGetMyProfile = jest.fn()
 const mockGetMyTasteProfile = jest.fn()
+const mockGetMyAuxstrology = jest.fn()
 const mockGetMyRecentVerdicts = jest.fn()
 const mockGetProfileByUsername = jest.fn()
 const mockGetCompatibility = jest.fn()
@@ -41,10 +42,12 @@ const mockReportUser = jest.fn()
 const mockGetProfileBookmarks = jest.fn()
 const mockGetMostCompatible = jest.fn()
 const mockGetProfileAnchors = jest.fn()
+const mockGetUserAuxstrology = jest.fn()
 
 jest.mock("../apiRequests", () => ({
     getMyProfile: (...args: unknown[]) => mockGetMyProfile(...args),
     getMyTasteProfile: (...args: unknown[]) => mockGetMyTasteProfile(...args),
+    getMyAuxstrology: (...args: unknown[]) => mockGetMyAuxstrology(...args),
     getMyRecentVerdicts: (...args: unknown[]) => mockGetMyRecentVerdicts(...args),
     getProfileByUsername: (...args: unknown[]) => mockGetProfileByUsername(...args),
     getCompatibility: (...args: unknown[]) => mockGetCompatibility(...args),
@@ -54,6 +57,7 @@ jest.mock("../apiRequests", () => ({
     getProfileBookmarks: (...args: unknown[]) => mockGetProfileBookmarks(...args),
     getMostCompatible: (...args: unknown[]) => mockGetMostCompatible(...args),
     getProfileAnchors: (...args: unknown[]) => mockGetProfileAnchors(...args),
+    getUserAuxstrology: (...args: unknown[]) => mockGetUserAuxstrology(...args),
     followUser: (...args: unknown[]) => mockFollowUser(...args),
     unfollowUser: (...args: unknown[]) => mockUnfollowUser(...args),
     blockUser: (...args: unknown[]) => mockBlockUser(...args),
@@ -75,6 +79,7 @@ const myProfile: Profile = {
     user_id: 2,
     username: "jason",
     display_name: "Jason",
+    avatar_color: null, timezone: null,
     is_public: true,
     visibility: "public",
     created_at: "2026-01-01T00:00:00Z",
@@ -93,6 +98,7 @@ const otherProfile: Profile = {
     user_id: 4,
     username: "maya",
     display_name: "Maya",
+    avatar_color: null, timezone: null,
     is_public: true,
     visibility: "public",
     created_at: "2026-01-01T00:00:00Z",
@@ -191,6 +197,10 @@ describe("ProfileScreen profile modules", () => {
         mockGetMyRecentVerdicts.mockResolvedValue(verdictsResponse)
         mockListMyRankings.mockResolvedValue(rankingsResponse)
         mockGetMostCompatible.mockResolvedValue(mostCompatibleResponse)
+        mockGetMyAuxstrology.mockResolvedValue({
+            status: "locked", current_ratings: 0, required_ratings: 1,
+            sign: null, caption: null, adjectives: [], evidence: [], axes: {},
+        })
     })
 
     it("renders Recent Verdicts module on the profile tab", async () => {
@@ -198,6 +208,33 @@ describe("ProfileScreen profile modules", () => {
 
         await waitFor(() => {
             expect(screen.getByTestId("recent-verdicts-module")).toBeTruthy()
+        })
+    })
+
+    it("renders the Auxstrology sign and caption when the reading is active", async () => {
+        mockGetMyAuxstrology.mockResolvedValue({
+            status: "active",
+            current_ratings: 12,
+            required_ratings: null,
+            sign: { name: "The Midnight Judge", summary: "Your verdicts come in after the world goes quiet." },
+            caption: "Your scores lean nocturnal, surgical, and a little melancholic.",
+            adjectives: ["nocturnal", "surgical", "melancholic"],
+            evidence: [],
+            axes: { nocturnality: "very_high" },
+        })
+        render(<ProfileScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByText("Your scores lean nocturnal, surgical, and a little melancholic.")).toBeTruthy()
+            expect(screen.getByText("The\nMidnight Judge")).toBeTruthy()
+        })
+    })
+
+    it("keeps the Auxstrology card locked while the reading is locked", async () => {
+        render(<ProfileScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByText("Locked\nfor now")).toBeTruthy()
         })
     })
 
@@ -343,8 +380,6 @@ describe("OtherProfileScreen profile modules", () => {
         },
     }
 
-    const emptyAnchors: RankingAnchorsResponse = { top_like: null, median_okay: null, lowest_dislike: null }
-
     beforeEach(() => {
         jest.resetAllMocks()
         mockGetProfileByUsername.mockResolvedValue(otherProfile)
@@ -354,16 +389,25 @@ describe("OtherProfileScreen profile modules", () => {
         mockGetProfileBookmarks.mockResolvedValue({ bookmarks: [] })
         mockReportUser.mockResolvedValue({ id: 1, status: "open" })
         mockGetUserTasteProfile.mockResolvedValue(emptyTaste)
-        mockGetProfileAnchors.mockResolvedValue(emptyAnchors)
+        mockGetUserAuxstrology.mockResolvedValue({
+            status: "locked",
+            current_ratings: 0,
+            required_ratings: 10,
+            sign: null,
+            caption: null,
+            adjectives: [],
+            evidence: [],
+            axes: {},
+        })
     })
 
-    it("renders Rankings Preview with View all navigating to UserRankings", async () => {
+    it("renders Their Top Songs with View all navigating to UserRankings", async () => {
         render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
 
         await waitFor(() => {
-            expect(screen.getByTestId("rankings-preview-module")).toBeTruthy()
+            expect(screen.getByText("THEIR TOP SONGS")).toBeTruthy()
         })
-        fireEvent.press(screen.getByTestId("rankings-view-all"))
+        fireEvent.press(screen.getByText("VIEW ALL →"))
 
         expect(mockNavigate).toHaveBeenCalledWith("UserRankings", { username: "maya" })
     })
@@ -410,108 +454,15 @@ describe("OtherProfileScreen profile modules", () => {
         })
     })
 
-    it("does not show anchors when taste requirements are not met (partial like only)", async () => {
-        const partialTaste: TasteProfileResponse = {
-            ...emptyTaste,
-            total_rated: 5,
-            bucket_breakdown: { like: 1, okay: 0, dislike: 0 },
-            by_bucket: {
-                ...emptyTaste.by_bucket,
-                like: { ...emptyTaste.by_bucket.like, count: 1 },
-            },
-        }
-        mockGetUserTasteProfile.mockResolvedValue(partialTaste)
-        mockGetProfileAnchors.mockResolvedValue({ top_like: ranking, median_okay: null, lowest_dislike: null })
-
-        render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
-
-        await waitFor(() => screen.getByText("Taste"))
-        fireEvent.press(screen.getByText("Taste"))
-
-        await waitFor(() => {
-            expect(mockGetUserTasteProfile).toHaveBeenCalled()
-        })
-        expect(screen.queryByTestId("other-profile-anchors")).toBeNull()
-    })
-
-    it("does not show anchors when Like + Dislike exist but fewer than 3 Okay ratings", async () => {
-        const partialTaste: TasteProfileResponse = {
-            ...emptyTaste,
-            total_rated: 10,
-            bucket_breakdown: { like: 1, okay: 2, dislike: 1 },
-            by_bucket: {
-                like: { ...emptyTaste.by_bucket.like, count: 1 },
-                okay: { ...emptyTaste.by_bucket.okay, count: 2 },
-                dislike: { ...emptyTaste.by_bucket.dislike, count: 1 },
-            },
-        }
-        mockGetUserTasteProfile.mockResolvedValue(partialTaste)
-        mockGetProfileAnchors.mockResolvedValue({ top_like: ranking, median_okay: null, lowest_dislike: ranking })
-
-        render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
-
-        await waitFor(() => screen.getByText("Taste"))
-        fireEvent.press(screen.getByText("Taste"))
-
-        await waitFor(() => {
-            expect(mockGetUserTasteProfile).toHaveBeenCalled()
-        })
-        expect(screen.queryByTestId("other-profile-anchors")).toBeNull()
-    })
-
-    it("shows all three anchors when all requirements are met (no total_rated minimum)", async () => {
-        const fullTaste: TasteProfileResponse = {
-            ...emptyTaste,
-            total_rated: 5,
-            avg_score: 7.5,
-            bucket_breakdown: { like: 1, okay: 3, dislike: 1 },
-            by_bucket: {
-                like: { ...emptyTaste.by_bucket.like, count: 1 },
-                okay: { ...emptyTaste.by_bucket.okay, count: 3 },
-                dislike: { ...emptyTaste.by_bucket.dislike, count: 1 },
-            },
-        }
-        const okayRankingForOther: RankingResponse = { ...ranking, id: 20, bucket: "alright" }
-        const dislikeRankingForOther: RankingResponse = {
-            ...ranking,
-            id: 21,
-            bucket: "dislike",
-            song: { ...ranking.song, title: "Bad Track" },
-        }
-        const fullAnchors: RankingAnchorsResponse = {
-            top_like: ranking,
-            median_okay: okayRankingForOther,
-            lowest_dislike: dislikeRankingForOther,
-        }
-        mockGetUserTasteProfile.mockResolvedValue(fullTaste)
-        mockGetProfileAnchors.mockResolvedValue(fullAnchors)
-
-        render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
-
-        await waitFor(() => screen.getByText("Taste"))
-        fireEvent.press(screen.getByText("Taste"))
-
-        await waitFor(() => {
-            expect(screen.getByTestId("other-profile-anchors")).toBeTruthy()
-        })
-        expect(screen.getByText("TOP · LIKE")).toBeTruthy()
-        expect(screen.getByText("MEDIAN · OKAY")).toBeTruthy()
-        expect(screen.getByText("FLOOR · DISLIKE")).toBeTruthy()
-        expect(screen.getByText("Bad Track")).toBeTruthy()
-    })
-
-    it("hides anchors module when viewer cannot see taste (privacy/block)", async () => {
+    it("hides taste modules when viewer cannot see taste (privacy/block)", async () => {
         mockGetProfileByUsername.mockResolvedValue(otherProfilePrivate)
 
         render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
 
-        await waitFor(() => screen.getByText("Taste"))
-        fireEvent.press(screen.getByText("Taste"))
-
         await waitFor(() => {
-            expect(screen.queryByTestId("other-profile-anchors")).toBeNull()
+            expect(screen.getByText("This profile is private.")).toBeTruthy()
         })
         expect(mockGetUserTasteProfile).not.toHaveBeenCalled()
-        expect(mockGetProfileAnchors).not.toHaveBeenCalled()
+        expect(mockGetUserAuxstrology).not.toHaveBeenCalled()
     })
 })
