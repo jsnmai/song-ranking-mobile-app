@@ -1,7 +1,7 @@
 // Tests for Comparison Flow audio preview behavior.
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native"
 
-import { chooseComparisonWinner, finalizeComparisonSession } from "../apiRequests"
+import { chooseComparisonWinner, finalizeComparisonSession, undoComparisonChoice } from "../apiRequests"
 import ComparisonFlowScreen from "../ComparisonFlowScreen"
 import { ComparisonSessionResponse } from "../types"
 
@@ -35,6 +35,7 @@ jest.mock("../apiRequests", () => ({
     cancelComparisonSession: jest.fn(),
     chooseComparisonWinner: jest.fn(),
     finalizeComparisonSession: jest.fn(),
+    undoComparisonChoice: jest.fn(),
 }))
 
 const session: ComparisonSessionResponse = {
@@ -165,6 +166,39 @@ describe("ComparisonFlowScreen", () => {
 
         await waitFor(() => {
             expect(mockChooseComparisonWinner).toHaveBeenCalledWith("session-123", "target", "test-token", 1450)
+        })
+        act(() => {
+            rendered.unmount()
+        })
+    })
+
+    it("disables undo before any comparison choice is made", () => {
+        const rendered = render(<ComparisonFlowScreen navigation={navigation as never} route={route as never} />)
+
+        const undoButton = screen.getByLabelText("Undo last comparison")
+        expect(undoButton.props.accessibilityState).toEqual({ disabled: true })
+
+        act(() => {
+            rendered.unmount()
+        })
+    })
+
+    it("undoes the latest comparison choice with the expected-count guard", async () => {
+        const mockUndo = undoComparisonChoice as jest.Mock
+        mockUndo.mockResolvedValue({
+            ...session,
+            comparison_count: 0,
+            candidate: { ...session.candidate!, song: { ...session.candidate!.song, cover_url: null } },
+        })
+        const undoableRoute = {
+            params: { session: { ...session, comparison_count: 1 } },
+        }
+        const rendered = render(<ComparisonFlowScreen navigation={navigation as never} route={undoableRoute as never} />)
+
+        fireEvent.press(screen.getByLabelText("Undo last comparison"))
+
+        await waitFor(() => {
+            expect(mockUndo).toHaveBeenCalledWith("session-123", "test-token", 1)
         })
         act(() => {
             rendered.unmount()

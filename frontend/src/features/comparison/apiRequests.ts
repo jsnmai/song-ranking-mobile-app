@@ -53,6 +53,20 @@ export async function chooseComparisonWinner(
     )
 }
 
+export async function undoComparisonChoice(
+    sessionUuid: string,
+    token: string,
+    expectedComparisonCount: number,
+): Promise<ComparisonSessionResponse> {
+    return apiClient.post<ComparisonSessionResponse>(
+        `/api/v1/comparison-sessions/${sessionUuid}/undo`,
+        {
+            expected_comparison_count: expectedComparisonCount,
+        },
+        token,
+    )
+}
+
 export async function finalizeComparisonSession(
     sessionUuid: string,
     token: string,

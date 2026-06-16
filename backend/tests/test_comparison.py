@@ -833,3 +833,242 @@ def test_binary_insertion_all_lose_path_lands_last(client: TestClient):
     assert session["final_position"] == 4
     assert finalize_response.status_code == 200
     assert finalize_response.json()["result"]["ranking"]["position"] == 4
+
+
+# --- Active-session comparison undo --------------------------------------------
+
+
+def _seed_like_bucket(
+    client: TestClient,
+    token: str,
+    count: int,
+) -> None:
+    """Finalize `count` songs into the like bucket so a new session has candidates."""
+    for index in range(count):
+        payload = _rating_payload(
+            deezer_id=300 + index,
+            title=f"Seed {index}",
+            bucket="like",
+        )
+        if index > 0:
+            payload["position"] = 1
+        _finalize_rating(
+            client,
+            token,
+            payload,
+        )
+
+
+def _choose(
+    client: TestClient,
+    token: str,
+    session_uuid: str,
+    winner: str,
+) -> dict:
+    """Record one comparison choice and return the response body."""
+    response = client.post(
+        f"/api/v1/comparison-sessions/{session_uuid}/choices",
+        json={"winner": winner},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    return response.json()
+
+
+def _undo(
+    client: TestClient,
+    token: str,
+    session_uuid: str,
+    expected_comparison_count: int,
+) -> dict:
+    """Call the undo endpoint and return the raw response."""
+    return client.post(
+        f"/api/v1/comparison-sessions/{session_uuid}/undo",
+        json={"expected_comparison_count": expected_comparison_count},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+
+def test_undo_reverts_latest_choice_to_prior_active_state(
+    client: TestClient,
+    db_session: Session,
+):
+    """Undo pops the latest choice and restores the exact prior binary-insertion state."""
+    token = _get_token(client)
+    _seed_like_bucket(client, token, 2)
+    session = _start_session(client, token)
+    assert session["candidate_index"] == 1
+    assert session["comparison_count"] == 0
+
+    choice = _choose(client, token, session["session_uuid"], "target")
+    assert choice["status"] == "active"
+    assert choice["comparison_count"] == 1
+    assert choice["candidate_index"] == 0
+
+    db_session.expire_all()
+    comparisons_before = db_session.scalar(select(func.count()).select_from(Comparison))
+    events_before = db_session.scalar(select(func.count()).select_from(RatingEvent))
+    rankings_before = db_session.scalar(select(func.count()).select_from(Ranking))
+
+    response = _undo(client, token, session["session_uuid"], 1)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "active"
+    assert body["comparison_count"] == 0
+    assert body["candidate_index"] == 1
+    assert body["low_index"] == 0
+    assert body["high_index"] == 2
+    assert body["final_position"] is None
+    assert body["candidate"] is not None
+
+    # Undo only rewinds the session row — no durable rows are written before finalize.
+    db_session.expire_all()
+    assert db_session.scalar(select(func.count()).select_from(Comparison)) == comparisons_before
+    assert db_session.scalar(select(func.count()).select_from(RatingEvent)) == events_before
+    assert db_session.scalar(select(func.count()).select_from(Ranking)) == rankings_before
+    assert db_session.scalar(select(func.count()).select_from(ComparisonSession)) == 1
+
+
+def test_undo_only_removes_the_latest_decision(
+    client: TestClient,
+):
+    """A single undo rewinds exactly one step; earlier decisions are preserved."""
+    token = _get_token(client)
+    _seed_like_bucket(client, token, 4)
+    session = _start_session(client, token)
+    assert session["candidate_index"] == 2
+
+    first = _choose(client, token, session["session_uuid"], "target")
+    assert first["comparison_count"] == 1
+    assert first["candidate_index"] == 1
+    second = _choose(client, token, session["session_uuid"], "target")
+    assert second["comparison_count"] == 2
+    assert second["candidate_index"] == 0
+
+    body = _undo(client, token, session["session_uuid"], 2).json()
+    assert body["comparison_count"] == 1
+    assert body["candidate_index"] == 1
+    assert body["low_index"] == 0
+    assert body["high_index"] == 2
+
+
+def test_undo_with_no_choices_returns_conflict(
+    client: TestClient,
+):
+    """Undo before any choice is a clean conflict, not a crash."""
+    token = _get_token(client)
+    _seed_like_bucket(client, token, 2)
+    session = _start_session(client, token)
+
+    response = _undo(client, token, session["session_uuid"], 1)
+    assert response.status_code == 409
+    assert "no comparison choice" in response.json()["detail"].lower()
+
+
+def test_undo_with_mismatched_expected_count_is_rejected(
+    client: TestClient,
+):
+    """A stale/duplicated undo is rejected and leaves the session untouched."""
+    token = _get_token(client)
+    _seed_like_bucket(client, token, 2)
+    session = _start_session(client, token)
+    _choose(client, token, session["session_uuid"], "target")
+
+    stale = _undo(client, token, session["session_uuid"], 2)
+    assert stale.status_code == 409
+    assert "stale" in stale.json()["detail"].lower()
+
+    # The rejected undo did not mutate state: a correct undo still works.
+    fresh = _undo(client, token, session["session_uuid"], 1)
+    assert fresh.status_code == 200
+    assert fresh.json()["comparison_count"] == 0
+
+
+def test_undo_unavailable_once_ready_to_finalize(
+    client: TestClient,
+):
+    """The final comparison auto-finalizes, so a ready-to-finalize session cannot undo."""
+    token = _get_token(client)
+    _seed_like_bucket(client, token, 2)
+    session = _start_session(client, token)
+    ready = _choose(client, token, session["session_uuid"], "candidate")
+    assert ready["status"] == "ready_to_finalize"
+
+    response = _undo(client, token, session["session_uuid"], 1)
+    assert response.status_code == 409
+    assert "final comparison" in response.json()["detail"].lower()
+
+
+def test_undo_then_continue_finalizes_correctly(
+    client: TestClient,
+    db_session: Session,
+):
+    """After an undo the session stays consistent and still finalizes cleanly."""
+    token = _get_token(client)
+    _seed_like_bucket(client, token, 2)
+    session = _start_session(client, token)
+    _choose(client, token, session["session_uuid"], "target")
+    undone = _undo(client, token, session["session_uuid"], 1).json()
+    assert undone["comparison_count"] == 0
+    assert undone["candidate_index"] == 1
+
+    ready = _choose(client, token, session["session_uuid"], "candidate")
+    assert ready["status"] == "ready_to_finalize"
+    finalize_response = client.post(
+        f"/api/v1/comparison-sessions/{session['session_uuid']}/finalize",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert finalize_response.status_code == 200
+    assert finalize_response.json()["result"]["ranking"]["position"] == 3
+    db_session.expire_all()
+    assert db_session.scalar(select(func.count()).select_from(ComparisonSession)) == 0
+
+
+def test_other_user_cannot_undo_comparison_session(
+    client: TestClient,
+):
+    """Undo is user-scoped: another user gets a 404, never another user's session."""
+    owner = _get_token(client, "owner@example.com", "owneruser")
+    _seed_like_bucket(client, owner, 2)
+    session = _start_session(client, owner)
+    _choose(client, owner, session["session_uuid"], "target")
+
+    intruder = _get_token(client, "intruder@example.com", "intruderuser")
+    response = _undo(client, intruder, session["session_uuid"], 1)
+    assert response.status_code == 404
+
+
+def test_undo_returns_conflict_when_bucket_ladder_changed(
+    client: TestClient,
+    db_session: Session,
+):
+    """If the bucket ladder shifted mid-session, undo refuses to replay a stale candidate."""
+    token = _get_token(client)
+    _seed_like_bucket(client, token, 4)
+    session = _start_session(client, token)
+    assert session["candidate_index"] == 2
+    # The song the first (kept) decision will be compared against.
+    first_candidate_song_id = session["candidate"]["song_id"]
+
+    _choose(client, token, session["session_uuid"], "target")  # decision 1 vs first candidate
+    _choose(client, token, session["session_uuid"], "target")  # decision 2 (will be undone)
+
+    # Mutate the underlying ladder: remove the ranking the first decision compared against,
+    # so winner-only replay would land on a different candidate than was recorded.
+    db_session.expire_all()
+    ranking = db_session.execute(
+        select(Ranking)
+        .where(Ranking.song_id == first_candidate_song_id)
+    ).scalar_one()
+    db_session.delete(ranking)
+    db_session.commit()
+
+    response = _undo(client, token, session["session_uuid"], 2)
+    assert response.status_code == 409
+    assert "stale" in response.json()["detail"].lower()
+
+    # The rejected undo did not mutate the session.
+    db_session.expire_all()
+    session_row = db_session.execute(select(ComparisonSession)).scalar_one()
+    assert len(session_row.decisions) == 2
+    assert session_row.candidate_index == 0

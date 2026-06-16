@@ -12,12 +12,14 @@ from src.pydantic_schemas.comparison import (
     ComparisonSessionFinalizeResponse,
     ComparisonSessionResponse,
     ComparisonSessionStartRequest,
+    ComparisonUndoRequest,
 )
 from src.services.comparison import (
     cancel_comparison_session,
     finalize_comparison_session,
     record_comparison_choice,
     start_comparison_session,
+    undo_comparison_choice,
 )
 from src.services.musicbrainz_tasks import enrich_song_metadata_task
 from src.services.similarity_tasks import refresh_similarity_for_user_task
@@ -67,6 +69,27 @@ def choose_winner(
         user_id=current_user.id,
         session_uuid=session_uuid,
         data=data,
+    )
+
+
+@router.post(
+    "/{session_uuid}/undo",
+    response_model=ComparisonSessionResponse,
+)
+@limiter.limit("120/minute")
+def undo_choice(
+    request: Request,
+    session_uuid: UUID,
+    data: ComparisonUndoRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ComparisonSessionResponse:
+    """Undo the latest comparison choice in an active session and return prior state."""
+    return undo_comparison_choice(
+        db,
+        user_id=current_user.id,
+        session_uuid=session_uuid,
+        expected_comparison_count=data.expected_comparison_count,
     )
 
 

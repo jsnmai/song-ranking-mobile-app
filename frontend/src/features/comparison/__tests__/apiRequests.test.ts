@@ -5,6 +5,7 @@ import {
     finalizeComparisonSession,
     finalizeRating,
     startComparisonSession,
+    undoComparisonChoice,
 } from "../apiRequests"
 import { SongSearchResult } from "../../search/types"
 
@@ -70,6 +71,20 @@ describe("comparison API requests", () => {
             {
                 winner: "target",
                 decision_duration_ms: 912,
+            },
+            "test-token",
+        )
+    })
+
+    it("undoes the latest comparison choice through the backend", async () => {
+        mockPost.mockResolvedValue({ session_uuid: "abc" })
+
+        await undoComparisonChoice("abc", "test-token", 2)
+
+        expect(mockPost).toHaveBeenCalledWith(
+            "/api/v1/comparison-sessions/abc/undo",
+            {
+                expected_comparison_count: 2,
             },
             "test-token",
         )

@@ -42,6 +42,17 @@ class ComparisonChoiceRequest(BaseModel):
     )
 
 
+class ComparisonUndoRequest(BaseModel):
+    """Request body for undoing the latest choice in an active comparison session.
+
+    `expected_comparison_count` is the number of decisions the client believes the
+    session currently holds. The server rejects the undo if it no longer matches, so a
+    retried/duplicated undo is a safe no-op error instead of rewinding two steps.
+    """
+
+    expected_comparison_count: int = Field(ge=1)
+
+
 class ComparisonBucketRankingItem(BaseModel):
     """One ordered song in the current comparison bucket ladder."""
 

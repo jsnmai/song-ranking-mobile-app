@@ -1,4 +1,5 @@
 """Business logic for binary insertion comparison sessions."""
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -171,6 +172,81 @@ def record_comparison_choice(
             final_position=None,
             decisions=decisions,
         )
+
+    try:
+        db.commit()
+        refresh_comparison_session(
+            db,
+            session,
+        )
+    except Exception:
+        db.rollback()
+        raise
+
+    return _session_response(
+        db,
+        user_id,
+        session,
+    )
+
+
+def undo_comparison_choice(
+    db: Session,
+    user_id: int,
+    session_uuid: UUID,
+    expected_comparison_count: int,
+) -> ComparisonSessionResponse:
+    """Undo the latest choice in an ACTIVE session by replaying the remaining decisions.
+
+    Only active (pre-finalize) sessions can undo: once the final comparison sets
+    `final_position`, the client auto-finalizes, so the last comparison is intentionally
+    not undoable. Nothing permanent is written until finalize, so undo only rewinds the
+    session row — it cannot orphan comparison/rating rows or disturb calibrated scores.
+    The `expected_comparison_count` guard makes a retried/duplicated undo a safe no-op
+    error rather than rewinding two steps.
+    """
+    session = _get_session_or_404(
+        db,
+        user_id,
+        session_uuid,
+    )
+    if session.final_position is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Comparison session is ready to finalize; the final comparison cannot be undone.",
+        )
+
+    decisions = list(session.decisions or [])
+    if not decisions:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="There is no comparison choice to undo.",
+        )
+    if expected_comparison_count != len(decisions):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Comparison undo is stale; refresh the session and retry.",
+        )
+
+    bucket_rankings = _session_bucket_rankings(
+        db,
+        user_id,
+        session,
+    )
+    remaining = decisions[:-1]
+    progress = _replay_binary_insertion(
+        remaining,
+        bucket_rankings,
+    )
+    update_session_progress(
+        session,
+        low_index=progress.low_index,
+        high_index=progress.high_index,
+        candidate_index=progress.candidate_index,
+        candidate_song_id=progress.candidate_song_id,
+        final_position=progress.final_position,
+        decisions=remaining,
+    )
 
     try:
         db.commit()
@@ -546,3 +622,74 @@ def _midpoint_index(
 ) -> int:
     """Return the next binary-insertion candidate index."""
     return (low_index + high_index) // 2
+
+
+@dataclass(frozen=True)
+class _BinaryInsertionProgress:
+    """Reconstructed binary-insertion state after replaying a decision sequence."""
+
+    low_index: int
+    high_index: int
+    candidate_index: int | None
+    candidate_song_id: int | None
+    final_position: int | None
+
+
+def _replay_binary_insertion(
+    decisions: list[dict],
+    bucket_rankings: list[Ranking],
+) -> _BinaryInsertionProgress:
+    """Deterministically replay decisions to reconstruct binary-insertion state.
+
+    The search is fully determined by the winner sequence and the initial bounds, so
+    undo recomputes state from the kept decisions rather than storing per-step snapshots.
+    Each step is validated against the recorded ``candidate_song_id``: if the bucket
+    ladder shifted mid-session (a ranking added/removed/reordered), winner-only replay
+    could reconstruct a plausible-but-wrong state, so a mismatch raises the same clean
+    stale 409 instead of replaying against a changed ladder.
+    """
+    low_index = 0
+    high_index = len(bucket_rankings)
+    for decision in decisions:
+        candidate_index = _midpoint_index(
+            low_index,
+            high_index,
+        )
+        if (
+            candidate_index >= len(bucket_rankings)
+            or bucket_rankings[candidate_index].song_id != int(decision["candidate_song_id"])
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Comparison session is stale.",
+            )
+        if decision["winner"] == "target":
+            high_index = candidate_index
+        else:
+            low_index = candidate_index + 1
+
+    if low_index == high_index:
+        return _BinaryInsertionProgress(
+            low_index=low_index,
+            high_index=high_index,
+            candidate_index=None,
+            candidate_song_id=None,
+            final_position=low_index + 1,
+        )
+
+    candidate_index = _midpoint_index(
+        low_index,
+        high_index,
+    )
+    if candidate_index >= len(bucket_rankings):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Comparison session is stale.",
+        )
+    return _BinaryInsertionProgress(
+        low_index=low_index,
+        high_index=high_index,
+        candidate_index=candidate_index,
+        candidate_song_id=bucket_rankings[candidate_index].song_id,
+        final_position=None,
+    )

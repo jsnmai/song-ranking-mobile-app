@@ -20,7 +20,7 @@ import { AppStackParamList } from "../../navigation/types"
 import { colors, fonts, bucketColor } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
 import { fetchPreviewUrl } from "../songs/apiRequests"
-import { cancelComparisonSession, chooseComparisonWinner, finalizeComparisonSession } from "./apiRequests"
+import { cancelComparisonSession, chooseComparisonWinner, finalizeComparisonSession, undoComparisonChoice } from "./apiRequests"
 import { ComparisonSessionResponse } from "./types"
 
 type ComparisonFlowProps = NativeStackScreenProps<AppStackParamList, "ComparisonFlow">
@@ -217,6 +217,43 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
         }
     }
 
+    // Undo only applies while the session is still active (pre-finalize). The final
+    // comparison auto-finalizes in handleChoice, so it is intentionally not undoable.
+    const handleUndo = async () => {
+        if (!token || isSubmitting || session.status !== "active" || session.comparison_count < 1) return
+        candidatePlayer.stop()
+        targetPlayer.stop()
+        setIsSubmitting(true)
+        setError(null)
+        try {
+            // expected count is the optimistic guard: the backend rejects the undo if the
+            // session moved on, so a double-tap/retry can't rewind two steps.
+            const nextSession = await undoComparisonChoice(
+                session.session_uuid,
+                token,
+                session.comparison_count,
+            )
+            const nextCoverUrl = nextSession.candidate?.song.cover_url
+            if (nextCoverUrl) {
+                await Promise.race([
+                    Image.prefetch(nextCoverUrl).catch(() => false),
+                    new Promise((resolve) => setTimeout(resolve, 600)),
+                ])
+            }
+            setSession(nextSession)
+        } catch (err) {
+            if (err instanceof ApiError) {
+                setError(err.detail)
+            } else if (err instanceof Error) {
+                setError(err.message)
+            } else {
+                setError("Could not undo comparison.")
+            }
+        } finally {
+            setIsSubmitting(false)
+        }
+    }
+
     useEffect(() => {
         const candidate = session.candidate
         if (candidate === null) { setCandidatePreviewUrl(null); return }
@@ -314,6 +351,7 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
     }, [rankings, session.candidate_index])
 
     const ring = bucketColor(session.bucket)
+    const canUndo = session.status === "active" && session.comparison_count > 0 && !isSubmitting
     // Gold stop tracks the pivot row's vertical center so the gradient peak follows it
     const pivotOffset = totalH > 0
         ? (placedRows.find(r => r.isActive)?.yc ?? totalH / 2) / totalH
@@ -376,10 +414,16 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
                 </View>
                 <Text style={styles.calibTitle}>Calibrating</Text>
                 <View style={styles.headerRight}>
-                    <View style={[styles.undoBtn, { opacity: 0.45 }]}>
+                    <TouchableOpacity
+                        style={[styles.undoBtn, { opacity: canUndo ? 1 : 0.45 }]}
+                        onPress={handleUndo}
+                        disabled={!canUndo}
+                        accessibilityLabel="Undo last comparison"
+                        accessibilityState={{ disabled: !canUndo }}
+                    >
                         <UndoIcon s={15} c={colors.ink} />
                         <Text style={styles.undoBtnText}>Undo</Text>
-                    </View>
+                    </TouchableOpacity>
                 </View>
             </View>
 
