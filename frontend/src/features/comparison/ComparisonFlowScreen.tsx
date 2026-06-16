@@ -3,8 +3,13 @@
 // Prompt: TargetSpinner (rotating CSS-style arc) + "Which song is better?"
 // Ranked list: songs positioned along a circular arc with gradient stroke + top/bottom fade
 // VS cards: fixed-art cards with ring border, absolute NEW badge, absolute play button
+// Animations: ladder rows slide to new arc positions via LinearTransition (keyed by song_id),
+// pivot/regular row swaps crossfade, candidate card crossfades per round (cover prefetched
+// so art never pops in blank), and submitting dims the cards instead of a full-screen overlay.
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Animated, ActivityIndicator, Dimensions, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+// RNAnimated: core Animated API, only used for the spinner loop — "Animated" is reserved for Reanimated below
+import { ActivityIndicator, Animated as RNAnimated, Dimensions, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import Animated, { FadeIn, FadeOut, LinearTransition, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated"
 import Svg, { Circle, Path, Defs, LinearGradient, Stop, Rect } from "react-native-svg"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
@@ -83,11 +88,11 @@ function PauseIcon({ color }: { color: string }) {
 
 // ── TargetSpinner — spinning arc (outer ring rotates accent color) ─────────────
 function TargetSpinner({ size = 38 }: { size?: number }) {
-    const spinAnim = useRef(new Animated.Value(0)).current
+    const spinAnim = useRef(new RNAnimated.Value(0)).current
 
     useEffect(() => {
-        const loop = Animated.loop(
-            Animated.timing(spinAnim, { toValue: 1, duration: 1100, useNativeDriver: true })
+        const loop = RNAnimated.loop(
+            RNAnimated.timing(spinAnim, { toValue: 1, duration: 1100, useNativeDriver: true })
         )
         loop.start()
         return () => loop.stop()
@@ -100,7 +105,7 @@ function TargetSpinner({ size = 38 }: { size?: number }) {
 
     return (
         <View style={{ width: size, height: size, flexShrink: 0 }}>
-            <Animated.View style={{
+            <RNAnimated.View style={{
                 position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
                 borderRadius: size / 2,
                 borderWidth: bw,
@@ -132,6 +137,10 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
     const [session, setSession] = useState<ComparisonSessionResponse>(route.params.session)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState<string | null>(null)
+
+    // Dims the VS cards while a choice is in flight — softer than a full-screen overlay
+    const submitDim = useSharedValue(0)
+    const vsRowDimStyle = useAnimatedStyle(() => ({ opacity: 1 - submitDim.value * 0.35 }))
 
     const [candidatePreviewUrl, setCandidatePreviewUrl] = useState<string | null>(null)
     const candidateShownAtRef = useRef<number | null>(null)
@@ -184,6 +193,16 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
                 await finalizeReadySession(nextSession)
                 return
             }
+            // Warm the image cache before swapping the card so the crossfade
+            // never reveals blank art. Race against a short timeout so a slow
+            // CDN can't stall the round.
+            const nextCoverUrl = nextSession.candidate?.song.cover_url
+            if (nextCoverUrl) {
+                await Promise.race([
+                    Image.prefetch(nextCoverUrl).catch(() => false),
+                    new Promise((resolve) => setTimeout(resolve, 600)),
+                ])
+            }
             setSession(nextSession)
         } catch (err) {
             if (err instanceof ApiError) {
@@ -225,8 +244,33 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
         candidateShownAtRef.current = Date.now()
     }, [session.candidate])
 
+    useEffect(() => {
+        submitDim.value = withTiming(isSubmitting ? 1 : 0, { duration: 160 })
+    }, [isSubmitting, submitDim])
+
     const candidate = session.candidate
     const rankings = session.current_bucket_rankings
+
+    // ── Leap-aware transition pacing ────────────────────────────────────────
+    // Early head-to-heads can move the candidate half the list in one round
+    // (binary search), replacing most of the visible window. Scale the
+    // transition length with how many rows the candidate jumped so big leaps
+    // play slowly enough to read, while late rounds settling to a neighbouring
+    // row stay snappy.
+    const candidateIndex = session.candidate_index ?? 0
+    const prevCandidateIndexRef = useRef(candidateIndex)
+    // On the render where the index changes, the ref still holds the previous
+    // round's value — exactly what the transition triggered by this render needs
+    const rowsJumped = Math.abs(candidateIndex - prevCandidateIndexRef.current)
+    const ladderMs = Math.min(680, 320 + rowsJumped * 45)
+    const enterMs = Math.round(ladderMs * 0.8)
+    const exitMs = Math.round(ladderMs * 0.55)
+    // On multi-row leaps, hold entering rows back so the exits/slides read first
+    const enterDelayMs = rowsJumped > 1 ? Math.min(150, rowsJumped * 15) : 0
+
+    useEffect(() => {
+        prevCandidateIndexRef.current = candidateIndex
+    }, [candidateIndex])
 
     // ── Arc geometry for ranked list ────────────────────────────────────────
     type RankingCell = typeof rankings[0] | null
@@ -279,7 +323,8 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
     function RankedNode({ dx, r, dotColor }: { dx: number; r: number; dotColor: string }) {
         const haloR = r + 3.5
         return (
-            <View style={{
+            // layout transition slides the dot along the arc when its row shifts
+            <Animated.View layout={LinearTransition.duration(ladderMs)} style={{
                 position: "absolute",
                 left: dx - haloR,
                 top: 0, bottom: 0,
@@ -293,13 +338,13 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
                 }}>
                     <View style={{ width: r * 2, height: r * 2, borderRadius: r, backgroundColor: dotColor }} />
                 </View>
-            </View>
+            </Animated.View>
         )
     }
 
     function GhostDot({ dx }: { dx: number }) {
         return (
-            <View style={{
+            <Animated.View layout={LinearTransition.duration(ladderMs)} style={{
                 position: "absolute",
                 left: dx - 7, top: 0, bottom: 0,
                 width: 14,
@@ -314,7 +359,7 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
                         opacity={0.6}
                     />
                 </Svg>
-            </View>
+            </Animated.View>
         )
     }
 
@@ -366,24 +411,34 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
                                 <Path d={arcPath} fill="none" stroke="url(#h2h-arc)" strokeWidth={2} strokeLinecap="round" />
                             </Svg>
 
-                            {/* Row items positioned along the arc */}
+                            {/* Row items positioned along the arc. Keyed by song_id so when the
+                                window shifts, surviving rows slide to their new slot (layout),
+                                rows scrolled out fade away (exiting) and new ones fade in
+                                (entering). The keyed inner wrappers crossfade a row between its
+                                pivot and regular looks when the active song changes. */}
                             {placedRows.map(({ item, i, h, y0, dx, isActive }) => (
-                                <View key={item ? item.song_id : `g${i}`} style={{ position: "absolute", top: y0, left: 0, right: 0, height: h }}>
+                                <Animated.View
+                                    key={item ? item.song_id : `g${i}`}
+                                    layout={LinearTransition.duration(ladderMs)}
+                                    entering={FadeIn.duration(enterMs).delay(enterDelayMs)}
+                                    exiting={FadeOut.duration(exitMs)}
+                                    style={{ position: "absolute", top: y0, left: 0, right: 0, height: h }}
+                                >
                                     {item === null ? (
                                         // Ghost row: dashed dot + hatched placeholder art + text blocks
                                         <>
                                             <GhostDot dx={dx} />
-                                            <View style={[styles.rowContent, { left: dx + 31, opacity: 0.55 }]}>
+                                            <Animated.View layout={LinearTransition.duration(ladderMs)} style={[styles.rowContent, { left: dx + 31, opacity: 0.55 }]}>
                                                 <View style={styles.ghostThumb} />
                                                 <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
                                                     <View style={styles.ghostTitleBar} />
                                                     <View style={styles.ghostArtistBar} />
                                                 </View>
-                                            </View>
+                                            </Animated.View>
                                         </>
                                     ) : isActive ? (
                                         // Pivot row: gold dot + gold pill with art + title + artist
-                                        <>
+                                        <Animated.View key="pivot" entering={FadeIn.duration(enterMs).delay(enterDelayMs)} exiting={FadeOut.duration(exitMs)} style={StyleSheet.absoluteFill}>
                                             <RankedNode dx={dx} r={5} dotColor={colors.gold} />
                                             <View style={[styles.pivotPill, { left: dx + 23 }]}>
                                                 <View style={styles.pivotThumb}>
@@ -396,12 +451,12 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
                                                     <Text numberOfLines={1} style={styles.pivotArtist}>{item.artist}</Text>
                                                 </View>
                                             </View>
-                                        </>
+                                        </Animated.View>
                                     ) : (
                                         // Regular row: small dark dot + art thumb + title + artist
-                                        <>
+                                        <Animated.View key="row" entering={FadeIn.duration(enterMs).delay(enterDelayMs)} exiting={FadeOut.duration(exitMs)} style={StyleSheet.absoluteFill}>
                                             <RankedNode dx={dx} r={4} dotColor="rgba(17,19,28,0.35)" />
-                                            <View style={[styles.rowContent, { left: dx + 31 }]}>
+                                            <Animated.View layout={LinearTransition.duration(ladderMs)} style={[styles.rowContent, { left: dx + 31 }]}>
                                                 <View style={styles.rowThumb}>
                                                     {item.cover_url ? (
                                                         <Image source={{ uri: item.cover_url }} style={{ width: "100%", height: "100%", borderRadius: 9 }} />
@@ -411,10 +466,10 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
                                                     <Text numberOfLines={1} style={styles.rowTitle}>{item.title}</Text>
                                                     <Text numberOfLines={1} style={styles.rowArtist}>{item.artist}</Text>
                                                 </View>
-                                            </View>
-                                        </>
+                                            </Animated.View>
+                                        </Animated.View>
                                     )}
-                                </View>
+                                </Animated.View>
                             ))}
 
                             {/* Fade overlay — short list: bottom only; long list: top + bottom */}
@@ -443,7 +498,7 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
 
             {/* ── VS cards ── */}
             {candidate !== null ? (
-                <View style={styles.vsRow}>
+                <Animated.View style={[styles.vsRow, vsRowDimStyle]}>
                     {/* Target card (new song — purple ring) */}
                     <TouchableOpacity
                         accessibilityLabel="Choose new song"
@@ -465,13 +520,15 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
                             </View>
                             {/* Preview button — bottom-right of art */}
                             {session.target_song.preview_url !== null && (
-                                <TouchableOpacity
-                                    style={styles.artPlayBtn}
-                                    onPress={(e) => { e.stopPropagation(); candidatePlayer.stop(); targetPlayer.toggle() }}
-                                    activeOpacity={0.8}
-                                >
-                                    {targetPlayer.isPlaying ? <PauseIcon color={colors.ink} /> : <PlayIcon color={colors.ink} />}
-                                </TouchableOpacity>
+                                <View style={styles.artPlayBtnWrap}>
+                                    <TouchableOpacity
+                                        style={styles.artPlayBtn}
+                                        onPress={(e) => { e.stopPropagation(); candidatePlayer.stop(); targetPlayer.toggle() }}
+                                        activeOpacity={0.8}
+                                    >
+                                        {targetPlayer.isPlaying ? <PauseIcon color={colors.ink} /> : <PlayIcon color={colors.ink} />}
+                                    </TouchableOpacity>
+                                </View>
                             )}
                         </View>
                         <Text style={styles.pairTitle} numberOfLines={2}>{session.target_song.title}</Text>
@@ -485,7 +542,8 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
                         </View>
                     </View>
 
-                    {/* Candidate card (existing ranking — gold ring) */}
+                    {/* Candidate card (existing ranking — gold ring). The card shell is
+                        stable; only its contents crossfade when the next candidate loads. */}
                     <TouchableOpacity
                         accessibilityLabel="Choose candidate song"
                         style={[styles.pairCard, { borderColor: colors.gold }]}
@@ -493,27 +551,37 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
                         disabled={isSubmitting}
                         activeOpacity={0.85}
                     >
-                        <View style={styles.artWrap}>
-                            {candidate.song.cover_url ? (
-                                <Image source={{ uri: candidate.song.cover_url }} style={styles.pairArt} />
-                            ) : (
-                                <View style={[styles.pairArt, { backgroundColor: colors.paper2 }]} />
-                            )}
-                            {candidatePreviewUrl !== null && (
-                                <TouchableOpacity
-                                    accessibilityLabel="Preview candidate"
-                                    style={styles.artPlayBtn}
-                                    onPress={(e) => { e.stopPropagation(); targetPlayer.stop(); candidatePlayer.toggle() }}
-                                    activeOpacity={0.8}
-                                >
-                                    {candidatePlayer.isPlaying ? <PauseIcon color={colors.ink} /> : <PlayIcon color={colors.ink} />}
-                                </TouchableOpacity>
-                            )}
-                        </View>
-                        <Text style={styles.pairTitle} numberOfLines={2}>{candidate.song.title}</Text>
-                        <Text style={styles.pairArtist} numberOfLines={1}>{candidate.song.artist}</Text>
+                        <Animated.View
+                            key={candidate.id}
+                            entering={FadeIn.duration(enterMs)}
+                            exiting={FadeOut.duration(exitMs)}
+                            style={styles.cardInner}
+                        >
+                            <View style={styles.artWrap}>
+                                {candidate.song.cover_url ? (
+                                    <Image source={{ uri: candidate.song.cover_url }} style={styles.pairArt} />
+                                ) : (
+                                    <View style={[styles.pairArt, { backgroundColor: colors.paper2 }]} />
+                                )}
+                                {candidatePreviewUrl !== null && (
+                                    // Fades in when the fresh preview URL resolves instead of popping
+                                    <Animated.View entering={FadeIn.duration(180)} style={styles.artPlayBtnWrap}>
+                                        <TouchableOpacity
+                                            accessibilityLabel="Preview candidate"
+                                            style={styles.artPlayBtn}
+                                            onPress={(e) => { e.stopPropagation(); targetPlayer.stop(); candidatePlayer.toggle() }}
+                                            activeOpacity={0.8}
+                                        >
+                                            {candidatePlayer.isPlaying ? <PauseIcon color={colors.ink} /> : <PlayIcon color={colors.ink} />}
+                                        </TouchableOpacity>
+                                    </Animated.View>
+                                )}
+                            </View>
+                            <Text style={styles.pairTitle} numberOfLines={2}>{candidate.song.title}</Text>
+                            <Text style={styles.pairArtist} numberOfLines={1}>{candidate.song.artist}</Text>
+                        </Animated.View>
                     </TouchableOpacity>
-                </View>
+                </Animated.View>
             ) : (
                 <View style={styles.loadingWrap}>
                     <ActivityIndicator color={colors.inkDim} />
@@ -521,12 +589,6 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
             )}
 
             <View style={{ flex: 1 }} />
-
-            {isSubmitting && (
-                <View style={styles.submittingOverlay}>
-                    <ActivityIndicator color={colors.gold} size="large" />
-                </View>
-            )}
 
             {error !== null && <Text style={styles.errorText}>{error}</Text>}
 
@@ -639,6 +701,7 @@ const styles = StyleSheet.create({
         shadowColor: "#000", shadowOpacity: 0.45, shadowRadius: 22, shadowOffset: { width: 0, height: 10 },
         elevation: 16,
     },
+    cardInner: { alignItems: "center", alignSelf: "stretch" },
     artWrap: { position: "relative", width: 128, height: 128, marginBottom: 12 },
     pairArt: {
         width: 128, height: 128, borderRadius: 20,
@@ -653,8 +716,8 @@ const styles = StyleSheet.create({
     newBadgeText: {
         fontFamily: fonts.mono, fontSize: 8, letterSpacing: 0.14 * 8, color: "#fff", fontWeight: "700",
     },
+    artPlayBtnWrap: { position: "absolute", right: -8, bottom: -8 },
     artPlayBtn: {
-        position: "absolute", right: -8, bottom: -8,
         width: 36, height: 36, borderRadius: 18,
         backgroundColor: "#fff", borderWidth: 1.5, borderColor: colors.line,
         alignItems: "center", justifyContent: "center",
@@ -683,11 +746,6 @@ const styles = StyleSheet.create({
 
     // ── States ──────────────────────────────────────────────────────────────
     loadingWrap: { height: 200, alignItems: "center", justifyContent: "center" },
-    submittingOverlay: {
-        position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-        alignItems: "center", justifyContent: "center",
-        backgroundColor: "rgba(253,251,244,0.6)",
-    },
     errorText: {
         color: colors.danger, fontSize: 13, textAlign: "center",
         marginHorizontal: 16, marginVertical: 4,

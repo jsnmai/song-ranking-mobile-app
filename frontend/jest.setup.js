@@ -1,6 +1,10 @@
 jest.mock('react-native-reanimated', () => {
     const RN = require('react-native')
-    const animationStub = { duration: jest.fn(() => ({})), delay: jest.fn(() => ({})), springify: jest.fn(() => ({})) }
+    // Builder methods return the stub itself so chains like FadeIn.duration(x).delay(y) work
+    const animationStub = {}
+    animationStub.duration = () => animationStub
+    animationStub.delay = () => animationStub
+    animationStub.springify = () => animationStub
     return {
         __esModule: true,
         default: {
@@ -11,17 +15,19 @@ jest.mock('react-native-reanimated', () => {
             FlatList: RN.FlatList,
             createAnimatedComponent: (c) => c,
         },
-        useSharedValue: jest.fn((v) => ({ value: v })),
-        useAnimatedStyle: jest.fn(() => ({})),
-        useAnimatedRef: jest.fn(() => ({ current: null })),
-        useAnimatedScrollHandler: jest.fn(() => ({})),
-        useDerivedValue: jest.fn((fn) => ({ value: fn() })),
-        withTiming: jest.fn((val) => val),
-        withSpring: jest.fn((val) => val),
-        withDelay: jest.fn((_d, val) => val),
-        withSequence: jest.fn((...vals) => vals[0]),
-        runOnJS: jest.fn((fn) => fn),
-        cancelAnimation: jest.fn(),
+        // Plain functions (not jest.fn) so jest.resetAllMocks() in test files
+        // cannot wipe their implementations mid-suite
+        useSharedValue: (v) => ({ value: v }),
+        useAnimatedStyle: () => ({}),
+        useAnimatedRef: () => ({ current: null }),
+        useAnimatedScrollHandler: () => ({}),
+        useDerivedValue: (fn) => ({ value: fn() }),
+        withTiming: (val) => val,
+        withSpring: (val) => val,
+        withDelay: (_d, val) => val,
+        withSequence: (...vals) => vals[0],
+        runOnJS: (fn) => fn,
+        cancelAnimation: () => {},
         FadeIn: animationStub,
         FadeInDown: animationStub,
         FadeInRight: animationStub,
