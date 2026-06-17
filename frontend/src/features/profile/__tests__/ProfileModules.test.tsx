@@ -299,7 +299,7 @@ describe("ProfileScreen profile modules", () => {
             expect(screen.getByText("Redbone")).toBeTruthy()
             expect(screen.getByText("Childish Gambino")).toBeTruthy()
             expect(screen.getByText('"love the bassline"')).toBeTruthy()
-            expect(screen.getByText("LIKE")).toBeTruthy()
+            expect(screen.getByText("IN LIKE")).toBeTruthy()
         })
     })
 

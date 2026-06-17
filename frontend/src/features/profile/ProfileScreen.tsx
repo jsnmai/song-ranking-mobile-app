@@ -1,7 +1,7 @@
 // Profile tab — own profile with identity card, To LISTn shelf, taste & activity.
 import { Fragment, useCallback, useEffect, useState } from "react"
 import {
-    ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View,
+    ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from "react-native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { useFocusEffect, useNavigation } from "@react-navigation/native"
@@ -9,10 +9,10 @@ import Svg, { Circle, Line, Path } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
 import { AppStackParamList } from "../../navigation/types"
-import { bucketColor } from "../../theme"
 import { avatarColorToken, colors, fonts } from "../../theme"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
 import ActivityLikeButton from "../activity/ActivityLikeButton"
+import RatingActivityCard from "../activity/RatingActivityCard"
 import { useAuth } from "../auth/AuthContext"
 import {
     getMostCompatible, getMyAuxstrology, getMyProfile, getMyRecentRatings, getMyTasteProfile,
@@ -440,119 +440,33 @@ export default function ProfileScreen() {
                         onViewAll={() => navigation.navigate("MostCompatible")}
                     />
 
-                    {/* Your Activity — full cards */}
+                    {/* Your Activity — feed-style cards */}
                     {ratings !== null && ratings.length > 0 && (
                         <View>
                             <Text style={styles.activityKicker}>Your Activity</Text>
-                            {ratings.map((item) => {
-                                const col = bucketColor(item.bucket)
-                                const when = formatRelativeTime(item.created_at)
-                                const bucketLabel = item.bucket === "alright" ? "OKAY"
-                                    : item.bucket.toUpperCase()
-                                const ringSize = 62
-                                const strokeW = 5
-                                const r = (ringSize - strokeW) / 2
-                                const circ = 2 * Math.PI * r
-                                const filled = circ * (item.score / 10)
-                                const gap = circ - filled
-                                return (
-                                    <TouchableOpacity
-                                        key={item.rating_event_id}
-                                        style={styles.actCard}
-                                        onPress={() => navigation.navigate("SongDetail", { song: item.song as never })}
-                                        activeOpacity={0.8}
-                                        testID={`activity-card-${item.rating_event_id}`}
-                                    >
-                                        {/* Byline */}
-                                        <View style={styles.actByline}>
-                                            <View style={[styles.actAvatar, { backgroundColor: avatarColorToken(profile?.avatar_color, colors.ink) }]}>
-                                                <Text style={styles.actAvatarLetter}>{profileInitial}</Text>
-                                            </View>
-                                            <Text style={styles.actBylineText}>
-                                                <Text style={styles.actBylineName}>You </Text>
-                                                <Text>rated · </Text>
-                                                <Text style={styles.actBylineTime}>{when} ago</Text>
-                                            </Text>
-                                        </View>
-
-                                        {/* Main row: song info + ring */}
-                                        <View style={styles.actMainRow}>
-                                            <View style={styles.actSongBlock}>
-                                                {item.song.cover_url ? (
-                                                    <Image
-                                                        source={{ uri: item.song.cover_url }}
-                                                        style={styles.actCover}
-                                                    />
-                                                ) : (
-                                                    <View style={[styles.actCover, styles.actCoverPlaceholder]} />
-                                                )}
-                                                <View style={styles.actSongMeta}>
-                                                    <Text style={styles.actTitle} numberOfLines={1}>
-                                                        {item.song.title}
-                                                    </Text>
-                                                    <Text style={styles.actArtist} numberOfLines={1}>
-                                                        {item.song.artist}
-                                                    </Text>
-                                                    <View style={styles.actChips}>
-                                                        <View style={[styles.actChip, { backgroundColor: `${col}1a` }]}>
-                                                            <View style={[styles.actChipDot, { backgroundColor: col }]} />
-                                                            <Text style={[styles.actChipText, { color: col }]}>
-                                                                {bucketLabel}
-                                                            </Text>
-                                                        </View>
-                                                    </View>
-                                                </View>
-                                            </View>
-
-                                            {/* Vinyl ring */}
-                                            <View style={styles.actRingWrap}>
-                                                <Svg width={ringSize} height={ringSize}>
-                                                    <Circle
-                                                        cx={ringSize / 2}
-                                                        cy={ringSize / 2}
-                                                        r={r}
-                                                        fill="none"
-                                                        stroke={colors.line}
-                                                        strokeWidth={strokeW}
-                                                    />
-                                                    <Circle
-                                                        cx={ringSize / 2}
-                                                        cy={ringSize / 2}
-                                                        r={r}
-                                                        fill="none"
-                                                        stroke={col}
-                                                        strokeWidth={strokeW}
-                                                        strokeLinecap="round"
-                                                        strokeDasharray={`${filled} ${gap}`}
-                                                        transform={`rotate(-90 ${ringSize / 2} ${ringSize / 2})`}
-                                                    />
-                                                </Svg>
-                                                <View style={[StyleSheet.absoluteFill, styles.actRingCenter]}>
-                                                    <Text style={[styles.actRingScore, { color: col }]}>
-                                                        {item.score.toFixed(1)}
-                                                    </Text>
-                                                </View>
-                                            </View>
-                                        </View>
-
-                                        {/* Note */}
-                                        {item.note !== null && item.note !== "" && (
-                                            <Text style={styles.actNote} numberOfLines={2}>
-                                                "{item.note}"
-                                            </Text>
-                                        )}
-                                        <View style={styles.actActions}>
-                                            <ActivityLikeButton
-                                                ratingEventId={item.rating_event_id}
-                                                initialLikedByViewer={item.liked_by_viewer}
-                                                initialLikeCount={item.like_count}
-                                                onOpenLikers={openActivityLikers}
-                                                compact
-                                            />
-                                        </View>
-                                    </TouchableOpacity>
-                                )
-                            })}
+                            {ratings.map((item) => (
+                                <RatingActivityCard
+                                    key={item.rating_event_id}
+                                    initial={profileInitial}
+                                    avatarColor={avatarColorToken(profile?.avatar_color, colors.ink)}
+                                    who="You"
+                                    actionLabel="rated"
+                                    timeAgo={formatRelativeTime(item.created_at)}
+                                    song={item.song}
+                                    bucket={item.bucket}
+                                    score={item.score}
+                                    note={item.note}
+                                    onPress={() => navigation.navigate("SongDetail", { song: item.song as never })}
+                                    testID={`activity-card-${item.rating_event_id}`}
+                                >
+                                    <ActivityLikeButton
+                                        ratingEventId={item.rating_event_id}
+                                        initialLikedByViewer={item.liked_by_viewer}
+                                        initialLikeCount={item.like_count}
+                                        onOpenLikers={openActivityLikers}
+                                    />
+                                </RatingActivityCard>
+                            ))}
                         </View>
                     )}
                 </View>
@@ -984,145 +898,6 @@ const styles = StyleSheet.create({
         textTransform: "uppercase",
         marginBottom: 9,
         marginLeft: 2,
-    },
-    actCard: {
-        backgroundColor: colors.paper,
-        borderRadius: 18,
-        borderWidth: 1,
-        borderColor: colors.line,
-        padding: 14,
-        marginBottom: 10,
-        shadowColor: colors.ink,
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 3 },
-    },
-    actByline: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 9,
-        marginBottom: 10,
-    },
-    actAvatar: {
-        width: 28,
-        height: 28,
-        borderRadius: 14,
-        backgroundColor: colors.ink,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    actAvatarLetter: {
-        fontFamily: fonts.display,
-        fontSize: 12,
-        color: "#fff",
-        lineHeight: 14,
-    },
-    actBylineText: {
-        fontSize: 11.5,
-        color: colors.inkSoft,
-    },
-    actBylineName: {
-        fontFamily: fonts.display,
-        fontSize: 12,
-        color: colors.ink,
-    },
-    actBylineTime: {
-        fontFamily: fonts.mono,
-        fontSize: 9,
-        color: colors.inkDim,
-        fontWeight: "700",
-    },
-    actMainRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 12,
-    },
-    actSongBlock: {
-        flex: 1,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 10,
-        minWidth: 0,
-    },
-    actCover: {
-        width: 46,
-        height: 46,
-        borderRadius: 9,
-        flexShrink: 0,
-    },
-    actCoverPlaceholder: {
-        backgroundColor: colors.paper,
-        borderWidth: 1,
-        borderColor: colors.line,
-    },
-    actSongMeta: {
-        flex: 1,
-        minWidth: 0,
-    },
-    actTitle: {
-        fontFamily: fonts.display,
-        fontSize: 15,
-        letterSpacing: -0.2,
-        color: colors.ink,
-        lineHeight: 17,
-    },
-    actArtist: {
-        fontFamily: fonts.mono,
-        fontSize: 10,
-        color: colors.inkDim,
-        marginTop: 2,
-        letterSpacing: 0.1,
-    },
-    actChips: {
-        flexDirection: "row",
-        gap: 6,
-        marginTop: 7,
-        flexWrap: "wrap",
-    },
-    actChip: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 5,
-        borderRadius: 999,
-        paddingHorizontal: 9,
-        paddingVertical: 3,
-    },
-    actChipDot: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
-    },
-    actChipText: {
-        fontFamily: fonts.mono,
-        fontSize: 8,
-        fontWeight: "700",
-        letterSpacing: 0.5,
-    },
-    actRingWrap: {
-        flexShrink: 0,
-        position: "relative",
-    },
-    actRingCenter: {
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    actRingScore: {
-        fontFamily: fonts.display,
-        fontSize: 16,
-        letterSpacing: -0.3,
-        lineHeight: 19,
-    },
-    actNote: {
-        fontFamily: fonts.serif,
-        fontStyle: "italic",
-        fontSize: 12.5,
-        color: colors.inkSoft,
-        lineHeight: 17,
-        marginTop: 11,
-    },
-    actActions: {
-        alignItems: "flex-start",
-        marginTop: 10,
     },
 })
 
