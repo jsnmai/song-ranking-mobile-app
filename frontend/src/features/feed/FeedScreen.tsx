@@ -15,7 +15,7 @@ import {
 } from "react-native"
 import type { GestureResponderEvent } from "react-native"
 import { FlashList, FlashListRef } from "@shopify/flash-list"
-import { CompositeNavigationProp, useNavigation } from "@react-navigation/native"
+import { CompositeNavigationProp, useNavigation, useScrollToTop } from "@react-navigation/native"
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import Svg, { Circle, Ellipse, Path, Polygon, Polyline } from "react-native-svg"
@@ -173,6 +173,11 @@ export default function FeedScreen() {
     const [friendsCardDismissed, setFriendsCardDismissed] = useState(false)
     const [heroRaters, setHeroRaters] = useState<ProfileBase[]>([])
     const listRef = useRef<FlashListRef<FeedEvent>>(null)
+    // Re-pressing the Feed tab while already on the Feed home screen scrolls the
+    // activity list back to the top. useScrollToTop only fires when this screen is
+    // focused and is the first route in the stack, so it leaves the tab bar's
+    // popToTop (returning from a pushed profile/list) untouched.
+    useScrollToTop(listRef)
 
     const loadFeed = useCallback(async (
         cursor: string | null,

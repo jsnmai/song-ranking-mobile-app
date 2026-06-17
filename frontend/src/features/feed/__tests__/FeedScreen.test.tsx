@@ -47,6 +47,9 @@ jest.mock("@react-navigation/native", () => {
             navigate: mockNavigate,
             getParent: jest.fn(() => ({ addListener: jest.fn(() => jest.fn()) })),
         }),
+        // useScrollToTop reaches for useRoute()/tab navigator context that the bare
+        // render here doesn't provide — stub it; the scroll-to-top wiring isn't under test.
+        useScrollToTop: () => {},
         useFocusEffect: (callback: () => void) => {
             React.useEffect(() => {
                 callback()
