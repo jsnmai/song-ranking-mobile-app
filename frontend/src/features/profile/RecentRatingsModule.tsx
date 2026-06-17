@@ -11,6 +11,10 @@ type Props = {
     isLoading: boolean;
     onItemPress: (item: RecentRatingItem) => void;
     onOpenLikers?: (ratingEventId: number) => void;
+    onViewAll?: () => void;
+    // The compact preview only shows the like button on your own profile; other profiles
+    // keep it clean (you can still like from the full "view all" activity cards).
+    showLikeButton?: boolean;
     title?: string;
 }
 
@@ -19,6 +23,8 @@ export default function RecentRatingsModule({
     isLoading,
     onItemPress,
     onOpenLikers,
+    onViewAll,
+    showLikeButton = true,
     title = "Your Recent Ratings",
 }: Props) {
     const items = ratings?.slice(0, 3) ?? []
@@ -59,17 +65,29 @@ export default function RecentRatingsModule({
                             </View>
                             <View style={styles.side}>
                                 <Text style={[styles.score, { color: col }]}>{item.score.toFixed(1)}</Text>
-                                <ActivityLikeButton
-                                    ratingEventId={item.rating_event_id}
-                                    initialLikedByViewer={item.liked_by_viewer}
-                                    initialLikeCount={item.like_count}
-                                    onOpenLikers={onOpenLikers}
-                                    compact
-                                />
+                                {showLikeButton && (
+                                    <ActivityLikeButton
+                                        ratingEventId={item.rating_event_id}
+                                        initialLikedByViewer={item.liked_by_viewer}
+                                        initialLikeCount={item.like_count}
+                                        onOpenLikers={onOpenLikers}
+                                        compact
+                                    />
+                                )}
                             </View>
                         </TouchableOpacity>
                     )
                 })}
+                {onViewAll && (
+                    <TouchableOpacity
+                        style={[styles.row, styles.rowBorder, styles.viewAllRow]}
+                        onPress={onViewAll}
+                        testID="recent-ratings-view-all"
+                        activeOpacity={0.7}
+                    >
+                        <Text style={styles.viewAll}>View all activity →</Text>
+                    </TouchableOpacity>
+                )}
             </View>
         </View>
     )
@@ -106,6 +124,16 @@ const styles = StyleSheet.create({
     rowBorder: {
         borderTopWidth: 1,
         borderTopColor: colors.line,
+    },
+    viewAllRow: {
+        justifyContent: "center",
+    },
+    viewAll: {
+        fontFamily: fonts.mono,
+        color: colors.accent,
+        fontSize: 11,
+        fontWeight: "700",
+        letterSpacing: 0.6,
     },
     cover: {
         width: 30,

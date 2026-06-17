@@ -42,6 +42,7 @@ import SongDetailScreen from "../features/song-detail/SongDetailScreen"
 import BookmarksScreen from "../features/bookmarks/BookmarksScreen"
 import UserBookmarksScreen from "../features/profile/UserBookmarksScreen"
 import UserRankingsScreen from "../features/profile/UserRankingsScreen"
+import UserActivityScreen from "../features/profile/UserActivityScreen"
 import MostCompatibleScreen from "../features/profile/MostCompatibleScreen"
 import { colors, fonts } from "../theme"
 
@@ -305,6 +306,7 @@ export default function AppNavigator() {
             <Stack.Screen name="ComparisonFlow" component={ComparisonFlowScreen} />
             <Stack.Screen name="ScoreReveal" component={ScoreRevealScreen} />
             <Stack.Screen name="UserRankings" component={UserRankingsScreen} />
+            <Stack.Screen name="UserActivity" component={UserActivityScreen} />
             <Stack.Screen name="UserBookmarks" component={UserBookmarksScreen} />
             <Stack.Screen name="MostCompatible" component={MostCompatibleScreen} />
         </Stack.Navigator>

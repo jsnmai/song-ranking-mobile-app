@@ -446,9 +446,20 @@ describe("OtherProfileScreen profile modules", () => {
         await waitFor(() => {
             expect(screen.getByText("THEIR TOP SONGS")).toBeTruthy()
         })
-        fireEvent.press(screen.getByText("VIEW ALL →"))
+        fireEvent.press(screen.getByText("VIEW ALL"))
 
         expect(mockNavigate).toHaveBeenCalledWith("UserRankings", { username: "maya" })
+    })
+
+    it("Recent Ratings 'View all activity' navigates to UserActivity", async () => {
+        render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("recent-ratings-view-all")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("recent-ratings-view-all"))
+
+        expect(mockNavigate).toHaveBeenCalledWith("UserActivity", { username: "maya" })
     })
 
     it("renders Rated and Bookmarked counts when user_stats is present", async () => {
@@ -505,17 +516,14 @@ describe("OtherProfileScreen profile modules", () => {
         expect(mockGetUserAuxstrology).not.toHaveBeenCalled()
     })
 
-    it("recent ratings rows support optimistic likes using rating_event_id", async () => {
-        mockLikeActivity.mockReturnValue(new Promise(() => {}))
+    it("does not show the like button on the recent ratings preview", async () => {
         render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
 
+        // The recent ratings preview renders, but the like button is omitted on other profiles
+        // (you can still like from the full "view all" activity cards).
         await waitFor(() => {
-            expect(screen.getByTestId("activity-like-button-42")).toBeTruthy()
+            expect(screen.getByTestId("recent-ratings-view-all")).toBeTruthy()
         })
-        fireEvent.press(screen.getByTestId("activity-like-button-42"))
-
-        expect(screen.getByTestId("activity-like-button-42").props.accessibilityState.selected).toBe(true)
-        expect(within(screen.getByTestId("activity-like-count-42")).getByText("5")).toBeTruthy()
-        expect(mockLikeActivity).toHaveBeenCalledWith(42, "test-token")
+        expect(screen.queryByTestId("activity-like-button-42")).toBeNull()
     })
 })

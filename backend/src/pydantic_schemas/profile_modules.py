@@ -19,3 +19,10 @@ class RecentRatingItem(BaseModel):
 
 class RecentRatingsResponse(BaseModel):
     items: list[RecentRatingItem]
+
+
+class ProfileActivityResponse(BaseModel):
+    """Cursor-paginated full activity (rating verdicts) for one profile, newest first."""
+
+    items: list[RecentRatingItem]
+    next_cursor: str | None

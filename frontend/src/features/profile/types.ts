@@ -190,6 +190,12 @@ export type RecentRatingsResponse = {
     items: RecentRatingItem[];
 }
 
+// Cursor-paginated full activity for one profile (the "view all" list).
+export type ProfileActivityResponse = {
+    items: RecentRatingItem[];
+    next_cursor: string | null;
+}
+
 // Mirrors CompatibilityResponse in backend/src/pydantic_schemas/profile.py
 export type CompatibilityResponse = {
     has_overlap: boolean;

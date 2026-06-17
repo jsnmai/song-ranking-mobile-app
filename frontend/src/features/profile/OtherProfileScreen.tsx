@@ -18,6 +18,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack"
 import Svg, { Circle, Line, Path } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
+import { ArrowLabel } from "../../components/Arrow"
 import { RankingResponse } from "../comparison/types"
 import { AppStackParamList } from "../../navigation/types"
 import { avatarColorToken, bucketColor, colors, fonts } from "../../theme"
@@ -331,7 +332,7 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
             <Text style={styles.sectionLabelText}>{label}</Text>
             {right && (
                 <TouchableOpacity onPress={right.onPress}>
-                    <Text style={styles.sectionLabelLink}>{right.label}</Text>
+                    <ArrowLabel text={right.label} direction="right" color={colors.accent} textStyle={styles.sectionLabelLink} />
                 </TouchableOpacity>
             )}
         </View>
@@ -610,7 +611,7 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
                         {profile.can_view_taste && topSongs !== null && topSongs.length > 0 && (
                             <>
                                 {sectionLabel("THEIR TOP SONGS", {
-                                    label: "VIEW ALL →",
+                                    label: "VIEW ALL",
                                     onPress: () => navigation.navigate("UserRankings", { username }),
                                 })}
                                 <View style={styles.topSongsCard}>
@@ -730,10 +731,12 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
                                     ratings={ratings}
                                     isLoading={false}
                                     title="Recent Ratings"
+                                    showLikeButton={false}
                                     onItemPress={(item) => {
                                         navigation.navigate("SongDetail", { song: item.song as never })
                                     }}
                                     onOpenLikers={openActivityLikers}
+                                    onViewAll={() => navigation.navigate("UserActivity", { username })}
                                 />
                             </View>
                         )}

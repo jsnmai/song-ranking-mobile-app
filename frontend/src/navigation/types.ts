@@ -65,6 +65,7 @@ export type AppStackParamList = {
     ComparisonFlow: { session: ComparisonSessionResponse };
     ScoreReveal: { result: RatingFinalizeResponse; isRerate?: boolean };
     UserRankings: { username: string };
+    UserActivity: { username: string };
     UserBookmarks: { username: string };
     MostCompatible: undefined;
 }

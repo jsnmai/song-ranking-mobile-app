@@ -11,6 +11,7 @@ import {
     ProfileBase,
     ProfileEditRequest,
     ProfileListResponse,
+    ProfileActivityResponse,
     ProfileReportRequest,
     ProfileReportResponse,
     ProfileSearchResponse,
@@ -145,6 +146,18 @@ export async function getProfileRecentRatings(
     token: string,
 ): Promise<RecentRatingsResponse> {
     return apiClient.get<RecentRatingsResponse>(`/api/v1/profile/${username}/recent-ratings`, token)
+}
+
+// Calls GET /api/v1/profile/{username}/activity — paginated full activity ("view all").
+export async function getProfileActivity(
+    username: string,
+    token: string,
+    cursor?: string,
+): Promise<ProfileActivityResponse> {
+    const path = cursor
+        ? `/api/v1/profile/${username}/activity?cursor=${encodeURIComponent(cursor)}`
+        : `/api/v1/profile/${username}/activity`
+    return apiClient.get<ProfileActivityResponse>(path, token)
 }
 
 // Calls GET /api/v1/profile/{username}/rankings

@@ -9,7 +9,7 @@ Privacy matrix tested:
 - newest-first ordering and note presence
 - rankings privacy mirrors ratings privacy
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -322,3 +322,64 @@ def test_only_me_viewer_gets_empty_rankings(client: TestClient, db_session: Sess
     data = _get_rankings(client, viewer_token, "privrank")
 
     assert data["rankings"] == []
+
+
+# ── Full activity (paginated "view all") ─────────────────────────────────────
+
+
+def _auth(token: str) -> dict:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_profile_activity_paginates_newest_first(client: TestClient, db_session: Session):
+    """The activity endpoint pages 20 at a time, newest first, with a working cursor."""
+    _register(client, "actowner")
+    viewer = _register(client, "actviewer")
+    base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    for i in range(21):
+        song = _create_song(db_session, 7000 + i, f"Song {i}")
+        _create_rating(db_session, "actowner", song, created_at=base + timedelta(minutes=i))
+
+    page1 = client.get("/api/v1/profile/actowner/activity", headers=_auth(viewer)).json()
+    assert len(page1["items"]) == 20
+    assert page1["next_cursor"] is not None
+    assert page1["items"][0]["song"]["title"] == "Song 20"  # newest first
+
+    page2 = client.get(
+        "/api/v1/profile/actowner/activity",
+        params={"cursor": page1["next_cursor"]},
+        headers=_auth(viewer),
+    ).json()
+    assert len(page2["items"]) == 1
+    assert page2["items"][0]["song"]["title"] == "Song 0"
+    assert page2["next_cursor"] is None
+
+    page1_ids = {item["rating_event_id"] for item in page1["items"]}
+    assert page2["items"][0]["rating_event_id"] not in page1_ids  # no overlap across pages
+
+
+def test_profile_activity_excludes_only_me_from_others(client: TestClient, db_session: Session):
+    """only_me activity is empty for other viewers but the owner still sees it."""
+    owner = _register(client, "actpriv")
+    viewer = _register(client, "actpviewer")
+    song = _create_song(db_session, 7100, "Hidden Verdict")
+    _create_rating(db_session, "actpriv", song)
+    _set_visibility(client, owner, "only_me")
+
+    others = client.get("/api/v1/profile/actpriv/activity", headers=_auth(viewer))
+    assert others.status_code == 200
+    assert others.json()["items"] == []
+
+    own = client.get("/api/v1/profile/actpriv/activity", headers=_auth(owner))
+    assert len(own.json()["items"]) == 1
+
+
+def test_profile_activity_unknown_profile_404(client: TestClient):
+    """Unknown profile returns 404."""
+    token = _register(client, "actsolo")
+    assert client.get("/api/v1/profile/nobody/activity", headers=_auth(token)).status_code == 404
+
+
+def test_profile_activity_requires_auth(client: TestClient):
+    """The activity endpoint requires authentication."""
+    assert client.get("/api/v1/profile/anyone/activity").status_code == 401

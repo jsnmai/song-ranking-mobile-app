@@ -22,7 +22,7 @@ from src.pydantic_schemas.profile import (
     ProfileVisibilityUpdate,
     TasteProfileResponse,
 )
-from src.pydantic_schemas.profile_modules import RecentRatingsResponse
+from src.pydantic_schemas.profile_modules import ProfileActivityResponse, RecentRatingsResponse
 from src.pydantic_schemas.rating import RankingAnchorsResponse, RankingListResponse
 from src.pydantic_schemas.bookmarks import BookmarkListResponse
 from src.services.profile import (
@@ -48,6 +48,7 @@ from src.services.profile import (
 from src.services.profile_modules import (
     get_my_recent_ratings,
     get_profile_ranking_anchors_by_username,
+    get_profile_activity,
     get_profile_rankings_by_username,
     get_profile_recent_ratings,
 )
@@ -328,6 +329,27 @@ def profile_recent_ratings(
 ) -> RecentRatingsResponse:
     """Return a profile's recent ratings, enforcing taste visibility rules."""
     return get_profile_recent_ratings(db, viewer_id=current_user.id, username=username)
+
+
+@router.get(
+    "/{username}/activity",
+    response_model=ProfileActivityResponse,
+)
+@limiter.limit("300/minute")
+def profile_activity(
+    request: Request,
+    username: str,
+    cursor: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProfileActivityResponse:
+    """Return a profile's full activity (paginated rating verdicts), enforcing visibility."""
+    return get_profile_activity(
+        db,
+        viewer_id=current_user.id,
+        username=username,
+        cursor=cursor,
+    )
 
 
 @router.get(

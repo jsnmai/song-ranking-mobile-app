@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
@@ -21,8 +22,15 @@ def list_profile_recent_ratings(
     viewer_id: int,
     owner_id: int,
     limit: int = 5,
+    *,
+    cursor_created_at: datetime | None = None,
+    cursor_id: int | None = None,
 ) -> list[RatingRow]:
-    """Return the latest visible rating event per song for owner_id, newest first."""
+    """Return the latest visible rating event per song for owner_id, newest first.
+
+    When a (created_at, id) cursor is supplied, only events strictly older than the cursor are
+    returned — descending keyset pagination for the full activity list.
+    """
     latest_event_ids = (
         select(RatingEvent.id)
         .distinct(RatingEvent.song_id)
@@ -34,7 +42,7 @@ def list_profile_recent_ratings(
         )
         .subquery()
     )
-    rows = db.execute(
+    statement = (
         select(RatingEvent, Song)
         .join(latest_event_ids, latest_event_ids.c.id == RatingEvent.id)
         .join(Song, Song.id == RatingEvent.song_id)
@@ -43,6 +51,19 @@ def list_profile_recent_ratings(
         .where(RatingEvent.event_type != "reordered")
         .where(RatingEvent.new_bucket.is_not(None))
         .where(RatingEvent.new_score.is_not(None))
+    )
+    if cursor_created_at is not None and cursor_id is not None:
+        statement = statement.where(
+            or_(
+                RatingEvent.created_at < cursor_created_at,
+                and_(
+                    RatingEvent.created_at == cursor_created_at,
+                    RatingEvent.id < cursor_id,
+                ),
+            )
+        )
+    rows = db.execute(
+        statement
         .order_by(RatingEvent.created_at.desc(), RatingEvent.id.desc())
         .limit(limit)
     ).all()
