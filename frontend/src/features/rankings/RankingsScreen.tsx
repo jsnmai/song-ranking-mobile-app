@@ -261,7 +261,7 @@ export default function RankingsScreen() {
 
                 {/* Top-left label */}
                 <View style={styles.rankMapPill}>
-                    <Text style={styles.rankMapPillText}>★ Rank Map</Text>
+                    <Text style={styles.rankMapPillText}>★ RANK MAP</Text>
                 </View>
 
                 {/* Bottom-left: count + who holds the center */}

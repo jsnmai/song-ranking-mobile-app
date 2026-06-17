@@ -89,6 +89,10 @@ function withDate(ranking: RankingResponse, createdAt: string): RankingResponse 
     return { ...ranking, created_at: createdAt, updated_at: createdAt }
 }
 
+function withGenre(ranking: RankingResponse, genre: string): RankingResponse {
+    return { ...ranking, song: { ...ranking.song, genre_deezer: genre } }
+}
+
 beforeEach(() => {
     jest.resetAllMocks()
     mockRouteRankings = [ALPHA, BETA, GAMMA]
@@ -123,6 +127,21 @@ describe("RankMapScreen", () => {
 
         expect(screen.getByLabelText("Filter Like").props.accessibilityState).toEqual({ selected: false })
         expect(screen.getByLabelText("Filter Okay").props.accessibilityState).toEqual({ selected: true })
+    })
+
+    it("rolls genres beyond the chart cap into an 'Other' filter", () => {
+        // 8 distinct genres > the 6 constellation slots, so the tail collapses.
+        const genres = ["Pop", "Rock", "Jazz", "Hip-Hop", "Metal", "Folk", "Soul", "Funk"]
+        mockRouteRankings = genres.map((g, i) => withGenre(mk(i + 1, `Song ${i}`, 9 - i * 0.5, "like"), g))
+        render(<RankMapScreen />)
+
+        fireEvent.press(screen.getByLabelText("Genres view"))
+
+        // Top genres keep their own pill; the rest fold into one "Other" pill so
+        // no song vanishes from the lens.
+        expect(screen.getByLabelText("Filter Pop")).toBeTruthy()
+        expect(screen.getByLabelText("Filter Other")).toBeTruthy()
+        expect(screen.queryByLabelText("Filter Funk")).toBeNull()
     })
 
     it("zooms the map with the floating controls", () => {

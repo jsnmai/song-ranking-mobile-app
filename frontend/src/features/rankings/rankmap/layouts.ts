@@ -7,7 +7,7 @@
 // decorative-only. Positions are deterministic trig — the only randomness is a
 // seeded jitter inside genre/nebula clusters so members don't stack.
 import { BucketName, RankingResponse } from "../../comparison/types"
-import { bucketColor } from "../../../theme"
+import { bucketColor, colors } from "../../../theme"
 
 export type RankView = "gravity" | "genres" | "nebula"
 export type TimeGranularity = "week" | "month"
@@ -185,8 +185,10 @@ export function gravityLayout(
     return { sun, planets }
 }
 
-// GENRES — the 4 biggest genres become named constellations; members jitter
-// around a center and connect in a ring. Brightness encodes score.
+// GENRES — the biggest genres become named constellations; members jitter
+// around a center and connect in a ring. Brightness encodes score. Beyond what
+// we can legibly chart, the long tail collapses into one "Other" constellation
+// so no song disappears from this lens.
 export type ConNode = { s: RankMapSong; x: number; y: number; size: number; bright: number }
 export type Constellation = {
     genre: string
@@ -194,6 +196,18 @@ export type Constellation = {
     nodes: ConNode[]
     color: string
 }
+
+// Center slots as fractions of the world; the first four match the original
+// layout so small libraries look unchanged. Cap = number of slots.
+const GENRE_CENTERS = [
+    { x: 0.3, y: 0.28 },
+    { x: 0.72, y: 0.4 },
+    { x: 0.4, y: 0.7 },
+    { x: 0.78, y: 0.74 },
+    { x: 0.2, y: 0.52 },
+    { x: 0.6, y: 0.16 },
+]
+export const OTHER_GENRE = "Other"
 
 export function constellationLayout(
     songs: RankMapSong[],
@@ -205,15 +219,22 @@ export function constellationLayout(
         ;(groups[s.genre] = groups[s.genre] || []).push(s)
     })
     const ordered = Object.entries(groups).sort((a, b) => b[1].length - a[1].length)
-    const centers = [
-        { x: w * 0.3, y: h * 0.28 },
-        { x: w * 0.72, y: h * 0.4 },
-        { x: w * 0.4, y: h * 0.7 },
-        { x: w * 0.78, y: h * 0.74 },
-    ]
+    const cap = GENRE_CENTERS.length
+
+    // Each charted genre gets its own constellation; once there are more genres
+    // than slots, everything past the top (cap − 1) rolls into "Other".
+    const display: [string, RankMapSong[]][] =
+        ordered.length <= cap
+            ? ordered
+            : [
+                ...ordered.slice(0, cap - 1),
+                [OTHER_GENRE, ordered.slice(cap - 1).flatMap(([, list]) => list)],
+            ]
+
     const out: Constellation[] = []
-    ordered.slice(0, 4).forEach(([genre, list], gi) => {
-        const ctr = centers[gi]
+    display.forEach(([genre, list], gi) => {
+        const slot = GENRE_CENTERS[gi]
+        const ctr = { x: w * slot.x, y: h * slot.y }
         const rr = rng("con" + genre)
         const nodes: ConNode[] = list.map((s, i) => {
             const ang = (i / list.length) * Math.PI * 2 + rr() * 1.2
@@ -226,7 +247,7 @@ export function constellationLayout(
                 bright: 0.35 + (s.score / 10) * 0.65,
             }
         })
-        out.push({ genre, ctr, nodes, color: bucketColor(nodes[0].s.bucket) })
+        out.push({ genre, ctr, nodes, color: genre === OTHER_GENRE ? colors.cdim : bucketColor(nodes[0].s.bucket) })
     })
     return out
 }

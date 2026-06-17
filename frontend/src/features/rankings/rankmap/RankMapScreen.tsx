@@ -8,6 +8,7 @@ import {
     GestureResponderEvent,
     PanResponder,
     Pressable,
+    ScrollView,
     StyleSheet,
     Text,
     View,
@@ -309,6 +310,14 @@ export default function RankMapScreen() {
     }, [songs, worldW, worldH])
     const genreNames = useMemo(() => genreLayouts.map((con) => con.genre), [genreLayouts])
     const activeGenreSet = activeGenres ?? new Set(genreNames)
+    // A song's filter key is the constellation it landed in (its genre, or
+    // "Other" when its genre rolled into the tail) — never its raw genre, so the
+    // "Other" pill toggles the long-tail songs and nothing falls through.
+    const genreOfSong = useMemo(() => {
+        const m = new Map<number, string>()
+        genreLayouts.forEach((con) => con.nodes.forEach((n) => m.set(n.s.id, con.genre)))
+        return m
+    }, [genreLayouts])
 
     const updatePan = (next: Point) => {
         panRef.current = next
@@ -438,7 +447,7 @@ export default function RankMapScreen() {
     const visible = (s: RankMapSong) => {
         const eraIdx = currentEra.indexBySongId.get(s.id) ?? 0
         const passesTime = view !== "gravity" || !timeMode || eraIdx <= effEra
-        if (view === "genres") return passesTime && activeGenreSet.has(s.genre)
+        if (view === "genres") return passesTime && activeGenreSet.has(genreOfSong.get(s.id) ?? s.genre)
         return passesTime && activeBuckets.has(s.bucket)
     }
     const opacityOf = (s: RankMapSong, base = 1) => (visible(s) ? base : 0.12)
@@ -714,11 +723,16 @@ export default function RankMapScreen() {
                 )}
             </View>
 
-            <View style={[styles.legendWrap, { top: stageTop + 8 }]}>
+            <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={[styles.legendWrap, { top: stageTop + 8 }]}
+                contentContainerStyle={styles.legendRow}
+            >
                 {renderLegend()}
-            </View>
+            </ScrollView>
 
-            <View style={[styles.controls, { top: stageTop + 8 }]}>
+            <View style={[styles.controls, { top: stageTop + 46 }]}>
                 <ZoomButton label="+" accessibilityLabel="Zoom in" onPress={() => updateZoom(zoomRef.current + 0.22)} />
                 <ZoomButton
                     label="−"
@@ -955,20 +969,26 @@ const styles = StyleSheet.create({
     },
 
     legendWrap: {
+        // A single full-width horizontal strip of filter pills; the zoom controls
+        // sit below it (not beside it), so chips never collide with them. Scrolls
+        // only if the chips can't all fit.
         position: "absolute",
         left: 12,
-        right: 54,
-        minHeight: 38,
-        flexDirection: "row",
-        flexWrap: "wrap",
-        gap: 6,
+        right: 12,
+        height: 30,
         zIndex: 26,
+    },
+    legendRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 7,
+        paddingRight: 4,
     },
     legendChip: {
         flexDirection: "row",
         alignItems: "center",
         gap: 6,
-        minHeight: 34,
+        minHeight: 26,
         paddingLeft: 8,
         paddingRight: 10,
         borderRadius: 999,
