@@ -501,10 +501,9 @@ export default function FeedScreen() {
         )
     }
 
+    // Recent Verdict is rendered separately (not gated by rated>=10); this section is the rest.
     const renderUnlockedSection = () => (
         <View style={styles.unlockedSection}>
-            {renderRecentVerdict()}
-
             {/* Row: Split (locked) + Consensus (locked, 138px) */}
             <View style={styles.fullRow}>
                 {/* Split Decision */}
@@ -875,6 +874,9 @@ export default function FeedScreen() {
                     </View>
                 </TouchableOpacity>
 
+                {/* Recent Verdict is never gated by rated count — only by having a followed verdict. */}
+                {renderRecentVerdict()}
+
                 {gettingStartedComplete ? (
                     renderUnlockedSection()
                 ) : (
@@ -1216,6 +1218,9 @@ export default function FeedScreen() {
                         <Text style={styles.ratePillText}>RATE +</Text>
                     </View>
                 </TouchableOpacity>
+
+                {/* Recent Verdict is never gated by rated count — only by having a followed verdict. */}
+                {renderRecentVerdict()}
 
                 {gettingStartedComplete ? (
                     renderUnlockedSection()
@@ -1907,6 +1912,8 @@ const styles = StyleSheet.create({
     // Recent Verdicts full card
     fvOuter: {
         marginHorizontal: 14,
+        marginTop: 8,
+        marginBottom: 10,
         borderRadius: 20,
         backgroundColor: colors.paper,
         borderWidth: 1,

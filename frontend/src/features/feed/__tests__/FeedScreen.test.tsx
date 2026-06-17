@@ -205,7 +205,7 @@ describe("FeedScreen", () => {
         render(<FeedScreen />)
 
         await waitFor(() => {
-            expect(screen.getByText("Nights")).toBeTruthy()
+            expect(screen.getByTestId("feed-song-9")).toBeTruthy()
         })
         fireEvent.press(screen.getByTestId("feed-song-9"))
 
@@ -270,6 +270,26 @@ describe("FeedScreen", () => {
         expect(screen.queryByTestId("feed-recent-verdict-21")).toBeNull()
     })
 
+    it("shows the Recent Verdict hero with fewer than 10 rated songs", async () => {
+        // Recent Verdict is gated only on a followed verdict, never on the viewer's rated count.
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 3, bookmarked_count: 0 },
+        }
+        mockListMyFeed.mockResolvedValue({
+            events: [feedEvent],  // a followed user's verdict (actor 4 ≠ viewer 2)
+            next_cursor: null,
+        })
+
+        render(<FeedScreen />)
+
+        // The live hero renders even though the getting-started (rated < 10) state is still shown.
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-recent-verdict-9")).toBeTruthy()
+        })
+        expect(screen.getByText("Getting started")).toBeTruthy()
+    })
+
     it("opens feed songs in unrated Song Detail when the current user has no ranking", async () => {
         mockListMyFeed.mockResolvedValue({
             events: [feedEvent],
@@ -280,7 +300,7 @@ describe("FeedScreen", () => {
         render(<FeedScreen />)
 
         await waitFor(() => {
-            expect(screen.getByText("Nights")).toBeTruthy()
+            expect(screen.getByTestId("feed-song-9")).toBeTruthy()
         })
         fireEvent.press(screen.getByTestId("feed-song-9"))
 
@@ -298,7 +318,7 @@ describe("FeedScreen", () => {
         render(<FeedScreen />)
 
         await waitFor(() => {
-            expect(screen.getByText("Nights")).toBeTruthy()
+            expect(screen.getByTestId("feed-song-9")).toBeTruthy()
         })
         fireEvent.press(screen.getByTestId("feed-actor-9"))
 
@@ -314,8 +334,9 @@ describe("FeedScreen", () => {
 
         render(<FeedScreen />)
 
+        // The activity card (and now also the Recent Verdict hero) shows the relative time.
         await waitFor(() => {
-            expect(screen.getByText(/3 hrs ago/)).toBeTruthy()
+            expect(screen.getAllByText(/3 hrs ago/).length).toBeGreaterThan(0)
         })
     })
 
@@ -481,7 +502,8 @@ describe("FeedScreen", () => {
         render(<FeedScreen />)
 
         await waitFor(() => {
-            expect(screen.getByText('"It doesn\'t lift, it hovers."')).toBeTruthy()
+            // The note shows on the activity card (and on the Recent Verdict hero featuring it).
+            expect(screen.getAllByText('"It doesn\'t lift, it hovers."').length).toBeGreaterThan(0)
             expect(screen.getByText("···")).toBeTruthy()
         })
     })
