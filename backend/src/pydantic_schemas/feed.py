@@ -31,3 +31,13 @@ class FeedListResponse(BaseModel):
 
     events: list[FeedEventResponse]
     next_cursor: str | None
+
+
+class CircleRatersResponse(BaseModel):
+    """Circle members (mutual follows, visible to the viewer) who currently rate one song.
+
+    Powers the Recent Verdict hero's social-proof avatars. The total LISTn rating count is
+    already on the song (`global_rating_count`), so it is not duplicated here.
+    """
+
+    raters: list[ProfileResponse]

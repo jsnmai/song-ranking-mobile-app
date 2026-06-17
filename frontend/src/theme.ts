@@ -41,6 +41,9 @@ export const colors = {
 export const fonts = {
     sans: undefined as string | undefined,
     serif: "Fraunces_700Bold",
+    // Real italic face — RN does not synthesize italics for custom fonts, so set this family
+    // directly (rather than fontStyle: "italic") wherever serif text should be italic.
+    serifItalic: "Fraunces_700Bold_Italic",
     mono: "JetBrainsMono_400Regular",
     display: "ArchivoBlack_400Regular",
 }

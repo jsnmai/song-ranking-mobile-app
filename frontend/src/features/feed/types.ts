@@ -20,3 +20,8 @@ export type FeedListResponse = {
     events: FeedEvent[];
     next_cursor: string | null;
 }
+
+// Circle members (mutual follows, visible) who currently rate one song — Recent Verdict avatars.
+export type CircleRatersResponse = {
+    raters: ProfileBase[];
+}

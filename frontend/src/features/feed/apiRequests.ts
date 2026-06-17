@@ -1,7 +1,7 @@
 // API functions for the Feed tab.
 import { apiClient } from "../../api/client"
 import { ProfileReportRequest, ProfileReportResponse } from "../profile/types"
-import { FeedListResponse } from "./types"
+import { CircleRatersResponse, FeedListResponse } from "./types"
 
 // Calls GET /api/v1/feed
 // The backend reads rating_events from users the current user follows.
@@ -11,6 +11,15 @@ export async function listMyFeed(
 ): Promise<FeedListResponse> {
     const path = cursor ? `/api/v1/feed?cursor=${encodeURIComponent(cursor)}` : "/api/v1/feed"
     return apiClient.get<FeedListResponse>(path, token)
+}
+
+// Calls GET /api/v1/feed/songs/{songId}/circle-raters
+// Circle members (mutual follows, visible) who currently rate the song — Recent Verdict avatars.
+export async function getSongCircleRaters(
+    songId: number,
+    token: string,
+): Promise<CircleRatersResponse> {
+    return apiClient.get<CircleRatersResponse>(`/api/v1/feed/songs/${songId}/circle-raters`, token)
 }
 
 // Calls POST /api/v1/rating-events/{id}/report

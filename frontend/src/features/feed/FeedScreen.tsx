@@ -1,5 +1,5 @@
 // Feed tab — shows rating activity from users the current user follows.
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
     ActivityIndicator,
     Dimensions,
@@ -14,7 +14,7 @@ import {
     View,
 } from "react-native"
 import type { GestureResponderEvent } from "react-native"
-import { FlashList } from "@shopify/flash-list"
+import { FlashList, FlashListRef } from "@shopify/flash-list"
 import { CompositeNavigationProp, useNavigation } from "@react-navigation/native"
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
@@ -27,10 +27,10 @@ import { formatRelativeTime } from "../../utils/formatRelativeTime"
 import ActivityLikeButton from "../activity/ActivityLikeButton"
 import { updateLikePrivacy } from "../activity/apiRequests"
 import { useAuth } from "../auth/AuthContext"
-import { ReportReason } from "../profile/types"
+import { ProfileBase, ReportReason } from "../profile/types"
 import { RankingResponse } from "../comparison/types"
 import { getMyRankingByDeezerId } from "../rankings/apiRequests"
-import { listMyFeed, reportRatingEvent } from "./apiRequests"
+import { getSongCircleRaters, listMyFeed, reportRatingEvent } from "./apiRequests"
 import { FeedEvent } from "./types"
 
 type FeedNavigation = CompositeNavigationProp<
@@ -171,6 +171,8 @@ export default function FeedScreen() {
     const [hideLikeCounts, setHideLikeCounts] = useState(profile?.hide_like_counts ?? false)
     const [error, setError] = useState<string | null>(null)
     const [friendsCardDismissed, setFriendsCardDismissed] = useState(false)
+    const [heroRaters, setHeroRaters] = useState<ProfileBase[]>([])
+    const listRef = useRef<FlashListRef<FeedEvent>>(null)
 
     const loadFeed = useCallback(async (
         cursor: string | null,
@@ -343,42 +345,165 @@ export default function FeedScreen() {
     }
 
     const gettingStartedComplete = (profile?.user_stats?.rated_count ?? 0) >= 10
+    // Recent Verdict module: feature the freshest verdict from someone the viewer follows
+    // (skip the viewer's own events). Falls back to the locked teaser when there's none yet.
+    const heroEvent = events.find((e) => e.actor_profile.user_id !== profile?.user_id) ?? null
+    const heroSongId = heroEvent?.song.id ?? null
+
+    // Fetch the circle members (mutual follows, visible) who rate the featured song so the
+    // Recent Verdict hero can show their avatars next to the song's total LISTn rating count.
+    useEffect(() => {
+        if (!token || heroSongId === null) {
+            setHeroRaters([])
+            return
+        }
+        let active = true
+        getSongCircleRaters(heroSongId, token)
+            .then((res) => { if (active) setHeroRaters(res.raters) })
+            .catch(() => { if (active) setHeroRaters([]) })
+        return () => { active = false }
+    }, [token, heroSongId])
+
+    // Tapping the hero scrolls down to the same verdict's card in the activity list.
+    const scrollToHeroActivity = () => {
+        if (heroEvent === null) return
+        const index = events.findIndex((e) => e.id === heroEvent.id)
+        if (index < 0) return
+        listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0 })
+    }
+
+    const renderRecentVerdict = () => {
+        if (heroEvent === null) {
+            // Locked teaser — shown until a followed user has a visible verdict.
+            return (
+                <View style={styles.fvOuter}>
+                    <View style={styles.fvInner}>
+                        <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+                            {ORBIT_STARS.map((s, i) => (
+                                <Circle key={i} cx={`${s.x}%`} cy={`${s.y}%`} r={s.r} fill="white" fillOpacity={s.o * 0.7} />
+                            ))}
+                        </Svg>
+                        <View style={{ position: "relative" }}>
+                            <View style={styles.fullCellTop}>
+                                <View style={styles.fvPill}><Text style={styles.fvPillText}>Recent verdict</Text></View>
+                                <View style={styles.lockTagRow}>
+                                    <LockIcon color="rgba(255,255,255,0.85)" size={10} />
+                                    <Text style={styles.lockTagLabel}>LOCKED</Text>
+                                </View>
+                            </View>
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 12 }}>
+                                <View style={styles.lockDotXl}><LockIcon color="#fff" size={24} /></View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={styles.lvLockedTitle}>Locked for now</Text>
+                                    <Text style={styles.lvLockedBody}>Follow friends to see their freshest ratings.</Text>
+                                </View>
+                            </View>
+                        </View>
+                    </View>
+                    <View style={styles.fvFooter}>
+                        <View style={{ flex: 1 }}>
+                            <View style={[styles.skBar, { width: "48%", height: 11, backgroundColor: "rgba(17,19,28,0.12)" }]} />
+                            <View style={[styles.skBar, { width: "30%", height: 7, backgroundColor: "rgba(17,19,28,0.08)", marginTop: 6 }]} />
+                        </View>
+                        <Text style={styles.fvHint}>FOLLOW TO UNLOCK</Text>
+                    </View>
+                </View>
+            )
+        }
+
+        const bColor = bucketColor(heroEvent.new_bucket)
+        const bucketLabel = heroEvent.new_bucket === "alright" ? "OKAY" : heroEvent.new_bucket.toUpperCase()
+        const totalRatings = heroEvent.song.global_rating_count
+        const shownRaters = heroRaters.slice(0, 4)
+
+        return (
+            <View style={styles.fvOuter} testID={`feed-recent-verdict-${heroEvent.id}`}>
+                {/* Navy hero — tapping it scrolls down to this verdict's activity card. */}
+                <TouchableOpacity
+                    style={styles.verdictInner}
+                    activeOpacity={0.9}
+                    onPress={scrollToHeroActivity}
+                    accessibilityLabel="Scroll to this verdict in your activity"
+                    testID={`feed-verdict-scroll-${heroEvent.id}`}
+                >
+                    {/* Album art is the hero background; a dark scrim keeps the text legible. */}
+                    {heroEvent.song.cover_url ? (
+                        <Image
+                            source={{ uri: heroEvent.song.cover_url }}
+                            style={StyleSheet.absoluteFill}
+                            resizeMode="cover"
+                        />
+                    ) : null}
+                    <View style={[StyleSheet.absoluteFill, styles.verdictScrim]} />
+                    <View style={{ position: "relative" }}>
+                        <View style={styles.fullCellTop}>
+                            <View style={[styles.verdictPill, { backgroundColor: bColor }]}>
+                                <Text style={styles.verdictPillText}>
+                                    Recent verdict · {formatRelativeTime(heroEvent.created_at)}
+                                </Text>
+                            </View>
+                            {/* Top-right: circle raters of this song + total LISTn rating count. */}
+                            <View style={styles.ratersRow}>
+                                {shownRaters.length > 0 && (
+                                    <View style={styles.ratersStack}>
+                                        {shownRaters.map((r, i) => (
+                                            <View
+                                                key={r.user_id}
+                                                style={[
+                                                    styles.raterAvatar,
+                                                    { backgroundColor: avatarColor(r.username), marginLeft: i > 0 ? -7 : 0 },
+                                                ]}
+                                            >
+                                                <Text style={styles.raterInitial}>
+                                                    {(r.display_name || r.username)[0].toUpperCase()}
+                                                </Text>
+                                            </View>
+                                        ))}
+                                    </View>
+                                )}
+                                {totalRatings > 0 && (
+                                    <Text style={styles.ratersCount}>{totalRatings} RATED</Text>
+                                )}
+                            </View>
+                        </View>
+                        <View style={styles.verdictBody}>
+                            <Text style={styles.verdictScore}>{heroEvent.new_score.toFixed(1)}</Text>
+                            <View style={styles.verdictMetaCol}>
+                                <Text style={styles.verdictWho} numberOfLines={1}>
+                                    @{heroEvent.actor_profile.username.toUpperCase()} · {bucketLabel}
+                                </Text>
+                                <Text style={styles.verdictNote} numberOfLines={2} ellipsizeMode="tail">
+                                    "{heroEvent.note || "Fresh from your circle."}"
+                                </Text>
+                            </View>
+                        </View>
+                    </View>
+                </TouchableOpacity>
+                {/* Footer — "Rate this" opens the song page. */}
+                <TouchableOpacity
+                    style={styles.verdictFooter}
+                    activeOpacity={0.7}
+                    onPress={() => handleSongPress(heroEvent)}
+                    disabled={openingEventId !== null}
+                    testID={`feed-verdict-rate-${heroEvent.id}`}
+                >
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.verdictSongTitle} numberOfLines={1}>{heroEvent.song.title}</Text>
+                        <Text style={styles.verdictSongArtist} numberOfLines={1}>{heroEvent.song.artist.toUpperCase()}</Text>
+                    </View>
+                    {openingEventId === heroEvent.id ? (
+                        <ActivityIndicator color={colors.accent} size="small" />
+                    ) : (
+                        <Text style={styles.verdictRate}>RATE THIS ↗</Text>
+                    )}
+                </TouchableOpacity>
+            </View>
+        )
+    }
 
     const renderUnlockedSection = () => (
         <View style={styles.unlockedSection}>
-            {/* LVerdict — fully locked */}
-            <View style={styles.fvOuter}>
-                <View style={styles.fvInner}>
-                    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
-                        {ORBIT_STARS.map((s, i) => (
-                            <Circle key={i} cx={`${s.x}%`} cy={`${s.y}%`} r={s.r} fill="white" fillOpacity={s.o * 0.7} />
-                        ))}
-                    </Svg>
-                    <View style={{ position: "relative" }}>
-                        <View style={styles.fullCellTop}>
-                            <View style={styles.fvPill}><Text style={styles.fvPillText}>Recent verdict</Text></View>
-                            <View style={styles.lockTagRow}>
-                                <LockIcon color="rgba(255,255,255,0.85)" size={10} />
-                                <Text style={styles.lockTagLabel}>LOCKED</Text>
-                            </View>
-                        </View>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 12 }}>
-                            <View style={styles.lockDotXl}><LockIcon color="#fff" size={24} /></View>
-                            <View style={{ flex: 1 }}>
-                                <Text style={styles.lvLockedTitle}>Locked for now</Text>
-                                <Text style={styles.lvLockedBody}>Follow friends to see their freshest ratings.</Text>
-                            </View>
-                        </View>
-                    </View>
-                </View>
-                <View style={styles.fvFooter}>
-                    <View style={{ flex: 1 }}>
-                        <View style={[styles.skBar, { width: "48%", height: 11, backgroundColor: "rgba(17,19,28,0.12)" }]} />
-                        <View style={[styles.skBar, { width: "30%", height: 7, backgroundColor: "rgba(17,19,28,0.08)", marginTop: 6 }]} />
-                    </View>
-                    <Text style={styles.fvHint}>FOLLOW TO UNLOCK</Text>
-                </View>
-            </View>
+            {renderRecentVerdict()}
 
             {/* Row: Split (locked) + Consensus (locked, 138px) */}
             <View style={styles.fullRow}>
@@ -1162,6 +1287,7 @@ export default function FeedScreen() {
         <View style={styles.container}>
             {error !== null && <Text style={styles.inlineError}>{error}</Text>}
             <FlashList
+                ref={listRef}
                 data={events}
                 renderItem={renderFeedEvent}
                 keyExtractor={(item) => item.id.toString()}
@@ -1970,6 +2096,123 @@ const styles = StyleSheet.create({
         color: "rgba(255,255,255,0.8)",
         marginTop: 3,
         lineHeight: 14,
+    },
+    // Recent Verdict — live hero ("VerdictCard" from the Bento Orbit design)
+    verdictInner: {
+        borderRadius: 14,
+        backgroundColor: colors.navy,  // fallback behind the album art
+        padding: 16,  // even inset on all four sides
+        overflow: "hidden",
+    },
+    verdictScrim: {
+        backgroundColor: "rgba(11,13,20,0.64)",
+    },
+    verdictPill: {
+        borderRadius: 999,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        flexShrink: 1,
+    },
+    verdictPillText: {
+        fontFamily: fonts.mono,
+        fontSize: 8.5,
+        color: "#fff",
+        fontWeight: "700",
+        letterSpacing: 1.2,
+        textTransform: "uppercase",
+    },
+    ratersRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 7,
+        flexShrink: 0,
+    },
+    ratersStack: {
+        flexDirection: "row",
+        alignItems: "center",
+    },
+    raterAvatar: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        alignItems: "center",
+        justifyContent: "center",
+        borderWidth: 1.5,
+        borderColor: colors.navy,
+    },
+    raterInitial: {
+        fontFamily: fonts.display,
+        color: "#fff",
+        fontSize: 9,
+    },
+    ratersCount: {
+        fontFamily: fonts.mono,
+        fontSize: 8,
+        color: colors.cdim,
+        letterSpacing: 1,
+        fontWeight: "700",
+    },
+    verdictBody: {
+        flexDirection: "row",
+        alignItems: "flex-end",
+        gap: 12,
+        marginTop: 11,
+    },
+    verdictScore: {
+        fontFamily: fonts.display,
+        fontSize: 50,
+        lineHeight: 50,
+        letterSpacing: -1,
+        color: "#fff",
+        flexShrink: 0,
+        includeFontPadding: false,
+    },
+    verdictMetaCol: {
+        flex: 1,
+        minWidth: 0,
+    },
+    verdictWho: {
+        fontFamily: fonts.mono,
+        fontSize: 8.5,
+        letterSpacing: 1.5,
+        color: "rgba(241,236,221,0.82)",  // cream-dim — legible over album art
+    },
+    verdictNote: {
+        fontFamily: fonts.serifItalic,
+        fontSize: 16,
+        color: "#fff",
+        lineHeight: 19,
+        marginTop: 4,
+        includeFontPadding: false,
+    },
+    verdictFooter: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        paddingHorizontal: 6,
+        paddingTop: 10,
+        paddingBottom: 2,
+    },
+    verdictSongTitle: {
+        fontFamily: fonts.display,
+        fontSize: 17,
+        color: colors.ink,
+    },
+    verdictSongArtist: {
+        fontFamily: fonts.mono,
+        fontSize: 8.5,
+        color: colors.inkSoft,
+        letterSpacing: 1,
+        marginTop: 3,
+    },
+    verdictRate: {
+        fontFamily: fonts.mono,
+        fontSize: 9,
+        color: colors.accent,
+        letterSpacing: 1.4,
+        fontWeight: "700",
+        flexShrink: 0,
+        marginLeft: 8,
     },
     lockCardDesc: {
         fontSize: 11,

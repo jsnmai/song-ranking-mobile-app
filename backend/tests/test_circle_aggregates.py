@@ -614,3 +614,54 @@ def test_circle_endpoints_require_auth(
     """Both circle endpoints reject unauthenticated requests."""
     assert client.get(MOST_RATED_PATH).status_code == 401
     assert client.get(TRENDING_PATH).status_code == 401
+
+
+# --- Recent Verdict hero raters -------------------------------------------------
+
+
+def test_recent_verdict_raters_lists_mutual_visible_members(
+    client: TestClient,
+    db_session: Session,
+):
+    """The Recent Verdict raters endpoint returns mutual + visible circle members who rate the song."""
+    viewer_token = _register(client, "viewer@example.com", "viewer")
+    member_token = _register(client, "member@example.com", "member")
+    stranger_token = _register(client, "stranger@example.com", "stranger")
+    _mutual(client, viewer_token, member_token, "member")
+    _follow(client, viewer_token, "stranger")  # one-way only — not in the circle
+
+    song_id = _rate(db_session, "member", 9100, "Circle Song", 9.0)
+    _rate(db_session, "stranger", 9100, "Circle Song", 8.0)
+
+    response = client.get(
+        f"/api/v1/feed/songs/{song_id}/circle-raters",
+        headers={"Authorization": f"Bearer {viewer_token}"},
+    )
+    assert response.status_code == 200
+    assert {r["username"] for r in response.json()["raters"]} == {"member"}
+
+
+def test_recent_verdict_raters_excludes_only_me_member(
+    client: TestClient,
+    db_session: Session,
+):
+    """A circle member who hid their taste (only_me) is not shown as a rater."""
+    viewer_token = _register(client, "viewer@example.com", "viewer")
+    member_token = _register(client, "member@example.com", "member")
+    _mutual(client, viewer_token, member_token, "member")
+    song_id = _rate(db_session, "member", 9101, "Hidden Song", 9.0)
+    _set_visibility(client, member_token, "only_me")
+
+    response = client.get(
+        f"/api/v1/feed/songs/{song_id}/circle-raters",
+        headers={"Authorization": f"Bearer {viewer_token}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["raters"] == []
+
+
+def test_recent_verdict_raters_requires_auth(
+    client: TestClient,
+):
+    """The Recent Verdict raters endpoint rejects unauthenticated requests."""
+    assert client.get("/api/v1/feed/songs/1/circle-raters").status_code == 401

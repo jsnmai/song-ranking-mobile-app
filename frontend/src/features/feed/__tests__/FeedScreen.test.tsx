@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react-nativ
 
 import { ApiError } from "../../../api/client"
 import { RankingResponse } from "../../comparison/types"
+import { Profile } from "../../profile/types"
 import FeedScreen from "../FeedScreen"
 import { FeedEvent } from "../types"
 
@@ -12,9 +13,10 @@ const mockReportRatingEvent = jest.fn()
 const mockLikeActivity = jest.fn()
 const mockUnlikeActivity = jest.fn()
 const mockUpdateLikePrivacy = jest.fn()
+const mockGetSongCircleRaters = jest.fn()
 const mockGetMyRankingByDeezerId = jest.fn()
 const mockRefreshProfile = jest.fn()
-let mockCurrentProfile = {
+let mockCurrentProfile: Profile = {
     id: 1,
     user_id: 2,
     username: "jason",
@@ -86,6 +88,7 @@ jest.mock("../../auth/AuthContext", () => ({
 
 jest.mock("../apiRequests", () => ({
     listMyFeed: (...args: unknown[]) => mockListMyFeed(...args),
+    getSongCircleRaters: (...args: unknown[]) => mockGetSongCircleRaters(...args),
     reportRatingEvent: (...args: unknown[]) => mockReportRatingEvent(...args),
 }))
 
@@ -164,7 +167,8 @@ const ranking: RankingResponse = {
 
 beforeEach(() => {
     jest.resetAllMocks()
-    mockCurrentProfile = { ...mockCurrentProfile, hide_like_counts: false }
+    mockCurrentProfile = { ...mockCurrentProfile, hide_like_counts: false, user_stats: null }
+    mockGetSongCircleRaters.mockResolvedValue({ raters: [] })
     mockRefreshProfile.mockResolvedValue(undefined)
     mockUpdateLikePrivacy.mockResolvedValue({ ...mockCurrentProfile, hide_like_counts: true })
     mockLikeActivity.mockResolvedValue({
@@ -208,6 +212,62 @@ describe("FeedScreen", () => {
         await waitFor(() => {
             expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
         })
+    })
+
+    it("features the freshest followed verdict with circle raters and total ratings", async () => {
+        // The unlocked module section only renders once the viewer has rated 10+ songs.
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 12, bookmarked_count: 0 },
+        }
+        mockGetSongCircleRaters.mockResolvedValue({
+            raters: [{ ...feedEvent.actor_profile, user_id: 4, username: "maya", display_name: "Maya" }],
+        })
+        mockListMyFeed.mockResolvedValue({
+            events: [{
+                ...feedEvent,
+                note: "Hovers, never lands.",
+                song: { ...song, global_rating_count: 12 },
+            }],
+            next_cursor: null,
+        })
+        mockGetMyRankingByDeezerId.mockResolvedValue(ranking)
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-recent-verdict-9")).toBeTruthy()
+        })
+        // Top-right shows the song's total LISTn rating count + the circle raters fetch ran.
+        await waitFor(() => expect(screen.getByText("12 RATED")).toBeTruthy())
+        expect(mockGetSongCircleRaters).toHaveBeenCalledWith(42, "test-token")
+
+        // "Rate this" opens the song page; tapping the hero body scrolls (does not navigate).
+        fireEvent.press(screen.getByTestId("feed-verdict-rate-9"))
+        await waitFor(() => {
+            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
+        })
+        fireEvent.press(screen.getByTestId("feed-verdict-scroll-9"))
+        expect(mockNavigate).not.toHaveBeenCalledWith("OtherProfile", expect.anything())
+    })
+
+    it("keeps the Recent Verdict module locked when no followed verdict exists", async () => {
+        // Only the viewer's own event is present, so there is no friend verdict to feature.
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 12, bookmarked_count: 0 },
+        }
+        mockListMyFeed.mockResolvedValue({
+            events: [{ ...feedEvent, id: 21, actor_profile: { ...feedEvent.actor_profile, user_id: 2, username: "jason" } }],
+            next_cursor: null,
+        })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByText("FOLLOW TO UNLOCK")).toBeTruthy()
+        })
+        expect(screen.queryByTestId("feed-recent-verdict-21")).toBeNull()
     })
 
     it("opens feed songs in unrated Song Detail when the current user has no ranking", async () => {

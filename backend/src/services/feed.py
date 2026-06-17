@@ -4,8 +4,9 @@ from datetime import datetime
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from src.crud.circle_aggregates import list_circle_contributors
 from src.crud.feed import FeedEventRow, list_feed_events
-from src.pydantic_schemas.feed import FeedEventResponse, FeedListResponse
+from src.pydantic_schemas.feed import CircleRatersResponse, FeedEventResponse, FeedListResponse
 from src.pydantic_schemas.profile import ProfileResponse
 from src.pydantic_schemas.song import SongResponse
 from src.services.like import like_states_for_events
@@ -13,6 +14,33 @@ from src.sqlalchemy_tables.rating_event import RatingEvent
 
 DEFAULT_FEED_LIMIT = 20
 MAX_FEED_LIMIT = 50
+# How many circle-member avatars the Recent Verdict hero asks for.
+RECENT_VERDICT_RATER_LIMIT = 8
+
+
+def list_song_circle_raters(
+    db: Session,
+    viewer_id: int,
+    song_id: int,
+) -> CircleRatersResponse:
+    """Circle members (mutual + visible) who currently rate the song, for the Recent Verdict hero.
+
+    Reuses the shared circle predicate via `list_circle_contributors`, so visibility, blocks,
+    only_me, deleted users, and the viewer's own exclusion all behave like every other circle
+    surface. A missing song simply yields no raters (catalog ids are not sensitive).
+    """
+    by_song = list_circle_contributors(
+        db,
+        viewer_id,
+        [song_id],
+        per_song_limit=RECENT_VERDICT_RATER_LIMIT,
+    )
+    return CircleRatersResponse(
+        raters=[
+            ProfileResponse.model_validate(contributor.profile)
+            for contributor in by_song.get(song_id, [])
+        ],
+    )
 
 
 def list_my_feed(
