@@ -40,6 +40,7 @@ import {
     TasteProfileResponse,
 } from "./types"
 import RecentRatingsModule from "./RecentRatingsModule"
+import { StreakBadge } from "./StreakBadge"
 
 type OtherProfileProps = NativeStackScreenProps<AppStackParamList, "OtherProfile">
 
@@ -313,6 +314,10 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
         ? (profile.display_name || profile.username).charAt(0).toUpperCase()
         : "?"
 
+    // Streak rides on the taste-gated user_stats, so the badge only appears when
+    // this viewer can see the profile's taste and there is an active streak.
+    const streakWeeks = profile?.user_stats?.current_streak ?? 0
+
     const topArtist = taste && taste.overall.top_artists.length > 0
         ? taste.overall.top_artists[0]
         : null
@@ -363,6 +368,9 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
                     <>
                         {/* Identity card — mirrors the You profile exactly */}
                         <View style={styles.identityCard}>
+                            {profile.user_stats && (
+                                <StreakBadge weeks={streakWeeks} name={profile.display_name || profile.username} />
+                            )}
                             <View style={styles.identityRow}>
                                 <View
                                     style={[
@@ -373,7 +381,7 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
                                 >
                                     <Text style={styles.bustLetter}>{profileInitial}</Text>
                                 </View>
-                                <View style={styles.identityText}>
+                                <View style={[styles.identityText, profile.user_stats && styles.identityTextWithBadge]}>
                                     <Text style={styles.displayName} numberOfLines={1}>{profile.display_name}</Text>
                                     <Text style={styles.username} numberOfLines={1}>
                                         @{profile.username}
@@ -801,6 +809,10 @@ const styles = StyleSheet.create({
     identityText: {
         flex: 1,
         minWidth: 0,
+    },
+    // Keep the display name clear of the absolute streak badge in the top-right.
+    identityTextWithBadge: {
+        paddingRight: 30,
     },
     displayName: {
         fontFamily: fonts.display,

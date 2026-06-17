@@ -33,6 +33,11 @@ export type ProfileBase = {
 export type UserStats = {
     rated_count: number;
     bookmarked_count: number;
+    // Weekly rating streak. `current_streak` is decayed to "now" by the backend,
+    // so a lapsed streak reads as 0. Optional so older fixtures/clients stay valid;
+    // the backend always sends them (default 0).
+    current_streak?: number;
+    longest_streak?: number;
 }
 
 // Mirrors ProfileSummaryResponse in backend/src/pydantic_schemas/profile.py
