@@ -19,6 +19,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack"
 import Svg, { Circle, Path } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
+import { ArrowLabel } from "../../components/Arrow"
 import { useAudioPlayer } from "../../hooks/useAudioPlayer"
 import { AppStackParamList } from "../../navigation/types"
 import { colors, fonts, bucketColor } from "../../theme"
@@ -515,7 +516,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                         <View style={styles.sdSectionRow}>
                             <Text style={styles.sdSectionLabel}>VERSUS HISTORY</Text>
                             <TouchableOpacity onPress={() => navigation.navigate("VersusHistory")}>
-                                <Text style={styles.sdSectionRight}>ALL ↗</Text>
+                                <ArrowLabel text="ALL" direction="up-right" color={colors.accent} textStyle={styles.sdSectionRight} />
                             </TouchableOpacity>
                         </View>
                         {versusReceipts.length === 0 ? (

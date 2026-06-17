@@ -1,5 +1,6 @@
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 
+import { ArrowLabel } from "../../components/Arrow"
 import { colors, fonts } from "../../theme"
 import { MostCompatibleItem } from "./types"
 
@@ -30,7 +31,7 @@ export default function MostCompatibleModule({ users, isLoading, onUserPress, on
                 <Text style={styles.sectionTitle}>COMPATIBILITY</Text>
                 {users && users.length > 0 && (
                     <TouchableOpacity onPress={onViewAll} testID="most-compatible-view-all">
-                        <Text style={styles.viewAll}>View all →</Text>
+                        <ArrowLabel text="VIEW ALL" direction="right" color={colors.accent} textStyle={styles.viewAll} />
                     </TouchableOpacity>
                 )}
             </View>

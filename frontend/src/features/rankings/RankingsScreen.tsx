@@ -25,6 +25,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import Svg, { Circle, Defs, LinearGradient, Path, RadialGradient, Rect, Stop } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
+import { ArrowLabel } from "../../components/Arrow"
 import { AppStackParamList, RankingsStackParamList, TabParamList } from "../../navigation/types"
 import { colors, fonts, bucketColor } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
@@ -278,7 +279,7 @@ export default function RankingsScreen() {
 
                 {/* Bottom-right CTA */}
                 <View style={styles.openChart}>
-                    <Text style={styles.openChartText}>OPEN STAR CHART →</Text>
+                    <ArrowLabel text="OPEN STAR CHART" direction="right" color={colors.gold} textStyle={styles.openChartText} size={10} />
                 </View>
             </TouchableOpacity>
         )
@@ -464,7 +465,7 @@ export default function RankingsScreen() {
                     onPress={handleFullRankingsPress}
                     accessibilityLabel="View All / Filter Rankings"
                 >
-                    <Text style={styles.sectionRight}>VIEW ALL →</Text>
+                    <ArrowLabel text="VIEW ALL" direction="right" color={colors.accent} textStyle={styles.sectionRight} />
                 </TouchableOpacity>
             </View>
 
@@ -529,7 +530,7 @@ export default function RankingsScreen() {
             <View style={styles.sectionRow}>
                 <Text style={styles.sectionLabel}>RECENT HEAD-TO-HEAD</Text>
                 <TouchableOpacity onPress={handleVersusHistoryPress}>
-                    <Text style={styles.sectionRight}>LOG ↗</Text>
+                    <ArrowLabel text="VIEW LOG" direction="up-right" color={colors.accent} textStyle={styles.sectionRight} />
                 </TouchableOpacity>
             </View>
             {versusReceipts.length === 0 ? (

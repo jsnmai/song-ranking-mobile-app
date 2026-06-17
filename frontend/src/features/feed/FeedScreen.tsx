@@ -21,6 +21,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import Svg, { Circle, Ellipse, Path, Polygon, Polyline } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
+import { ArrowLabel } from "../../components/Arrow"
 import { AppStackParamList, FeedStackParamList, TabParamList } from "../../navigation/types"
 import { colors, fonts, bucketColor } from "../../theme"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
@@ -503,7 +504,7 @@ export default function FeedScreen() {
                     {openingEventId === heroEvent.id ? (
                         <ActivityIndicator color={colors.accent} size="small" />
                     ) : (
-                        <Text style={styles.verdictRate}>RATE THIS ↗</Text>
+                        <ArrowLabel text="RATE THIS" direction="up-right" color={colors.accent} textStyle={styles.verdictRate} />
                     )}
                 </TouchableOpacity>
             </View>
