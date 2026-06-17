@@ -154,6 +154,9 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
 
     const openFollowers = () => navigation.navigate("ProfileList", { username, listType: "followers" })
     const openFollowing = () => navigation.navigate("ProfileList", { username, listType: "following" })
+    const openActivityLikers = (ratingEventId: number) => {
+        navigation.navigate("ActivityLikers", { ratingEventId })
+    }
 
     const toggleFollow = async () => {
         if (!token || !profile || profile.is_own_profile || isSaving) return
@@ -722,6 +725,7 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
                                     onItemPress={(item) => {
                                         navigation.navigate("SongDetail", { song: item.song as never })
                                     }}
+                                    onOpenLikers={openActivityLikers}
                                 />
                             </View>
                         )}

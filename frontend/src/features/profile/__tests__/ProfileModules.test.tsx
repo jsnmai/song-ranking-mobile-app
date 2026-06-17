@@ -1,5 +1,5 @@
 // Tests for RecentRatingsModule, RankingsPreviewModule, and MostCompatibleModule on ProfileScreen and OtherProfileScreen.
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native"
 
 import OtherProfileScreen from "../OtherProfileScreen"
 import ProfileScreen from "../ProfileScreen"
@@ -43,6 +43,8 @@ const mockGetProfileBookmarks = jest.fn()
 const mockGetMostCompatible = jest.fn()
 const mockGetProfileAnchors = jest.fn()
 const mockGetUserAuxstrology = jest.fn()
+const mockLikeActivity = jest.fn()
+const mockUnlikeActivity = jest.fn()
 
 jest.mock("../apiRequests", () => ({
     getMyProfile: (...args: unknown[]) => mockGetMyProfile(...args),
@@ -63,6 +65,11 @@ jest.mock("../apiRequests", () => ({
     blockUser: (...args: unknown[]) => mockBlockUser(...args),
     unblockUser: (...args: unknown[]) => mockUnblockUser(...args),
     reportUser: (...args: unknown[]) => mockReportUser(...args),
+}))
+
+jest.mock("../../activity/apiRequests", () => ({
+    likeActivity: (...args: unknown[]) => mockLikeActivity(...args),
+    unlikeActivity: (...args: unknown[]) => mockUnlikeActivity(...args),
 }))
 
 const mockListMyRankings = jest.fn()
@@ -90,6 +97,7 @@ const myProfile: Profile = {
     is_own_profile: true,
     can_view_taste: true,
     is_blocked: false,
+    hide_like_counts: false,
     user_stats: { rated_count: 42, bookmarked_count: 7 },
 }
 
@@ -109,6 +117,7 @@ const otherProfile: Profile = {
     is_own_profile: false,
     can_view_taste: true,
     is_blocked: false,
+    hide_like_counts: false,
     user_stats: { rated_count: 18, bookmarked_count: 3 },
 }
 
@@ -143,6 +152,8 @@ const ratingItem = {
     bucket: "like",
     score: 9.2,
     note: "love the bassline",
+    like_count: 4,
+    liked_by_viewer: false,
     created_at: "2026-05-01T10:00:00Z",
 }
 
@@ -197,6 +208,16 @@ describe("ProfileScreen profile modules", () => {
         mockGetMyRecentRatings.mockResolvedValue(ratingsResponse)
         mockListMyRankings.mockResolvedValue(rankingsResponse)
         mockGetMostCompatible.mockResolvedValue(mostCompatibleResponse)
+        mockLikeActivity.mockResolvedValue({
+            rating_event_id: 42,
+            like_count: 5,
+            liked_by_viewer: true,
+        })
+        mockUnlikeActivity.mockResolvedValue({
+            rating_event_id: 42,
+            like_count: 4,
+            liked_by_viewer: false,
+        })
         mockGetMyAuxstrology.mockResolvedValue({
             status: "locked", current_ratings: 0, required_ratings: 1,
             sign: null, caption: null, adjectives: [], evidence: [], axes: {},
@@ -280,6 +301,20 @@ describe("ProfileScreen profile modules", () => {
             expect(screen.getByText('"love the bassline"')).toBeTruthy()
             expect(screen.getByText("LIKE")).toBeTruthy()
         })
+    })
+
+    it("own activity card supports optimistic likes", async () => {
+        mockLikeActivity.mockReturnValue(new Promise(() => {}))
+        render(<ProfileScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("activity-like-button-42")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("activity-like-button-42"))
+
+        expect(screen.getByTestId("activity-like-button-42").props.accessibilityState.selected).toBe(true)
+        expect(within(screen.getByTestId("activity-like-count-42")).getByText("5")).toBeTruthy()
+        expect(mockLikeActivity).toHaveBeenCalledWith(42, "test-token")
     })
 
     it("tapping an activity card navigates to SongDetail", async () => {
@@ -398,6 +433,11 @@ describe("OtherProfileScreen profile modules", () => {
             evidence: [],
             axes: {},
         })
+        mockLikeActivity.mockResolvedValue({
+            rating_event_id: 42,
+            like_count: 5,
+            liked_by_viewer: true,
+        })
     })
 
     it("renders Their Top Songs with View all navigating to UserRankings", async () => {
@@ -463,5 +503,19 @@ describe("OtherProfileScreen profile modules", () => {
         })
         expect(mockGetUserTasteProfile).not.toHaveBeenCalled()
         expect(mockGetUserAuxstrology).not.toHaveBeenCalled()
+    })
+
+    it("recent ratings rows support optimistic likes using rating_event_id", async () => {
+        mockLikeActivity.mockReturnValue(new Promise(() => {}))
+        render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("activity-like-button-42")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("activity-like-button-42"))
+
+        expect(screen.getByTestId("activity-like-button-42").props.accessibilityState.selected).toBe(true)
+        expect(within(screen.getByTestId("activity-like-count-42")).getByText("5")).toBeTruthy()
+        expect(mockLikeActivity).toHaveBeenCalledWith(42, "test-token")
     })
 })

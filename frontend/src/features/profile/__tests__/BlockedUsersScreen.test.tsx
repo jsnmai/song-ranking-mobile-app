@@ -33,6 +33,7 @@ const blockedProfile: Profile = {
     is_own_profile: false,
     can_view_taste: false,
     is_blocked: true,
+    hide_like_counts: false,
     user_stats: null,
 }
 

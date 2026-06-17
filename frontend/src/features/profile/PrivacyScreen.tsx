@@ -10,6 +10,7 @@ import { AppStackParamList } from "../../navigation/types"
 import { colors, fonts } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
 import { getMyProfile, updateMyVisibility } from "./apiRequests"
+import { updateLikePrivacy } from "../activity/apiRequests"
 import { BackIcon, FriendsIcon, GlobeIcon, InfoIcon, LockIcon } from "./settingsIcons"
 import { ProfileVisibility } from "./types"
 
@@ -46,7 +47,9 @@ const LEVELS: readonly {
 export default function PrivacyScreen({ navigation }: PrivacyProps) {
     const { token } = useAuth()
     const [visibility, setVisibility] = useState<ProfileVisibility | null>(null)
+    const [hideLikeCounts, setHideLikeCounts] = useState(false)
     const [saving, setSaving] = useState<ProfileVisibility | null>(null)
+    const [isSavingLikePrivacy, setIsSavingLikePrivacy] = useState(false)
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
 
@@ -60,6 +63,7 @@ export default function PrivacyScreen({ navigation }: PrivacyProps) {
                 const profile = await getMyProfile(token)
                 if (active) {
                     setVisibility(profile.visibility)
+                    setHideLikeCounts(profile.hide_like_counts)
                 }
             } catch (err) {
                 if (active) {
@@ -90,6 +94,23 @@ export default function PrivacyScreen({ navigation }: PrivacyProps) {
             setError(errorMessage(err, "Could not update privacy."))
         } finally {
             setSaving(null)
+        }
+    }
+
+    const toggleLikePrivacy = async () => {
+        if (!token || isSavingLikePrivacy) {
+            return
+        }
+        const nextValue = !hideLikeCounts
+        setIsSavingLikePrivacy(true)
+        setError(null)
+        try {
+            const updated = await updateLikePrivacy(nextValue, token)
+            setHideLikeCounts(updated.hide_like_counts)
+        } catch (err) {
+            setError(errorMessage(err, "Could not update like privacy."))
+        } finally {
+            setIsSavingLikePrivacy(false)
         }
     }
 
@@ -151,6 +172,31 @@ export default function PrivacyScreen({ navigation }: PrivacyProps) {
                             compatibility, Co-Signs, or discovery.
                         </Text>
                     </View>
+
+                    <Text style={styles.sectionLabel}>ACTIVITY LIKES</Text>
+                    <TouchableOpacity
+                        style={styles.likePrivacyRow}
+                        onPress={toggleLikePrivacy}
+                        disabled={isSavingLikePrivacy}
+                        accessibilityRole="switch"
+                        accessibilityState={{ checked: hideLikeCounts, disabled: isSavingLikePrivacy }}
+                        testID="hide-like-counts-toggle"
+                        activeOpacity={0.85}
+                    >
+                        <View style={styles.likePrivacyText}>
+                            <Text style={styles.likePrivacyTitle}>Hide like counts</Text>
+                            <Text style={styles.likePrivacyDesc}>
+                                Other people won’t see like counts or who liked your activity. You’ll still see them.
+                            </Text>
+                        </View>
+                        <View style={[styles.switchTrack, hideLikeCounts && styles.switchTrackOn]}>
+                            {isSavingLikePrivacy ? (
+                                <ActivityIndicator size="small" color={hideLikeCounts ? colors.paper : colors.inkDim} />
+                            ) : (
+                                <View style={[styles.switchThumb, hideLikeCounts && styles.switchThumbOn]} />
+                            )}
+                        </View>
+                    </TouchableOpacity>
 
                     {error !== null && <Text style={styles.error}>{error}</Text>}
                 </ScrollView>
@@ -300,6 +346,57 @@ const styles = StyleSheet.create({
         fontSize: 10.5,
         color: colors.inkDim,
         lineHeight: 15,
+    },
+    likePrivacyRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        backgroundColor: colors.paper,
+        borderWidth: 1.5,
+        borderColor: colors.line,
+        borderRadius: 14,
+        paddingVertical: 13,
+        paddingHorizontal: 14,
+    },
+    likePrivacyText: {
+        flex: 1,
+        minWidth: 0,
+    },
+    likePrivacyTitle: {
+        fontFamily: fonts.display,
+        fontSize: 14,
+        color: colors.ink,
+    },
+    likePrivacyDesc: {
+        fontSize: 11,
+        color: colors.inkSoft,
+        lineHeight: 15,
+        marginTop: 3,
+    },
+    switchTrack: {
+        width: 44,
+        height: 26,
+        borderRadius: 13,
+        borderWidth: 1,
+        borderColor: colors.line,
+        backgroundColor: colors.bg,
+        padding: 3,
+        justifyContent: "center",
+        flexShrink: 0,
+    },
+    switchTrackOn: {
+        borderColor: colors.ink,
+        backgroundColor: colors.ink,
+    },
+    switchThumb: {
+        width: 18,
+        height: 18,
+        borderRadius: 9,
+        backgroundColor: colors.inkDim,
+    },
+    switchThumbOn: {
+        alignSelf: "flex-end",
+        backgroundColor: colors.paper,
     },
     error: {
         color: colors.danger,

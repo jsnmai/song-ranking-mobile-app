@@ -7,6 +7,7 @@ import { Profile } from "../types"
 const mockGoBack = jest.fn()
 const mockGetMyProfile = jest.fn()
 const mockUpdateMyVisibility = jest.fn()
+const mockUpdateLikePrivacy = jest.fn()
 
 jest.mock("../../auth/AuthContext", () => ({
     useAuth: () => ({ token: "test-token" }),
@@ -15,6 +16,10 @@ jest.mock("../../auth/AuthContext", () => ({
 jest.mock("../apiRequests", () => ({
     getMyProfile: (...args: unknown[]) => mockGetMyProfile(...args),
     updateMyVisibility: (...args: unknown[]) => mockUpdateMyVisibility(...args),
+}))
+
+jest.mock("../../activity/apiRequests", () => ({
+    updateLikePrivacy: (...args: unknown[]) => mockUpdateLikePrivacy(...args),
 }))
 
 const profile: Profile = {
@@ -33,6 +38,7 @@ const profile: Profile = {
     is_own_profile: true,
     can_view_taste: true,
     is_blocked: false,
+    hide_like_counts: false,
     user_stats: null,
 }
 
@@ -42,6 +48,7 @@ beforeEach(() => {
     jest.resetAllMocks()
     mockGetMyProfile.mockResolvedValue(profile)
     mockUpdateMyVisibility.mockResolvedValue({ ...profile, visibility: "friends_only" })
+    mockUpdateLikePrivacy.mockResolvedValue({ ...profile, hide_like_counts: true })
 })
 
 describe("PrivacyScreen", () => {
@@ -73,5 +80,17 @@ describe("PrivacyScreen", () => {
         fireEvent.press(screen.getByText("Public"))
 
         expect(mockUpdateMyVisibility).not.toHaveBeenCalled()
+    })
+
+    it("updates the hide-like-counts setting", async () => {
+        render(<PrivacyScreen navigation={navigationProp} route={{} as never} />)
+
+        await waitFor(() => expect(screen.getByText("Hide like counts")).toBeTruthy())
+        fireEvent.press(screen.getByTestId("hide-like-counts-toggle"))
+
+        await waitFor(() => {
+            expect(mockUpdateLikePrivacy).toHaveBeenCalledWith(true, "test-token")
+            expect(screen.getByTestId("hide-like-counts-toggle").props.accessibilityState.checked).toBe(true)
+        })
     })
 })

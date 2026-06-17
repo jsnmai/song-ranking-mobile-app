@@ -52,6 +52,7 @@ const profile: Profile = {
     is_own_profile: true,
     can_view_taste: true,
     is_blocked: false,
+    hide_like_counts: false,
     user_stats: null,
 }
 

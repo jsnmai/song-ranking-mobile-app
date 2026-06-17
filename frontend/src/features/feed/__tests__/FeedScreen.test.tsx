@@ -9,7 +9,31 @@ import { FeedEvent } from "../types"
 const mockNavigate = jest.fn()
 const mockListMyFeed = jest.fn()
 const mockReportRatingEvent = jest.fn()
+const mockLikeActivity = jest.fn()
+const mockUnlikeActivity = jest.fn()
+const mockUpdateLikePrivacy = jest.fn()
 const mockGetMyRankingByDeezerId = jest.fn()
+const mockRefreshProfile = jest.fn()
+let mockCurrentProfile = {
+    id: 1,
+    user_id: 2,
+    username: "jason",
+    display_name: "Jason",
+    avatar_color: null,
+    timezone: null,
+    is_public: true,
+    visibility: "public",
+    created_at: "2026-01-01T00:00:00Z",
+    follower_count: 0,
+    following_count: 0,
+    is_following: false,
+    is_followed_by: false,
+    is_own_profile: true,
+    can_view_taste: true,
+    is_blocked: false,
+    hide_like_counts: false,
+    user_stats: null,
+}
 
 jest.mock("@react-navigation/native", () => {
     const actual = jest.requireActual("@react-navigation/native")
@@ -55,13 +79,20 @@ jest.mock("@shopify/flash-list", () => {
 jest.mock("../../auth/AuthContext", () => ({
     useAuth: () => ({
         token: "test-token",
-        refreshProfile: jest.fn().mockResolvedValue(undefined),
+        profile: mockCurrentProfile,
+        refreshProfile: mockRefreshProfile,
     }),
 }))
 
 jest.mock("../apiRequests", () => ({
     listMyFeed: (...args: unknown[]) => mockListMyFeed(...args),
     reportRatingEvent: (...args: unknown[]) => mockReportRatingEvent(...args),
+}))
+
+jest.mock("../../activity/apiRequests", () => ({
+    likeActivity: (...args: unknown[]) => mockLikeActivity(...args),
+    unlikeActivity: (...args: unknown[]) => mockUnlikeActivity(...args),
+    updateLikePrivacy: (...args: unknown[]) => mockUpdateLikePrivacy(...args),
 }))
 
 jest.mock("../../rankings/apiRequests", () => ({
@@ -104,6 +135,8 @@ const feedEvent: FeedEvent = {
     new_bucket: "like",
     new_score: 8.75,
     note: null,
+    like_count: 2,
+    liked_by_viewer: false,
     created_at: "2026-01-01T00:00:00Z",
     actor_profile: {
         id: 3,
@@ -131,6 +164,19 @@ const ranking: RankingResponse = {
 
 beforeEach(() => {
     jest.resetAllMocks()
+    mockCurrentProfile = { ...mockCurrentProfile, hide_like_counts: false }
+    mockRefreshProfile.mockResolvedValue(undefined)
+    mockUpdateLikePrivacy.mockResolvedValue({ ...mockCurrentProfile, hide_like_counts: true })
+    mockLikeActivity.mockResolvedValue({
+        rating_event_id: 9,
+        like_count: 3,
+        liked_by_viewer: true,
+    })
+    mockUnlikeActivity.mockResolvedValue({
+        rating_event_id: 9,
+        like_count: 1,
+        liked_by_viewer: false,
+    })
     mockReportRatingEvent.mockResolvedValue({
         id: 1,
         reporter_user_id: 1,
@@ -210,6 +256,159 @@ describe("FeedScreen", () => {
 
         await waitFor(() => {
             expect(screen.getByText(/3 hrs ago/)).toBeTruthy()
+        })
+    })
+
+    it("renders an unliked activity state with the visible count", async () => {
+        mockListMyFeed.mockResolvedValue({
+            events: [feedEvent],
+            next_cursor: null,
+        })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("activity-like-button-9").props.accessibilityState.selected).toBe(false)
+            expect(screen.getByText("2")).toBeTruthy()
+        })
+    })
+
+    it("optimistically likes a feed activity and increments the visible count", async () => {
+        let resolveLike: (value: unknown) => void = () => {}
+        mockLikeActivity.mockReturnValue(new Promise((resolve) => { resolveLike = resolve }))
+        mockListMyFeed.mockResolvedValue({
+            events: [feedEvent],
+            next_cursor: null,
+        })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("activity-like-button-9")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("activity-like-button-9"))
+
+        expect(screen.getByTestId("activity-like-button-9").props.accessibilityState.selected).toBe(true)
+        expect(screen.getByText("3")).toBeTruthy()
+        expect(mockLikeActivity).toHaveBeenCalledTimes(1)
+        expect(mockLikeActivity).toHaveBeenCalledWith(9, "test-token")
+
+        resolveLike({ rating_event_id: 9, like_count: 3, liked_by_viewer: true })
+    })
+
+    it("optimistically unlikes a feed activity and decrements the visible count", async () => {
+        let resolveUnlike: (value: unknown) => void = () => {}
+        mockUnlikeActivity.mockReturnValue(new Promise((resolve) => { resolveUnlike = resolve }))
+        mockListMyFeed.mockResolvedValue({
+            events: [{ ...feedEvent, liked_by_viewer: true, like_count: 2 }],
+            next_cursor: null,
+        })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("activity-like-button-9")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("activity-like-button-9"))
+
+        expect(screen.getByTestId("activity-like-button-9").props.accessibilityState.selected).toBe(false)
+        expect(screen.getByText("1")).toBeTruthy()
+        expect(mockUnlikeActivity).toHaveBeenCalledTimes(1)
+        expect(mockUnlikeActivity).toHaveBeenCalledWith(9, "test-token")
+
+        resolveUnlike({ rating_event_id: 9, like_count: 1, liked_by_viewer: false })
+    })
+
+    it("rolls back a feed activity like when the API fails", async () => {
+        mockLikeActivity.mockRejectedValue(new Error("Nope"))
+        mockListMyFeed.mockResolvedValue({
+            events: [feedEvent],
+            next_cursor: null,
+        })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("activity-like-button-9")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("activity-like-button-9"))
+
+        await waitFor(() => {
+            expect(screen.getByTestId("activity-like-button-9").props.accessibilityState.selected).toBe(false)
+            expect(screen.getByText("2")).toBeTruthy()
+        })
+    })
+
+    it("keeps hidden activity counts hidden while still allowing likes", async () => {
+        mockLikeActivity.mockResolvedValue({
+            rating_event_id: 9,
+            like_count: null,
+            liked_by_viewer: true,
+        })
+        mockListMyFeed.mockResolvedValue({
+            events: [{ ...feedEvent, like_count: null }],
+            next_cursor: null,
+        })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("activity-like-button-9")).toBeTruthy()
+        })
+        expect(screen.queryByTestId("activity-like-count-9")).toBeNull()
+
+        fireEvent.press(screen.getByTestId("activity-like-button-9"))
+
+        expect(screen.getByTestId("activity-like-button-9").props.accessibilityState.selected).toBe(true)
+        expect(screen.queryByTestId("activity-like-count-9")).toBeNull()
+        expect(mockNavigate).not.toHaveBeenCalledWith("ActivityLikers", expect.anything())
+    })
+
+    it("opens the likers list from a visible feed activity count", async () => {
+        mockListMyFeed.mockResolvedValue({
+            events: [feedEvent],
+            next_cursor: null,
+        })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("activity-like-count-9")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("activity-like-count-9"))
+
+        expect(mockNavigate).toHaveBeenCalledWith("ActivityLikers", { ratingEventId: 9 })
+    })
+
+    it("opens hide-like-counts from own feed card options", async () => {
+        const ownEvent: FeedEvent = {
+            ...feedEvent,
+            id: 12,
+            actor_profile: {
+                ...feedEvent.actor_profile,
+                user_id: 2,
+                username: "jason",
+                display_name: "Jason",
+            },
+        }
+        mockListMyFeed.mockResolvedValue({
+            events: [ownEvent],
+            next_cursor: null,
+        })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-options-12")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("feed-options-12"))
+
+        expect(screen.getByTestId("feed-like-privacy-panel-12")).toBeTruthy()
+        fireEvent.press(screen.getByTestId("feed-hide-like-counts-12"))
+
+        await waitFor(() => {
+            expect(mockUpdateLikePrivacy).toHaveBeenCalledWith(true, "test-token")
+            expect(mockRefreshProfile).toHaveBeenCalled()
         })
     })
 

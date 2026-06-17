@@ -28,6 +28,7 @@ export type RankingsStackParamList = {
 type SocialScreenParams = {
     OtherProfile: { username: string };
     ProfileList: { username: string; listType: "followers" | "following" };
+    ActivityLikers: { ratingEventId: number };
 }
 
 export type FeedStackParamList = SocialScreenParams & {
@@ -49,6 +50,7 @@ export type AppStackParamList = {
     SongDetail: { ranking: RankingResponse } | { song: SongSearchResult };
     OtherProfile: { username: string };
     ProfileList: { username: string; listType: "followers" | "following" };
+    ActivityLikers: { ratingEventId: number };
     Settings: undefined;
     Privacy: undefined;
     BlockedUsers: undefined;

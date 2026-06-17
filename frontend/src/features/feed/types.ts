@@ -9,6 +9,8 @@ export type FeedEvent = {
     new_bucket: "like" | "alright" | "dislike";
     new_score: number;
     note: string | null;
+    like_count: number | null;
+    liked_by_viewer: boolean;
     created_at: string;
     actor_profile: ProfileBase;
     song: PersistedSong;

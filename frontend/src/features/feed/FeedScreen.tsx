@@ -2,7 +2,10 @@
 import { useCallback, useEffect, useState } from "react"
 import {
     ActivityIndicator,
+    Dimensions,
     Image,
+    Modal,
+    Pressable,
     ScrollView,
     StyleSheet,
     Text,
@@ -10,6 +13,7 @@ import {
     TouchableOpacity,
     View,
 } from "react-native"
+import type { GestureResponderEvent } from "react-native"
 import { FlashList } from "@shopify/flash-list"
 import { CompositeNavigationProp, useNavigation } from "@react-navigation/native"
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
@@ -20,6 +24,8 @@ import { ApiError } from "../../api/client"
 import { AppStackParamList, FeedStackParamList, TabParamList } from "../../navigation/types"
 import { colors, fonts, bucketColor } from "../../theme"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
+import ActivityLikeButton from "../activity/ActivityLikeButton"
+import { updateLikePrivacy } from "../activity/apiRequests"
 import { useAuth } from "../auth/AuthContext"
 import { ReportReason } from "../profile/types"
 import { RankingResponse } from "../comparison/types"
@@ -36,6 +42,9 @@ type FeedNavigation = CompositeNavigationProp<
 >
 
 const DAY_ABBRS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
+
+// Width of the activity-options popover that springs from the "···" button.
+const LIKE_MENU_WIDTH = 236
 
 const REPORT_REASONS: readonly { value: ReportReason; label: string }[] = [
     { value: "harassment", label: "Harassment" },
@@ -108,6 +117,28 @@ function LockIcon({ color, size = 14 }: { color: string; size?: number }) {
     )
 }
 
+function EyeOffIcon({ color, size = 16 }: { color: string; size?: number }) {
+    return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+            stroke={color} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
+            <Path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+            <Path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+            <Path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+            <Path d="M2 2l20 20" />
+        </Svg>
+    )
+}
+
+function EyeIcon({ color, size = 16 }: { color: string; size?: number }) {
+    return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+            stroke={color} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
+            <Path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
+            <Circle cx={12} cy={12} r={3} />
+        </Svg>
+    )
+}
+
 function SearchIcon() {
     return (
         <Svg width={16} height={16} viewBox="0 0 24 24" fill="none"
@@ -133,6 +164,11 @@ export default function FeedScreen() {
     const [isReporting, setIsReporting] = useState(false)
     const [reportedEventId, setReportedEventId] = useState<number | null>(null)
     const [reportError, setReportError] = useState<string | null>(null)
+    const [likePrivacyEventId, setLikePrivacyEventId] = useState<number | null>(null)
+    const [likePrivacyAnchor, setLikePrivacyAnchor] = useState<{ top: number; right: number } | null>(null)
+    const [isSavingLikePrivacy, setIsSavingLikePrivacy] = useState(false)
+    const [likePrivacyError, setLikePrivacyError] = useState<string | null>(null)
+    const [hideLikeCounts, setHideLikeCounts] = useState(profile?.hide_like_counts ?? false)
     const [error, setError] = useState<string | null>(null)
     const [friendsCardDismissed, setFriendsCardDismissed] = useState(false)
 
@@ -219,12 +255,64 @@ export default function FeedScreen() {
         setReportedEventId(null)
     }
 
+    const openActivityLikers = (ratingEventId: number) => {
+        navigation.navigate("ActivityLikers", { ratingEventId })
+    }
+
+    const toggleLikePrivacyMenu = (eventId: number, event?: GestureResponderEvent) => {
+        if (isSavingLikePrivacy) return
+        // Tapping the same row's "···" again closes the open menu.
+        if (likePrivacyEventId === eventId) {
+            setLikePrivacyEventId(null)
+            return
+        }
+        // Anchor the popover to where the "···" was tapped so it appears to spring from the button.
+        const { width, height } = Dimensions.get("window")
+        const pageX = event?.nativeEvent?.pageX ?? width - 24
+        const pageY = event?.nativeEvent?.pageY ?? 240
+        const right = Math.min(Math.max(width - pageX, 12), Math.max(12, width - LIKE_MENU_WIDTH - 12))
+        const top = Math.min(pageY + 12, height - 200)
+        setReportingEventId(null)
+        setReportError(null)
+        setLikePrivacyError(null)
+        setLikePrivacyAnchor({ top, right })
+        setLikePrivacyEventId(eventId)
+    }
+
+    const closeLikePrivacyMenu = () => {
+        if (isSavingLikePrivacy) return
+        setLikePrivacyEventId(null)
+        setLikePrivacyError(null)
+    }
+
     const closeReport = () => {
         if (isReporting) return
         setReportingEventId(null)
         setReportReason(null)
         setReportDetails("")
         setReportError(null)
+    }
+
+    const toggleLikePrivacy = async () => {
+        if (!token || isSavingLikePrivacy) return
+        const nextValue = !hideLikeCounts
+        setIsSavingLikePrivacy(true)
+        setLikePrivacyError(null)
+        try {
+            const updated = await updateLikePrivacy(nextValue, token)
+            setHideLikeCounts(updated.hide_like_counts)
+            await refreshProfile()
+        } catch (err) {
+            if (err instanceof ApiError) {
+                setLikePrivacyError(err.detail)
+            } else if (err instanceof Error) {
+                setLikePrivacyError(err.message)
+            } else {
+                setLikePrivacyError("Could not update like privacy.")
+            }
+        } finally {
+            setIsSavingLikePrivacy(false)
+        }
     }
 
     const submitReport = async (eventId: number) => {
@@ -852,22 +940,25 @@ export default function FeedScreen() {
                 {/* Action row */}
                 <View style={styles.actionRow}>
                     <View style={styles.actionBtns}>
-                        <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
-                            <Svg width={14} height={14} viewBox="0 0 24 24">
-                                <Path
-                                    d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
-                                    fill={colors.accent}
-                                />
-                            </Svg>
-                            <Svg width={12} height={12} viewBox="0 0 24 24" style={{ marginLeft: 3 }}>
-                                <Path
-                                    d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
-                                    fill={colors.gold}
-                                />
-                            </Svg>
-                        </TouchableOpacity>
+                        <ActivityLikeButton
+                            ratingEventId={item.id}
+                            initialLikedByViewer={item.liked_by_viewer}
+                            initialLikeCount={item.like_count}
+                            onOpenLikers={openActivityLikers}
+                        />
                     </View>
-                    {!isOwnEvent && (
+                    {isOwnEvent ? (
+                        <TouchableOpacity
+                            style={styles.moreBtn}
+                            onPress={(e) => toggleLikePrivacyMenu(item.id, e)}
+                            disabled={isSavingLikePrivacy}
+                            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                            accessibilityLabel="Activity options"
+                            testID={`feed-options-${item.id}`}
+                        >
+                            <Text style={styles.moreDots}>···</Text>
+                        </TouchableOpacity>
+                    ) : (
                         <TouchableOpacity
                             style={styles.moreBtn}
                             onPress={() => item.note !== null && !reportingEventId && openReport(item.id)}
@@ -886,11 +977,66 @@ export default function FeedScreen() {
         return <ActivityIndicator color={colors.accent} style={styles.footerSpinner} />
     }
 
+    // Popover menu that springs from the "···" button on your own activity cards.
+    // Only own events open it, so its single option is the like-count privacy toggle.
+    const renderLikePrivacyMenu = () => {
+        if (likePrivacyEventId === null || likePrivacyAnchor === null) return null
+        return (
+            <Modal
+                visible
+                transparent
+                animationType="fade"
+                onRequestClose={closeLikePrivacyMenu}
+            >
+                <Pressable style={styles.menuBackdrop} onPress={closeLikePrivacyMenu}>
+                    <View
+                        style={[styles.menuCard, { top: likePrivacyAnchor.top, right: likePrivacyAnchor.right }]}
+                        onStartShouldSetResponder={() => true}
+                        testID={`feed-like-privacy-panel-${likePrivacyEventId}`}
+                    >
+                        <Text style={styles.menuHeader}>ACTIVITY OPTIONS</Text>
+                        <TouchableOpacity
+                            style={styles.menuItem}
+                            onPress={toggleLikePrivacy}
+                            disabled={isSavingLikePrivacy}
+                            testID={`feed-hide-like-counts-${likePrivacyEventId}`}
+                        >
+                            <View style={styles.menuItemIcon}>
+                                {hideLikeCounts
+                                    ? <EyeIcon color={colors.ink} />
+                                    : <EyeOffIcon color={colors.ink} />}
+                            </View>
+                            <View style={styles.menuItemText}>
+                                <Text style={styles.menuItemLabel}>
+                                    {isSavingLikePrivacy
+                                        ? "Saving…"
+                                        : hideLikeCounts ? "Show like counts" : "Hide like counts"}
+                                </Text>
+                                <Text style={styles.menuItemSub}>
+                                    {hideLikeCounts
+                                        ? "Hidden from others right now"
+                                        : "Others can see who liked this"}
+                                </Text>
+                            </View>
+                        </TouchableOpacity>
+                        {likePrivacyError !== null && (
+                            <Text style={styles.menuError}>{likePrivacyError}</Text>
+                        )}
+                    </View>
+                </Pressable>
+            </Modal>
+        )
+    }
+
     // Load on mount and reload when the Feed tab regains focus from another tab.
     // Deliberately not useFocusEffect: that also fires when popping back from a
     // screen pushed on the Feed stack (a user's profile, a follow list), and the
     // mid-transition reload visibly yanks the list to the top before the scroll
     // position settles back.
+    useEffect(() => {
+        setHideLikeCounts(profile?.hide_like_counts ?? false)
+    }, [profile?.hide_like_counts])
+
     useEffect(() => {
         loadFeed(null, true)
         refreshProfile()
@@ -1027,6 +1173,7 @@ export default function FeedScreen() {
                 contentContainerStyle={styles.listContent}
                 ItemSeparatorComponent={null}
             />
+            {renderLikePrivacyMenu()}
         </View>
     )
 }
@@ -1342,6 +1489,74 @@ const styles = StyleSheet.create({
         fontSize: 9.5,
         letterSpacing: 0.5,
         marginBottom: 8,
+    },
+    // ── Activity options popover (springs from the "···") ──────────────────
+    menuBackdrop: {
+        flex: 1,
+        backgroundColor: "rgba(22,20,19,0.18)",
+    },
+    menuCard: {
+        position: "absolute",
+        width: LIKE_MENU_WIDTH,
+        backgroundColor: colors.paper,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: colors.line,
+        padding: 8,
+        shadowColor: colors.ink,
+        shadowOpacity: 0.18,
+        shadowRadius: 18,
+        shadowOffset: { width: 0, height: 8 },
+        elevation: 8,
+    },
+    menuHeader: {
+        fontFamily: fonts.mono,
+        fontSize: 8.5,
+        letterSpacing: 1.4,
+        color: colors.inkDim,
+        fontWeight: "700",
+        paddingHorizontal: 8,
+        paddingTop: 4,
+        paddingBottom: 7,
+    },
+    menuItem: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 11,
+        paddingVertical: 8,
+        paddingHorizontal: 8,
+        borderRadius: 10,
+    },
+    menuItemIcon: {
+        width: 32,
+        height: 32,
+        borderRadius: 9,
+        backgroundColor: colors.bg,
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+    },
+    menuItemText: {
+        flex: 1,
+        minWidth: 0,
+    },
+    menuItemLabel: {
+        fontSize: 13.5,
+        color: colors.ink,
+        fontWeight: "600",
+    },
+    menuItemSub: {
+        fontSize: 11,
+        color: colors.inkDim,
+        marginTop: 1,
+    },
+    menuError: {
+        color: colors.danger,
+        fontSize: 12,
+        lineHeight: 16,
+        paddingHorizontal: 8,
+        paddingTop: 4,
+        paddingBottom: 2,
     },
     reasonGrid: {
         flexDirection: "row",

@@ -44,6 +44,7 @@ export type Profile = ProfileBase & {
     is_own_profile: boolean;
     can_view_taste: boolean;
     is_blocked: boolean;
+    hide_like_counts: boolean;
     user_stats: UserStats | null;
     // Taste similarity with the viewer; populated on user search results.
     similarity_score?: number | null;
@@ -175,6 +176,8 @@ export type RecentRatingItem = {
     bucket: string;
     score: number;
     note: string | null;
+    like_count: number | null;
+    liked_by_viewer: boolean;
     created_at: string;
 }
 

@@ -20,6 +20,7 @@ import {
     RankingsStackParamList,
     TabParamList,
 } from "./types"
+import ActivityLikersScreen from "../features/activity/ActivityLikersScreen"
 import BucketSelectionScreen from "../features/comparison/BucketSelectionScreen"
 import ComparisonFlowScreen from "../features/comparison/ComparisonFlowScreen"
 import ScoreRevealScreen from "../features/comparison/ScoreRevealScreen"
@@ -219,6 +220,7 @@ function FeedNavigator() {
             <FeedStack.Screen name="FeedHome" component={FeedScreen} />
             <FeedStack.Screen name="OtherProfile" component={OtherProfileScreen} />
             <FeedStack.Screen name="ProfileList" component={ProfileListScreen} />
+            <FeedStack.Screen name="ActivityLikers" component={ActivityLikersScreen} />
         </FeedStack.Navigator>
     )
 }
@@ -229,6 +231,7 @@ function DiscoverNavigator() {
             <DiscoverStack.Screen name="DiscoverHome" component={DiscoverScreen} />
             <DiscoverStack.Screen name="OtherProfile" component={OtherProfileScreen} />
             <DiscoverStack.Screen name="ProfileList" component={ProfileListScreen} />
+            <DiscoverStack.Screen name="ActivityLikers" component={ActivityLikersScreen} />
         </DiscoverStack.Navigator>
     )
 }
@@ -239,6 +242,7 @@ function ProfileNavigator() {
             <ProfileStack.Screen name="ProfileHome" component={ProfileScreen} />
             <ProfileStack.Screen name="OtherProfile" component={OtherProfileScreen} />
             <ProfileStack.Screen name="ProfileList" component={ProfileListScreen} />
+            <ProfileStack.Screen name="ActivityLikers" component={ActivityLikersScreen} />
         </ProfileStack.Navigator>
     )
 }
@@ -269,6 +273,7 @@ export default function AppNavigator() {
             <Stack.Screen name="SongDetail" component={SongDetailScreen} />
             <Stack.Screen name="OtherProfile" component={OtherProfileScreen} />
             <Stack.Screen name="ProfileList" component={ProfileListScreen} />
+            <Stack.Screen name="ActivityLikers" component={ActivityLikersScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} />
             <Stack.Screen name="Privacy" component={PrivacyScreen} />
             <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} />

@@ -12,6 +12,7 @@ import { AppStackParamList } from "../../navigation/types"
 import { bucketColor } from "../../theme"
 import { avatarColorToken, colors, fonts } from "../../theme"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
+import ActivityLikeButton from "../activity/ActivityLikeButton"
 import { useAuth } from "../auth/AuthContext"
 import {
     getMostCompatible, getMyAuxstrology, getMyProfile, getMyRecentRatings, getMyTasteProfile,
@@ -61,6 +62,9 @@ export default function ProfileScreen() {
     const openBookmarks = () => navigation.navigate("Bookmarks")
     const openRatings = () =>
         navigation.navigate("MainTabs", { screen: "Rankings", params: { screen: "FullRankings" } })
+    const openActivityLikers = (ratingEventId: number) => {
+        navigation.navigate("ActivityLikers", { ratingEventId })
+    }
 
     useFocusEffect(
         useCallback(() => {
@@ -555,6 +559,15 @@ export default function ProfileScreen() {
                                                 "{item.note}"
                                             </Text>
                                         )}
+                                        <View style={styles.actActions}>
+                                            <ActivityLikeButton
+                                                ratingEventId={item.rating_event_id}
+                                                initialLikedByViewer={item.liked_by_viewer}
+                                                initialLikeCount={item.like_count}
+                                                onOpenLikers={openActivityLikers}
+                                                compact
+                                            />
+                                        </View>
                                     </TouchableOpacity>
                                 )
                             })}
@@ -1137,6 +1150,10 @@ const styles = StyleSheet.create({
         color: colors.inkSoft,
         lineHeight: 17,
         marginTop: 11,
+    },
+    actActions: {
+        alignItems: "flex-start",
+        marginTop: 10,
     },
 })
 

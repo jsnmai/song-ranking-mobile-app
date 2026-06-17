@@ -3,16 +3,24 @@ import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { bucketColor } from "../../theme"
 import { colors, fonts } from "../../theme"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
+import ActivityLikeButton from "../activity/ActivityLikeButton"
 import { RecentRatingItem } from "./types"
 
 type Props = {
     ratings: RecentRatingItem[] | null;
     isLoading: boolean;
     onItemPress: (item: RecentRatingItem) => void;
+    onOpenLikers?: (ratingEventId: number) => void;
     title?: string;
 }
 
-export default function RecentRatingsModule({ ratings, isLoading, onItemPress, title = "Your Recent Ratings" }: Props) {
+export default function RecentRatingsModule({
+    ratings,
+    isLoading,
+    onItemPress,
+    onOpenLikers,
+    title = "Your Recent Ratings",
+}: Props) {
     const items = ratings?.slice(0, 3) ?? []
 
     if (isLoading || items.length === 0) return null
@@ -49,7 +57,16 @@ export default function RecentRatingsModule({ ratings, isLoading, onItemPress, t
                                     {item.song.title.toUpperCase()} · {item.song.artist.toUpperCase()} · {when}
                                 </Text>
                             </View>
-                            <Text style={[styles.score, { color: col }]}>{item.score.toFixed(1)}</Text>
+                            <View style={styles.side}>
+                                <Text style={[styles.score, { color: col }]}>{item.score.toFixed(1)}</Text>
+                                <ActivityLikeButton
+                                    ratingEventId={item.rating_event_id}
+                                    initialLikedByViewer={item.liked_by_viewer}
+                                    initialLikeCount={item.like_count}
+                                    onOpenLikers={onOpenLikers}
+                                    compact
+                                />
+                            </View>
                         </TouchableOpacity>
                     )
                 })}
@@ -122,7 +139,12 @@ const styles = StyleSheet.create({
     score: {
         fontFamily: fonts.display,
         fontSize: 15,
-        letterSpacing: -0.2,
+        letterSpacing: 0,
+        flexShrink: 0,
+    },
+    side: {
+        alignItems: "flex-end",
+        gap: 5,
         flexShrink: 0,
     },
 })
