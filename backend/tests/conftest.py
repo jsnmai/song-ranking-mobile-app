@@ -22,6 +22,7 @@ import src.sqlalchemy_tables.bookmark  # noqa: F401 — registers Bookmark with 
 import src.sqlalchemy_tables.song  # noqa: F401 — registers Song with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.user  # noqa: F401 — registers User with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.user_similarity_snapshot  # noqa: F401 — registers UserSimilaritySnapshot with Base.metadata so create_all() creates the table
+import src.sqlalchemy_tables.user_streak  # noqa: F401 — registers UserStreak with Base.metadata so create_all() creates the table
 
 # Add a new import here each time a new model file is created.
 from main import app

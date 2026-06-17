@@ -1,6 +1,6 @@
 # Integration tests for authenticated account deletion.
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi.testclient import TestClient
 from sqlalchemy import func, or_, select
@@ -21,6 +21,7 @@ from src.sqlalchemy_tables.report import Report
 from src.sqlalchemy_tables.song import Song
 from src.sqlalchemy_tables.user import User
 from src.sqlalchemy_tables.user_similarity_snapshot import UserSimilaritySnapshot
+from src.sqlalchemy_tables.user_streak import UserStreak
 
 
 def _register(
@@ -377,6 +378,10 @@ def test_account_deletion_leaves_no_user_owned_orphans(
 
     db_session.add_all([
         Ranking(user_id=deleting_id, song_id=song_a.id, bucket="like", position=1, score=9.0),
+        UserStreak(
+            user_id=deleting_id, current_streak=3, longest_streak=5,
+            anchor_date=date(2026, 6, 1), last_active_date=date(2026, 6, 15),
+        ),
         Bookmark(user_id=deleting_id, song_id=song_b.id, source="song_detail"),
         # Likes: one the deleting user authored, one ON the deleting user's own event.
         Like(user_id=deleting_id, rating_event_id=deleting_event.id),
@@ -436,6 +441,7 @@ def test_account_deletion_leaves_no_user_owned_orphans(
     # (3 + 4) Explicit-delete + CASCADE tables retain nothing referencing the deleted user.
     assert _count_user_rows(db_session, Ranking, deleting_id) == 0
     assert _count_user_rows(db_session, RatingEvent, deleting_id) == 0
+    assert _count_user_rows(db_session, UserStreak, deleting_id) == 0
     assert _count_user_rows(db_session, Bookmark, deleting_id) == 0
     assert _count_user_rows(db_session, Comparison, deleting_id) == 0
     assert _count_user_rows(db_session, ComparisonSession, deleting_id) == 0

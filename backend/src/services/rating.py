@@ -44,6 +44,7 @@ from src.pydantic_schemas.rating import (
 )
 from src.pydantic_schemas.song import SongResponse
 from src.services.access import can_view_profile, can_view_taste
+from src.services.streak import record_rating_activity
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
 from src.sqlalchemy_tables.song import Song
@@ -125,7 +126,14 @@ def finalize_rating(
         db.rollback()
         raise
 
-    return build_rating_finalize_response(finalized_rating)
+    response = build_rating_finalize_response(finalized_rating)
+    # Best-effort, post-commit: this counts the rating toward the weekly streak.
+    # It is fully guarded internally and must never affect the committed rating.
+    record_rating_activity(
+        db,
+        user_id,
+    )
+    return response
 
 
 def persist_finalized_rating(

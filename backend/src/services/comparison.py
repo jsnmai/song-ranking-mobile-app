@@ -36,6 +36,7 @@ from src.services.rating import (
     persist_finalized_rating,
     refresh_finalized_rating,
 )
+from src.services.streak import record_rating_activity
 from src.sqlalchemy_tables.comparison_session import ComparisonSession
 from src.sqlalchemy_tables.ranking import Ranking
 
@@ -377,9 +378,16 @@ def finalize_comparison_session(
         db.rollback()
         raise
 
-    return ComparisonSessionFinalizeResponse(
+    response = ComparisonSessionFinalizeResponse(
         result=build_rating_finalize_response(finalized_rating),
     )
+    # Best-effort, post-commit: count the comparison-finalized rating toward the
+    # weekly streak. Guarded internally so it can never affect the committed rating.
+    record_rating_activity(
+        db,
+        user_id,
+    )
+    return response
 
 
 def cancel_comparison_session(

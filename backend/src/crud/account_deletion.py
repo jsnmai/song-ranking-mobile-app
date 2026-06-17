@@ -13,6 +13,7 @@ from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
 from src.sqlalchemy_tables.bookmark import Bookmark
 from src.sqlalchemy_tables.user_similarity_snapshot import UserSimilaritySnapshot
+from src.sqlalchemy_tables.user_streak import UserStreak
 
 
 def list_ranked_song_ids_for_user(
@@ -48,14 +49,19 @@ def delete_taste_history_for_user(
     db: Session,
     user_id: int,
 ) -> None:
-    """Remove row-level likes, Bookmarks, rankings, rating events, comparisons, and sessions.
+    """Remove row-level likes, streaks, Bookmarks, rankings, rating events, comparisons, and sessions.
 
     Likes the user authored are removed here; likes *on* the user's events are cleared by the
-    rating_events delete below (FK ondelete=CASCADE).
+    rating_events delete below (FK ondelete=CASCADE). The streak row is a per-user cache and is
+    dropped outright.
     """
     db.execute(
         delete(Like)
         .where(Like.user_id == user_id)
+    )
+    db.execute(
+        delete(UserStreak)
+        .where(UserStreak.user_id == user_id)
     )
     db.execute(
         delete(Bookmark)

@@ -47,6 +47,7 @@ from src.pydantic_schemas.bookmarks import BookmarkListResponse, BookmarkRespons
 from src.services.access import can_view_profile, can_view_taste
 from src.services.access import is_plus as check_is_plus
 from src.services.rating import build_ranking_response
+from src.services.streak import get_streak_state
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.user import User
 from src.sqlalchemy_tables.user_similarity_snapshot import UserSimilaritySnapshot
@@ -114,14 +115,17 @@ def _build_profile_summary(
         )
     )
     taste_visible = can_view_taste(db, current_user_id, profile)
-    user_stats = (
-        UserStats(
+    user_stats = None
+    if taste_visible:
+        # Streak rides on the taste-gated stats block, so it inherits the profile's
+        # visibility rules (public / friends-only / only-me) with no separate gate.
+        streak = get_streak_state(db, profile)
+        user_stats = UserStats(
             rated_count=count_user_rankings(db, profile.user_id),
             bookmarked_count=count_user_bookmarks(db, profile.user_id),
+            current_streak=streak.current_streak,
+            longest_streak=streak.longest_streak,
         )
-        if taste_visible
-        else None
-    )
     return ProfileSummaryResponse(
         **base.model_dump(),
         follower_count=count_followers(

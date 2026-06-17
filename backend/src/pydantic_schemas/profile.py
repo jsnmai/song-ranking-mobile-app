@@ -194,10 +194,15 @@ class ProfileResponse(BaseModel):
 
 
 class UserStats(BaseModel):
-    """Rated and bookmarked counts, shown when the viewer can see taste data."""
+    """Rated/bookmarked counts and weekly streak, shown when the viewer can see taste data."""
 
     rated_count: int
     bookmarked_count: int
+    # Weekly-rating streak. current_streak is decayed to "now" at read time, so a
+    # lapsed streak reads as 0 without any write. Visible per profile visibility:
+    # populated only on this taste-gated stats block.
+    current_streak: int = 0
+    longest_streak: int = 0
 
 
 class ProfileSummaryResponse(ProfileResponse):
