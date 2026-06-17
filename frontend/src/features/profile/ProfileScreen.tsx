@@ -155,7 +155,7 @@ export default function ProfileScreen() {
             <View style={styles.header}>
                 <View style={styles.headerTop}>
                     <View>
-                        <Text style={styles.kicker}>TUNED IN</Text>
+                        <Text style={styles.kicker}>LISTENING PROFILE</Text>
                         <Text style={styles.heading}>You</Text>
                     </View>
                     <View style={styles.headerActions}>
@@ -402,7 +402,7 @@ export default function ProfileScreen() {
                         </View>
                     )}
 
-                    {/* 2-col: Your Buckets + Your Stats */}
+                    {/* Your Buckets */}
                     <View style={styles.twoColRow}>
                         <View style={styles.twoColCard}>
                             <Text style={styles.twoColKicker}>YOUR BUCKETS</Text>
@@ -414,7 +414,7 @@ export default function ProfileScreen() {
                                 const pct = isNew ? 0 : (count / bucketTotal) * 100
                                 return (
                                     <View key={label} style={styles.bucketRow}>
-                                        <Text style={styles.bucketLabel}>{label}</Text>
+                                        <Text style={styles.bucketLabel} numberOfLines={1}>{label}</Text>
                                         <View style={styles.bucketBarTrack}>
                                             {pct > 0 && (
                                                 <View
@@ -429,30 +429,6 @@ export default function ProfileScreen() {
                                     </View>
                                 )
                             })}
-                        </View>
-
-                        <View style={styles.twoColCard}>
-                            <Text style={styles.twoColKicker}>YOUR STATS</Text>
-                            <View style={styles.statStack}>
-                                <View>
-                                    <Text
-                                        style={[
-                                            styles.bigStatNum,
-                                            (isNew || !taste?.avg_score) && { color: colors.inkDim },
-                                        ]}
-                                    >
-                                        {isNew || !taste?.avg_score
-                                            ? "–"
-                                            : taste.avg_score.toFixed(1)}
-                                    </Text>
-                                    <Text style={styles.bigStatLbl}>AVG SCORE</Text>
-                                </View>
-                                <View style={styles.statStackDivider} />
-                                <View>
-                                    <Text style={[styles.bigStatNum, { color: colors.inkDim }]}>–</Text>
-                                    <Text style={styles.bigStatLbl}>VS CROWD</Text>
-                                </View>
-                            </View>
                         </View>
                     </View>
 
@@ -977,7 +953,8 @@ const styles = StyleSheet.create({
         fontFamily: fonts.mono,
         fontSize: 9,
         color: colors.inkSoft,
-        width: 36,
+        // Wide enough for "Dislike" (7 mono chars) so the trailing "e" never wraps.
+        width: 44,
     },
     bucketBarTrack: {
         flex: 1,
@@ -996,27 +973,6 @@ const styles = StyleSheet.create({
         color: colors.inkDim,
         width: 18,
         textAlign: "right",
-    },
-    statStack: {
-        flex: 1,
-        gap: 8,
-    },
-    bigStatNum: {
-        fontFamily: fonts.display,
-        fontSize: 26,
-        color: colors.ink,
-        letterSpacing: -0.5,
-        lineHeight: 28,
-    },
-    bigStatLbl: {
-        fontFamily: fonts.mono,
-        fontSize: 8,
-        color: colors.inkDim,
-        letterSpacing: 1.2,
-    },
-    statStackDivider: {
-        height: StyleSheet.hairlineWidth,
-        backgroundColor: colors.line,
     },
     // ── Your Activity cards ───────────────────────────────────────────
     activityKicker: {

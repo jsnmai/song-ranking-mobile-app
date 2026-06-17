@@ -66,11 +66,10 @@ export function StreakDetailModal({
     longest: number
 }) {
     const active = weeks > 0
-    const weekWord = weeks === 1 ? "week" : "weeks"
     const longestWord = longest === 1 ? "week" : "weeks"
     return (
         <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-            <Pressable style={modalStyles.overlay} onPress={onClose}>
+            <Pressable style={modalStyles.overlay} onPress={onClose} testID="streak-modal-overlay">
                 <Pressable style={modalStyles.card} onPress={() => {}} testID="streak-detail-modal">
                     <View style={modalStyles.halo}>
                         <StreakFlame size={52} muted={!active} />
@@ -79,25 +78,18 @@ export function StreakDetailModal({
                         <>
                             <Text style={modalStyles.bigNum}>{weeks}</Text>
                             <Text style={modalStyles.label}>WEEK RATING STREAK</Text>
-                            <Text style={modalStyles.body}>
-                                You've rated at least one song every week for {weeks} {weekWord} straight.
-                                Keep the flame alive — rate something this week.
-                            </Text>
                             {longest > weeks && (
-                                <Text style={modalStyles.meta}>YOUR BEST · {longest} {longestWord.toUpperCase()}</Text>
+                                <Text style={modalStyles.metaActive}>YOUR BEST · {longest} {longestWord.toUpperCase()}</Text>
                             )}
-                            <Pressable style={modalStyles.primaryBtn} onPress={onClose} testID="streak-modal-done">
-                                <Text style={modalStyles.primaryBtnText}>Keep it going</Text>
-                            </Pressable>
                         </>
                     ) : (
                         <>
                             <Text style={modalStyles.title}>No streak yet</Text>
-                            <Text style={modalStyles.body}>
+                            <Text style={modalStyles.bodyEmpty}>
                                 Rate at least one song every week to start a rating streak.
                             </Text>
                             {longest > 0 && (
-                                <Text style={modalStyles.meta}>YOUR BEST SO FAR · {longest} {longestWord.toUpperCase()}</Text>
+                                <Text style={modalStyles.metaEmpty}>YOUR BEST SO FAR · {longest} {longestWord.toUpperCase()}</Text>
                             )}
                         </>
                     )}
@@ -318,13 +310,14 @@ const modalStyles = StyleSheet.create({
         justifyContent: "center",
         paddingHorizontal: 28,
     },
+    // Dark charcoal card matching the other-profile streak popover (STREAK_SURFACE).
     card: {
         width: "100%",
         maxWidth: 320,
-        backgroundColor: STREAK_SURFACE,
         borderRadius: 22,
         borderWidth: 1,
         borderColor: colors.cline,
+        backgroundColor: STREAK_SURFACE,
         paddingVertical: 28,
         paddingHorizontal: 24,
         alignItems: "center",
@@ -352,11 +345,20 @@ const modalStyles = StyleSheet.create({
     },
     label: {
         fontFamily: fonts.mono,
-        fontSize: 9,
-        letterSpacing: 2,
+        fontSize: 12.5,
+        letterSpacing: 1.5,
         fontWeight: "700",
-        color: "rgba(241,236,221,0.6)",
-        marginTop: 6,
+        // Gold, matching the Auxstrology kicker on the app's other dark card.
+        color: colors.gold,
+        marginTop: 8,
+    },
+    metaActive: {
+        fontFamily: fonts.mono,
+        fontSize: 11,
+        letterSpacing: 1,
+        fontWeight: "700",
+        color: "rgba(241,236,221,0.85)",
+        marginTop: 16,
     },
     title: {
         fontFamily: fonts.display,
@@ -365,7 +367,7 @@ const modalStyles = StyleSheet.create({
         color: colors.cream,
         marginTop: 2,
     },
-    body: {
+    bodyEmpty: {
         fontFamily: fonts.sans,
         fontSize: 13,
         lineHeight: 19,
@@ -374,28 +376,12 @@ const modalStyles = StyleSheet.create({
         marginTop: 12,
         paddingHorizontal: 4,
     },
-    meta: {
+    metaEmpty: {
         fontFamily: fonts.mono,
         fontSize: 9,
         letterSpacing: 1,
         fontWeight: "700",
         color: "rgba(241,236,221,0.55)",
         marginTop: 14,
-    },
-    primaryBtn: {
-        alignSelf: "stretch",
-        backgroundColor: "transparent",
-        borderWidth: 1.5,
-        borderColor: colors.cline,
-        borderRadius: 12,
-        paddingVertical: 13,
-        alignItems: "center",
-        marginTop: 22,
-    },
-    primaryBtnText: {
-        fontFamily: fonts.display,
-        fontSize: 14,
-        letterSpacing: -0.2,
-        color: colors.cream,
     },
 })

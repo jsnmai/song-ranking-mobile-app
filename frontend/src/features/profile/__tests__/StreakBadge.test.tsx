@@ -91,12 +91,20 @@ describe("OwnStreakChip", () => {
         expect(screen.queryByTestId("streak-modal-dismiss")).toBeNull()
     })
 
+    it("has no description or action button in the active state", () => {
+        render(<OwnStreakChip weeks={12} longest={20} />)
+        fireEvent.press(screen.getByTestId("streak-chip-button"))
+
+        expect(screen.queryByText(/You've rated at least one song/)).toBeNull()
+        expect(screen.queryByTestId("streak-modal-done")).toBeNull()
+    })
+
     it("closes the modal when the backdrop is pressed", () => {
         render(<OwnStreakChip weeks={12} longest={20} />)
         fireEvent.press(screen.getByTestId("streak-chip-button"))
         expect(screen.getByTestId("streak-detail-modal")).toBeTruthy()
 
-        fireEvent.press(screen.getByTestId("streak-modal-done"))
+        fireEvent.press(screen.getByTestId("streak-modal-overlay"))
         expect(screen.queryByTestId("streak-detail-modal")).toBeNull()
     })
 })
