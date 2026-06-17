@@ -559,7 +559,9 @@ const styles = StyleSheet.create({
     bucketWord: {
         fontFamily: fonts.display,
         fontSize: 48,
-        lineHeight: 44,
+        // lineHeight must clear the descender or the "y" in "Okay" clips; 44 cut
+        // it off. The container keeps its fixed 52 height, so layout is unchanged.
+        lineHeight: 56,
         letterSpacing: -1,
         color: colors.ink,
     },

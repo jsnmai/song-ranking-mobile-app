@@ -881,7 +881,9 @@ const styles = StyleSheet.create({
         fontFamily: fonts.display,
         fontSize: 30,
         letterSpacing: -0.6,
-        lineHeight: 29,
+        // lineHeight clears the display font's descender (kept consistent across
+        // all screen titles); 29 (< fontSize) clipped descenders like "g".
+        lineHeight: 36,
         color: colors.ink,
     },
     avatarCircle: {
