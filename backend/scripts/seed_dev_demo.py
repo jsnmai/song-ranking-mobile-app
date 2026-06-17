@@ -36,6 +36,7 @@ import src.sqlalchemy_tables.bookmark  # noqa: F401
 import src.sqlalchemy_tables.song  # noqa: F401
 import src.sqlalchemy_tables.user  # noqa: F401
 import src.sqlalchemy_tables.user_similarity_snapshot  # noqa: F401
+import src.sqlalchemy_tables.user_streak  # noqa: F401
 from scripts.demo_seed_data import (
     ALGORITHM_VERSION,
     ALLOWED_DB_HOSTS,
@@ -54,9 +55,11 @@ from scripts.demo_seed_data import (
     PRODUCTION_URL_DENYLIST,
     RANKINGS_BY_USERNAME,
     SONG_CATALOG,
+    STREAK_SPECS,
     RankingSeedSpec,
     event_created_at,
     feed_anchor_now,
+    streak_dates,
 )
 from src.core.config import settings
 from src.core.security import hash_password
@@ -79,6 +82,7 @@ from src.sqlalchemy_tables.bookmark import Bookmark
 from src.sqlalchemy_tables.song import Song
 from src.sqlalchemy_tables.user import User
 from src.sqlalchemy_tables.user_similarity_snapshot import UserSimilaritySnapshot
+from src.sqlalchemy_tables.user_streak import UserStreak
 
 logger = logging.getLogger(__name__)
 
@@ -305,6 +309,7 @@ def clear_demo_scoped_rows(
     db.execute(delete(RatingEvent).where(RatingEvent.user_id.in_(demo_user_ids)))
     db.execute(delete(Comparison).where(Comparison.user_id.in_(demo_user_ids)))
     db.execute(delete(Ranking).where(Ranking.user_id.in_(demo_user_ids)))
+    db.execute(delete(UserStreak).where(UserStreak.user_id.in_(demo_user_ids)))
     db.execute(delete(Bookmark).where(Bookmark.user_id.in_(demo_user_ids)))
     db.execute(
         delete(Block).where(
@@ -567,6 +572,29 @@ def recompute_aggregates(
         recompute_song_aggregates(db, song_id)
 
 
+def seed_streaks(
+    db: Session,
+    user_ids: dict[str, int],
+) -> None:
+    """Seed weekly streak rows so the profile streak UI has data on first load.
+
+    The seed writes user_streaks directly (it never calls the rating finalize
+    hook), so streaks are inserted as their derived local-date form.
+    """
+    for spec in STREAK_SPECS:
+        anchor_date, last_active_date = streak_dates(spec.current_streak)
+        db.add(
+            UserStreak(
+                user_id=user_ids[spec.username],
+                current_streak=spec.current_streak,
+                longest_streak=spec.longest_streak,
+                anchor_date=anchor_date,
+                last_active_date=last_active_date,
+            ),
+        )
+    db.flush()
+
+
 def seed_bookmarks(
     db: Session,
     user_ids: dict[str, int],
@@ -607,6 +635,7 @@ def seed_demo_data(db: Session) -> SeedResult:
     friend_score, opposite_score = seed_similarity_snapshots(db, user_ids)
     recompute_aggregates(db, touched_song_ids)
     seed_bookmarks(db, user_ids, song_ids)
+    seed_streaks(db, user_ids)
 
     db.commit()
     return SeedResult(

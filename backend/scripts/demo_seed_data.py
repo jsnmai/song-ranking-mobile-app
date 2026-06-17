@@ -1,6 +1,6 @@
 """Constants and layout for the local dev demo seed script."""
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 DEMO_PASSWORD = "demo1234"
 DEMO_EMAIL_DOMAIN = "@listn.demo"
@@ -491,3 +491,34 @@ def event_created_at(
 ) -> datetime:
     """Return a created_at offset from the feed anchor."""
     return anchor - timedelta(hours=hours_ago)
+
+
+@dataclass(frozen=True)
+class StreakSeedSpec:
+    """A demo user's weekly rating streak to display on the profile streak UI."""
+
+    username: str
+    current_streak: int
+    longest_streak: int
+
+
+# Weekly streaks for manual testing of the profile streak UI:
+# - demo_power has a long active streak (own-profile chip + detail modal).
+# - demo_friend is public, so it is visible to demo_power and exercises the
+#   other-profile streak badge + popover.
+STREAK_SPECS: tuple[StreakSeedSpec, ...] = (
+    StreakSeedSpec("demo_power", 7, 12),
+    StreakSeedSpec("demo_friend", 4, 4),
+)
+
+
+def streak_dates(current_streak: int) -> tuple[date, date]:
+    """Return (anchor_date, last_active_date) for a streak that is alive this week.
+
+    last_active_date is today so the read-time decay keeps the streak active
+    (gap 0); anchor_date is placed so the current run spans `current_streak`
+    personal weeks. Mirrors how services/streak.py stores local dates.
+    """
+    today = datetime.now(timezone.utc).date()
+    anchor = today - timedelta(days=7 * max(current_streak - 1, 0))
+    return anchor, today

@@ -396,6 +396,24 @@ def test_discovery_seed_bookmarked_state_present(
     assert bookmarked_item["is_bookmarked"] is True
 
 
+def test_seed_streaks_visible_on_own_and_other_profiles(
+    client,
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Seeded streaks show on demo_power's own profile and on public demo_friend's profile."""
+    _run_seed(db_session, monkeypatch)
+    token = _login(client, demo_email("demo_power"))
+    headers = {"Authorization": f"Bearer {token}"}
+
+    me = client.get("/api/v1/profile/me", headers=headers).json()
+    assert me["user_stats"]["current_streak"] == 7
+    assert me["user_stats"]["longest_streak"] == 12
+
+    friend = client.get("/api/v1/profile/demo_friend", headers=headers).json()
+    assert friend["user_stats"]["current_streak"] == 4
+
+
 def test_discovery_seed_is_idempotent(
     db_session,
     monkeypatch: pytest.MonkeyPatch,
