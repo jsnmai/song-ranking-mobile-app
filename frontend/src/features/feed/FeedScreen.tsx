@@ -374,6 +374,10 @@ export default function FeedScreen() {
 
     const renderRecentVerdict = () => {
         if (heroEvent === null) {
+            // While still getting started (rated < 10), the compact "Recent Verdicts" row in the
+            // UNLOCKING SOON list already represents the locked state — don't double up with a top
+            // teaser. Once rated >= 10 (no compact list), the full locked teaser shows here instead.
+            if (!gettingStartedComplete) return null
             // Locked teaser — shown until a followed user has a visible verdict.
             return (
                 <View style={styles.fvOuter}>
@@ -660,26 +664,30 @@ export default function FeedScreen() {
                 <Text style={styles.sectionLabel}>UNLOCKING SOON</Text>
             </View>
 
-            {/* Recent Verdicts row */}
-            <View style={[styles.miniRow, styles.miniRowNavy]}>
-                <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
-                    {ORBIT_STARS.slice(0, 10).map((s, i) => (
-                        <Circle key={i} cx={`${s.x}%`} cy={`${s.y}%`} r={s.r} fill="white" fillOpacity={s.o * 0.7} />
-                    ))}
-                </Svg>
-                <View style={styles.miniRowInner}>
-                    <View style={styles.miniLockCircle}>
-                        <LockIcon color={colors.cream} />
+            {/* Recent Verdicts compact teaser — only while it's still locked. Once a followed
+                verdict exists it is promoted to the full hero above, so "UNLOCKING SOON" then
+                heads only the modules below that are still locked. */}
+            {heroEvent === null && (
+                <View style={[styles.miniRow, styles.miniRowNavy]}>
+                    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+                        {ORBIT_STARS.slice(0, 10).map((s, i) => (
+                            <Circle key={i} cx={`${s.x}%`} cy={`${s.y}%`} r={s.r} fill="white" fillOpacity={s.o * 0.7} />
+                        ))}
+                    </Svg>
+                    <View style={styles.miniRowInner}>
+                        <View style={styles.miniLockCircle}>
+                            <LockIcon color={colors.cream} />
+                        </View>
+                        <View style={styles.miniRowText}>
+                            <Text style={styles.miniRowLabel} numberOfLines={1}>Recent Verdicts</Text>
+                            <Text style={[styles.miniRowSub, { color: colors.cdim }]} numberOfLines={1}>
+                                Friends' fresh ratings, front and center
+                            </Text>
+                        </View>
+                        <Text style={[styles.miniLockedTag, { color: colors.cdim }]}>LOCKED</Text>
                     </View>
-                    <View style={styles.miniRowText}>
-                        <Text style={styles.miniRowLabel} numberOfLines={1}>Recent Verdicts</Text>
-                        <Text style={[styles.miniRowSub, { color: colors.cdim }]} numberOfLines={1}>
-                            Friends' fresh ratings, front and center
-                        </Text>
-                    </View>
-                    <Text style={[styles.miniLockedTag, { color: colors.cdim }]}>LOCKED</Text>
                 </View>
-            </View>
+            )}
 
             {/* 2×2 grid */}
             <View style={styles.miniGridRow}>
@@ -1369,7 +1377,9 @@ const styles = StyleSheet.create({
         fontFamily: fonts.display,
         fontSize: 30,
         letterSpacing: -0.6,
-        lineHeight: 29,
+        // lineHeight clears the display font's descender (kept consistent across
+        // all screen titles); 29 (< fontSize) clipped descenders like "g".
+        lineHeight: 36,
         color: colors.ink,
     },
     avatarCircle: {

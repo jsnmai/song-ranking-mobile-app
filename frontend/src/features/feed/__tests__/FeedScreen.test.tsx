@@ -290,6 +290,49 @@ describe("FeedScreen", () => {
         expect(screen.getByText("Getting started")).toBeTruthy()
     })
 
+    it("drops the compact Recent Verdicts teaser from UNLOCKING SOON once the hero is unlocked", async () => {
+        // rated < 10 keeps the compact locked section, but with a followed verdict the hero is
+        // promoted to the top, so the redundant compact "Recent Verdicts" row is removed and
+        // "UNLOCKING SOON" heads only the modules still locked below it.
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 3, bookmarked_count: 0 },
+        }
+        mockListMyFeed.mockResolvedValue({
+            events: [feedEvent],
+            next_cursor: null,
+        })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-recent-verdict-9")).toBeTruthy()
+        })
+        expect(screen.getByText("UNLOCKING SOON")).toBeTruthy()
+        expect(screen.queryByText("Recent Verdicts")).toBeNull()
+    })
+
+    it("keeps the locked Recent Verdict only in the compact list while getting started", async () => {
+        // rated < 10 and no followed verdict: Recent Verdict is represented solely by the compact
+        // "Recent Verdicts" row in UNLOCKING SOON — no duplicate full locked teaser at the top.
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 3, bookmarked_count: 0 },
+        }
+        mockListMyFeed.mockResolvedValue({
+            events: [{ ...feedEvent, id: 31, actor_profile: { ...feedEvent.actor_profile, user_id: 2, username: "jason" } }],
+            next_cursor: null,
+        })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByText("UNLOCKING SOON")).toBeTruthy()
+        })
+        expect(screen.getByText("Recent Verdicts")).toBeTruthy()
+        expect(screen.queryByText("FOLLOW TO UNLOCK")).toBeNull()
+    })
+
     it("opens feed songs in unrated Song Detail when the current user has no ranking", async () => {
         mockListMyFeed.mockResolvedValue({
             events: [feedEvent],
