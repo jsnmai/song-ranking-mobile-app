@@ -27,6 +27,7 @@ import ScoreRevealScreen from "../features/comparison/ScoreRevealScreen"
 import FeedScreen from "../features/feed/FeedScreen"
 import RankingsScreen from "../features/rankings/RankingsScreen"
 import FullRankingsScreen from "../features/rankings/FullRankingsScreen"
+import RankMapScreen from "../features/rankings/rankmap/RankMapScreen"
 import ReorderScreen from "../features/rankings/ReorderScreen"
 import VersusHistoryScreen from "../features/rankings/VersusHistoryScreen"
 import DiscoverScreen from "../features/discover/DiscoverScreen"
@@ -108,6 +109,13 @@ function TabIcon({ name, color }: { name: TabIconName; color: string }) {
 function FrostedTabBar({ state, descriptors: _desc, navigation }: BottomTabBarProps) {
     const { bottom } = useSafeAreaInsets()
     const tabBarH = 56 + bottom
+    const focusedRoute = state.routes[state.index]
+    const nestedRouteIndex = focusedRoute.state?.index ?? 0
+    const nestedRouteName = focusedRoute.state?.routes?.[nestedRouteIndex]?.name
+
+    if (focusedRoute.name === "Rankings" && nestedRouteName === "RankMap") {
+        return null
+    }
 
     const tabDefs: Array<{ route: TabIconName; label: string }> = [
         { route: "Feed", label: "FEED" },
@@ -207,6 +215,14 @@ function RankingsNavigator() {
         <RankingsStack.Navigator screenOptions={{ headerShown: false }}>
             <RankingsStack.Screen name="RankingsOverview" component={RankingsScreen} />
             <RankingsStack.Screen name="FullRankings" component={FullRankingsScreen} />
+            {/* Swipe-back is disabled: the Rank Map captures horizontal drags to
+                pan the universe, so the edge-swipe pop gesture would fight it. The
+                in-screen back button is the only way out. */}
+            <RankingsStack.Screen
+                name="RankMap"
+                component={RankMapScreen}
+                options={{ gestureEnabled: false }}
+            />
         </RankingsStack.Navigator>
     )
 }

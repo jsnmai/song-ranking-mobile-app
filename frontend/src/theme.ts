@@ -30,6 +30,7 @@ export const colors = {
     navy2: "#0b0d14",
     cream: "#f1ecdd",   // text on navy surfaces
     cdim: "#79809a",    // dimmed text on navy
+    cline: "rgba(245,238,220,0.12)", // hairline border on navy surfaces
     // Legacy alias kept for screen migration
     clay: "#ff5a3c",
     sand: "#e7e1d4",

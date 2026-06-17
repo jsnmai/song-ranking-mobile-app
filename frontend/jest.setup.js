@@ -18,6 +18,7 @@ jest.mock('react-native-reanimated', () => {
         // Plain functions (not jest.fn) so jest.resetAllMocks() in test files
         // cannot wipe their implementations mid-suite
         useSharedValue: (v) => ({ value: v }),
+        useReducedMotion: () => false,
         useAnimatedStyle: () => ({}),
         useAnimatedRef: () => ({ current: null }),
         useAnimatedScrollHandler: () => ({}),
@@ -25,6 +26,7 @@ jest.mock('react-native-reanimated', () => {
         withTiming: (val) => val,
         withSpring: (val) => val,
         withDelay: (_d, val) => val,
+        withRepeat: (val) => val,
         withSequence: (...vals) => vals[0],
         runOnJS: (fn) => fn,
         cancelAnimation: () => {},

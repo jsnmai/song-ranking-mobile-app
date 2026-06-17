@@ -19,6 +19,9 @@ export type TabParamList = {
 export type RankingsStackParamList = {
     RankingsOverview: undefined;
     FullRankings: undefined;
+    // RankMap receives the already-loaded rankings as a snapshot so the immersive
+    // cosmos opens instantly (no second fetch) — mirrors how SongDetail takes a ranking.
+    RankMap: { rankings: RankingResponse[] };
 }
 
 // Social screens registered inside each tab's stack so the bottom tab bar

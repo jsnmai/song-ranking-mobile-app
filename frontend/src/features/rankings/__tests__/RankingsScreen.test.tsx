@@ -119,8 +119,8 @@ describe("RankingsScreen", () => {
         expect(mockNavigate).toHaveBeenCalledWith("FullRankings")
     })
 
-    it("navigates to SongDetail with the full ranking when an orbit song is tapped", async () => {
-        // Rank map unlocks at 10 songs; provide 10 to show the orbit.
+    it("opens the full Rank Map when the centered-sun preview card is tapped", async () => {
+        // Rank map unlocks at 10 songs; provide 10 to show the preview card.
         const tenRankings = Array.from({ length: 10 }, (_, i) => ({
             ...ranking,
             id: i + 1,
@@ -132,11 +132,11 @@ describe("RankingsScreen", () => {
         render(<RankingsScreen />)
 
         await waitFor(() => {
-            expect(screen.getByTestId("ranking-orbit-1")).toBeTruthy()
+            expect(screen.getByTestId("rank-map-preview")).toBeTruthy()
         })
-        fireEvent.press(screen.getByTestId("ranking-orbit-1"))
+        fireEvent.press(screen.getByTestId("rank-map-preview"))
 
-        expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking: tenRankings[0] })
+        expect(mockNavigate).toHaveBeenCalledWith("RankMap", { rankings: tenRankings })
     })
 
     it("renders the Versus History empty state and navigates via LOG link", async () => {

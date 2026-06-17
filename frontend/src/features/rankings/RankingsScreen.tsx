@@ -1,5 +1,5 @@
 // Rankings tab — shows the user's ranked songs sorted by score.
-import { useCallback, useState } from "react"
+import { ReactNode, useCallback, useEffect, useState } from "react"
 import {
     ActivityIndicator,
     Dimensions,
@@ -10,11 +10,19 @@ import {
     TouchableOpacity,
     View,
 } from "react-native"
+import Animated, {
+    Easing,
+    useAnimatedStyle,
+    useReducedMotion,
+    useSharedValue,
+    withRepeat,
+    withTiming,
+} from "react-native-reanimated"
 import { FlashList } from "@shopify/flash-list"
 import { CompositeNavigationProp, useFocusEffect, useNavigation } from "@react-navigation/native"
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
-import Svg, { Circle, Ellipse, Path } from "react-native-svg"
+import Svg, { Circle, Defs, LinearGradient, Path, RadialGradient, Rect, Stop } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
 import { AppStackParamList, RankingsStackParamList, TabParamList } from "../../navigation/types"
@@ -68,6 +76,24 @@ function makeStars(count: number) {
 }
 const STARS = makeStars(40)
 
+// The hero covers slowly drift around the sun (one full turn every 95s), matching
+// the design's living thumbnail. Fills the map so its center is the sun's center,
+// so a plain rotation orbits every cover around the #1. Honors reduced motion.
+function DriftLayer({ children }: { children: ReactNode }) {
+    const reduced = useReducedMotion()
+    const spin = useSharedValue(0)
+    useEffect(() => {
+        if (reduced) return
+        spin.value = withRepeat(withTiming(360, { duration: 95000, easing: Easing.linear }), -1, false)
+    }, [reduced, spin])
+    const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value}deg` }] }))
+    return (
+        <Animated.View style={[StyleSheet.absoluteFill, style]} pointerEvents="none">
+            {children}
+        </Animated.View>
+    )
+}
+
 export default function RankingsScreen() {
     const navigation = useNavigation<RankingsNavigation>()
     const { token, profile } = useAuth()
@@ -116,136 +142,145 @@ export default function RankingsScreen() {
     const handleReorderPress = () => navigation.navigate("Reorder")
     const handleVersusHistoryPress = () => navigation.navigate("VersusHistory")
     const handleFullRankingsPress = () => navigation.navigate("FullRankings")
+    const handleOpenRankMap = () => navigation.navigate("RankMap", { rankings })
     const handleRateFirstSong = () => navigation.navigate("Discover", { screen: "DiscoverHome", params: { focusSearch: true } })
 
+    // Centered-sun preview: your #1 cover is a glowing sun, a few hero covers
+    // ride two dashed orbit rings over a taste-colored aurora, and the whole
+    // card opens the full immersive Rank Map. (See design §13 "centered sun".)
     const renderRankMap = () => {
         const screenW = Dimensions.get("window").width
         const mapW = screenW - 28
-        const mapH = 148
+        const mapH = 168
         const cx = mapW / 2
         const cy = mapH / 2
-        const innerRx = mapW * 0.25
-        const innerRy = mapH * 0.34
-        const outerRx = mapW * 0.44
-        const outerRy = mapH * 0.46
+        const innerR = 40
+        const outerR = 64
 
-        const topRanking = rankings[0]
-        const topScore = topRanking ? topRanking.score.toFixed(1) : null
-
-        // Orbital positions: 2 on inner, up to 3 on outer
-        const innerAngles = [-Math.PI / 2, Math.PI * 0.6]
-        const outerAngles = [Math.PI * 0.1, Math.PI * 0.95, Math.PI * 1.55]
-
-        const orbitItems = [
-            ...rankings.slice(1, 3).map((r, i) => ({
-                ranking: r,
-                angle: innerAngles[i],
-                rx: innerRx, ry: innerRy,
-                size: 26,
-            })),
-            ...rankings.slice(3, 6).map((r, i) => ({
-                ranking: r,
-                angle: outerAngles[i],
-                rx: outerRx, ry: outerRy,
-                size: 20,
-            })),
-        ]
+        const top = rankings[0]
+        const heroes = [
+            { r: rankings[1], a: -0.6, ring: innerR, size: 28 },
+            { r: rankings[2], a: 2.5, ring: innerR, size: 28 },
+            { r: rankings[3], a: -2.3, ring: outerR, size: 22 },
+            { r: rankings[4], a: -0.2, ring: outerR, size: 22 },
+            { r: rankings[5], a: 1.4, ring: outerR, size: 22 },
+            { r: rankings[6], a: 3.0, ring: outerR, size: 22 },
+        ].filter((h): h is { r: RankingResponse; a: number; ring: number; size: number } => Boolean(h.r))
 
         return (
-            <View style={[styles.rankMap, { width: mapW, height: mapH }]}>
-                {/* SVG layer: stars + ellipses */}
-                <Svg
-                    width={mapW}
-                    height={mapH}
-                    style={StyleSheet.absoluteFill}
-                    pointerEvents="none"
-                >
+            <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={handleOpenRankMap}
+                accessibilityRole="button"
+                accessibilityLabel="Open Rank Map"
+                testID="rank-map-preview"
+                style={[styles.rankMap, { width: mapW, height: mapH }]}
+            >
+                {/* Background: starfield, taste aurora, sun halo, orbit rings */}
+                <Svg width={mapW} height={mapH} style={StyleSheet.absoluteFill} pointerEvents="none">
+                    <Defs>
+                        <RadialGradient id="rmHalo" cx={cx} cy={cy} r={72} gradientUnits="userSpaceOnUse">
+                            <Stop offset="0" stopColor={colors.gold} stopOpacity={0.38} />
+                            <Stop offset="0.42" stopColor={colors.gold} stopOpacity={0.1} />
+                            <Stop offset="1" stopColor={colors.gold} stopOpacity={0} />
+                        </RadialGradient>
+                        <RadialGradient id="rmAuroraLike" cx={cx - 34} cy={cy + 4} r={92} gradientUnits="userSpaceOnUse">
+                            <Stop offset="0" stopColor={colors.like} stopOpacity={0.22} />
+                            <Stop offset="1" stopColor={colors.like} stopOpacity={0} />
+                        </RadialGradient>
+                        <RadialGradient id="rmAuroraOkay" cx={cx + 38} cy={cy + 22} r={84} gradientUnits="userSpaceOnUse">
+                            <Stop offset="0" stopColor={colors.okay} stopOpacity={0.19} />
+                            <Stop offset="1" stopColor={colors.okay} stopOpacity={0} />
+                        </RadialGradient>
+                        <RadialGradient id="rmAuroraDislike" cx={cx + 6} cy={cy - 34} r={76} gradientUnits="userSpaceOnUse">
+                            <Stop offset="0" stopColor={colors.dislike} stopOpacity={0.16} />
+                            <Stop offset="1" stopColor={colors.dislike} stopOpacity={0} />
+                        </RadialGradient>
+                    </Defs>
                     {STARS.map((st, i) => (
-                        <Circle
-                            key={i}
-                            cx={`${st.x}%`}
-                            cy={`${st.y}%`}
-                            r={st.r}
-                            fill={colors.cream}
-                            opacity={st.o}
-                        />
+                        <Circle key={i} cx={`${st.x}%`} cy={`${st.y}%`} r={st.r} fill={colors.cream} opacity={st.o} />
                     ))}
-                    <Ellipse
-                        cx={cx} cy={cy}
-                        rx={innerRx} ry={innerRy}
-                        fill="none"
-                        stroke={colors.gold}
-                        strokeOpacity={0.28}
-                        strokeDasharray="2 3"
-                    />
-                    <Ellipse
-                        cx={cx} cy={cy}
-                        rx={outerRx} ry={outerRy}
-                        fill="none"
-                        stroke={colors.cream}
-                        strokeOpacity={0.12}
-                        strokeDasharray="2 3"
-                    />
+                    <Circle cx={cx - 34} cy={cy + 4} r={92} fill="url(#rmAuroraLike)" />
+                    <Circle cx={cx + 38} cy={cy + 22} r={84} fill="url(#rmAuroraOkay)" />
+                    <Circle cx={cx + 6} cy={cy - 34} r={76} fill="url(#rmAuroraDislike)" />
+                    <Circle cx={cx} cy={cy} r={72} fill="url(#rmHalo)" />
+                    <Circle cx={cx} cy={cy} r={innerR} fill="none" stroke={colors.gold} strokeOpacity={0.3} strokeWidth={0.8} strokeDasharray="2 5" />
+                    <Circle cx={cx} cy={cy} r={outerR} fill="none" stroke={colors.cream} strokeOpacity={0.12} strokeWidth={0.8} strokeDasharray="2 5" />
                 </Svg>
 
-                {/* "Rank map" label */}
+                {/* Hero covers riding the rings — slowly drifting around the sun */}
+                <DriftLayer>
+                    {heroes.map(({ r, a, ring, size }) => {
+                        const glow = bucketColor(r.bucket)
+                        return (
+                            <View
+                                key={r.id}
+                                style={[
+                                    styles.heroCover,
+                                    {
+                                        width: size,
+                                        height: size,
+                                        borderRadius: size / 2,
+                                        left: cx + Math.cos(a) * ring - size / 2,
+                                        top: cy + Math.sin(a) * ring - size / 2,
+                                        shadowColor: glow,
+                                    },
+                                ]}
+                            >
+                                {r.song.cover_url ? (
+                                    <Image source={{ uri: r.song.cover_url }} style={styles.heroCoverImg} />
+                                ) : (
+                                    <View style={[styles.heroCoverImg, { backgroundColor: glow, opacity: 0.6 }]} />
+                                )}
+                            </View>
+                        )
+                    })}
+                </DriftLayer>
+
+                {/* The sun — your #1, glowing at the center */}
+                {top ? (
+                    <View style={[styles.sun, { left: cx - 29, top: cy - 29 }]}>
+                        {top.song.cover_url ? (
+                            <Image source={{ uri: top.song.cover_url }} style={styles.sunImg} />
+                        ) : (
+                            <View style={[styles.sunImg, { backgroundColor: bucketColor(top.bucket) }]} />
+                        )}
+                    </View>
+                ) : null}
+
+                {/* Bottom scrim for text legibility */}
+                <Svg width={mapW} height={56} style={styles.rankMapScrim} pointerEvents="none">
+                    <Defs>
+                        <LinearGradient id="rmScrim" x1="0" y1="0" x2="0" y2="1">
+                            <Stop offset="0" stopColor={colors.navy2} stopOpacity={0} />
+                            <Stop offset="1" stopColor={colors.navy2} stopOpacity={0.85} />
+                        </LinearGradient>
+                    </Defs>
+                    <Rect x={0} y={0} width={mapW} height={56} fill="url(#rmScrim)" />
+                </Svg>
+
+                {/* Top-left label */}
                 <View style={styles.rankMapPill}>
-                    <Text style={styles.rankMapPillText}>Rank map</Text>
+                    <Text style={styles.rankMapPillText}>★ Rank Map</Text>
                 </View>
 
-                {/* Orbital covers */}
-                {orbitItems.map(({ ranking, angle, rx, ry, size }) => (
-                    <TouchableOpacity
-                        key={ranking.id}
-                        accessibilityRole="button"
-                        accessibilityLabel={ranking.song.title}
-                        onPress={() => handleRankingPress(ranking)}
-                        style={[
-                            styles.orbCover,
-                            {
-                                width: size,
-                                height: size,
-                                borderRadius: size / 2,
-                                left: cx + Math.cos(angle) * rx,
-                                top: cy + Math.sin(angle) * ry,
-                                transform: [
-                                    { translateX: -size / 2 },
-                                    { translateY: -size / 2 },
-                                ],
-                            },
-                        ]}
-                    >
-                        {ranking.song.cover_url ? (
-                            <Image
-                                source={{ uri: ranking.song.cover_url }}
-                                style={styles.orbCoverImg}
-                            />
-                        ) : null}
-                    </TouchableOpacity>
-                ))}
+                {/* Bottom-left: count + who holds the center */}
+                <View style={styles.rankMapInfo}>
+                    <Text style={styles.rankMapCount}>
+                        {rankings.length} songs<Text style={styles.rankMapCountDim}> in orbit</Text>
+                    </Text>
+                    {top ? (
+                        <Text style={styles.rankMapHolds} numberOfLines={1}>
+                            ★ {(top.song.title || "Untitled").toUpperCase()} HOLDS YOUR CENTER
+                        </Text>
+                    ) : null}
+                </View>
 
-                {/* Center: #1 song score */}
-                {topRanking ? (
-                    <TouchableOpacity
-                        onPress={() => handleRankingPress(topRanking)}
-                        testID={`ranking-orbit-${topRanking.id}`}
-                        style={[
-                            styles.rankMapCenter,
-                            {
-                                left: cx - 19,
-                                top: cy - 19,
-                                shadowColor: colors.accent,
-                            },
-                        ]}
-                    >
-                        <Text style={styles.rankMapScore}>{topScore}</Text>
-                    </TouchableOpacity>
-                ) : (
-                    <View style={[styles.rankMapCenter, { left: cx - 19, top: cy - 19 }]}>
-                        <Text style={styles.rankMapScore}>—</Text>
-                    </View>
-                )}
-            </View>
+                {/* Bottom-right CTA */}
+                <View style={styles.openChart}>
+                    <Text style={styles.openChartText}>OPEN STAR CHART →</Text>
+                </View>
+            </TouchableOpacity>
         )
     }
 
@@ -363,7 +398,7 @@ export default function RankingsScreen() {
                         </Svg>
                     </TouchableOpacity>
                     <View style={styles.buildText}>
-                        <Text style={styles.buildTitle}>{"Build your rank map."}</Text>
+                        <Text style={styles.buildTitle}>{"Build your Rank Map."}</Text>
                         <Text style={styles.buildBody}>
                             Rate 10 songs to place every track by taste.
                         </Text>
@@ -782,35 +817,82 @@ const styles = StyleSheet.create({
         fontWeight: "700",
         letterSpacing: 1.2,
     },
-    orbCover: {
+    heroCover: {
         position: "absolute",
         overflow: "hidden",
-        shadowColor: colors.gold,
-        shadowOpacity: 0.4,
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.16)",
+        shadowOpacity: 0.85,
         shadowRadius: 9,
         shadowOffset: { width: 0, height: 0 },
+        elevation: 5,
     },
-    orbCoverImg: {
+    heroCoverImg: {
         width: "100%",
         height: "100%",
     },
-    rankMapCenter: {
+    sun: {
         position: "absolute",
-        width: 38,
-        height: 38,
-        borderRadius: 19,
-        backgroundColor: colors.accent,
-        alignItems: "center",
-        justifyContent: "center",
-        shadowOpacity: 0.55,
-        shadowRadius: 14,
+        width: 58,
+        height: 58,
+        borderRadius: 29,
+        overflow: "hidden",
+        borderWidth: 2.5,
+        borderColor: colors.gold,
+        shadowColor: colors.gold,
+        shadowOpacity: 0.9,
+        shadowRadius: 18,
         shadowOffset: { width: 0, height: 0 },
+        elevation: 10,
     },
-    rankMapScore: {
-        fontFamily: fonts.display,
-        fontSize: 14,
-        color: "#fff",
-        letterSpacing: -0.3,
+    sunImg: {
+        width: "100%",
+        height: "100%",
+    },
+    rankMapScrim: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: 0,
+    },
+    rankMapInfo: {
+        position: "absolute",
+        left: 12,
+        bottom: 11,
+        right: 120,
+    },
+    rankMapCount: {
+        fontFamily: fonts.serif,
+        fontSize: 15,
+        lineHeight: 16,
+        color: colors.cream,
+    },
+    rankMapCountDim: {
+        color: colors.cdim,
+    },
+    rankMapHolds: {
+        fontFamily: fonts.mono,
+        fontSize: 7.5,
+        color: colors.cdim,
+        letterSpacing: 1,
+        marginTop: 4,
+    },
+    openChart: {
+        position: "absolute",
+        right: 11,
+        bottom: 11,
+        borderWidth: 1,
+        borderColor: "rgba(245,184,64,0.34)",
+        borderRadius: 999,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+    },
+    openChartText: {
+        fontFamily: fonts.mono,
+        fontSize: 8.5,
+        fontWeight: "700",
+        color: colors.gold,
+        letterSpacing: 0.8,
     },
     // ── Section label ──────────────────────────────────────────────────
     sectionRow: {

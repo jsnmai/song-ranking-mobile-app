@@ -37,6 +37,7 @@ module.exports = {
 
     // Shared values
     useSharedValue: (init) => ({ value: init }),
+    useReducedMotion: () => false,
     useAnimatedStyle: (fn) => fn(),
     useDerivedValue: (fn) => ({ value: fn() }),
     useAnimatedGestureHandler: (handlers) => handlers,
