@@ -58,6 +58,17 @@ class CircleConsensusRow:
     latest_at: datetime | None
 
 
+@dataclass(frozen=True)
+class CircleDisagreementRow:
+    """One song where the viewer's score diverges from their friends' average, with the gap."""
+
+    song_id: int
+    your_score: float
+    friends_average: float
+    friends_count: int
+    gap: float
+
+
 def aggregate_circle_most_rated(
     db: Session,
     viewer_id: int,
@@ -382,3 +393,104 @@ def viewer_rated_artist_ids(
         .distinct()
     ).scalars().all()
     return {int(artist_id) for artist_id in artist_ids}
+
+
+def circle_disagreement_candidates(
+    db: Session,
+    viewer_id: int,
+    *,
+    minimum_contributors: int,
+    min_gap: float,
+    limit: int,
+) -> list[CircleDisagreementRow]:
+    """Songs where the viewer's score diverges from their friends' average, biggest gap first.
+
+    Disagreement Spotlight is **gap-primary**, so the gap filter and ordering happen here in SQL and
+    the `limit` is applied *after* gap ordering — a large-gap song is never truncated out (the reason
+    this is a dedicated query, not a reuse of the recency-capped consensus pool). "Friends" = mutual
+    follows visible to the viewer via `circle_visible_taste_owner_predicate`, which also excludes the
+    viewer, so `friends_average`/count never include the viewer's own ranking. The viewer's own score
+    is joined in separately. Recency (latest eligible friend event) is only a tie-break.
+    """
+    friends = (
+        select(
+            Ranking.song_id.label("song_id"),
+            func.count().label("friends_count"),
+            func.avg(Ranking.score).label("friends_average"),
+        )
+        .where(
+            circle_visible_taste_owner_predicate(
+                viewer_id,
+                Ranking.user_id,
+            )
+        )
+        .group_by(Ranking.song_id)
+        .having(func.count() >= minimum_contributors)
+        .cte("circle_friends_agg")
+    )
+    # Recency only counts events from friends who CURRENTLY rank the song (the same contributors as
+    # the average), via a join to their current Ranking — so a stale event from a friend who has since
+    # removed their rating can't skew the freshness tie-break.
+    recent_at = (
+        select(
+            RatingEvent.song_id.label("song_id"),
+            func.max(RatingEvent.created_at).label("latest_at"),
+        )
+        .join(
+            Ranking,
+            and_(
+                Ranking.user_id == RatingEvent.user_id,
+                Ranking.song_id == RatingEvent.song_id,
+            ),
+        )
+        .where(RatingEvent.event_type.in_(ELIGIBLE_RATING_EVENT_TYPES))
+        .where(
+            circle_visible_taste_owner_predicate(
+                viewer_id,
+                RatingEvent.user_id,
+            )
+        )
+        .group_by(RatingEvent.song_id)
+        .cte("circle_disagree_recent_at")
+    )
+    viewer_ranking = aliased(Ranking)
+    gap = func.abs(viewer_ranking.score - friends.c.friends_average)
+    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    rows = db.execute(
+        select(
+            friends.c.song_id,
+            viewer_ranking.score.label("your_score"),
+            friends.c.friends_average,
+            friends.c.friends_count,
+            gap.label("gap"),
+        )
+        .join(
+            viewer_ranking,
+            and_(
+                viewer_ranking.song_id == friends.c.song_id,
+                viewer_ranking.user_id == viewer_id,
+            ),
+        )
+        .outerjoin(
+            recent_at,
+            recent_at.c.song_id == friends.c.song_id,
+        )
+        .where(gap >= min_gap)
+        .order_by(
+            gap.desc(),
+            func.coalesce(recent_at.c.latest_at, epoch).desc(),
+            friends.c.friends_count.desc(),
+            friends.c.song_id.asc(),
+        )
+        .limit(limit)
+    ).all()
+    return [
+        CircleDisagreementRow(
+            song_id=row.song_id,
+            your_score=float(row.your_score),
+            friends_average=float(row.friends_average),
+            friends_count=row.friends_count,
+            gap=float(row.gap),
+        )
+        for row in rows
+    ]

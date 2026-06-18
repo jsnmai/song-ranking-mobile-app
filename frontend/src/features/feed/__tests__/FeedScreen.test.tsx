@@ -5,7 +5,7 @@ import { ApiError } from "../../../api/client"
 import { RankingResponse } from "../../comparison/types"
 import { Profile } from "../../profile/types"
 import FeedScreen from "../FeedScreen"
-import { ConsensusModule, FeedEvent, RerateRadarItem } from "../types"
+import { ConsensusModule, DisagreementModule, FeedEvent, RerateRadarItem } from "../types"
 
 const mockNavigate = jest.fn()
 const mockListMyFeed = jest.fn()
@@ -195,6 +195,15 @@ const consensusModule: ConsensusModule = {
     average_score: 8.4,
     contributor_count: 5,
     distribution: [0, 0, 0, 0, 0, 0, 0, 0, 3, 2],
+}
+
+const disagreementModule: DisagreementModule = {
+    song,
+    your_score: 9.1,
+    friends_average: 4.2,
+    friends_count: 4,
+    gap: 4.9,
+    direction: "viewer_higher",
 }
 
 beforeEach(() => {
@@ -701,6 +710,51 @@ describe("FeedScreen", () => {
         })
         expect(screen.queryByTestId("feed-consensus-42")).toBeNull()
         expect(screen.getByTestId("feed-consensus-locked")).toBeTruthy()
+    })
+
+    it("surfaces a live Disagreement card (you vs friends) and opens the song", async () => {
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 12, bookmarked_count: 0 },
+        }
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+        mockGetFeedModules.mockResolvedValue({ ...emptyModules, disagreement_spotlight: disagreementModule })
+        mockGetMyRankingByDeezerId.mockResolvedValue(ranking)
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-disagreement-42")).toBeTruthy()
+        })
+        expect(screen.queryByTestId("feed-disagreement-locked")).toBeNull()
+        expect(screen.getByText("9.1")).toBeTruthy()          // YOU
+        expect(screen.getByText("4.2")).toBeTruthy()          // FRIENDS
+        expect(screen.getByText("4.9 APART")).toBeTruthy()
+        // Column is "FRIENDS", never "CROWD".
+        expect(screen.getByText("FRIENDS")).toBeTruthy()
+        expect(screen.queryByText("CROWD")).toBeNull()
+
+        fireEvent.press(screen.getByTestId("feed-disagreement-42"))
+        await waitFor(() => {
+            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
+        })
+    })
+
+    it("falls back to the locked Disagreement card when no song qualifies", async () => {
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 12, bookmarked_count: 0 },
+        }
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+        mockGetFeedModules.mockResolvedValue({ ...emptyModules })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-song-9")).toBeTruthy()
+        })
+        expect(screen.queryByTestId("feed-disagreement-42")).toBeNull()
+        expect(screen.getByTestId("feed-disagreement-locked")).toBeTruthy()
     })
 
     it("opens Discover user search from the empty state", async () => {

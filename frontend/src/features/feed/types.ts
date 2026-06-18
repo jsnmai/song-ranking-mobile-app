@@ -50,13 +50,24 @@ export type ConsensusModule = {
     distribution: number[];   // always 10 bins, scores [0,1)…[9,10]
 }
 
-// Bundled Feed module aggregates (GET /api/v1/feed/modules). Re-rate Radar and Consensus are live;
-// the other keys are reserved and always null until each module ships. Mirrors
+// Disagreement Spotlight: the song where YOUR score diverges most from your friends' average.
+// friends = mutual follows (viewer excluded from friends_average). gap = abs(your − friends).
+export type DisagreementModule = {
+    song: PersistedSong;
+    your_score: number;
+    friends_average: number;
+    friends_count: number;
+    gap: number;
+    direction: "viewer_higher" | "friends_higher";
+}
+
+// Bundled Feed module aggregates (GET /api/v1/feed/modules). Re-rate Radar, Consensus, and
+// Disagreement Spotlight are live; the rest are reserved and null until each ships. Mirrors
 // backend/src/pydantic_schemas/feed.py::FeedModulesResponse.
 export type FeedModulesResponse = {
     rerate_radar: RerateRadarItem | null;
     consensus: ConsensusModule | null;
-    disagreement_spotlight: null;
+    disagreement_spotlight: DisagreementModule | null;
     split_decision: null;
     match_moment: null;
 }

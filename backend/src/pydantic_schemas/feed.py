@@ -76,6 +76,24 @@ class ConsensusModule(BaseModel):
     distribution: list[int]
 
 
+class DisagreementModule(BaseModel):
+    """Disagreement Spotlight: the song where the viewer's score diverges most from their friends'.
+
+    "Friends" = mutual follows visible to the viewer (the shared circle predicate); the viewer is
+    excluded from `friends_average`. `gap` is the absolute difference (the "X.X APART" badge);
+    `direction` says whether the viewer rated it higher or lower than friends.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    song: SongResponse
+    your_score: float
+    friends_average: float
+    friends_count: int
+    gap: float
+    direction: str  # "viewer_higher" | "friends_higher"
+
+
 class FeedModulesResponse(BaseModel):
     """Bundled Feed module aggregates served behind the shared social-access privacy layer.
 
@@ -87,7 +105,7 @@ class FeedModulesResponse(BaseModel):
 
     rerate_radar: RerateRadarItem | None = None
     consensus: ConsensusModule | None = None
+    disagreement_spotlight: DisagreementModule | None = None
     # Reserved — not implemented yet; always null until each module ships.
-    disagreement_spotlight: None = None
     split_decision: None = None
     match_moment: None = None

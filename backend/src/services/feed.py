@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from src.crud.circle_aggregates import (
     CircleConsensusRow,
     circle_consensus_candidates,
+    circle_disagreement_candidates,
     circle_score_distribution,
     get_songs_by_ids,
     list_circle_contributors,
@@ -16,6 +17,7 @@ from src.crud.feed import FeedEventRow, latest_rerate_from_followed, list_feed_e
 from src.pydantic_schemas.feed import (
     CircleRatersResponse,
     ConsensusModule,
+    DisagreementModule,
     FeedEventResponse,
     FeedListResponse,
     FeedModulesResponse,
@@ -54,6 +56,12 @@ CONSENSUS_FRESH_NUDGE = 0.10
 CONSENSUS_AGREEMENT_STDDEV_SCALE = 3.0
 # Friend count at which coverage scores 1.0.
 CONSENSUS_COVERAGE_FULL = 8.0
+
+# ── Disagreement Spotlight (tunable) ─────────────────────────────────────────
+# A "spotlight" must be a real divergence: only surface a song whose |you − friends_avg| clears this.
+DISAGREEMENT_MIN_GAP = 2.0
+# Bounded set fetched after gap ordering (biggest gaps first), so a high-gap song is never truncated.
+DISAGREEMENT_CANDIDATE_LIMIT = 50
 
 
 def list_song_circle_raters(
@@ -95,6 +103,43 @@ def get_feed_modules(
     return FeedModulesResponse(
         rerate_radar=_rerate_radar_item(rerate_row) if rerate_row is not None else None,
         consensus=_consensus_module(db, user_id),
+        disagreement_spotlight=_disagreement_module(db, user_id),
+    )
+
+
+def _disagreement_module(
+    db: Session,
+    user_id: int,
+) -> DisagreementModule | None:
+    """Surface the song where the viewer's score diverges most from their friends' average.
+
+    Gap-primary: the candidate query already filters to ≥ CIRCLE_MIN_CONTRIBUTORS friends + gap ≥
+    DISAGREEMENT_MIN_GAP and orders biggest-gap-first, so the top row is the spotlight (no rotation —
+    "biggest gap wins"). Friends = mutual + visible (viewer excluded from their average). Returns
+    None (→ locked card) when nothing clears the gap threshold.
+    """
+    candidates = circle_disagreement_candidates(
+        db,
+        user_id,
+        minimum_contributors=CIRCLE_MIN_CONTRIBUTORS,
+        min_gap=DISAGREEMENT_MIN_GAP,
+        limit=DISAGREEMENT_CANDIDATE_LIMIT,
+    )
+    if not candidates:
+        return None
+    chosen = candidates[0]
+    songs = get_songs_by_ids(db, [chosen.song_id])
+    song = songs.get(chosen.song_id)
+    if song is None:
+        return None
+    direction = "viewer_higher" if chosen.your_score >= chosen.friends_average else "friends_higher"
+    return DisagreementModule(
+        song=SongResponse.model_validate(song),
+        your_score=chosen.your_score,
+        friends_average=chosen.friends_average,
+        friends_count=chosen.friends_count,
+        gap=round(chosen.gap, 1),
+        direction=direction,
     )
 
 

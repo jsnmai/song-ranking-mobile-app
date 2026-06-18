@@ -1,11 +1,11 @@
-# Integration tests for the bundled Feed modules endpoint (Re-rate Radar + Consensus live; rest reserved).
+# Integration tests for the bundled Feed modules endpoint (Re-rate Radar + Consensus + Disagreement live).
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.sqlalchemy_tables.profile import Profile
 
-RESERVED_MODULE_KEYS = ("disagreement_spotlight", "split_decision", "match_moment")
+RESERVED_MODULE_KEYS = ("split_decision", "match_moment")
 
 
 def _register(
@@ -159,6 +159,7 @@ def test_feed_modules_empty_returns_null_modules(client: TestClient):
 
     assert body["rerate_radar"] is None
     assert body["consensus"] is None
+    assert body["disagreement_spotlight"] is None
     for key in RESERVED_MODULE_KEYS:
         assert body[key] is None
 
@@ -389,3 +390,134 @@ def test_consensus_is_deterministic_within_a_day(client: TestClient):
     second = _modules(client, viewer)["consensus"]
     assert first is not None and second is not None
     assert first["song"]["id"] == second["song"]["id"]
+
+
+# ── Disagreement Spotlight ───────────────────────────────────────────────────
+
+
+def test_disagreement_null_without_qualifying_song(client: TestClient):
+    """No song the viewer rated has ≥3 friends + a big enough gap → locked."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    _finalize_rating(client, viewer, 101, "Lonely Song", "like")
+    # Only two friends rate it (below the threshold), so there's no friend crowd to diverge from.
+    _friend_rates(client, viewer, "viewer", "frienda", 101, "Lonely Song", "dislike")
+    _friend_rates(client, viewer, "viewer", "friendb", 101, "Lonely Song", "dislike")
+
+    assert _modules(client, viewer)["disagreement_spotlight"] is None
+
+
+def test_disagreement_surfaces_you_vs_friends_gap(client: TestClient):
+    """The viewer rated a song high while ≥3 friends rated it low → a spotlighted gap."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    _finalize_rating(client, viewer, 101, "Split Song", "like")  # you: 8.75
+    for name in ("frienda", "friendb", "friendc"):
+        _friend_rates(client, viewer, "viewer", name, 101, "Split Song", "dislike")
+
+    d = _modules(client, viewer)["disagreement_spotlight"]
+    assert d is not None
+    assert d["song"]["title"] == "Split Song"
+    assert d["your_score"] == 8.75
+    assert d["friends_count"] == 3                    # the viewer is not counted among friends
+    assert d["your_score"] > d["friends_average"]     # friends rated it lower
+    assert d["gap"] >= 2.0
+    assert d["direction"] == "viewer_higher"
+
+
+def test_disagreement_requires_viewer_to_have_rated(client: TestClient):
+    """Friends rating a song the viewer hasn't rated is not a 'you vs friends' moment."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    for name in ("frienda", "friendb", "friendc"):
+        _friend_rates(client, viewer, "viewer", name, 101, "Unrated By You", "dislike")
+
+    assert _modules(client, viewer)["disagreement_spotlight"] is None
+
+
+def test_disagreement_below_threshold_is_hidden(client: TestClient):
+    """A song the viewer and friends roughly agree on (gap < threshold) is not a spotlight."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    _finalize_rating(client, viewer, 101, "Agreed Song", "like")
+    for name in ("frienda", "friendb", "friendc"):
+        _friend_rates(client, viewer, "viewer", name, 101, "Agreed Song", "like")  # all ~8.75 → gap ~0
+
+    assert _modules(client, viewer)["disagreement_spotlight"] is None
+
+
+def test_disagreement_picks_biggest_gap_even_when_another_is_more_recent(client: TestClient):
+    """Gap is primary: the biggest-gap song wins even if a smaller-gap song was rated more recently."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    _finalize_rating(client, viewer, 101, "Big Gap Song", "like")       # you: 8.75
+    _finalize_rating(client, viewer, 202, "Small Gap Song", "dislike")  # you: low
+    # Each friend rates the big-gap song first, then the small-gap song (so small-gap is more recent).
+    for name in ("frienda", "friendb", "friendc"):
+        token = _friend_rates(client, viewer, "viewer", name, 101, "Big Gap Song", "dislike")
+        _finalize_rating(client, token, 202, "Small Gap Song", "alright")
+
+    d = _modules(client, viewer)["disagreement_spotlight"]
+    assert d is not None
+    # Big Gap (you 8.75 vs friends ~dislike) beats Small Gap (you ~dislike vs friends ~alright).
+    assert d["song"]["title"] == "Big Gap Song"
+
+
+def test_disagreement_excludes_one_way_follow(client: TestClient):
+    """A one-way-followed rater is not a friend; dropping below 3 hides the spotlight."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    _finalize_rating(client, viewer, 101, "Split Song", "like")
+    _friend_rates(client, viewer, "viewer", "frienda", 101, "Split Song", "dislike")
+    _friend_rates(client, viewer, "viewer", "friendb", 101, "Split Song", "dislike")
+    # One-way: viewer follows them, they do not follow back.
+    oneway = _register(client, "oneway@example.com", "oneway")
+    _follow(client, viewer, "oneway")
+    _finalize_rating(client, oneway, 101, "Split Song", "dislike")
+
+    assert _modules(client, viewer)["disagreement_spotlight"] is None
+
+
+def test_disagreement_drops_blocked_friend_below_threshold(client: TestClient):
+    """Blocking a friend removes them from the aggregate; falling under 3 hides the spotlight."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    _finalize_rating(client, viewer, 101, "Split Song", "like")
+    for name in ("frienda", "friendb", "friendc"):
+        _friend_rates(client, viewer, "viewer", name, 101, "Split Song", "dislike")
+    assert _modules(client, viewer)["disagreement_spotlight"] is not None
+
+    _block(client, viewer, "friendc")
+
+    assert _modules(client, viewer)["disagreement_spotlight"] is None
+
+
+def test_disagreement_excludes_private_taste_friend(client: TestClient, db_session: Session):
+    """A mutual friend who hides their taste leaves the aggregate (privacy regression)."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    _finalize_rating(client, viewer, 101, "Split Song", "like")
+    for name in ("frienda", "friendb", "friendc"):
+        _friend_rates(client, viewer, "viewer", name, 101, "Split Song", "dislike")
+    assert _modules(client, viewer)["disagreement_spotlight"] is not None
+
+    profile = db_session.execute(
+        select(Profile).where(Profile.username == "friendc")
+    ).scalar_one()
+    profile.is_public = False
+    profile.visibility = "only_me"
+    db_session.commit()
+
+    assert _modules(client, viewer)["disagreement_spotlight"] is None
+
+
+def test_disagreement_excludes_deleted_friend(client: TestClient):
+    """A friend who deletes their account leaves the aggregate."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    _finalize_rating(client, viewer, 101, "Split Song", "like")
+    _friend_rates(client, viewer, "viewer", "frienda", 101, "Split Song", "dislike")
+    _friend_rates(client, viewer, "viewer", "friendb", 101, "Split Song", "dislike")
+    gone = _friend_rates(client, viewer, "viewer", "friendc", 101, "Split Song", "dislike")
+    assert _modules(client, viewer)["disagreement_spotlight"] is not None
+
+    response = client.request(
+        "DELETE",
+        "/api/v1/auth/me",
+        json={"confirmation": "DELETE"},
+        headers={"Authorization": f"Bearer {gone}"},
+    )
+    assert response.status_code == 204
+
+    assert _modules(client, viewer)["disagreement_spotlight"] is None

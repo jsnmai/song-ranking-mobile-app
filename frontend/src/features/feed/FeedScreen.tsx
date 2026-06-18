@@ -32,7 +32,7 @@ import { ProfileBase, ReportReason } from "../profile/types"
 import { RankingResponse } from "../comparison/types"
 import { getMyRankingByDeezerId } from "../rankings/apiRequests"
 import { getFeedModules, getSongCircleRaters, listMyFeed, reportRatingEvent } from "./apiRequests"
-import { ConsensusModule, FeedEvent, RerateRadarItem } from "./types"
+import { ConsensusModule, DisagreementModule, FeedEvent, RerateRadarItem } from "./types"
 
 type FeedNavigation = CompositeNavigationProp<
     NativeStackNavigationProp<FeedStackParamList, "FeedHome">,
@@ -180,6 +180,8 @@ export default function FeedScreen() {
     const [rerateOpening, setRerateOpening] = useState(false)
     const [consensus, setConsensus] = useState<ConsensusModule | null>(null)
     const [consensusOpening, setConsensusOpening] = useState(false)
+    const [disagreement, setDisagreement] = useState<DisagreementModule | null>(null)
+    const [disagreementOpening, setDisagreementOpening] = useState(false)
     const listRef = useRef<FlashListRef<FeedEvent>>(null)
     // Re-pressing the Feed tab while already on the Feed home screen scrolls the
     // activity list back to the top. useScrollToTop only fires when this screen is
@@ -228,9 +230,11 @@ export default function FeedScreen() {
             const modules = await getFeedModules(token)
             setRerateRadar(modules.rerate_radar)
             setConsensus(modules.consensus)
+            setDisagreement(modules.disagreement_spotlight)
         } catch {
             setRerateRadar(null)
             setConsensus(null)
+            setDisagreement(null)
         }
     }, [token])
 
@@ -286,6 +290,31 @@ export default function FeedScreen() {
             }
         } finally {
             setConsensusOpening(false)
+        }
+    }
+
+    // Open the song behind the live Disagreement card (same ranking lookup as the other module cards).
+    const handleDisagreementPress = async () => {
+        if (!token || disagreement === null || disagreementOpening) return
+        setDisagreementOpening(true)
+        setError(null)
+        try {
+            const ranking: RankingResponse = await getMyRankingByDeezerId(disagreement.song.deezer_id, token)
+            navigation.navigate("SongDetail", { ranking })
+        } catch (err) {
+            if (err instanceof ApiError && err.status === 404) {
+                navigation.navigate("SongDetail", { song: disagreement.song })
+                return
+            }
+            if (err instanceof ApiError) {
+                setError(err.detail)
+            } else if (err instanceof Error) {
+                setError(err.message)
+            } else {
+                setError("Could not open this song.")
+            }
+        } finally {
+            setDisagreementOpening(false)
         }
     }
 
@@ -768,6 +797,80 @@ export default function FeedScreen() {
         )
     }
 
+    // Disagreement Spotlight: live "you vs your friends" gap when a qualifying song exists, else the
+    // original locked placeholder. Friends = mutual follows (viewer excluded from their average).
+    const renderDisagreement = () => {
+        if (disagreement === null) {
+            return (
+                <View style={styles.fullDisagreeCard} testID="feed-disagreement-locked">
+                    <View style={styles.fullCellTop}>
+                        <View style={styles.butterPill}><Text style={styles.butterPillText}>Disagreement spotlight</Text></View>
+                        <View style={styles.lockTagRow}>
+                            <LockIcon color={colors.inkDim} size={10} />
+                            <Text style={[styles.lockTagLabel, { color: colors.inkDim }]}>LOCKED</Text>
+                        </View>
+                    </View>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 11 }}>
+                        <View style={styles.ghostBoxMd} />
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.disagreeLockedTitle}>Locked for now</Text>
+                            <Text style={styles.disagreeLockedBody}>Rate more to see where you split from your friends.</Text>
+                        </View>
+                        <View style={{ flexDirection: "row", gap: 14, alignItems: "center" }}>
+                            <View style={{ alignItems: "center" }}>
+                                <Text style={styles.disagreeColLabel}>YOU</Text>
+                                <View style={styles.disagreeColCircle}><LockIcon color={colors.inkDim} size={12} /></View>
+                            </View>
+                            <View style={styles.disagreeDivider} />
+                            <View style={{ alignItems: "center" }}>
+                                <Text style={styles.disagreeColLabel}>FRIENDS</Text>
+                                <View style={styles.disagreeColCircle}><LockIcon color={colors.inkDim} size={12} /></View>
+                            </View>
+                        </View>
+                    </View>
+                </View>
+            )
+        }
+
+        const d = disagreement
+        return (
+            <TouchableOpacity
+                style={styles.fullDisagreeCard}
+                activeOpacity={0.9}
+                onPress={handleDisagreementPress}
+                disabled={disagreementOpening}
+                testID={`feed-disagreement-${d.song.id}`}
+            >
+                <View style={styles.fullCellTop}>
+                    <View style={styles.butterPill}><Text style={styles.butterPillText}>Disagreement spotlight</Text></View>
+                    <Text style={styles.disagreeApart}>{d.gap.toFixed(1)} APART</Text>
+                </View>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 11 }}>
+                    {d.song.cover_url ? (
+                        <Image style={styles.disagreeArt} source={{ uri: d.song.cover_url }} />
+                    ) : (
+                        <View style={[styles.disagreeArt, { backgroundColor: colors.paper2 }]} />
+                    )}
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.disagreeSong} numberOfLines={1}>{d.song.title}</Text>
+                        <Text style={styles.disagreeArtist} numberOfLines={1}>{d.song.artist.toUpperCase()}</Text>
+                    </View>
+                    <View style={{ flexDirection: "row", gap: 14, alignItems: "center" }}>
+                        <View style={{ alignItems: "center" }}>
+                            <Text style={styles.disagreeColLabel}>YOU</Text>
+                            <Text style={[styles.disagreeScore, { color: colors.accent }]}>{d.your_score.toFixed(1)}</Text>
+                        </View>
+                        <View style={styles.disagreeDivider} />
+                        <View style={{ alignItems: "center" }}>
+                            <Text style={styles.disagreeColLabel}>FRIENDS</Text>
+                            <Text style={[styles.disagreeScore, { color: colors.inkSoft }]}>{d.friends_average.toFixed(1)}</Text>
+                        </View>
+                    </View>
+                </View>
+            </TouchableOpacity>
+        )
+    }
+
     const renderUnlockedSection = () => (
         <View style={styles.unlockedSection}>
             {/* Row: Split (locked) + Consensus (locked, 138px) */}
@@ -830,34 +933,7 @@ export default function FeedScreen() {
                 </View>
             </View>
 
-            {/* Disagreement Spotlight — locked */}
-            <View style={styles.fullDisagreeCard}>
-                <View style={styles.fullCellTop}>
-                    <View style={styles.butterPill}><Text style={styles.butterPillText}>Disagreement spotlight</Text></View>
-                    <View style={styles.lockTagRow}>
-                        <LockIcon color={colors.inkDim} size={10} />
-                        <Text style={[styles.lockTagLabel, { color: colors.inkDim }]}>LOCKED</Text>
-                    </View>
-                </View>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 11 }}>
-                    <View style={styles.ghostBoxMd} />
-                    <View style={{ flex: 1 }}>
-                        <Text style={styles.disagreeLockedTitle}>Locked for now</Text>
-                        <Text style={styles.disagreeLockedBody}>Rate more to see where you split from the crowd.</Text>
-                    </View>
-                    <View style={{ flexDirection: "row", gap: 14, alignItems: "center" }}>
-                        <View style={{ alignItems: "center" }}>
-                            <Text style={styles.disagreeColLabel}>YOU</Text>
-                            <View style={styles.disagreeColCircle}><LockIcon color={colors.inkDim} size={12} /></View>
-                        </View>
-                        <View style={styles.disagreeDivider} />
-                        <View style={{ alignItems: "center" }}>
-                            <Text style={styles.disagreeColLabel}>CROWD</Text>
-                            <View style={styles.disagreeColCircle}><LockIcon color={colors.inkDim} size={12} /></View>
-                        </View>
-                    </View>
-                </View>
-            </View>
+            {renderDisagreement()}
         </View>
     )
 
@@ -2692,6 +2768,37 @@ const styles = StyleSheet.create({
         width: 1,
         height: 30,
         backgroundColor: colors.line,
+    },
+    // Disagreement Spotlight — live state (you vs friends gap)
+    disagreeApart: {
+        fontFamily: fonts.mono,
+        fontSize: 8,
+        fontWeight: "700",
+        letterSpacing: 0.8,
+        color: colors.inkDim,
+    },
+    disagreeArt: {
+        width: 48,
+        height: 48,
+        borderRadius: 9,
+    },
+    disagreeSong: {
+        fontFamily: fonts.display,
+        fontSize: 15,
+        lineHeight: 17,
+        color: colors.ink,
+    },
+    disagreeArtist: {
+        fontFamily: fonts.mono,
+        fontSize: 8,
+        letterSpacing: 0.6,
+        color: colors.inkSoft,
+        marginTop: 3,
+    },
+    disagreeScore: {
+        fontFamily: fonts.display,
+        fontSize: 22,
+        letterSpacing: -0.4,
     },
     // ── Locked modules (compact) ──────────────────────────────────────────
     lockedSection: {
