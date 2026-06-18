@@ -650,6 +650,7 @@ const styles = StyleSheet.create({
     },
     // ── Hero ───────────────────────────────────────────────────────────
     hero: {
+        width: "100%",
         aspectRatio: 1,
         borderRadius: 18,
         overflow: "hidden",
@@ -657,6 +658,7 @@ const styles = StyleSheet.create({
         marginBottom: 11,
     },
     heroCover: {
+        ...StyleSheet.absoluteFillObject,
         width: "100%",
         height: "100%",
     },
