@@ -1,4 +1,4 @@
-// "View all" — a paginated list of one user's activity cards (their full rating history).
+// "View all" — a paginated list of one user's activity, using the shared feed-style card.
 import { useCallback, useEffect, useState } from "react"
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
@@ -6,12 +6,22 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack"
 import { ApiError } from "../../api/client"
 import { AppStackParamList } from "../../navigation/types"
 import { colors, fonts } from "../../theme"
-import ActivityCard from "../activity/ActivityCard"
+import ActivityLikeButton from "../activity/ActivityLikeButton"
+import RatingActivityCard from "../activity/RatingActivityCard"
 import { useAuth } from "../auth/AuthContext"
+import { formatRelativeTime } from "../../utils/formatRelativeTime"
 import { getProfileActivity } from "./apiRequests"
 import { RecentRatingItem } from "./types"
 
 type Props = NativeStackScreenProps<AppStackParamList, "UserActivity">
+
+// Deterministic avatar background per user, matching OtherProfile/follow lists.
+const AVATAR_COLORS = [colors.accent, colors.sky, colors.plum, colors.mint, colors.gold]
+function avatarColor(username: string): string {
+    let hash = 0
+    for (let i = 0; i < username.length; i++) hash = (hash * 31 + username.charCodeAt(i)) % 997
+    return AVATAR_COLORS[hash % AVATAR_COLORS.length]
+}
 
 export default function UserActivityScreen({ navigation, route }: Props) {
     const { username } = route.params
@@ -79,12 +89,26 @@ export default function UserActivityScreen({ navigation, route }: Props) {
                         isLoadingMore ? <ActivityIndicator color={colors.accent} style={styles.footerLoader} /> : null
                     }
                     renderItem={({ item }) => (
-                        <ActivityCard
-                            username={username}
-                            item={item}
-                            onOpenSong={() => navigation.navigate("SongDetail", { song: item.song as never })}
-                            onOpenLikers={(ratingEventId) => navigation.navigate("ActivityLikers", { ratingEventId })}
-                        />
+                        <RatingActivityCard
+                            initial={username[0].toUpperCase()}
+                            avatarColor={avatarColor(username)}
+                            who={`@${username}`}
+                            actionLabel="rated"
+                            timeAgo={formatRelativeTime(item.created_at)}
+                            song={item.song}
+                            bucket={item.bucket}
+                            score={item.score}
+                            note={item.note}
+                            onPress={() => navigation.navigate("SongDetail", { song: item.song as never })}
+                            testID={`activity-card-${item.rating_event_id}`}
+                        >
+                            <ActivityLikeButton
+                                ratingEventId={item.rating_event_id}
+                                initialLikedByViewer={item.liked_by_viewer}
+                                initialLikeCount={item.like_count}
+                                onOpenLikers={(ratingEventId) => navigation.navigate("ActivityLikers", { ratingEventId })}
+                            />
+                        </RatingActivityCard>
                     )}
                 />
             )}
@@ -106,7 +130,7 @@ const styles = StyleSheet.create({
     heading: { fontFamily: fonts.serif, color: colors.ink, fontSize: 24, lineHeight: 28 },
     loader: { marginTop: 48 },
     error: { color: colors.danger, fontSize: 14, textAlign: "center", margin: 24 },
-    list: { paddingTop: 12, paddingBottom: 32 },
+    list: { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 32 },
     empty: { color: colors.inkSoft, fontSize: 14, textAlign: "center", marginTop: 48 },
     footerLoader: { marginVertical: 18 },
 })

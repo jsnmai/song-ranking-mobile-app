@@ -8,7 +8,6 @@ const mockGoBack = jest.fn()
 const mockGetProfileActivity = jest.fn()
 const mockLikeActivity = jest.fn()
 const mockUnlikeActivity = jest.fn()
-const mockReportRatingEvent = jest.fn()
 
 jest.mock("../apiRequests", () => ({
     getProfileActivity: (...args: unknown[]) => mockGetProfileActivity(...args),
@@ -21,10 +20,6 @@ jest.mock("../../auth/AuthContext", () => ({
 jest.mock("../../activity/apiRequests", () => ({
     likeActivity: (...args: unknown[]) => mockLikeActivity(...args),
     unlikeActivity: (...args: unknown[]) => mockUnlikeActivity(...args),
-}))
-
-jest.mock("../../feed/apiRequests", () => ({
-    reportRatingEvent: (...args: unknown[]) => mockReportRatingEvent(...args),
 }))
 
 jest.mock("../../../utils/formatRelativeTime", () => ({
@@ -78,9 +73,9 @@ describe("UserActivityScreen", () => {
         render(<UserActivityScreen navigation={navigationProp} route={routeProp} />)
 
         await waitFor(() => {
-            expect(screen.getByTestId("activity-song-42")).toBeTruthy()
+            expect(screen.getByTestId("activity-card-42")).toBeTruthy()
         })
-        fireEvent.press(screen.getByTestId("activity-song-42"))
+        fireEvent.press(screen.getByTestId("activity-card-42"))
 
         expect(mockNavigate).toHaveBeenCalledWith(
             "SongDetail",
