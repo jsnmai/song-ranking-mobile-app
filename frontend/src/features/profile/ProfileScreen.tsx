@@ -31,11 +31,23 @@ const CONST_NODES: [number, number][] = [
 ]
 const CONST_EDGES: [number, number][] = [[0, 1], [1, 2], [2, 3], [2, 4], [0, 4], [1, 5], [3, 6]]
 
-// Star dot positions for the dark navy card backdrop (in 0–100 viewBox space)
-const STAR_DOTS = Array.from({ length: 30 }, (_, i) => ({
+// Star-field for the dark navy Auxstrology card backdrop. Hand-placed (not random)
+// so dots stay clear of the right-hand text column and don't pile up at the bottom:
+// a loose cluster around the constellation on the left, a strip across the top above
+// the copy, and a few low dots below it. Coordinates are in a wide, short
+// 100×30 viewBox so a `slice` fit barely crops.
+const STAR_DOTS = [
+    // around the constellation (left side)
+    { x: 6, y: 5 }, { x: 15, y: 9 }, { x: 4, y: 17 }, { x: 21, y: 13 },
+    { x: 12, y: 22 }, { x: 23, y: 20 }, { x: 17, y: 3 },
+    // top strip, above the text column (fills the top, keeps the copy clear)
+    { x: 38, y: 3.5 }, { x: 56, y: 2.5 }, { x: 74, y: 4 }, { x: 89, y: 3 },
+    // low dots — one left, two in the bottom-right corner just below the body copy
+    { x: 8, y: 26 }, { x: 68, y: 26.5 }, { x: 90, y: 27 },
+].map((p, i) => ({
     key: i,
-    x: ((i * 37 + 13) * 941) % 100,
-    y: ((i * 53 + 7) * 613) % 100,
+    x: p.x,
+    y: p.y,
     r: i % 3 === 0 ? 1 : 0.6,
     op: 0.2 + (i % 4) * 0.08,
 }))
@@ -310,63 +322,90 @@ export default function ProfileScreen() {
                     {/* Auxstrology orbit card */}
                     <View style={styles.auxCard}>
                         <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-                            <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
-                                {STAR_DOTS.slice(0, 20).map((s) => (
+                            <Svg width="100%" height="100%" viewBox="0 0 100 30" preserveAspectRatio="xMidYMid slice">
+                                {STAR_DOTS.map((s) => (
                                     <Circle key={s.key} cx={s.x} cy={s.y} r={s.r} fill="#fff" opacity={s.op * 0.8} />
                                 ))}
                             </Svg>
                         </View>
-                        <View style={styles.auxInner}>
-                            <View style={styles.auxTextBlock}>
-                                <Text style={styles.auxKicker}>AUXSTROLOGY</Text>
-                                {!aux || aux.status === "locked" || !aux.sign ? (
-                                    <>
-                                        <Text style={styles.auxTitle}>Locked{"\n"}for now</Text>
-                                        <Text style={styles.auxBody}>
-                                            Rate songs and we'll name your sound — your genres, moods & quirks.
-                                        </Text>
-                                    </>
-                                ) : (
-                                    <>
-                                        <Text style={styles.auxTitle}>
-                                            {aux.sign.name.replace(/^The /, "The\n")}
-                                        </Text>
-                                        <Text style={styles.auxBody}>
-                                            {aux.caption ?? aux.sign.summary}
-                                        </Text>
-                                    </>
-                                )}
+                        {!aux || aux.status === "locked" || !aux.sign ? (
+                            // Locked / new-user state — Claude Design "Profile · New user
+                            // (empty)": gold constellation on the LEFT, taste copy on the RIGHT.
+                            <View style={styles.auxInnerLocked}>
+                                <Svg width={64} height={64} viewBox="0 0 80 80" opacity={0.5}>
+                                    {CONST_EDGES.map(([a, b], i) => (
+                                        <Line
+                                            key={i}
+                                            x1={CONST_NODES[a][0]}
+                                            y1={CONST_NODES[a][1]}
+                                            x2={CONST_NODES[b][0]}
+                                            y2={CONST_NODES[b][1]}
+                                            stroke={colors.gold}
+                                            strokeWidth={0.9}
+                                            opacity={0.55}
+                                        />
+                                    ))}
+                                    {CONST_NODES.map(([x, y], i) => (
+                                        <Circle
+                                            key={i}
+                                            cx={x}
+                                            cy={y}
+                                            r={i === 1 ? 3 : 2}
+                                            fill={colors.gold}
+                                            opacity={0.9}
+                                        />
+                                    ))}
+                                </Svg>
+                                <View style={styles.auxTextBlock}>
+                                    <Text style={styles.auxKicker}>AUXSTROLOGY</Text>
+                                    <Text style={styles.auxTitleLocked}>Locked for now</Text>
+                                    <Text style={styles.auxBodyLocked}>
+                                        Rate songs and we'll name your sound — your genres, moods & quirks.
+                                    </Text>
+                                </View>
                             </View>
-                            <Svg
-                                width={72}
-                                height={72}
-                                viewBox="0 0 80 80"
-                                opacity={aux?.status === "active" ? 0.9 : 0.35}
-                            >
-                                {CONST_EDGES.map(([a, b], i) => (
-                                    <Line
-                                        key={i}
-                                        x1={CONST_NODES[a][0]}
-                                        y1={CONST_NODES[a][1]}
-                                        x2={CONST_NODES[b][0]}
-                                        y2={CONST_NODES[b][1]}
-                                        stroke={colors.gold}
-                                        strokeWidth={0.9}
-                                        opacity={0.55}
-                                    />
-                                ))}
-                                {CONST_NODES.map(([x, y], i) => (
-                                    <Circle
-                                        key={i}
-                                        cx={x}
-                                        cy={y}
-                                        r={i === 1 ? 3 : 2}
-                                        fill={colors.gold}
-                                        opacity={0.9}
-                                    />
-                                ))}
-                            </Svg>
-                        </View>
+                        ) : (
+                            <View style={styles.auxInner}>
+                                <View style={styles.auxTextBlock}>
+                                    <Text style={styles.auxKicker}>AUXSTROLOGY</Text>
+                                    <Text style={styles.auxTitle}>
+                                        {aux.sign.name.replace(/^The /, "The\n")}
+                                    </Text>
+                                    <Text style={styles.auxBody}>
+                                        {aux.caption ?? aux.sign.summary}
+                                    </Text>
+                                </View>
+                                <Svg
+                                    width={72}
+                                    height={72}
+                                    viewBox="0 0 80 80"
+                                    opacity={0.9}
+                                >
+                                    {CONST_EDGES.map(([a, b], i) => (
+                                        <Line
+                                            key={i}
+                                            x1={CONST_NODES[a][0]}
+                                            y1={CONST_NODES[a][1]}
+                                            x2={CONST_NODES[b][0]}
+                                            y2={CONST_NODES[b][1]}
+                                            stroke={colors.gold}
+                                            strokeWidth={0.9}
+                                            opacity={0.55}
+                                        />
+                                    ))}
+                                    {CONST_NODES.map(([x, y], i) => (
+                                        <Circle
+                                            key={i}
+                                            cx={x}
+                                            cy={y}
+                                            r={i === 1 ? 3 : 2}
+                                            fill={colors.gold}
+                                            opacity={0.9}
+                                        />
+                                    ))}
+                                </Svg>
+                            </View>
+                        )}
                     </View>
 
                     {/* Taste Profile — top genres (full users only) */}
@@ -776,6 +815,27 @@ const styles = StyleSheet.create({
         fontSize: 10,
         color: colors.cdim,
         lineHeight: 14,
+    },
+    // Locked / new-user Auxstrology card (constellation left, copy right).
+    auxInnerLocked: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+    },
+    auxTitleLocked: {
+        // serifItalic is the real italic face — RN won't synthesize italics for Fraunces.
+        fontFamily: fonts.serifItalic,
+        fontSize: 17,
+        color: colors.cream,
+        lineHeight: 20,
+        marginBottom: 4,
+    },
+    auxBodyLocked: {
+        // Sans body (fonts.sans is the system face) to match the design's softer copy.
+        fontFamily: fonts.sans,
+        fontSize: 11,
+        color: colors.cdim,
+        lineHeight: 15,
     },
     // ── Taste Profile card ────────────────────────────────────────────
     tasteCard: {
