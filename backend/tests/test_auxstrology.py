@@ -143,36 +143,34 @@ def test_zero_ratings_is_locked(client: TestClient) -> None:
     data = response.json()
     assert data["status"] == "locked"
     assert data["current_ratings"] == 0
-    assert data["required_ratings"] == 1
+    assert data["required_ratings"] == ACTIVE_MIN_RATED
     assert data["sign"] is None
     assert data["caption"] is None
 
 
-def test_first_rating_unlocks_first_contact(client: TestClient) -> None:
-    """One liked song produces the Certified Knower first-contact reading."""
-    token, _ = _register(client, "first@example.com", "firstuser")
+def test_below_threshold_stays_locked_with_no_sign(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    """Ranking under ACTIVE_MIN_RATED songs stays locked — no early teaser sign."""
+    token, user_id = _register(client, "first@example.com", "firstuser")
     _rate(client, token, 100, "Artist A", "like")
+    _seed_rankings(
+        db_session,
+        user_id,
+        n=ACTIVE_MIN_RATED - 2,
+        start_deezer_id=101,
+    )
 
     response = _get_aux(client, token)
 
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "first_contact"
-    assert data["current_ratings"] == 1
+    assert data["status"] == "locked"
+    assert data["current_ratings"] == ACTIVE_MIN_RATED - 1
     assert data["required_ratings"] == ACTIVE_MIN_RATED
-    assert data["sign"]["name"] == "The Certified Knower"
-
-
-def test_first_contact_noted_dislike_variant(client: TestClient) -> None:
-    """A first dislike with a note picks the noted variant of the reading."""
-    token, _ = _register(client, "noted@example.com", "noteduser")
-    _rate(client, token, 101, "Artist A", "dislike", note="not for me")
-
-    response = _get_aux(client, token)
-
-    data = response.json()
-    assert data["status"] == "first_contact"
-    assert data["sign"]["name"] == "The Documented No"
+    assert data["sign"] is None
+    assert data["caption"] is None
 
 
 def test_active_reading_has_sign_caption_and_evidence(

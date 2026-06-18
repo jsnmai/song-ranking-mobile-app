@@ -49,14 +49,6 @@ class ComparisonStats:
     mean_depth: float | None
 
 
-@dataclass
-class FirstRating:
-    """The user's first intentional rating, used by the First Contact reading."""
-
-    bucket: str | None
-    has_note: bool
-
-
 def get_aux_song_rows(
     db: Session,
     user_id: int,
@@ -167,37 +159,6 @@ def get_comparison_stats(
         median_duration_ms=float(duration_row[1]) if duration_row[1] is not None else None,
         session_count=depth_row[0],
         mean_depth=float(depth_row[1]) if depth_row[1] is not None else None,
-    )
-
-
-def get_first_rating(
-    db: Session,
-    user_id: int,
-) -> FirstRating:
-    """Return the user's first 'rated' event for the First Contact reading."""
-    row = db.execute(
-        select(
-            RatingEvent.new_bucket,
-            RatingEvent.note,
-        )
-        .where(
-            RatingEvent.user_id == user_id,
-            RatingEvent.event_type == "rated",
-        )
-        .order_by(
-            RatingEvent.created_at.asc(),
-            RatingEvent.id.asc(),
-        )
-        .limit(1)
-    ).first()
-    if row is None:
-        return FirstRating(
-            bucket=None,
-            has_note=False,
-        )
-    return FirstRating(
-        bucket=row.new_bucket,
-        has_note=row.note is not None,
     )
 
 

@@ -25,7 +25,6 @@ from src.crud.auxstrology import (
     RatingEventStats,
     get_aux_song_rows,
     get_comparison_stats,
-    get_first_rating,
     get_latest_rating_event_at,
     get_latest_snapshot,
     get_rating_event_stats,
@@ -39,7 +38,6 @@ from src.data.auxstrology_pools import (
     ALGORITHM_VERSION,
     AXES,
     DEFAULT_SIGN,
-    FIRST_CONTACT,
     SIGN_TIER_ORDER,
     SIGNS,
     SKELETON_PHRASES,
@@ -165,23 +163,18 @@ def _compute(
     rows = get_aux_song_rows(db, user_id)
     total_rated = len(rows)
 
-    if total_rated == 0:
+    # The chart stays fully locked until ACTIVE_MIN_RATED ranked songs — no early teaser,
+    # so the reading only appears once the user has put in real work.
+    if total_rated < ACTIVE_MIN_RATED:
         return AuxstrologyResponse(
             status="locked",
-            current_ratings=0,
-            required_ratings=1,
+            current_ratings=total_rated,
+            required_ratings=ACTIVE_MIN_RATED,
             sign=None,
             caption=None,
             adjectives=[],
             evidence=[],
             axes={},
-        )
-
-    if total_rated < ACTIVE_MIN_RATED:
-        return _first_contact_response(
-            db,
-            user_id,
-            total_rated,
         )
 
     profile = get_profile_by_user_id(db, user_id)
@@ -223,31 +216,6 @@ def _compute(
             key: result.zone
             for key, result in results.items()
         },
-    )
-
-
-def _first_contact_response(
-    db: Session,
-    user_id: int,
-    total_rated: int,
-) -> AuxstrologyResponse:
-    """Build the 1-4 rating First Contact reading from the user's first verdict."""
-    first = get_first_rating(db, user_id)
-    bucket = first.bucket if first.bucket in ("like", "alright", "dislike") else "alright"
-    key = f"{bucket}_noted" if first.has_note else bucket
-    reading = FIRST_CONTACT[key]
-    return AuxstrologyResponse(
-        status="first_contact",
-        current_ratings=total_rated,
-        required_ratings=ACTIVE_MIN_RATED,
-        sign={
-            "name": reading["name"],
-            "summary": reading["summary"],
-        },
-        caption=None,
-        adjectives=[],
-        evidence=[],
-        axes={},
     )
 
 

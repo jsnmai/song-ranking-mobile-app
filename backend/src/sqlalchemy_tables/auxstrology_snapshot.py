@@ -39,8 +39,8 @@ class AuxstrologySnapshot(Base):
         String(20),
         nullable=False,
     )
-    # "locked" | "first_contact" | "active" — plain string, no ENUM, so new
-    # ladder stages need no ALTER TYPE migration (same trick as songs.enrichment_status).
+    # "locked" | "active" — plain string, no ENUM, so new ladder stages need no
+    # ALTER TYPE migration (same trick as songs.enrichment_status).
     status: Mapped[str] = mapped_column(
         String(20),
         nullable=False,

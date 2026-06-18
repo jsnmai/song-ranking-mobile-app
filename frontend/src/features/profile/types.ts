@@ -155,7 +155,7 @@ export type AuxstrologySign = {
 
 // Mirrors AuxstrologyResponse in backend/src/pydantic_schemas/auxstrology.py
 export type AuxstrologyResponse = {
-    status: "locked" | "first_contact" | "active";
+    status: "locked" | "active";
     current_ratings: number;
     required_ratings: number | null;
     sign: AuxstrologySign | null;

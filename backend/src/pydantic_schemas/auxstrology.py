@@ -15,12 +15,13 @@ class AuxstrologyResponse(BaseModel):
     """
     One Auxstrology reading.
 
-    status drives the unlock ladder: "locked" (0 ratings), "first_contact"
-    (1-4), "active" (5+, full sign + caption + evidence). required_ratings is
-    the next threshold, or null once fully unlocked.
+    status drives the unlock gate: "locked" (below the threshold — no sign yet)
+    and "active" (full sign + caption + evidence once the user has ranked
+    ACTIVE_MIN_RATED songs). required_ratings is the unlock threshold while
+    locked, or null once unlocked.
     """
 
-    status: Literal["locked", "first_contact", "active"]
+    status: Literal["locked", "active"]
     current_ratings: int
     required_ratings: int | None
     sign: AuxstrologySign | None

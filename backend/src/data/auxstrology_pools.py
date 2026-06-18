@@ -17,14 +17,15 @@ from dataclasses import dataclass
 
 # Bump when pools, axes, or selection logic change in a way that should
 # invalidate stored snapshots / re-seed adjective picks.
-ALGORITHM_VERSION = "v2"
+ALGORITHM_VERSION = "v3"
 
 # Five zones every axis is bucketed into by its z-score.
 ZONES = ("very_low", "low", "mid", "high", "very_high")
 
-# Unlock ladder thresholds (rated songs). AUXSTROLOGY.md §12.
-FIRST_CONTACT_MIN_RATED = 1
-ACTIVE_MIN_RATED = 5
+# Unlock threshold (rated songs): the chart stays locked until the user has put in
+# real work, then the full reading unlocks at once. No intermediate teaser — a chart
+# after a single rating felt unearned. AUXSTROLOGY.md §12.
+ACTIVE_MIN_RATED = 10
 
 
 @dataclass(frozen=True)
@@ -734,34 +735,4 @@ SIGNS: dict[str, dict[str, dict[str, str]]] = {
 DEFAULT_SIGN: dict[str, str] = {
     "name": "The Open Book",
     "summary": "Your chart is still taking shape — every rating sharpens it.",
-}
-
-# First Contact readings (1-4 ratings): a curated heuristic on the user's first
-# verdict. Keyed by first-rating bucket; the noted variant wins when the first
-# rating carried a note. AUXSTROLOGY.md §12, §20.
-FIRST_CONTACT: dict[str, dict[str, str]] = {
-    "like": {
-        "name": "The Certified Knower",
-        "summary": "You came in with the answer, not a question. Your first rating was less discovery and more declaration.",
-    },
-    "like_noted": {
-        "name": "The Instant Devotee",
-        "summary": "First song, full heart, and a note to prove it — you don't do casual first impressions.",
-    },
-    "alright": {
-        "name": "The Open Skeptic",
-        "summary": "You'll listen, but you won't hand out trust for free. Your chart starts in careful-curious territory.",
-    },
-    "alright_noted": {
-        "name": "The Measured Witness",
-        "summary": "A middle verdict and a written record — you started your chart like a careful judge opening a case file.",
-    },
-    "dislike": {
-        "name": "The Fast No",
-        "summary": "You gave it a chance, heard enough, and closed the case.",
-    },
-    "dislike_noted": {
-        "name": "The Documented No",
-        "summary": "Not just a no — a no with receipts. Your standards arrived before your favorites did.",
-    },
 }
