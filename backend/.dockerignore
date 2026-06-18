@@ -1,0 +1,27 @@
+# Build context is backend/. Keep the image lean and never bake secrets in.
+
+# Secrets — never copy a local env file into the image
+.env
+.env.*
+
+# Local virtualenv — the image builds its own Linux .venv via `uv sync`.
+# (Critical: without this, the host .venv would overwrite the image's on COPY.)
+.venv/
+
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.uv-cache/
+
+# Tests are not needed in the production image
+tests/
+
+# Docs / tooling / VCS noise
+*.md
+.git/
+.gitignore
+.DS_Store
+Dockerfile
+.dockerignore
