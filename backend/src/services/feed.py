@@ -5,8 +5,14 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from src.crud.circle_aggregates import list_circle_contributors
-from src.crud.feed import FeedEventRow, list_feed_events
-from src.pydantic_schemas.feed import CircleRatersResponse, FeedEventResponse, FeedListResponse
+from src.crud.feed import FeedEventRow, latest_rerate_from_followed, list_feed_events
+from src.pydantic_schemas.feed import (
+    CircleRatersResponse,
+    FeedEventResponse,
+    FeedListResponse,
+    FeedModulesResponse,
+    RerateRadarItem,
+)
 from src.pydantic_schemas.profile import ProfileResponse
 from src.pydantic_schemas.song import SongResponse
 from src.services.like import like_states_for_events
@@ -40,6 +46,39 @@ def list_song_circle_raters(
             ProfileResponse.model_validate(contributor.profile)
             for contributor in by_song.get(song_id, [])
         ],
+    )
+
+
+def get_feed_modules(
+    db: Session,
+    user_id: int,
+) -> FeedModulesResponse:
+    """Return the bundled Feed module aggregates for the viewer.
+
+    Only Re-rate Radar is implemented; the other module keys are reserved and return null
+    until each one ships. Every aggregate rides the shared social-access predicates, so the
+    whole module strip honors the same taste-visibility/block/deleted-user rules as the feed.
+    """
+    rerate_row = latest_rerate_from_followed(db, user_id)
+    return FeedModulesResponse(
+        rerate_radar=_rerate_radar_item(rerate_row) if rerate_row is not None else None,
+    )
+
+
+def _rerate_radar_item(
+    row: FeedEventRow,
+) -> RerateRadarItem:
+    """Build the Re-rate Radar response from a joined feed-event row."""
+    return RerateRadarItem(
+        rating_event_id=row.event.id,
+        actor_profile=ProfileResponse.model_validate(row.actor_profile),
+        song=SongResponse.model_validate(row.song),
+        previous_bucket=row.event.previous_bucket,
+        previous_score=row.event.previous_score,
+        new_bucket=row.event.new_bucket,
+        new_score=row.event.new_score,
+        note=row.event.note,
+        created_at=row.event.created_at,
     )
 
 

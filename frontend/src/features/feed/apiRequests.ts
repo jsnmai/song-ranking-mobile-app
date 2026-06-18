@@ -1,7 +1,7 @@
 // API functions for the Feed tab.
 import { apiClient } from "../../api/client"
 import { ProfileReportRequest, ProfileReportResponse } from "../profile/types"
-import { CircleRatersResponse, FeedListResponse } from "./types"
+import { CircleRatersResponse, FeedListResponse, FeedModulesResponse } from "./types"
 
 // Calls GET /api/v1/feed
 // The backend reads rating_events from users the current user follows.
@@ -11,6 +11,14 @@ export async function listMyFeed(
 ): Promise<FeedListResponse> {
     const path = cursor ? `/api/v1/feed?cursor=${encodeURIComponent(cursor)}` : "/api/v1/feed"
     return apiClient.get<FeedListResponse>(path, token)
+}
+
+// Calls GET /api/v1/feed/modules
+// One bundled request for every Feed module card (only Re-rate Radar is live so far).
+export async function getFeedModules(
+    token: string,
+): Promise<FeedModulesResponse> {
+    return apiClient.get<FeedModulesResponse>("/api/v1/feed/modules", token)
 }
 
 // Calls GET /api/v1/feed/songs/{songId}/circle-raters

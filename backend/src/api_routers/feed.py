@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
 from src.core.limiter import limiter
-from src.pydantic_schemas.feed import CircleRatersResponse, FeedListResponse
-from src.services.feed import list_my_feed, list_song_circle_raters
+from src.pydantic_schemas.feed import CircleRatersResponse, FeedListResponse, FeedModulesResponse
+from src.services.feed import get_feed_modules, list_my_feed, list_song_circle_raters
 from src.sqlalchemy_tables.user import User
 
 router = APIRouter(
@@ -36,6 +36,23 @@ def my_feed(
         user_id=current_user.id,
         limit=limit,
         cursor=cursor,
+    )
+
+
+@router.get(
+    "/modules",
+    response_model=FeedModulesResponse,
+)
+@limiter.limit("300/minute")
+def feed_modules(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FeedModulesResponse:
+    """Bundled Feed module aggregates behind the shared privacy layer (only Re-rate Radar is live)."""
+    return get_feed_modules(
+        db,
+        user_id=current_user.id,
     )
 
 

@@ -41,3 +41,36 @@ class CircleRatersResponse(BaseModel):
     """
 
     raters: list[ProfileResponse]
+
+
+class RerateRadarItem(BaseModel):
+    """Re-rate Radar: one followed user's recent score change on a song (the delta)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    rating_event_id: int
+    actor_profile: ProfileResponse
+    song: SongResponse
+    previous_bucket: BucketName
+    previous_score: float
+    new_bucket: BucketName
+    new_score: float
+    note: str | None
+    created_at: datetime
+
+
+class FeedModulesResponse(BaseModel):
+    """Bundled Feed module aggregates served behind the shared social-access privacy layer.
+
+    One endpoint backs every Feed module card so the Feed makes a single request and the
+    privacy filtering runs once per load (the paginated activity stream stays its own /feed).
+    Modules that are not built yet are reserved keys that always return null for now; each
+    gains its own typed model as it ships.
+    """
+
+    rerate_radar: RerateRadarItem | None = None
+    # Reserved — not implemented yet; always null until each module ships.
+    consensus: None = None
+    disagreement_spotlight: None = None
+    split_decision: None = None
+    match_moment: None = None

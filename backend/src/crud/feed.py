@@ -114,3 +114,63 @@ def list_feed_events(
         )
         for row in rows
     ]
+
+
+def latest_rerate_from_followed(
+    db: Session,
+    user_id: int,
+) -> FeedEventRow | None:
+    """Return the most recent visible re-rate by a followed user where the score moved.
+
+    Re-rate Radar surfaces *friends* changing their scores, so it uses the followed
+    predicate (which already excludes the viewer themselves) — never the viewer's own
+    re-rates. Taste visibility, friends-only mutual access, blocks (both directions), and
+    deleted-user exclusion all come from the shared predicate, so Re-rate Radar honors the
+    same privacy rules as the rest of the feed. Only `rerated` events with a real
+    previous->new movement qualify; a re-rate that lands on the same score is not "radar".
+    """
+    statement = (
+        select(
+            RatingEvent,
+            Profile,
+            Song,
+        )
+        .join(
+            Profile,
+            Profile.user_id == RatingEvent.user_id,
+        )
+        .join(
+            Song,
+            Song.id == RatingEvent.song_id,
+        )
+        .where(
+            followed_visible_taste_owner_predicate(
+                user_id,
+                RatingEvent.user_id,
+            )
+        )
+        .where(RatingEvent.event_type == "rerated")
+        .where(RatingEvent.previous_bucket.is_not(None))
+        .where(RatingEvent.previous_score.is_not(None))
+        .where(RatingEvent.new_bucket.is_not(None))
+        .where(RatingEvent.new_score.is_not(None))
+        .where(
+            or_(
+                RatingEvent.new_score != RatingEvent.previous_score,
+                RatingEvent.new_bucket != RatingEvent.previous_bucket,
+            )
+        )
+        .order_by(
+            RatingEvent.created_at.desc(),
+            RatingEvent.id.desc(),
+        )
+        .limit(1)
+    )
+    row = db.execute(statement).first()
+    if row is None:
+        return None
+    return FeedEventRow(
+        event=row[0],
+        actor_profile=row[1],
+        song=row[2],
+    )

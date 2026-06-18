@@ -5,10 +5,11 @@ import { ApiError } from "../../../api/client"
 import { RankingResponse } from "../../comparison/types"
 import { Profile } from "../../profile/types"
 import FeedScreen from "../FeedScreen"
-import { FeedEvent } from "../types"
+import { FeedEvent, RerateRadarItem } from "../types"
 
 const mockNavigate = jest.fn()
 const mockListMyFeed = jest.fn()
+const mockGetFeedModules = jest.fn()
 const mockReportRatingEvent = jest.fn()
 const mockLikeActivity = jest.fn()
 const mockUnlikeActivity = jest.fn()
@@ -91,6 +92,7 @@ jest.mock("../../auth/AuthContext", () => ({
 
 jest.mock("../apiRequests", () => ({
     listMyFeed: (...args: unknown[]) => mockListMyFeed(...args),
+    getFeedModules: (...args: unknown[]) => mockGetFeedModules(...args),
     getSongCircleRaters: (...args: unknown[]) => mockGetSongCircleRaters(...args),
     reportRatingEvent: (...args: unknown[]) => mockReportRatingEvent(...args),
 }))
@@ -168,9 +170,30 @@ const ranking: RankingResponse = {
     song,
 }
 
+const emptyModules = {
+    rerate_radar: null,
+    consensus: null,
+    disagreement_spotlight: null,
+    split_decision: null,
+    match_moment: null,
+} as const
+
+const rerateRadarItem: RerateRadarItem = {
+    rating_event_id: 55,
+    actor_profile: { ...feedEvent.actor_profile },
+    song,
+    previous_bucket: "alright",
+    previous_score: 6.0,
+    new_bucket: "like",
+    new_score: 8.5,
+    note: null,
+    created_at: "2026-01-01T00:00:00Z",
+}
+
 beforeEach(() => {
     jest.resetAllMocks()
     mockCurrentProfile = { ...mockCurrentProfile, hide_like_counts: false, user_stats: null }
+    mockGetFeedModules.mockResolvedValue({ ...emptyModules })
     mockGetSongCircleRaters.mockResolvedValue({ raters: [] })
     mockRefreshProfile.mockResolvedValue(undefined)
     mockUpdateLikePrivacy.mockResolvedValue({ ...mockCurrentProfile, hide_like_counts: true })
@@ -582,6 +605,52 @@ describe("FeedScreen", () => {
             )
             expect(screen.getByText("Thanks. We'll review this report.")).toBeTruthy()
         })
+    })
+
+    it("surfaces a live Re-rate Radar card with the score delta and opens the song", async () => {
+        // The module strip only renders once the viewer has rated 10+ songs.
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 12, bookmarked_count: 0 },
+        }
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+        mockGetFeedModules.mockResolvedValue({ ...emptyModules, rerate_radar: rerateRadarItem })
+        mockGetMyRankingByDeezerId.mockResolvedValue(ranking)
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-rerate-radar-55")).toBeTruthy()
+        })
+        // The live card replaces the locked placeholder.
+        expect(screen.queryByTestId("feed-rerate-radar-locked")).toBeNull()
+        // The previous → new delta is shown (6.0 → 8.5, +2.5).
+        expect(screen.getByText("8.5")).toBeTruthy()
+        expect(screen.getByText("+2.5")).toBeTruthy()
+
+        fireEvent.press(screen.getByTestId("feed-rerate-radar-55"))
+        await waitFor(() => {
+            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
+        })
+    })
+
+    it("falls back to the locked Re-rate Radar card when there is no qualifying re-rate", async () => {
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 12, bookmarked_count: 0 },
+        }
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+        mockGetFeedModules.mockResolvedValue({ ...emptyModules })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-song-9")).toBeTruthy()
+        })
+        // No live card, but the locked placeholder keeps the module slot visible.
+        expect(screen.queryByTestId("feed-rerate-radar-55")).toBeNull()
+        expect(screen.getByTestId("feed-rerate-radar-locked")).toBeTruthy()
+        expect(screen.getByText("When a friend changes a score")).toBeTruthy()
     })
 
     it("opens Discover user search from the empty state", async () => {

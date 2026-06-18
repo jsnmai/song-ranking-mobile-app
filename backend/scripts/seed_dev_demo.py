@@ -54,6 +54,7 @@ from scripts.demo_seed_data import (
     LEGACY_DEMO_EMAIL_DOMAINS,
     PRODUCTION_URL_DENYLIST,
     RANKINGS_BY_USERNAME,
+    RERATE_EVENT_SPECS,
     SONG_CATALOG,
     STREAK_SPECS,
     RankingSeedSpec,
@@ -413,6 +414,29 @@ def seed_rating_events(
                 new_position=spec.position,
                 previous_score=None,
                 new_score=score,
+                note=None,
+                event_metadata=None,
+                created_at=created_at,
+            ),
+        )
+
+    for username, rerate in RERATE_EVENT_SPECS:
+        user_id = user_ids[username]
+        song_id = song_ids[rerate.deezer_id]
+        score_map = _scores_for_specs(RANKINGS_BY_USERNAME[username])
+        new_score = score_map[(rerate.deezer_id, rerate.new_bucket)]
+        created_at = event_created_at(anchor, rerate.hours_ago)
+        db.add(
+            RatingEvent(
+                user_id=user_id,
+                song_id=song_id,
+                event_type="rerated",
+                previous_bucket=rerate.previous_bucket,
+                new_bucket=rerate.new_bucket,
+                previous_position=None,
+                new_position=rerate.new_position,
+                previous_score=rerate.previous_score,
+                new_score=new_score,
                 note=None,
                 event_metadata=None,
                 created_at=created_at,

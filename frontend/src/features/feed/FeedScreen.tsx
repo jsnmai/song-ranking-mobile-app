@@ -21,7 +21,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import Svg, { Circle, Ellipse, Path, Polygon, Polyline } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
-import { ArrowLabel } from "../../components/Arrow"
+import { Arrow, ArrowLabel } from "../../components/Arrow"
 import { AppStackParamList, FeedStackParamList, TabParamList } from "../../navigation/types"
 import { colors, fonts, bucketColor } from "../../theme"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
@@ -31,8 +31,8 @@ import { useAuth } from "../auth/AuthContext"
 import { ProfileBase, ReportReason } from "../profile/types"
 import { RankingResponse } from "../comparison/types"
 import { getMyRankingByDeezerId } from "../rankings/apiRequests"
-import { getSongCircleRaters, listMyFeed, reportRatingEvent } from "./apiRequests"
-import { FeedEvent } from "./types"
+import { getFeedModules, getSongCircleRaters, listMyFeed, reportRatingEvent } from "./apiRequests"
+import { FeedEvent, RerateRadarItem } from "./types"
 
 type FeedNavigation = CompositeNavigationProp<
     NativeStackNavigationProp<FeedStackParamList, "FeedHome">,
@@ -173,6 +173,8 @@ export default function FeedScreen() {
     const [error, setError] = useState<string | null>(null)
     const [friendsCardDismissed, setFriendsCardDismissed] = useState(false)
     const [heroRaters, setHeroRaters] = useState<ProfileBase[]>([])
+    const [rerateRadar, setRerateRadar] = useState<RerateRadarItem | null>(null)
+    const [rerateOpening, setRerateOpening] = useState(false)
     const listRef = useRef<FlashListRef<FeedEvent>>(null)
     // Re-pressing the Feed tab while already on the Feed home screen scrolls the
     // activity list back to the top. useScrollToTop only fires when this screen is
@@ -213,9 +215,46 @@ export default function FeedScreen() {
         }
     }, [token])
 
+    // Feed module aggregates ride their own bundled endpoint, refreshed alongside the feed.
+    // A module failure must never blank the feed, so errors just leave the card on its locked state.
+    const loadModules = useCallback(async () => {
+        if (!token) return
+        try {
+            const modules = await getFeedModules(token)
+            setRerateRadar(modules.rerate_radar)
+        } catch {
+            setRerateRadar(null)
+        }
+    }, [token])
+
     const handleLoadMore = () => {
         if (!nextCursor || isLoading || isLoadingMore) return
         loadFeed(nextCursor, false)
+    }
+
+    // Open the song behind the live Re-rate Radar card, mirroring handleSongPress' ranking lookup.
+    const handleRerateRadarPress = async () => {
+        if (!token || rerateRadar === null || rerateOpening) return
+        setRerateOpening(true)
+        setError(null)
+        try {
+            const ranking: RankingResponse = await getMyRankingByDeezerId(rerateRadar.song.deezer_id, token)
+            navigation.navigate("SongDetail", { ranking })
+        } catch (err) {
+            if (err instanceof ApiError && err.status === 404) {
+                navigation.navigate("SongDetail", { song: rerateRadar.song })
+                return
+            }
+            if (err instanceof ApiError) {
+                setError(err.detail)
+            } else if (err instanceof Error) {
+                setError(err.message)
+            } else {
+                setError("Could not open this song.")
+            }
+        } finally {
+            setRerateOpening(false)
+        }
     }
 
     const handleFindUsers = () => {
@@ -512,6 +551,93 @@ export default function FeedScreen() {
     }
 
     // Recent Verdict is rendered separately (not gated by rated>=10); this section is the rest.
+    // Re-rate Radar half-tile: the live delta card when a followed user has moved a score,
+    // otherwise the original locked placeholder (the slot keeps its locked state, never hides).
+    const renderRerateRadar = () => {
+        if (rerateRadar === null) {
+            return (
+                <View style={[styles.fullCell, { height: 150, backgroundColor: colors.navy }]} testID="feed-rerate-radar-locked">
+                    <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
+                        <View style={styles.fullCellTop}>
+                            <View style={styles.goldPill}><Text style={styles.goldPillText}>Re-rate radar</Text></View>
+                            <View style={styles.lockTagRow}>
+                                <LockIcon color="rgba(255,255,255,0.85)" size={10} />
+                                <Text style={styles.lockTagLabel}>LOCKED</Text>
+                            </View>
+                        </View>
+                        {/* Placeholder text pill next to the empty square */}
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                            <View style={styles.ghostBoxSm} />
+                            <View style={{ flex: 1 }}>
+                                <View style={[styles.skBar, { width: "62%", height: 10, backgroundColor: "rgba(255,255,255,0.3)" }]} />
+                            </View>
+                        </View>
+                        {/* Sparkline as flex child 3/4 */}
+                        <Svg width="100%" height={34} viewBox="0 0 100 34" preserveAspectRatio="none">
+                            <Polyline
+                                points="4,27 32,22 54,18 76,12 96,7"
+                                fill="none"
+                                stroke={colors.gold}
+                                strokeOpacity="0.4"
+                                strokeWidth="2"
+                                strokeDasharray="3 3"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                            />
+                        </Svg>
+                        {/* Caption next to the lock */}
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                            <View style={styles.lockDotSm}><LockIcon color="#fff" size={13} /></View>
+                            <Text style={[styles.lockCardDesc, { flex: 1, color: "rgba(255,255,255,0.55)" }]}>When a friend changes a score</Text>
+                        </View>
+                    </View>
+                </View>
+            )
+        }
+
+        const r = rerateRadar
+        const newColor = bucketColor(r.new_bucket)
+        const delta = r.new_score - r.previous_score
+        const up = delta >= 0
+        const deltaColor = up ? colors.mint : colors.accent
+        const deltaLabel = `${up ? "+" : "−"}${Math.abs(delta).toFixed(1)}`
+        return (
+            <TouchableOpacity
+                style={[styles.fullCell, { height: 150, backgroundColor: colors.navy }]}
+                activeOpacity={0.9}
+                onPress={handleRerateRadarPress}
+                disabled={rerateOpening}
+                testID={`feed-rerate-radar-${r.rating_event_id}`}
+            >
+                <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
+                    <View style={styles.fullCellTop}>
+                        <View style={styles.goldPill}><Text style={styles.goldPillText}>Re-rate radar</Text></View>
+                        <Text style={styles.rrTime}>{formatRelativeTime(r.created_at).toUpperCase()}</Text>
+                    </View>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        {r.song.cover_url ? (
+                            <Image style={styles.rrArt} source={{ uri: r.song.cover_url }} />
+                        ) : (
+                            <View style={[styles.rrArt, { backgroundColor: colors.navyHi }]} />
+                        )}
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={styles.rrWho} numberOfLines={1}>@{r.actor_profile.username}</Text>
+                            <Text style={styles.rrSong} numberOfLines={1}>{r.song.title}</Text>
+                        </View>
+                    </View>
+                    <View style={styles.rrDeltaRow}>
+                        <Text style={styles.rrPrev}>{r.previous_score.toFixed(1)}</Text>
+                        <Arrow direction="right" color={colors.cdim} size={12} />
+                        <Text style={[styles.rrNew, { color: newColor }]}>{r.new_score.toFixed(1)}</Text>
+                        <View style={[styles.rrChip, { backgroundColor: deltaColor }]}>
+                            <Text style={styles.rrChipText}>{deltaLabel}</Text>
+                        </View>
+                    </View>
+                </View>
+            </TouchableOpacity>
+        )
+    }
+
     const renderUnlockedSection = () => (
         <View style={styles.unlockedSection}>
             {/* Row: Split (locked) + Consensus (locked, 138px) */}
@@ -564,45 +690,9 @@ export default function FeedScreen() {
                 </View>
             </View>
 
-            {/* Row: Re-rate Radar (locked, 150px) + Match Moment (locked, 150px) */}
+            {/* Row: Re-rate Radar (live-or-locked, 150px) + Match Moment (locked, 150px) */}
             <View style={styles.fullRow}>
-                {/* Re-rate Radar */}
-                <View style={[styles.fullCell, { height: 150, backgroundColor: colors.navy }]}>
-                    <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
-                        <View style={styles.fullCellTop}>
-                            <View style={styles.goldPill}><Text style={styles.goldPillText}>Re-rate radar</Text></View>
-                            <View style={styles.lockTagRow}>
-                                <LockIcon color="rgba(255,255,255,0.85)" size={10} />
-                                <Text style={styles.lockTagLabel}>LOCKED</Text>
-                            </View>
-                        </View>
-                        {/* Placeholder text pill next to the empty square */}
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                            <View style={styles.ghostBoxSm} />
-                            <View style={{ flex: 1 }}>
-                                <View style={[styles.skBar, { width: "62%", height: 10, backgroundColor: "rgba(255,255,255,0.3)" }]} />
-                            </View>
-                        </View>
-                        {/* Sparkline as flex child 3/4 */}
-                        <Svg width="100%" height={34} viewBox="0 0 100 34" preserveAspectRatio="none">
-                            <Polyline
-                                points="4,27 32,22 54,18 76,12 96,7"
-                                fill="none"
-                                stroke={colors.gold}
-                                strokeOpacity="0.4"
-                                strokeWidth="2"
-                                strokeDasharray="3 3"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                            />
-                        </Svg>
-                        {/* Caption next to the lock */}
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                            <View style={styles.lockDotSm}><LockIcon color="#fff" size={13} /></View>
-                            <Text style={[styles.lockCardDesc, { flex: 1, color: "rgba(255,255,255,0.55)" }]}>When a friend changes a score</Text>
-                        </View>
-                    </View>
-                </View>
+                {renderRerateRadar()}
 
                 {/* Match Moment — locked, 150px, mint */}
                 <View style={[styles.fullCell, { height: 150, backgroundColor: colors.mint }]}>
@@ -1180,13 +1270,15 @@ export default function FeedScreen() {
 
     useEffect(() => {
         loadFeed(null, true)
+        loadModules()
         refreshProfile()
         const tabNavigation = navigation.getParent<BottomTabNavigationProp<TabParamList, "Feed">>()
         return tabNavigation?.addListener("focus", () => {
             loadFeed(null, true)
+            loadModules()
             refreshProfile()
         })
-    }, [loadFeed, refreshProfile, navigation])
+    }, [loadFeed, loadModules, refreshProfile, navigation])
 
     if (error !== null && events.length === 0) {
         return (
@@ -1924,6 +2016,59 @@ const styles = StyleSheet.create({
     unlockedSection: {
         gap: 10,
         marginTop: 4,
+    },
+    // Re-rate Radar — live half-tile state (a followed user's score change), same footprint as locked
+    rrTime: {
+        fontFamily: fonts.mono,
+        fontSize: 8,
+        letterSpacing: 0.4,
+        color: colors.cdim,
+    },
+    rrArt: {
+        width: 32,
+        height: 32,
+        borderRadius: 7,
+    },
+    rrWho: {
+        fontFamily: fonts.mono,
+        fontSize: 10,
+        letterSpacing: 0.3,
+        color: colors.cream,
+        marginBottom: 2,
+    },
+    rrSong: {
+        fontFamily: fonts.display,
+        fontSize: 13,
+        lineHeight: 15,
+        color: colors.cream,
+    },
+    rrDeltaRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+    },
+    rrPrev: {
+        fontFamily: fonts.display,
+        fontSize: 12,
+        color: colors.cdim,
+        textDecorationLine: "line-through",
+    },
+    rrNew: {
+        fontFamily: fonts.display,
+        fontSize: 18,
+        letterSpacing: -0.3,
+    },
+    rrChip: {
+        marginLeft: "auto",
+        borderRadius: 999,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+    },
+    rrChipText: {
+        fontFamily: fonts.mono,
+        fontSize: 9,
+        fontWeight: "700",
+        color: "#fff",
     },
     // Recent Verdicts full card
     fvOuter: {

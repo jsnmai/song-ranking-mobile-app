@@ -71,6 +71,23 @@ class RatingEventSeedSpec:
 
 
 @dataclass(frozen=True)
+class RerateEventSeedSpec:
+    """One feed-visible re-rate (a score the user moved), powering Re-rate Radar.
+
+    `new_bucket`/`new_position` must mirror the user's current ranking for the song so the
+    event's stored `new_score` matches the live ranking; `previous_*` are the pre-move values
+    shown as the delta.
+    """
+
+    deezer_id: int
+    previous_bucket: str
+    previous_score: float
+    new_bucket: str
+    new_position: int
+    hours_ago: float
+
+
+@dataclass(frozen=True)
 class ComparisonSeedSpec:
     """One finalized Versus History receipt for a demo account."""
 
@@ -435,6 +452,13 @@ FEED_EVENT_SPECS: tuple[tuple[str, RatingEventSeedSpec], ...] = (
             RatingEventSeedSpec(9_000_009, "like", 5, 7.0),
         ),
     ),
+)
+
+# Re-rate events (a friend moved a score) so demo_power's Re-rate Radar module has a live card.
+# demo_power follows demo_friend (public), who ranks 9_000_009 as ("like", 5); the event records an
+# upward move from "alright" to that current "like" placement, so the delta reads as a real bump.
+RERATE_EVENT_SPECS: tuple[tuple[str, RerateEventSeedSpec], ...] = (
+    ("demo_friend", RerateEventSeedSpec(9_000_009, "alright", 5.4, "like", 5, 0.4)),
 )
 
 COMPARISON_SPECS_BY_USERNAME: dict[str, tuple[ComparisonSeedSpec, ...]] = {
