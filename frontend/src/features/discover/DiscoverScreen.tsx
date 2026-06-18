@@ -162,15 +162,10 @@ export default function DiscoverScreen() {
         }
     }, [searchFocused])
 
-    // Restore keyboard when returning to this tab while a search is in progress.
-    useFocusEffect(
-        useCallback(() => {
-            if (searchFocused) {
-                const id = setTimeout(() => searchRef.current?.focus(), 150)
-                return () => clearTimeout(id)
-            }
-        }, [searchFocused])
-    )
+    // Deliberately do NOT re-focus the input when this screen regains focus
+    // (e.g. returning from Song Detail or dismissing the Rate sheet). The search
+    // UI and results stay visible, but the keyboard stays down until the user
+    // taps the search bar again — auto-popping it back up is jarring.
 
     // Pressing the Discover tab while already on it and searching → reset to home.
     // tabPress fires on the parent tab navigator, not this screen's stack.
