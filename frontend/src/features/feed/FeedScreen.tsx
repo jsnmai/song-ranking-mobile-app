@@ -1366,7 +1366,7 @@ export default function FeedScreen() {
                     <>
                         {renderGettingStartedBanner()}
 
-                        {!friendsCardDismissed ? (
+                        {!friendsCardDismissed && (
                             /* Find friends card */
                             <View style={styles.findFriendsCard}>
                                 <TouchableOpacity
@@ -1398,9 +1398,9 @@ export default function FeedScreen() {
                                     </TouchableOpacity>
                                 </View>
                             </View>
-                        ) : (
-                            renderLockedSection()
                         )}
+
+                        {renderLockedSection()}
                     </>
                 )}
 
