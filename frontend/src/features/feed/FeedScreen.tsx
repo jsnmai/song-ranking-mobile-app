@@ -1198,15 +1198,17 @@ export default function FeedScreen() {
                 {renderRecentVerdict()}
 
                 {gettingStartedComplete ? (
-                    renderUnlockedSection()
+                    <>
+                        {renderUnlockedSection()}
+                        {renderFindFriends()}
+                    </>
                 ) : (
                     <>
                         {renderGettingStartedBanner()}
+                        {renderFindFriends()}
                         {renderLockedSection()}
                     </>
                 )}
-
-                {renderFindFriends()}
 
                 {events.length > 0 && (
                     <View style={styles.sectionRow}>
