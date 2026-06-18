@@ -21,7 +21,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import Svg, { Circle, Ellipse, Path, Polygon, Polyline } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
-import { Arrow, ArrowLabel } from "../../components/Arrow"
+import { ArrowLabel } from "../../components/Arrow"
 import { AppStackParamList, FeedStackParamList, TabParamList } from "../../navigation/types"
 import { colors, fonts, bucketColor } from "../../theme"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
@@ -77,6 +77,9 @@ const ORBIT_STARS = [
     { x: 70, y: 42, r: 0.6, o: 0.55 },
     { x: 55, y: 55, r: 0.5, o: 0.25 },
 ] as const
+
+// Re-rate Radar sparkline row height (px); the trajectory node tops are computed against it.
+const SPARK_H = 26
 
 // Ring arc constants for feed event album art
 const RING_SIZE = 84
@@ -596,11 +599,23 @@ export default function FeedScreen() {
         }
 
         const r = rerateRadar
-        const newColor = bucketColor(r.new_bucket)
         const delta = r.new_score - r.previous_score
         const up = delta >= 0
-        const deltaColor = up ? colors.mint : colors.accent
-        const deltaLabel = `${up ? "+" : "−"}${Math.abs(delta).toFixed(1)}`
+        const deltaColor = up ? colors.gold : colors.sky
+        // The trajectory line maps each score (0–10) to a y in the sparkline viewBox, so the
+        // slope and the two end nodes reflect the actual previous → new change, not a canned curve.
+        const SPARK_VB = 42
+        const SPARK_PAD = 7
+        const scoreToY = (s: number) =>
+            SPARK_PAD + (1 - Math.max(0, Math.min(10, s)) / 10) * (SPARK_VB - 2 * SPARK_PAD)
+        const startY = scoreToY(r.previous_score)
+        const endY = scoreToY(r.new_score)
+        // Hold a flat baseline at the previous score, then bend to the new score on the right.
+        // The bend's direction and steepness reflect the real change; round joins soften the elbow.
+        const sparkPoints = `4,${startY.toFixed(1)} 44,${startY.toFixed(1)} 96,${endY.toFixed(1)}`
+        // Node tops in px: the polyline (viewBox height SPARK_VB) is stretched to the SPARK_H-tall row.
+        const startTop = (startY / SPARK_VB) * SPARK_H
+        const endTop = (endY / SPARK_VB) * SPARK_H
         return (
             <TouchableOpacity
                 style={[styles.fullCell, { height: 150, backgroundColor: colors.navy }]}
@@ -610,27 +625,44 @@ export default function FeedScreen() {
                 testID={`feed-rerate-radar-${r.rating_event_id}`}
             >
                 <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
-                    <View style={styles.fullCellTop}>
-                        <View style={styles.goldPill}><Text style={styles.goldPillText}>Re-rate radar</Text></View>
-                        <Text style={styles.rrTime}>{formatRelativeTime(r.created_at).toUpperCase()}</Text>
+                    {/* Pill with the actor handle directly beneath it, so a long handle still fits. */}
+                    <View>
+                        <View style={styles.fullCellTop}>
+                            <View style={styles.goldPill}><Text style={styles.goldPillText}>Re-rate radar</Text></View>
+                        </View>
+                        <Text style={styles.rrUser} numberOfLines={1}>@{r.actor_profile.username}</Text>
                     </View>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <View style={styles.rrBody}>
                         {r.song.cover_url ? (
                             <Image style={styles.rrArt} source={{ uri: r.song.cover_url }} />
                         ) : (
                             <View style={[styles.rrArt, { backgroundColor: colors.navyHi }]} />
                         )}
                         <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text style={styles.rrWho} numberOfLines={1}>@{r.actor_profile.username}</Text>
                             <Text style={styles.rrSong} numberOfLines={1}>{r.song.title}</Text>
+                            <Text style={styles.rrArtist} numberOfLines={1}>{r.song.artist.toUpperCase()}</Text>
                         </View>
+                    </View>
+                    {/* Trajectory: gold line rising/falling between a dim start node and a glowing end node. */}
+                    <View style={styles.rrSpark}>
+                        <Svg width="100%" height="100%" viewBox="0 0 100 42" preserveAspectRatio="none">
+                            <Polyline
+                                points={sparkPoints}
+                                fill="none"
+                                stroke={colors.gold}
+                                strokeWidth="2.4"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                            />
+                        </Svg>
+                        <View style={[styles.rrSparkStart, { top: startTop }]} />
+                        <View style={[styles.rrSparkEnd, { top: endTop }]} />
                     </View>
                     <View style={styles.rrDeltaRow}>
                         <Text style={styles.rrPrev}>{r.previous_score.toFixed(1)}</Text>
-                        <Arrow direction="right" color={colors.cdim} size={12} />
-                        <Text style={[styles.rrNew, { color: newColor }]}>{r.new_score.toFixed(1)}</Text>
-                        <View style={[styles.rrChip, { backgroundColor: deltaColor }]}>
-                            <Text style={styles.rrChipText}>{deltaLabel}</Text>
+                        <Text style={styles.rrNew}>{r.new_score.toFixed(1)}</Text>
+                        <View style={[styles.rrDeltaChip, { backgroundColor: `${deltaColor}26` }]}>
+                            <Text style={[styles.rrDelta, { color: deltaColor }]}>{`${up ? "+" : ""}${delta.toFixed(1)}`}</Text>
                         </View>
                     </View>
                 </View>
@@ -2017,58 +2049,95 @@ const styles = StyleSheet.create({
         gap: 10,
         marginTop: 4,
     },
-    // Re-rate Radar — live half-tile state (a followed user's score change), same footprint as locked
-    rrTime: {
+    // Re-rate Radar — live half-tile state (a followed user's score change), modeled on the
+    // design's RerateCard: gold pill + handle, song, rising/falling trajectory, struck-from → gold-to.
+    rrUser: {
         fontFamily: fonts.mono,
-        fontSize: 8,
-        letterSpacing: 0.4,
-        color: colors.cdim,
+        fontSize: 9.5,
+        letterSpacing: 0.5,
+        color: "rgba(241,236,221,0.85)",
+        marginTop: 5,
+    },
+    rrBody: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
     },
     rrArt: {
-        width: 32,
-        height: 32,
-        borderRadius: 7,
-    },
-    rrWho: {
-        fontFamily: fonts.mono,
-        fontSize: 10,
-        letterSpacing: 0.3,
-        color: colors.cream,
-        marginBottom: 2,
+        width: 28,
+        height: 28,
+        borderRadius: 6,
     },
     rrSong: {
         fontFamily: fonts.display,
-        fontSize: 13,
-        lineHeight: 15,
+        fontSize: 12,
+        lineHeight: 14,
         color: colors.cream,
+    },
+    rrArtist: {
+        fontFamily: fonts.mono,
+        fontSize: 7.5,
+        letterSpacing: 0.5,
+        color: "rgba(241,236,221,0.6)",
+        marginTop: 3,
+    },
+    rrSpark: {
+        position: "relative",
+        height: SPARK_H,
+    },
+    rrSparkStart: {
+        position: "absolute",
+        left: "4%",
+        width: 7,
+        height: 7,
+        borderRadius: 3.5,
+        marginLeft: -3.5,
+        marginTop: -3.5,
+        backgroundColor: colors.gold,
+        opacity: 0.55,
+    },
+    rrSparkEnd: {
+        position: "absolute",
+        left: "96%",
+        width: 11,
+        height: 11,
+        borderRadius: 5.5,
+        marginLeft: -5.5,
+        marginTop: -5.5,
+        backgroundColor: colors.gold,
+        shadowColor: colors.gold,
+        shadowOpacity: 0.8,
+        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 0 },
     },
     rrDeltaRow: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 6,
+        gap: 8,
     },
     rrPrev: {
         fontFamily: fonts.display,
-        fontSize: 12,
+        fontSize: 15,
         color: colors.cdim,
         textDecorationLine: "line-through",
     },
     rrNew: {
         fontFamily: fonts.display,
-        fontSize: 18,
-        letterSpacing: -0.3,
+        fontSize: 26,
+        letterSpacing: -0.4,
+        color: colors.gold,
     },
-    rrChip: {
+    rrDeltaChip: {
         marginLeft: "auto",
         borderRadius: 999,
-        paddingHorizontal: 6,
-        paddingVertical: 2,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
     },
-    rrChipText: {
+    rrDelta: {
         fontFamily: fonts.mono,
-        fontSize: 9,
+        fontSize: 12,
         fontWeight: "700",
-        color: "#fff",
+        letterSpacing: 0.3,
     },
     // Recent Verdicts full card
     fvOuter: {
