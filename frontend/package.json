@@ -11,7 +11,9 @@
   },
   "jest": {
     "preset": "jest-expo",
-    "setupFilesAfterEnv": ["./jest.setup.js"]
+    "setupFilesAfterEnv": [
+      "./jest.setup.js"
+    ]
   },
   "dependencies": {
     "@expo-google-fonts/archivo-black": "^0.4.1",
@@ -28,6 +30,7 @@
     "expo-font": "~55.0.8",
     "expo-secure-store": "~55.0.14",
     "expo-status-bar": "~55.0.6",
+    "expo-updates": "~55.0.24",
     "jest-expo": "~55.0.18",
     "react": "19.2.0",
     "react-native": "0.83.6",

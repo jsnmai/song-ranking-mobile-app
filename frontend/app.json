@@ -3,6 +3,12 @@
     "name": "LISTN",
     "slug": "listn",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/4c1d1907-ab7e-4a02-9584-c87cec13a289"
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
