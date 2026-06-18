@@ -39,7 +39,9 @@ jest.mock('react-native-reanimated', () => {
         FadeOutRight: animationStub,
         FadeOutUp: animationStub,
         SlideInRight: animationStub,
+        SlideInDown: animationStub,
         SlideOutLeft: animationStub,
+        SlideOutDown: animationStub,
         LinearTransition: animationStub,
         Easing: { bezier: jest.fn(), linear: jest.fn(), inOut: jest.fn() },
     }
