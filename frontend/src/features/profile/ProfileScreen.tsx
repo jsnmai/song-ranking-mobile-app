@@ -154,7 +154,14 @@ export default function ProfileScreen() {
     const topGenreLabel = topGenres[0]?.name ?? null
     const GENRE_COLORS = [colors.accent, colors.plum, colors.mint]
 
-    const bucketTotal = (taste?.total_rated ?? 0) || 1
+    // Bucket bars are scaled to the largest bucket, so the biggest is always a
+    // full bar (a new user with one Like shows a full Like bar, the rest empty).
+    const bucketMax = Math.max(
+        1,
+        taste?.bucket_breakdown?.like ?? 0,
+        taste?.bucket_breakdown?.okay ?? 0,
+        taste?.bucket_breakdown?.dislike ?? 0,
+    )
 
     return (
         <ScrollView
@@ -450,7 +457,7 @@ export default function ProfileScreen() {
                                 ["Okay", taste?.bucket_breakdown?.okay ?? 0, colors.butter],
                                 ["Dislike", taste?.bucket_breakdown?.dislike ?? 0, colors.accent],
                             ] as [string, number, string][]).map(([label, count, color]) => {
-                                const pct = isNew ? 0 : (count / bucketTotal) * 100
+                                const pct = (count / bucketMax) * 100
                                 return (
                                     <View key={label} style={styles.bucketRow}>
                                         <Text style={styles.bucketLabel} numberOfLines={1}>{label}</Text>
