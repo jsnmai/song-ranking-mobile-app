@@ -109,6 +109,10 @@ export default function ScoreRevealScreen({ navigation, route }: ScoreRevealProp
                 contentContainerStyle={{ paddingBottom: 80 + insets.bottom }}
             >
                 {/* ── Hero ──────────────────────────────────────────────── */}
+                {/* Full-bleed album art that melts down into the warm paper page.
+                    The gradient keeps the art clear until ~70% down, with only a
+                    subtle dark band at the very top for button legibility, so far
+                    more of the cover shows through than a hard fade would. */}
                 <View style={styles.hero}>
                     {ranking.song.cover_url
                         ? <Image source={{ uri: ranking.song.cover_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
@@ -117,36 +121,40 @@ export default function ScoreRevealScreen({ navigation, route }: ScoreRevealProp
                     <Svg style={StyleSheet.absoluteFill} width="100%" height={HERO_H}>
                         <Defs>
                             <SvgGradient id="sr-fade" x1="0" y1="0" x2="0" y2="1">
-                                <Stop offset="0.4" stopColor={colors.bg} stopOpacity="0" />
+                                <Stop offset="0" stopColor={colors.ink} stopOpacity="0.34" />
+                                <Stop offset="0.32" stopColor={colors.bg} stopOpacity="0" />
+                                <Stop offset="0.7" stopColor={colors.bg} stopOpacity="0.72" />
                                 <Stop offset="1" stopColor={colors.bg} stopOpacity="1" />
                             </SvgGradient>
                         </Defs>
                         <Rect x="0" y="0" width="100%" height={HERO_H} fill="url(#sr-fade)" />
                     </Svg>
-                    <View style={[styles.heroButtons, { paddingTop: insets.top + 12 }]}>
-                        <TouchableOpacity style={styles.ghostBtn} onPress={handleClose}>
-                            <CloseIcon />
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.ghostBtn} onPress={handleShare}>
-                            <ShareIcon />
-                        </TouchableOpacity>
+                    <View style={[StyleSheet.absoluteFill, styles.heroOverlay, { paddingTop: insets.top + 8 }]}>
+                        <View style={styles.heroButtons}>
+                            <TouchableOpacity style={styles.ghostBtn} onPress={handleClose}>
+                                <CloseIcon />
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.ghostBtn} onPress={handleShare}>
+                                <ShareIcon />
+                            </TouchableOpacity>
+                        </View>
+                        <View style={{ flex: 1 }} />
+                        {/* Caption overlaid on the lower (paper-faded) part of the art */}
+                        <View style={styles.heroCaption}>
+                            <View style={[styles.badge, { backgroundColor: accent }]}>
+                                <HeartSmIcon color="#fff" />
+                                <Text style={styles.badgeText}>
+                                    YOU {ranking.bucket === "like" ? "LIKED" : ranking.bucket === "alright" ? "OKAYED" : "DISLIKED"} THIS
+                                </Text>
+                            </View>
+                            <Text style={styles.songTitle} numberOfLines={2}>{ranking.song.title}</Text>
+                            <Text style={styles.artistName}>{ranking.song.artist}</Text>
+                        </View>
                     </View>
                 </View>
 
                 {/* ── Below hero ────────────────────────────────────────── */}
                 <View style={styles.content}>
-                    {/* Badge */}
-                    <View style={[styles.badge, { backgroundColor: `${accent}18`, borderColor: `${accent}40` }]}>
-                        <HeartSmIcon color={accent} />
-                        <Text style={[styles.badgeText, { color: accent }]}>
-                            YOU {ranking.bucket === "like" ? "LIKED" : ranking.bucket === "alright" ? "OKAYED" : "DISLIKED"} THIS
-                        </Text>
-                    </View>
-
-                    {/* Title + artist */}
-                    <Text style={styles.songTitle} numberOfLines={2}>{ranking.song.title}</Text>
-                    <Text style={styles.artistName}>{ranking.song.artist}</Text>
-
                     {/* Score */}
                     <View style={styles.scoreRow}>
                         <Text style={[styles.scoreBig, { color: accent }]}>{ranking.score.toFixed(1)}</Text>
@@ -227,14 +235,17 @@ const styles = StyleSheet.create({
         height: HERO_H,
         overflow: "hidden",
     },
+    heroOverlay: {
+        flexDirection: "column",
+    },
     heroButtons: {
-        position: "absolute",
-        top: 0,
-        left: 0,
-        right: 0,
         flexDirection: "row",
         justifyContent: "space-between",
         paddingHorizontal: 16,
+    },
+    heroCaption: {
+        paddingHorizontal: 16,
+        paddingBottom: 14,
     },
     ghostBtn: {
         width: 36,
@@ -256,17 +267,17 @@ const styles = StyleSheet.create({
         alignItems: "center",
         gap: 6,
         alignSelf: "flex-start",
-        borderWidth: 1,
         borderRadius: 999,
-        paddingHorizontal: 10,
+        paddingHorizontal: 11,
         paddingVertical: 5,
-        marginBottom: 10,
+        marginBottom: 9,
     },
     badgeText: {
         fontFamily: fonts.mono,
         fontSize: 9,
         fontWeight: "700",
         letterSpacing: 1.2,
+        color: "#fff",
     },
     songTitle: {
         fontFamily: fonts.display,
@@ -277,8 +288,7 @@ const styles = StyleSheet.create({
     },
     artistName: {
         fontSize: 13,
-        color: colors.inkDim,
-        marginBottom: 14,
+        color: colors.inkSoft,
     },
     // ── Score ─────────────────────────────────────────────────────────────
     scoreRow: {
