@@ -312,7 +312,7 @@ export default function ProfileScreen() {
                             </View>
                             <TouchableOpacity
                                 style={styles.setupBtn}
-                                onPress={() => navigation.navigate("MainTabs", { screen: "Feed" })}
+                                onPress={() => navigation.navigate("MainTabs", { screen: "Discover", params: { screen: "DiscoverHome", params: { focusSearch: true, searchMode: "songs" } } })}
                             >
                                 <Text style={styles.setupBtnText}>Rate a song</Text>
                             </TouchableOpacity>

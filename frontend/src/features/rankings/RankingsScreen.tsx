@@ -144,7 +144,7 @@ export default function RankingsScreen() {
     const handleVersusHistoryPress = () => navigation.navigate("VersusHistory")
     const handleFullRankingsPress = () => navigation.navigate("FullRankings")
     const handleOpenRankMap = () => navigation.navigate("RankMap", { rankings })
-    const handleRateFirstSong = () => navigation.navigate("Discover", { screen: "DiscoverHome", params: { focusSearch: true } })
+    const handleRateFirstSong = () => navigation.navigate("Discover", { screen: "DiscoverHome", params: { focusSearch: true, searchMode: "songs" } })
 
     // Centered-sun preview: your #1 cover is a glowing sun, a few hero covers
     // ride two dashed orbit rings over a taste-colored aurora, and the whole
