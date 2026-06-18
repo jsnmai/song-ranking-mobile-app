@@ -492,7 +492,9 @@ const styles = StyleSheet.create({
     },
     headerTop: {
         flexDirection: "row",
-        alignItems: "flex-start",
+        // Align the streak chip + settings icon with the title ("You"), not the
+        // small kicker label above it.
+        alignItems: "flex-end",
         justifyContent: "space-between",
         marginBottom: 20,
     },
@@ -500,7 +502,6 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         gap: 8,
-        marginTop: 4,
     },
     kicker: {
         fontFamily: fonts.mono,

@@ -1491,7 +1491,9 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingBottom: 10,
         flexDirection: "row",
-        alignItems: "flex-start",
+        // Align the right-side icon with the title (bottom of the kicker+heading
+        // column), not the small kicker label above it.
+        alignItems: "flex-end",
         justifyContent: "space-between",
     },
     headerLeft: {},
