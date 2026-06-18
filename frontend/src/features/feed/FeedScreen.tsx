@@ -973,7 +973,7 @@ export default function FeedScreen() {
                         </View>
                         <View>
                             <Text style={[styles.miniTileLabel, { color: "#fff" }]}>Split Decision</Text>
-                            <Text style={[styles.miniTileSub, { color: "rgba(255,255,255,0.78)" }]}>When two friends clash on a song</Text>
+                            <Text style={[styles.miniTileSub, { color: "rgba(255,255,255,0.78)" }]} numberOfLines={1}>Friends clash on a song</Text>
                         </View>
                     </View>
                 </View>
@@ -1306,7 +1306,8 @@ export default function FeedScreen() {
                                     <ActivityIndicator color={bColor} size="small" />
                                 ) : (
                                     <Text style={styles.scoreBadgeText}>
-                                        {item.new_score.toFixed(1)}
+                                        {/* "?" for the viewer's own score until they've rated 10; others' stay. */}
+                                        {isOwnEvent && !gettingStartedComplete ? "?" : item.new_score.toFixed(1)}
                                     </Text>
                                 )}
                             </View>

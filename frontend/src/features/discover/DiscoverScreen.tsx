@@ -398,6 +398,8 @@ export default function DiscoverScreen() {
     const hasQuery = trimmedQuery.length > 0
     const followingCount = profile?.following_count ?? 0
     const ratedCount = profile?.user_stats?.rated_count ?? 0
+    // Hide the viewer's own score in search results until they've rated 10 songs.
+    const scoresLocked = ratedCount < 10
 
     return (
         <View style={styles.container}>
@@ -546,7 +548,7 @@ export default function DiscoverScreen() {
                                                         <Text style={styles.ratedTagText}>RATED</Text>
                                                     </View>
                                                     <Text style={[styles.ratedScore, { color: bucketColor(song.my_bucket!) }]}>
-                                                        {song.my_score!.toFixed(1)}
+                                                        {scoresLocked ? "?" : song.my_score!.toFixed(1)}
                                                     </Text>
                                                 </View>
                                             ) : (

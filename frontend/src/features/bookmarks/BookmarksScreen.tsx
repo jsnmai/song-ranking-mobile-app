@@ -90,7 +90,7 @@ export default function BookmarksScreen({ navigation }: BookmarksScreenProps) {
                     <Text style={styles.noSavesKicker}>NOTHING SAVED YET</Text>
                     <Text style={styles.noSavesTitle}>Park songs for later</Text>
                     <Text style={styles.noSavesBody}>
-                        Bookmark any song from its page — your list lives here.
+                        Bookmark any song from its page.
                     </Text>
                     <TouchableOpacity
                         style={styles.noSavesBtn}

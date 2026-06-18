@@ -9,6 +9,7 @@ import { AppStackParamList } from "../../navigation/types"
 import { colors, fonts, bucketColor } from "../../theme"
 import { RankingResponse } from "../comparison/types"
 import { listMyBucketRankings } from "../rankings/apiRequests"
+import { SCORE_UNLOCK_THRESHOLD, useRatingsUntilUnlock, useScoresLocked } from "../../hooks/useScoresLocked"
 
 type ScoreRevealProps = NativeStackScreenProps<AppStackParamList, "ScoreReveal">
 
@@ -55,8 +56,10 @@ function ListIcon({ color }: { color: string }) {
 }
 
 export default function ScoreRevealScreen({ navigation, route }: ScoreRevealProps) {
-    const { token } = useAuth()
+    const { token, refreshProfile } = useAuth()
     const insets = useSafeAreaInsets()
+    const scoresLocked = useScoresLocked()
+    const toUnlock = useRatingsUntilUnlock()
     const { result } = route.params
     const { ranking } = result
     const accent = bucketColor(ranking.bucket)
@@ -87,6 +90,12 @@ export default function ScoreRevealScreen({ navigation, route }: ScoreRevealProp
             .catch(() => {})
     }, [])
 
+    // Refresh the profile so the score gate (and the "N to unlock" count) reflect
+    // this just-finalized rating — including the moment scores unlock at 10.
+    useEffect(() => {
+        refreshProfile()
+    }, [refreshProfile])
+
     const topPct = bucketTotal !== null
         ? Math.max(1, Math.round((ranking.position / bucketTotal) * 100))
         : null
@@ -95,7 +104,9 @@ export default function ScoreRevealScreen({ navigation, route }: ScoreRevealProp
     const handleShare = async () => {
         try {
             await Share.share({
-                message: `Just rated "${ranking.song.title}" by ${ranking.song.artist}: ${ranking.score.toFixed(1)}/10 on LISTn`,
+                message: scoresLocked
+                    ? `Just rated "${ranking.song.title}" by ${ranking.song.artist} on LISTn`
+                    : `Just rated "${ranking.song.title}" by ${ranking.song.artist}: ${ranking.score.toFixed(1)}/10 on LISTn`,
             })
         } catch {}
     }
@@ -155,59 +166,76 @@ export default function ScoreRevealScreen({ navigation, route }: ScoreRevealProp
 
                 {/* ── Below hero ────────────────────────────────────────── */}
                 <View style={styles.content}>
-                    {/* Score */}
-                    <View style={styles.scoreRow}>
-                        <Text style={[styles.scoreBig, { color: accent }]}>{ranking.score.toFixed(1)}</Text>
-                        <Text style={styles.scoreDenom}>/10</Text>
-                    </View>
+                    {scoresLocked ? (
+                        /* Scores/placements stay hidden until 10 rated — celebrate the
+                           rating and show progress, but no number or position. */
+                        <View style={styles.lockedBox}>
+                            <Text style={styles.lockedTitle}>Rating logged ✓</Text>
+                            <Text style={styles.lockedBody}>
+                                Keep rating to calibrate your taste — scores and rankings unlock
+                                once you&apos;ve rated {SCORE_UNLOCK_THRESHOLD} songs.
+                            </Text>
+                            <Text style={styles.lockedMeter}>
+                                {SCORE_UNLOCK_THRESHOLD - toUnlock} / {SCORE_UNLOCK_THRESHOLD} RATED · {toUnlock} TO GO
+                            </Text>
+                        </View>
+                    ) : (
+                        <>
+                            {/* Score */}
+                            <View style={styles.scoreRow}>
+                                <Text style={[styles.scoreBig, { color: accent }]}>{ranking.score.toFixed(1)}</Text>
+                                <Text style={styles.scoreDenom}>/10</Text>
+                            </View>
 
-                    {/* Stat line */}
-                    <Text style={styles.statLine}>
-                        #{ranking.position}{bucketTotal !== null ? ` OF ${bucketTotal}` : ""}
-                        {topPct !== null ? `  ·  TOP ${topPct}% OF YOUR ${bucketLabel}S` : ""}
-                    </Text>
+                            {/* Stat line */}
+                            <Text style={styles.statLine}>
+                                #{ranking.position}{bucketTotal !== null ? ` OF ${bucketTotal}` : ""}
+                                {topPct !== null ? `  ·  TOP ${topPct}% OF YOUR ${bucketLabel}S` : ""}
+                            </Text>
 
-                    {/* Slot list */}
-                    <Text style={styles.slotKicker}>ITS PLACE IN YOUR {bucketLabel}S</Text>
-                    <View style={styles.slotList}>
-                        {neighbors.map((r) => {
-                            const isNew = r.id === ranking.id
-                            return (
-                                <View
-                                    key={r.id}
-                                    style={[
-                                        styles.slotRow,
-                                        isNew && { backgroundColor: `${accent}12` },
-                                    ]}
-                                >
-                                    <Text style={styles.slotRank}>{r.position}</Text>
-                                    <View style={[
-                                        styles.slotArtWrap,
-                                        isNew && { borderColor: accent, borderWidth: 2 },
-                                    ]}>
-                                        {r.song.cover_url
-                                            ? <Image source={{ uri: r.song.cover_url }} style={styles.slotArt} />
-                                            : <View style={[styles.slotArt, { backgroundColor: colors.sand }]} />
-                                        }
-                                    </View>
-                                    <View style={styles.slotInfo}>
-                                        <View style={styles.slotTitleRow}>
-                                            <Text style={styles.slotTitle} numberOfLines={1}>{r.song.title}</Text>
-                                            {isNew && (
-                                                <View style={[styles.newBadge, { backgroundColor: `${accent}22` }]}>
-                                                    <Text style={[styles.newBadgeText, { color: accent }]}>NEW</Text>
+                            {/* Slot list */}
+                            <Text style={styles.slotKicker}>ITS PLACE IN YOUR {bucketLabel}S</Text>
+                            <View style={styles.slotList}>
+                                {neighbors.map((r) => {
+                                    const isNew = r.id === ranking.id
+                                    return (
+                                        <View
+                                            key={r.id}
+                                            style={[
+                                                styles.slotRow,
+                                                isNew && { backgroundColor: `${accent}12` },
+                                            ]}
+                                        >
+                                            <Text style={styles.slotRank}>{r.position}</Text>
+                                            <View style={[
+                                                styles.slotArtWrap,
+                                                isNew && { borderColor: accent, borderWidth: 2 },
+                                            ]}>
+                                                {r.song.cover_url
+                                                    ? <Image source={{ uri: r.song.cover_url }} style={styles.slotArt} />
+                                                    : <View style={[styles.slotArt, { backgroundColor: colors.sand }]} />
+                                                }
+                                            </View>
+                                            <View style={styles.slotInfo}>
+                                                <View style={styles.slotTitleRow}>
+                                                    <Text style={styles.slotTitle} numberOfLines={1}>{r.song.title}</Text>
+                                                    {isNew && (
+                                                        <View style={[styles.newBadge, { backgroundColor: `${accent}22` }]}>
+                                                            <Text style={[styles.newBadgeText, { color: accent }]}>NEW</Text>
+                                                        </View>
+                                                    )}
                                                 </View>
-                                            )}
+                                                <Text style={styles.slotArtist} numberOfLines={1}>{r.song.artist}</Text>
+                                            </View>
+                                            <Text style={[styles.slotScore, isNew && { color: accent }]}>
+                                                {r.score.toFixed(1)}
+                                            </Text>
                                         </View>
-                                        <Text style={styles.slotArtist} numberOfLines={1}>{r.song.artist}</Text>
-                                    </View>
-                                    <Text style={[styles.slotScore, isNew && { color: accent }]}>
-                                        {r.score.toFixed(1)}
-                                    </Text>
-                                </View>
-                            )
-                        })}
-                    </View>
+                                    )
+                                })}
+                            </View>
+                        </>
+                    )}
                 </View>
             </ScrollView>
 
@@ -314,6 +342,30 @@ const styles = StyleSheet.create({
         color: colors.inkDim,
         fontWeight: "700",
         marginBottom: 20,
+    },
+    // ── Locked (scores hidden until 10 rated) ─────────────────────────────
+    lockedBox: {
+        paddingTop: 6,
+        paddingBottom: 8,
+    },
+    lockedTitle: {
+        fontFamily: fonts.display,
+        fontSize: 26,
+        color: colors.ink,
+        marginBottom: 10,
+    },
+    lockedBody: {
+        fontSize: 14,
+        color: colors.inkSoft,
+        lineHeight: 21,
+        marginBottom: 16,
+    },
+    lockedMeter: {
+        fontFamily: fonts.mono,
+        fontSize: 10,
+        letterSpacing: 1.4,
+        color: colors.inkDim,
+        fontWeight: "700",
     },
     // ── Slot list ─────────────────────────────────────────────────────────
     slotKicker: {

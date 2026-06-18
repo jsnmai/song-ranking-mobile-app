@@ -37,6 +37,9 @@ type RatingActivityCardProps = {
     song: { title: string; artist: string; cover_url: string | null }
     bucket: string
     score: number
+    // When true, the numeric score badge is hidden (bucket + ring still show).
+    // Used to keep the viewer's OWN scores locked until they've rated 10 songs.
+    hideScore?: boolean
     note?: string | null
     onPress?: () => void
     children?: ReactNode
@@ -52,6 +55,7 @@ export default function RatingActivityCard({
     song,
     bucket,
     score,
+    hideScore,
     note,
     onPress,
     children,
@@ -109,7 +113,7 @@ export default function RatingActivityCard({
                     </View>
                     <View style={styles.scoreBadgeWrap}>
                         <View style={[styles.scoreBadge, { borderColor: bColor }]}>
-                            <Text style={styles.scoreBadgeText}>{score.toFixed(1)}</Text>
+                            <Text style={styles.scoreBadgeText}>{hideScore ? "?" : score.toFixed(1)}</Text>
                         </View>
                     </View>
                 </View>

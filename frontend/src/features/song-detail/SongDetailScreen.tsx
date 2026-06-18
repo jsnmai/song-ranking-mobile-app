@@ -24,6 +24,7 @@ import { useAudioPlayer } from "../../hooks/useAudioPlayer"
 import { AppStackParamList } from "../../navigation/types"
 import { colors, fonts, bucketColor } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
+import { useScoresLocked } from "../../hooks/useScoresLocked"
 import { listMyVersusHistory, removeRating } from "../rankings/apiRequests"
 import { ComparisonHistoryReceipt } from "../rankings/types"
 import { fetchPreviewUrl } from "../songs/apiRequests"
@@ -157,6 +158,7 @@ function _bucketLabel(bucket: string): string {
 
 export default function SongDetailScreen({ navigation, route }: SongDetailProps) {
     const { token } = useAuth()
+    const scoresLocked = useScoresLocked()
     const isRated = "ranking" in route.params
     const ranking = isRated ? route.params.ranking : null
     const song = isRated ? route.params.ranking.song : route.params.song
@@ -221,7 +223,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
         setMenuOpen(false)
         try {
             await Share.share({
-                message: `${song.title} by ${song.artist}${ranking ? ` — ${ranking.score.toFixed(1)}/10 on LISTn` : " — on LISTn"}`,
+                message: `${song.title} by ${song.artist}${ranking && !scoresLocked ? ` — ${ranking.score.toFixed(1)}/10 on LISTn` : " — on LISTn"}`,
             })
         } catch { /* ignore */ }
     }
@@ -399,7 +401,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                         <View style={styles.heroRight}>
                             {ranking !== null ? (
                                 <>
-                                    <Text style={styles.heroScore}>{ranking.score.toFixed(1)}</Text>
+                                    <Text style={styles.heroScore}>{scoresLocked ? "?" : ranking.score.toFixed(1)}</Text>
                                     <Text style={styles.heroScoreLabel}>YOUR SCORE</Text>
                                 </>
                             ) : (
@@ -478,9 +480,11 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                         {ranking !== null ? (
                             <>
                                 <Text style={[styles.bigScore, { color: accent }]}>
-                                    {ranking.score.toFixed(1)}
+                                    {scoresLocked ? "?" : ranking.score.toFixed(1)}
                                 </Text>
-                                <Text style={styles.cardMeta}>#{ranking.position} · {_bucketLabel(ranking.bucket).toUpperCase()}</Text>
+                                <Text style={styles.cardMeta}>
+                                    {scoresLocked ? "#?" : `#${ranking.position}`} · {_bucketLabel(ranking.bucket).toUpperCase()}
+                                </Text>
                             </>
                         ) : (
                             <Text style={styles.cardEmpty}>Not rated yet</Text>
@@ -873,6 +877,14 @@ const styles = StyleSheet.create({
         fontSize: 26,
         letterSpacing: -0.5,
         lineHeight: 28,
+        marginBottom: 4,
+    },
+    // Bucket shown in place of the score while it's locked (< 10 rated).
+    lockedBucket: {
+        fontFamily: fonts.display,
+        fontSize: 20,
+        letterSpacing: -0.3,
+        lineHeight: 24,
         marginBottom: 4,
     },
     cardMeta: {

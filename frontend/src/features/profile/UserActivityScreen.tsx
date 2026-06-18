@@ -9,6 +9,7 @@ import { colors, fonts } from "../../theme"
 import ActivityLikeButton from "../activity/ActivityLikeButton"
 import RatingActivityCard from "../activity/RatingActivityCard"
 import { useAuth } from "../auth/AuthContext"
+import { useScoresLocked } from "../../hooks/useScoresLocked"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
 import { getProfileActivity } from "./apiRequests"
 import { RecentRatingItem } from "./types"
@@ -25,7 +26,9 @@ function avatarColor(username: string): string {
 
 export default function UserActivityScreen({ navigation, route }: Props) {
     const { username } = route.params
-    const { token } = useAuth()
+    const { token, profile } = useAuth()
+    // Only the current user's own scores are locked (< 10 rated); other users' stay visible.
+    const hideScore = useScoresLocked() && profile?.username === username
     const [items, setItems] = useState<RecentRatingItem[]>([])
     const [nextCursor, setNextCursor] = useState<string | undefined>(undefined)
     const [isLoading, setIsLoading] = useState(true)
@@ -98,6 +101,7 @@ export default function UserActivityScreen({ navigation, route }: Props) {
                             song={item.song}
                             bucket={item.bucket}
                             score={item.score}
+                            hideScore={hideScore}
                             note={item.note}
                             onPress={() => navigation.navigate("SongDetail", { song: item.song as never })}
                             testID={`activity-card-${item.rating_event_id}`}

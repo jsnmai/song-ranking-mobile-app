@@ -11,6 +11,7 @@ import { bucketColor, colors, fonts } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
 import { BucketName, RankingResponse } from "../comparison/types"
 import { listMyRankings } from "./apiRequests"
+import { useScoresLocked } from "../../hooks/useScoresLocked"
 
 type FullRankingsNavigation = CompositeNavigationProp<
     NativeStackNavigationProp<RankingsStackParamList, "FullRankings">,
@@ -38,6 +39,8 @@ const BUCKET_FILTERS: readonly { value: BucketName | "all"; label: string }[] = 
 
 export default function FullRankingsScreen({ navigation }: FullRankingsScreenProps) {
     const { token } = useAuth()
+    // Hide the viewer's own scores + positions until they've rated 10 songs.
+    const scoresLocked = useScoresLocked()
     const [rankings, setRankings] = useState<RankingResponse[]>([])
     const [bucketFilter, setBucketFilter] = useState<BucketName | "all">("all")
     const [artistFilter, setArtistFilter] = useState<string | null>(null)
@@ -259,7 +262,6 @@ export default function FullRankingsScreen({ navigation }: FullRankingsScreenPro
                     contentContainerStyle={styles.listContent}
                     maintainVisibleContentPosition={{ disabled: true }}
                     renderItem={({ item, index }) => {
-                        const scoresLocked = rankings.length < 5
                         return (
                             <TouchableOpacity
                                 accessibilityRole="button"
@@ -284,19 +286,9 @@ export default function FullRankingsScreen({ navigation }: FullRankingsScreenPro
                                 </View>
                                 <View style={styles.scoreGroup}>
                                     <View style={[styles.bucketDot, { backgroundColor: bucketColor(item.bucket) }]} />
-                                    {scoresLocked ? (
-                                        <View style={styles.scoreLockIcon}>
-                                            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none"
-                                                stroke={colors.inkDim} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                                                <Path d="M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z" />
-                                                <Path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                                            </Svg>
-                                        </View>
-                                    ) : (
-                                        <Text style={[styles.score, { color: bucketColor(item.bucket) }]}>
-                                            {item.score.toFixed(1)}
-                                        </Text>
-                                    )}
+                                    <Text style={[styles.score, { color: bucketColor(item.bucket) }]}>
+                                        {scoresLocked ? "?" : item.score.toFixed(1)}
+                                    </Text>
                                 </View>
                             </TouchableOpacity>
                         )

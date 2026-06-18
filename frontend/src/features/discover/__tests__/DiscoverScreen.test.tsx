@@ -52,6 +52,8 @@ jest.mock("@react-navigation/native", () => {
 jest.mock("../../auth/AuthContext", () => ({
     useAuth: () => ({
         token: "test-token",
+        // rated_count >= 10 → scores unlocked, so search results show the number.
+        profile: { user_stats: { rated_count: 50 } },
     }),
 }))
 

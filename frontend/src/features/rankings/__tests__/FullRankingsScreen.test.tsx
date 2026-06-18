@@ -41,7 +41,8 @@ jest.mock("@shopify/flash-list", () => {
 })
 
 jest.mock("../../auth/AuthContext", () => ({
-    useAuth: () => ({ token: "test-token" }),
+    // rated_count >= 10 → scores/positions unlocked, so numbering shows as numbers.
+    useAuth: () => ({ token: "test-token", profile: { user_stats: { rated_count: 50 } } }),
 }))
 
 jest.mock("../apiRequests", () => ({

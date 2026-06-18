@@ -501,6 +501,7 @@ export default function ProfileScreen() {
                                     song={item.song}
                                     bucket={item.bucket}
                                     score={item.score}
+                                    hideScore={isNew}
                                     note={item.note}
                                     onPress={() => navigation.navigate("SongDetail", { song: item.song as never })}
                                     testID={`activity-card-${item.rating_event_id}`}

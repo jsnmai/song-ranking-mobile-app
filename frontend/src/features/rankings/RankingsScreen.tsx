@@ -31,6 +31,7 @@ import { colors, fonts, bucketColor } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
 import { BucketName, RankingAnchorsResponse, RankingResponse } from "../comparison/types"
 import { getMyRankingAnchors, listMyRankings, listMyVersusHistory } from "./apiRequests"
+import { useScoresLocked } from "../../hooks/useScoresLocked"
 import { ComparisonHistoryReceipt } from "./types"
 
 type RankingsNavigation = CompositeNavigationProp<
@@ -98,6 +99,8 @@ function DriftLayer({ children }: { children: ReactNode }) {
 export default function RankingsScreen() {
     const navigation = useNavigation<RankingsNavigation>()
     const { token, profile } = useAuth()
+    // Hide the viewer's own scores + positions until they've rated 10 songs.
+    const scoresLocked = useScoresLocked()
     const avatarInitial = (profile?.display_name || profile?.username || "?").charAt(0).toUpperCase()
     const [rankings, setRankings] = useState<RankingResponse[]>([])
     const [anchors, setAnchors] = useState<RankingAnchorsResponse>(EMPTY_ANCHORS)
@@ -323,14 +326,20 @@ export default function RankingsScreen() {
                                 {anchor.song.title}
                             </Text>
                             <View style={styles.anchorFooter}>
-                                <Text style={[styles.anchorScore, { color: accentColor }]}>
-                                    {anchor.score.toFixed(1)}
-                                </Text>
-                                <View style={[styles.anchorCountPill, { backgroundColor: `${accentColor}20` }]}>
-                                    <Text style={[styles.anchorCount, { color: accentColor }]}>
-                                        #{anchor.position}
-                                    </Text>
-                                </View>
+                                {scoresLocked ? (
+                                    <Text style={[styles.anchorScore, { color: accentColor }]}>?</Text>
+                                ) : (
+                                    <>
+                                        <Text style={[styles.anchorScore, { color: accentColor }]}>
+                                            {anchor.score.toFixed(1)}
+                                        </Text>
+                                        <View style={[styles.anchorCountPill, { backgroundColor: `${accentColor}20` }]}>
+                                            <Text style={[styles.anchorCount, { color: accentColor }]}>
+                                                #{anchor.position}
+                                            </Text>
+                                        </View>
+                                    </>
+                                )}
                             </View>
                         </>
                     )}
@@ -426,7 +435,6 @@ export default function RankingsScreen() {
     }
 
     const renderListHeader = () => {
-        const scoresLocked = rankings.length < 5
         const anchorsUnlocked =
             rankings.filter((r) => r.bucket === "like").length >= 1 &&
             rankings.filter((r) => r.bucket === "alright").length >= 3 &&
@@ -499,19 +507,9 @@ export default function RankingsScreen() {
                                     {item.song.artist.toUpperCase()}
                                 </Text>
                             </View>
-                            {scoresLocked ? (
-                                <View style={styles.rowLockIcon}>
-                                    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none"
-                                        stroke={colors.inkDim} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                                        <Path d="M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z" />
-                                        <Path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                                    </Svg>
-                                </View>
-                            ) : (
-                                <Text style={[styles.rowScore, { color: accent }]}>
-                                    {item.score.toFixed(1)}
-                                </Text>
-                            )}
+                            <Text style={[styles.rowScore, { color: accent }]}>
+                                {scoresLocked ? "?" : item.score.toFixed(1)}
+                            </Text>
                         </TouchableOpacity>
                     )
                 })}
