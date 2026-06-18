@@ -29,6 +29,12 @@ class Settings(BaseSettings):
 
     cors_origins: str  # the single allowed CORS origin — set in .env for every environment
 
+    # Sentry error monitoring. Optional: when sentry_dsn is unset (local dev),
+    # Sentry init is skipped and the app runs exactly as before. Set SENTRY_DSN
+    # (from the listn-backend Sentry project) in production to start reporting.
+    sentry_dsn: str | None = None
+    sentry_environment: str = "development"  # tags events; set to "production" on Railway
+
     # Kill-switch for the weekly-streak side effect on rating/comparison finalize.
     # Streaks are a best-effort cache derived from rating_events; flipping this off
     # disables the finalize hook and read surface without a code rollback.

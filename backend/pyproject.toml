@@ -20,6 +20,7 @@ dependencies = [
     "slowapi>=0.1.9",                 # rate limiting middleware for FastAPI
     "pydantic[email]>=2.12.5",        # enables EmailStr validation in Pydantic schemas
     "httpx>=0.28.1",                  # server-side external API calls, starting with Deezer search
+    "sentry-sdk[fastapi]>=2.0.0",     # error monitoring — reports unhandled exceptions to the listn-backend Sentry project
 ]
 
 # =============================================================================                                                                    

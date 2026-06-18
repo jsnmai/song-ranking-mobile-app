@@ -3,6 +3,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from uuid import uuid4
 
+import sentry_sdk
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
@@ -28,6 +29,19 @@ from src.core.config import settings
 from src.core.limiter import limiter
 
 logger = logging.getLogger("listn.api")
+
+# Sentry — initialised before the app so the FastAPI integration (auto-enabled
+# when sentry-sdk[fastapi] is installed) can instrument it. No-op when SENTRY_DSN
+# is unset, so this is safe to ship before the Sentry project exists.
+# send_default_pii=False keeps auth headers, JWTs, and emails out of events; we
+# attach only id/username as user context where a request is authenticated.
+if settings.sentry_dsn:
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.sentry_environment,
+        send_default_pii=False,
+        traces_sample_rate=0.1,
+    )
 
 app = FastAPI(title="LISTn API")
 
@@ -70,6 +84,12 @@ async def request_id_middleware(
     try:
         response = await call_next(request)
     except Exception:
+        # This middleware swallows the exception (returns a 500 below), so it
+        # never propagates to Sentry's FastAPI integration — capture it here by
+        # hand. set_tag writes to the request-isolated scope, so the request_id
+        # rides along with the event for correlation with the client/logs.
+        sentry_sdk.set_tag("request_id", request_id)
+        sentry_sdk.capture_exception()
         logger.exception(
             "Unhandled request error",
             extra={
