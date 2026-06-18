@@ -5,7 +5,7 @@ import { ApiError } from "../../../api/client"
 import { RankingResponse } from "../../comparison/types"
 import { Profile } from "../../profile/types"
 import FeedScreen from "../FeedScreen"
-import { FeedEvent, RerateRadarItem } from "../types"
+import { ConsensusModule, FeedEvent, RerateRadarItem } from "../types"
 
 const mockNavigate = jest.fn()
 const mockListMyFeed = jest.fn()
@@ -188,6 +188,13 @@ const rerateRadarItem: RerateRadarItem = {
     new_score: 8.5,
     note: null,
     created_at: "2026-01-01T00:00:00Z",
+}
+
+const consensusModule: ConsensusModule = {
+    song,
+    average_score: 8.4,
+    contributor_count: 5,
+    distribution: [0, 0, 0, 0, 0, 0, 0, 0, 3, 2],
 }
 
 beforeEach(() => {
@@ -651,6 +658,49 @@ describe("FeedScreen", () => {
         expect(screen.queryByTestId("feed-rerate-radar-55")).toBeNull()
         expect(screen.getByTestId("feed-rerate-radar-locked")).toBeTruthy()
         expect(screen.getByText("When a friend changes a score")).toBeTruthy()
+    })
+
+    it("surfaces a live Consensus card with the friend average and count, and opens the song", async () => {
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 12, bookmarked_count: 0 },
+        }
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+        mockGetFeedModules.mockResolvedValue({ ...emptyModules, consensus: consensusModule })
+        mockGetMyRankingByDeezerId.mockResolvedValue(ranking)
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-consensus-42")).toBeTruthy()
+        })
+        expect(screen.queryByTestId("feed-consensus-locked")).toBeNull()
+        expect(screen.getByText("8.4")).toBeTruthy()
+        // Friend count uses "FRIENDS", never "IN YOUR CIRCLE".
+        expect(screen.getByText("5 FRIENDS · AVG")).toBeTruthy()
+        expect(screen.queryByText(/IN YOUR CIRCLE/)).toBeNull()
+
+        fireEvent.press(screen.getByTestId("feed-consensus-42"))
+        await waitFor(() => {
+            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
+        })
+    })
+
+    it("falls back to the locked Consensus card when no song has enough friend raters", async () => {
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 12, bookmarked_count: 0 },
+        }
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+        mockGetFeedModules.mockResolvedValue({ ...emptyModules })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-song-9")).toBeTruthy()
+        })
+        expect(screen.queryByTestId("feed-consensus-42")).toBeNull()
+        expect(screen.getByTestId("feed-consensus-locked")).toBeTruthy()
     })
 
     it("opens Discover user search from the empty state", async () => {

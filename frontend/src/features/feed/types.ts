@@ -41,12 +41,21 @@ export type RerateRadarItem = {
     created_at: string;
 }
 
-// Bundled Feed module aggregates (GET /api/v1/feed/modules). Only Re-rate Radar is live;
+// Consensus: how the viewer's friends (mutual follows) collectively scored one song —
+// friend average, friend count, and a 10-bin score distribution. The viewer is never included.
+export type ConsensusModule = {
+    song: PersistedSong;
+    average_score: number;
+    contributor_count: number;
+    distribution: number[];   // always 10 bins, scores [0,1)…[9,10]
+}
+
+// Bundled Feed module aggregates (GET /api/v1/feed/modules). Re-rate Radar and Consensus are live;
 // the other keys are reserved and always null until each module ships. Mirrors
 // backend/src/pydantic_schemas/feed.py::FeedModulesResponse.
 export type FeedModulesResponse = {
     rerate_radar: RerateRadarItem | null;
-    consensus: null;
+    consensus: ConsensusModule | null;
     disagreement_spotlight: null;
     split_decision: null;
     match_moment: null;

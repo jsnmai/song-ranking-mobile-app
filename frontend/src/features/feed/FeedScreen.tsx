@@ -32,7 +32,7 @@ import { ProfileBase, ReportReason } from "../profile/types"
 import { RankingResponse } from "../comparison/types"
 import { getMyRankingByDeezerId } from "../rankings/apiRequests"
 import { getFeedModules, getSongCircleRaters, listMyFeed, reportRatingEvent } from "./apiRequests"
-import { FeedEvent, RerateRadarItem } from "./types"
+import { ConsensusModule, FeedEvent, RerateRadarItem } from "./types"
 
 type FeedNavigation = CompositeNavigationProp<
     NativeStackNavigationProp<FeedStackParamList, "FeedHome">,
@@ -178,6 +178,8 @@ export default function FeedScreen() {
     const [heroRaters, setHeroRaters] = useState<ProfileBase[]>([])
     const [rerateRadar, setRerateRadar] = useState<RerateRadarItem | null>(null)
     const [rerateOpening, setRerateOpening] = useState(false)
+    const [consensus, setConsensus] = useState<ConsensusModule | null>(null)
+    const [consensusOpening, setConsensusOpening] = useState(false)
     const listRef = useRef<FlashListRef<FeedEvent>>(null)
     // Re-pressing the Feed tab while already on the Feed home screen scrolls the
     // activity list back to the top. useScrollToTop only fires when this screen is
@@ -225,8 +227,10 @@ export default function FeedScreen() {
         try {
             const modules = await getFeedModules(token)
             setRerateRadar(modules.rerate_radar)
+            setConsensus(modules.consensus)
         } catch {
             setRerateRadar(null)
+            setConsensus(null)
         }
     }, [token])
 
@@ -257,6 +261,31 @@ export default function FeedScreen() {
             }
         } finally {
             setRerateOpening(false)
+        }
+    }
+
+    // Open the song behind the live Consensus card (same ranking lookup as the other module cards).
+    const handleConsensusPress = async () => {
+        if (!token || consensus === null || consensusOpening) return
+        setConsensusOpening(true)
+        setError(null)
+        try {
+            const ranking: RankingResponse = await getMyRankingByDeezerId(consensus.song.deezer_id, token)
+            navigation.navigate("SongDetail", { ranking })
+        } catch (err) {
+            if (err instanceof ApiError && err.status === 404) {
+                navigation.navigate("SongDetail", { song: consensus.song })
+                return
+            }
+            if (err instanceof ApiError) {
+                setError(err.detail)
+            } else if (err instanceof Error) {
+                setError(err.message)
+            } else {
+                setError("Could not open this song.")
+            }
+        } finally {
+            setConsensusOpening(false)
         }
     }
 
@@ -670,6 +699,75 @@ export default function FeedScreen() {
         )
     }
 
+    // Consensus half-tile: live friend average + score distribution when ≥3 friends rate a song,
+    // otherwise the original locked placeholder. Friends = mutual follows (backend filters to mutual +
+    // visible, never one-way); the viewer is never part of the aggregate.
+    const renderConsensus = () => {
+        if (consensus === null) {
+            return (
+                <View style={[styles.fullCell, { height: 138, backgroundColor: colors.sky }]} testID="feed-consensus-locked">
+                    <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
+                        <View style={styles.fullCellTop}>
+                            <View style={styles.lightPill}><Text style={styles.lightPillText}>Consensus</Text></View>
+                            <View style={styles.lockTagRow}>
+                                <LockIcon color="rgba(255,255,255,0.85)" size={10} />
+                                <Text style={styles.lockTagLabel}>LOCKED</Text>
+                            </View>
+                        </View>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                            <View style={styles.lockDotLg}><LockIcon color="#fff" size={18} /></View>
+                            <Text style={[styles.lockCardDesc, { flex: 1 }]}>How your friends score a track</Text>
+                        </View>
+                        <View>
+                            <View style={styles.consensusFullBars}>
+                                {[4, 6, 9, 13, 16, 12, 7, 4].map((h, i) => (
+                                    <View key={i} style={[styles.fullConsBar, { height: h }]} />
+                                ))}
+                            </View>
+                            <View style={[styles.skBar, { width: "62%", height: 9, backgroundColor: "rgba(255,255,255,0.3)", marginTop: 5 }]} />
+                        </View>
+                    </View>
+                </View>
+            )
+        }
+
+        const c = consensus
+        const maxBin = Math.max(1, ...c.distribution)
+        return (
+            <TouchableOpacity
+                style={[styles.fullCell, { height: 138, backgroundColor: colors.sky }]}
+                activeOpacity={0.9}
+                onPress={handleConsensusPress}
+                disabled={consensusOpening}
+                testID={`feed-consensus-${c.song.id}`}
+            >
+                <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
+                    <View style={styles.fullCellTop}>
+                        <View style={styles.lightPill}><Text style={styles.lightPillText}>Consensus</Text></View>
+                    </View>
+                    <View>
+                        <Text style={styles.consAvg}>{c.average_score.toFixed(1)}</Text>
+                        <Text style={styles.consMeta}>{c.contributor_count} FRIENDS · AVG</Text>
+                    </View>
+                    <View>
+                        <View style={styles.consensusFullBars}>
+                            {c.distribution.map((count, i) => (
+                                <View
+                                    key={i}
+                                    style={[
+                                        styles.consBarLive,
+                                        { height: Math.max(2, (count / maxBin) * 20), opacity: count > 0 ? 0.95 : 0.25 },
+                                    ]}
+                                />
+                            ))}
+                        </View>
+                        <Text style={styles.consSong} numberOfLines={1}>{c.song.title}</Text>
+                    </View>
+                </View>
+            </TouchableOpacity>
+        )
+    }
+
     const renderUnlockedSection = () => (
         <View style={styles.unlockedSection}>
             {/* Row: Split (locked) + Consensus (locked, 138px) */}
@@ -696,30 +794,7 @@ export default function FeedScreen() {
                     </View>
                 </View>
 
-                {/* Consensus — locked, 138px */}
-                <View style={[styles.fullCell, { height: 138, backgroundColor: colors.sky }]}>
-                    <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
-                        <View style={styles.fullCellTop}>
-                            <View style={styles.lightPill}><Text style={styles.lightPillText}>Consensus</Text></View>
-                            <View style={styles.lockTagRow}>
-                                <LockIcon color="rgba(255,255,255,0.85)" size={10} />
-                                <Text style={styles.lockTagLabel}>LOCKED</Text>
-                            </View>
-                        </View>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                            <View style={styles.lockDotLg}><LockIcon color="#fff" size={18} /></View>
-                            <Text style={[styles.lockCardDesc, { flex: 1 }]}>How your circle scores a track</Text>
-                        </View>
-                        <View>
-                            <View style={styles.consensusFullBars}>
-                                {[4, 6, 9, 13, 16, 12, 7, 4].map((h, i) => (
-                                    <View key={i} style={[styles.fullConsBar, { height: h }]} />
-                                ))}
-                            </View>
-                            <View style={[styles.skBar, { width: "62%", height: 9, backgroundColor: "rgba(255,255,255,0.3)", marginTop: 5 }]} />
-                        </View>
-                    </View>
-                </View>
+                {renderConsensus()}
             </View>
 
             {/* Row: Re-rate Radar (live-or-locked, 150px) + Match Moment (locked, 150px) */}
@@ -2472,6 +2547,34 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: "rgba(255,255,255,0.28)",
         borderRadius: 1,
+    },
+    // Consensus — live half-tile (friend average + distribution)
+    consAvg: {
+        fontFamily: fonts.display,
+        fontSize: 38,
+        lineHeight: 38,
+        letterSpacing: -1,
+        color: "#fff",
+    },
+    consMeta: {
+        fontFamily: fonts.mono,
+        fontSize: 7.5,
+        letterSpacing: 0.8,
+        color: "rgba(255,255,255,0.85)",
+        marginTop: 2,
+    },
+    consBarLive: {
+        flex: 1,
+        backgroundColor: "#fff",
+        borderRadius: 1,
+    },
+    consSong: {
+        fontFamily: fonts.serif,
+        fontStyle: "italic",
+        fontWeight: "700",
+        fontSize: 12.5,
+        color: "#fff",
+        marginTop: 6,
     },
     // Ghost boxes (dashed outline, for skeleton cover art)
     ghostBoxSm: {

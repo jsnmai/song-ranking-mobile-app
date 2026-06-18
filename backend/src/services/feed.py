@@ -1,13 +1,21 @@
 # Business logic for the social feed.
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from src.crud.circle_aggregates import list_circle_contributors
+from src.crud.circle_aggregates import (
+    CircleConsensusRow,
+    circle_consensus_candidates,
+    circle_score_distribution,
+    get_songs_by_ids,
+    list_circle_contributors,
+    viewer_rated_artist_ids,
+)
 from src.crud.feed import FeedEventRow, latest_rerate_from_followed, list_feed_events
 from src.pydantic_schemas.feed import (
     CircleRatersResponse,
+    ConsensusModule,
     FeedEventResponse,
     FeedListResponse,
     FeedModulesResponse,
@@ -15,13 +23,37 @@ from src.pydantic_schemas.feed import (
 )
 from src.pydantic_schemas.profile import ProfileResponse
 from src.pydantic_schemas.song import SongResponse
+from src.services.circle_aggregates import CIRCLE_MIN_CONTRIBUTORS
 from src.services.like import like_states_for_events
 from src.sqlalchemy_tables.rating_event import RatingEvent
+from src.sqlalchemy_tables.song import Song
 
 DEFAULT_FEED_LIMIT = 20
 MAX_FEED_LIMIT = 50
 # How many circle-member avatars the Recent Verdict hero asks for.
 RECENT_VERDICT_RATER_LIMIT = 8
+
+# ── Consensus module (tunable) ───────────────────────────────────────────────
+# Bounded candidate set the interestingness heuristic scores (ordered most-recently-active first, so
+# fresh qualifying songs are never truncated out before scoring).
+CONSENSUS_CANDIDATE_LIMIT = 100
+# Stable-within-a-day rotation; among near-best candidates only.
+CONSENSUS_ROTATE_DAYS = 1
+# Only candidates within this ratio of the best score rotate, so a clearly stronger song is never hidden.
+CONSENSUS_NEAR_BEST_RATIO = 0.85
+# Interestingness weights: recent friend activity, your relevance, agreement (tightness), coverage.
+CONSENSUS_W_RECENCY = 0.45
+CONSENSUS_W_RELEVANCE = 0.20
+CONSENSUS_W_AGREEMENT = 0.25
+CONSENSUS_W_COVERAGE = 0.10
+# Recency decays by half every N days of friend inactivity on the song.
+CONSENSUS_RECENCY_HALFLIFE_DAYS = 7.0
+# Small bump for a song right at the threshold (approximates "newly qualifying"; not a real snapshot).
+CONSENSUS_FRESH_NUDGE = 0.10
+# Std-dev at/above which agreement scores 0 (scores are 0–10).
+CONSENSUS_AGREEMENT_STDDEV_SCALE = 3.0
+# Friend count at which coverage scores 1.0.
+CONSENSUS_COVERAGE_FULL = 8.0
 
 
 def list_song_circle_raters(
@@ -55,14 +87,116 @@ def get_feed_modules(
 ) -> FeedModulesResponse:
     """Return the bundled Feed module aggregates for the viewer.
 
-    Only Re-rate Radar is implemented; the other module keys are reserved and return null
-    until each one ships. Every aggregate rides the shared social-access predicates, so the
-    whole module strip honors the same taste-visibility/block/deleted-user rules as the feed.
+    Re-rate Radar and Consensus are implemented; the remaining module keys are reserved and
+    return null until each one ships. Every aggregate rides the shared social-access predicates,
+    so the whole module strip honors the same taste-visibility/block/deleted-user rules as the feed.
     """
     rerate_row = latest_rerate_from_followed(db, user_id)
     return FeedModulesResponse(
         rerate_radar=_rerate_radar_item(rerate_row) if rerate_row is not None else None,
+        consensus=_consensus_module(db, user_id),
     )
+
+
+def _consensus_module(
+    db: Session,
+    user_id: int,
+) -> ConsensusModule | None:
+    """Pick the most "interesting" friend-consensus song and build its avg + 10-bin distribution.
+
+    Candidates are songs ≥ CIRCLE_MIN_CONTRIBUTORS friends (mutual + visible, viewer excluded)
+    currently rate. Each is scored by recent friend activity (from rating_events), the viewer's
+    relevance (rated the artist), agreement strength (tighter distributions score higher — this is
+    consensus, not spread), and light coverage. The displayed pick is stabilized within a day among
+    only the near-best (≥85% of the top score), so it doesn't flicker yet a clearly stronger song is
+    never hidden. Returns None (→ locked card) when no song has enough friend raters.
+    """
+    candidates = circle_consensus_candidates(
+        db,
+        user_id,
+        minimum_contributors=CIRCLE_MIN_CONTRIBUTORS,
+        limit=CONSENSUS_CANDIDATE_LIMIT,
+    )
+    if not candidates:
+        return None
+    song_ids = [candidate.song_id for candidate in candidates]
+    songs = get_songs_by_ids(db, song_ids)
+    viewer_artists = viewer_rated_artist_ids(db, user_id)
+    now = datetime.now(timezone.utc)
+
+    scored: list[tuple[float, CircleConsensusRow, Song]] = []
+    for candidate in candidates:
+        song = songs.get(candidate.song_id)
+        if song is None:
+            continue
+        interest = _consensus_interestingness(
+            candidate,
+            song,
+            candidate.latest_at,
+            viewer_artists,
+            now,
+        )
+        scored.append((interest, candidate, song))
+    if not scored:
+        return None
+
+    # Highest interestingness first; song_id tiebreak keeps the order deterministic.
+    scored.sort(key=lambda entry: (-entry[0], entry[1].song_id))
+    best = scored[0][0]
+    threshold = best * CONSENSUS_NEAR_BEST_RATIO if best > 0 else float("-inf")
+    near_best = [entry for entry in scored if entry[0] >= threshold]
+    epoch_day = now.toordinal()
+    index = (user_id + epoch_day // CONSENSUS_ROTATE_DAYS) % len(near_best)
+    _, chosen, chosen_song = near_best[index]
+
+    distribution = _score_distribution_bins(
+        circle_score_distribution(db, user_id, chosen.song_id)
+    )
+    return ConsensusModule(
+        song=SongResponse.model_validate(chosen_song),
+        average_score=chosen.average_score,
+        contributor_count=chosen.contributor_count,
+        distribution=distribution,
+    )
+
+
+def _consensus_interestingness(
+    candidate: CircleConsensusRow,
+    song: Song,
+    latest_at: datetime | None,
+    viewer_artists: set[int],
+    now: datetime,
+) -> float:
+    """Weighted blend: recent friend activity + your relevance + agreement (tightness) + coverage."""
+    if latest_at is not None:
+        age_days = max(0.0, (now - latest_at).total_seconds() / 86400.0)
+        recency = 0.5 ** (age_days / CONSENSUS_RECENCY_HALFLIFE_DAYS)
+    else:
+        recency = 0.0
+    if candidate.contributor_count == CIRCLE_MIN_CONTRIBUTORS:
+        recency = min(1.0, recency + CONSENSUS_FRESH_NUDGE)
+    relevance = 1.0 if song.artist_deezer_id in viewer_artists else 0.0
+    # Tighter spread ⇒ stronger agreement ⇒ higher score (consensus rewards cohesion, not spread).
+    agreement = max(0.0, 1.0 - min(1.0, candidate.score_stddev / CONSENSUS_AGREEMENT_STDDEV_SCALE))
+    coverage = min(1.0, candidate.contributor_count / CONSENSUS_COVERAGE_FULL)
+    return (
+        CONSENSUS_W_RECENCY * recency
+        + CONSENSUS_W_RELEVANCE * relevance
+        + CONSENSUS_W_AGREEMENT * agreement
+        + CONSENSUS_W_COVERAGE * coverage
+    )
+
+
+def _score_distribution_bins(
+    scores: list[float],
+) -> list[int]:
+    """Bin friend scores into exactly 10 buckets: [0,1), [1,2), … [9,10]."""
+    bins = [0] * 10
+    for score in scores:
+        index = int(score)
+        index = 0 if index < 0 else 9 if index > 9 else index
+        bins[index] += 1
+    return bins
 
 
 def _rerate_radar_item(

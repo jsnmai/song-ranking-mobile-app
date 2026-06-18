@@ -6,7 +6,7 @@ the rest of the social surfaces. The predicate also excludes the viewer from eve
 aggregate (`owner_id != viewer_id`), so the viewer can never pad their own circle counts.
 """
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import and_, exists, func, select
 from sqlalchemy.orm import Session, aliased
@@ -43,6 +43,19 @@ class CircleContributorRow:
     profile: Profile
     score: float
     bucket: str
+
+
+@dataclass(frozen=True)
+class CircleConsensusRow:
+    """One song's friend-consensus stats: friend count, average, spread, and latest friend activity."""
+
+    song_id: int
+    contributor_count: int
+    average_score: float
+    score_stddev: float
+    # Max eligible friend rating-event time (None if a current ranking has no rated/rerated event,
+    # e.g. some seeded rows). Drives the freshness signal and the candidate ordering.
+    latest_at: datetime | None
 
 
 def aggregate_circle_most_rated(
@@ -254,3 +267,118 @@ def get_songs_by_ids(
         .where(Song.id.in_(song_ids))
     ).scalars().all()
     return {song.id: song for song in songs}
+
+
+def circle_consensus_candidates(
+    db: Session,
+    viewer_id: int,
+    *,
+    minimum_contributors: int,
+    limit: int,
+) -> list[CircleConsensusRow]:
+    """Songs the viewer's friends collectively rate, with friend average, spread, and latest activity.
+
+    Friends = mutual follows visible to the viewer; the shared circle predicate also excludes the
+    viewer from the aggregate, so contributor_count/average_score/score_stddev never include the
+    viewer's own ranking. Count/avg/spread come from current `rankings`; recency (`latest_at`) is the
+    max eligible (`rated`/`rerated`) friend rating-event time — sourced from `rating_events`, not
+    `rankings.updated_at`. Candidates are ordered **most-recently-active first** (a left join keeps
+    songs whose rankings have no eligible event, ordered last via the epoch coalesce), so a freshly
+    qualifying song is never truncated out of the scored set before the service ranks it.
+    """
+    recent_at = (
+        select(
+            RatingEvent.song_id.label("song_id"),
+            func.max(RatingEvent.created_at).label("latest_at"),
+        )
+        .where(RatingEvent.event_type.in_(ELIGIBLE_RATING_EVENT_TYPES))
+        .where(
+            circle_visible_taste_owner_predicate(
+                viewer_id,
+                RatingEvent.user_id,
+            )
+        )
+        .group_by(RatingEvent.song_id)
+        .cte("circle_recent_at")
+    )
+    contributor_count = func.count()
+    average_score = func.avg(Ranking.score)
+    score_stddev = func.stddev_samp(Ranking.score)
+    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    rows = db.execute(
+        select(
+            Ranking.song_id,
+            contributor_count.label("contributor_count"),
+            average_score.label("average_score"),
+            score_stddev.label("score_stddev"),
+            recent_at.c.latest_at.label("latest_at"),
+        )
+        .outerjoin(
+            recent_at,
+            recent_at.c.song_id == Ranking.song_id,
+        )
+        .where(
+            circle_visible_taste_owner_predicate(
+                viewer_id,
+                Ranking.user_id,
+            )
+        )
+        .group_by(
+            Ranking.song_id,
+            recent_at.c.latest_at,
+        )
+        .having(contributor_count >= minimum_contributors)
+        .order_by(
+            func.coalesce(recent_at.c.latest_at, epoch).desc(),
+            contributor_count.desc(),
+            Ranking.song_id.asc(),
+        )
+        .limit(limit)
+    ).all()
+    return [
+        CircleConsensusRow(
+            song_id=row.song_id,
+            contributor_count=row.contributor_count,
+            average_score=float(row.average_score),
+            # stddev_samp is NULL for a single row, but we require >= 3 contributors, so it's defined.
+            score_stddev=float(row.score_stddev) if row.score_stddev is not None else 0.0,
+            latest_at=row.latest_at,
+        )
+        for row in rows
+    ]
+
+
+def circle_score_distribution(
+    db: Session,
+    viewer_id: int,
+    song_id: int,
+) -> list[float]:
+    """All visible friends' current scores for one song (viewer excluded), for the histogram."""
+    scores = db.execute(
+        select(Ranking.score)
+        .where(Ranking.song_id == song_id)
+        .where(
+            circle_visible_taste_owner_predicate(
+                viewer_id,
+                Ranking.user_id,
+            )
+        )
+    ).scalars().all()
+    return [float(score) for score in scores]
+
+
+def viewer_rated_artist_ids(
+    db: Session,
+    viewer_id: int,
+) -> set[int]:
+    """Distinct artist ids the viewer has rated — the Consensus 'your relevance' signal."""
+    artist_ids = db.execute(
+        select(Song.artist_deezer_id)
+        .join(
+            Ranking,
+            Ranking.song_id == Song.id,
+        )
+        .where(Ranking.user_id == viewer_id)
+        .distinct()
+    ).scalars().all()
+    return {int(artist_id) for artist_id in artist_ids}

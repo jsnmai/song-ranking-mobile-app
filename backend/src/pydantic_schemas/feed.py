@@ -59,6 +59,23 @@ class RerateRadarItem(BaseModel):
     created_at: datetime
 
 
+class ConsensusModule(BaseModel):
+    """Consensus: how the viewer's friends (mutual follows) collectively scored one song.
+
+    Shows the friend average, the friend count, and a 10-bin score distribution (the histogram
+    payoff). The viewer's own rating is never part of the aggregate. Friends = mutual follows,
+    visible to the viewer (the same circle predicate the rest of the social surfaces use).
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    song: SongResponse
+    average_score: float
+    contributor_count: int
+    # Always exactly 10 bins: scores [0,1), [1,2), … [9,10].
+    distribution: list[int]
+
+
 class FeedModulesResponse(BaseModel):
     """Bundled Feed module aggregates served behind the shared social-access privacy layer.
 
@@ -69,8 +86,8 @@ class FeedModulesResponse(BaseModel):
     """
 
     rerate_radar: RerateRadarItem | None = None
+    consensus: ConsensusModule | None = None
     # Reserved — not implemented yet; always null until each module ships.
-    consensus: None = None
     disagreement_spotlight: None = None
     split_decision: None = None
     match_moment: None = None
