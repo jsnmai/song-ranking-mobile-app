@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
     ActivityIndicator,
-    Dimensions,
     Image,
     Modal,
     Pressable,
@@ -13,7 +12,8 @@ import {
     TouchableOpacity,
     View,
 } from "react-native"
-import type { GestureResponderEvent } from "react-native"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
+import Animated, { SlideInDown, SlideOutDown } from "react-native-reanimated"
 import { FlashList, FlashListRef } from "@shopify/flash-list"
 import { CompositeNavigationProp, useNavigation, useScrollToTop } from "@react-navigation/native"
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
@@ -43,9 +43,6 @@ type FeedNavigation = CompositeNavigationProp<
 >
 
 const DAY_ABBRS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
-
-// Width of the activity-options popover that springs from the "···" button.
-const LIKE_MENU_WIDTH = 236
 
 const REPORT_REASONS: readonly { value: ReportReason; label: string }[] = [
     { value: "harassment", label: "Harassment" },
@@ -155,6 +152,7 @@ function SearchIcon() {
 
 export default function FeedScreen() {
     const navigation = useNavigation<FeedNavigation>()
+    const insets = useSafeAreaInsets()
     const { token, profile, refreshProfile } = useAuth()
     const avatarInitial = (profile?.display_name || profile?.username || "?").charAt(0).toUpperCase()
     const [events, setEvents] = useState<FeedEvent[]>([])
@@ -169,7 +167,6 @@ export default function FeedScreen() {
     const [reportedEventId, setReportedEventId] = useState<number | null>(null)
     const [reportError, setReportError] = useState<string | null>(null)
     const [likePrivacyEventId, setLikePrivacyEventId] = useState<number | null>(null)
-    const [likePrivacyAnchor, setLikePrivacyAnchor] = useState<{ top: number; right: number } | null>(null)
     const [isSavingLikePrivacy, setIsSavingLikePrivacy] = useState(false)
     const [likePrivacyError, setLikePrivacyError] = useState<string | null>(null)
     const [hideLikeCounts, setHideLikeCounts] = useState(profile?.hide_like_counts ?? false)
@@ -367,23 +364,16 @@ export default function FeedScreen() {
         navigation.navigate("ActivityLikers", { ratingEventId })
     }
 
-    const toggleLikePrivacyMenu = (eventId: number, event?: GestureResponderEvent) => {
+    const toggleLikePrivacyMenu = (eventId: number) => {
         if (isSavingLikePrivacy) return
-        // Tapping the same row's "···" again closes the open menu.
+        // Tapping the same row's "···" again closes the open sheet.
         if (likePrivacyEventId === eventId) {
             setLikePrivacyEventId(null)
             return
         }
-        // Anchor the popover to where the "···" was tapped so it appears to spring from the button.
-        const { width, height } = Dimensions.get("window")
-        const pageX = event?.nativeEvent?.pageX ?? width - 24
-        const pageY = event?.nativeEvent?.pageY ?? 240
-        const right = Math.min(Math.max(width - pageX, 12), Math.max(12, width - LIKE_MENU_WIDTH - 12))
-        const top = Math.min(pageY + 12, height - 200)
         setReportingEventId(null)
         setReportError(null)
         setLikePrivacyError(null)
-        setLikePrivacyAnchor({ top, right })
         setLikePrivacyEventId(eventId)
     }
 
@@ -1111,7 +1101,7 @@ export default function FeedScreen() {
                     <View style={styles.bannerBtns}>
                         <TouchableOpacity
                             style={styles.bannerBtnGold}
-                            onPress={() => navigation.navigate("Discover", { screen: "DiscoverHome", params: { focusSearch: true } })}
+                            onPress={() => navigation.navigate("Discover", { screen: "DiscoverHome", params: { focusSearch: true, searchMode: "songs" } })}
                         >
                             <Text style={styles.bannerBtnGoldText}>+ Rate songs</Text>
                         </TouchableOpacity>
@@ -1119,6 +1109,49 @@ export default function FeedScreen() {
                             <Text style={styles.bannerBtnGhostText}>Find friends</Text>
                         </TouchableOpacity>
                     </View>
+                </View>
+            </View>
+        )
+    }
+
+    // "Find your people" nudge — shown until the user follows 3 people or dismisses
+    // it (✕). Friend-gated (not rating-gated), and rendered in both the empty feed
+    // and the normal feed header so it persists past the first rating.
+    // DEFERRED: "Connect contacts" and "Invite" both just open user search for now
+    // (handleFindUsers). A real contacts-sync / invite-a-friend surface is not built
+    // yet — TODO: wire these to a dedicated connect/invite flow when it exists.
+    const renderFindFriends = () => {
+        const followingCount = profile?.following_count ?? 0
+        if (friendsCardDismissed || followingCount >= 3) return null
+        return (
+            <View style={styles.findFriendsCard}>
+                <TouchableOpacity
+                    style={styles.findDismiss}
+                    onPress={() => setFriendsCardDismissed(true)}
+                    hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                >
+                    <Text style={styles.findDismissX}>✕</Text>
+                </TouchableOpacity>
+                <View style={styles.findTopRow}>
+                    <View style={styles.findTextBlock}>
+                        <Text style={styles.findTitle}>Find your people</Text>
+                        <Text style={styles.findBody}>Compare taste and see more stats.</Text>
+                    </View>
+                    <View style={styles.friendStack}>
+                        {FRIEND_AVATARS.map((f, i) => (
+                            <View key={f.id} style={[styles.friendStackAva, { backgroundColor: f.color, marginLeft: i > 0 ? -10 : 0 }]}>
+                                <Text style={styles.friendStackLetter}>{f.initial}</Text>
+                            </View>
+                        ))}
+                    </View>
+                </View>
+                <View style={styles.findBtns}>
+                    <TouchableOpacity style={styles.findBtnPrimary} onPress={handleFindUsers}>
+                        <Text style={styles.findBtnPrimaryText}>Connect contacts</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.findBtnSecondary} onPress={handleFindUsers}>
+                        <Text style={styles.findBtnSecondaryText}>Invite</Text>
+                    </TouchableOpacity>
                 </View>
             </View>
         )
@@ -1172,6 +1205,8 @@ export default function FeedScreen() {
                         {renderLockedSection()}
                     </>
                 )}
+
+                {renderFindFriends()}
 
                 {events.length > 0 && (
                     <View style={styles.sectionRow}>
@@ -1364,7 +1399,7 @@ export default function FeedScreen() {
                     {isOwnEvent ? (
                         <TouchableOpacity
                             style={styles.moreBtn}
-                            onPress={(e) => toggleLikePrivacyMenu(item.id, e)}
+                            onPress={() => toggleLikePrivacyMenu(item.id)}
                             disabled={isSavingLikePrivacy}
                             hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
                             accessibilityLabel="Activity options"
@@ -1391,10 +1426,10 @@ export default function FeedScreen() {
         return <ActivityIndicator color={colors.accent} style={styles.footerSpinner} />
     }
 
-    // Popover menu that springs from the "···" button on your own activity cards.
+    // Bottom sheet that slides up from the "···" button on your own activity cards.
     // Only own events open it, so its single option is the like-count privacy toggle.
     const renderLikePrivacyMenu = () => {
-        if (likePrivacyEventId === null || likePrivacyAnchor === null) return null
+        if (likePrivacyEventId === null) return null
         return (
             <Modal
                 visible
@@ -1403,11 +1438,14 @@ export default function FeedScreen() {
                 onRequestClose={closeLikePrivacyMenu}
             >
                 <Pressable style={styles.menuBackdrop} onPress={closeLikePrivacyMenu}>
-                    <View
-                        style={[styles.menuCard, { top: likePrivacyAnchor.top, right: likePrivacyAnchor.right }]}
+                    <Animated.View
+                        entering={SlideInDown.duration(240)}
+                        exiting={SlideOutDown.duration(180)}
+                        style={[styles.sheetCard, { paddingBottom: insets.bottom + 12 }]}
                         onStartShouldSetResponder={() => true}
                         testID={`feed-like-privacy-panel-${likePrivacyEventId}`}
                     >
+                        <View style={styles.sheetHandle} />
                         <Text style={styles.menuHeader}>ACTIVITY OPTIONS</Text>
                         <TouchableOpacity
                             style={styles.menuItem}
@@ -1436,7 +1474,7 @@ export default function FeedScreen() {
                         {likePrivacyError !== null && (
                             <Text style={styles.menuError}>{likePrivacyError}</Text>
                         )}
-                    </View>
+                    </Animated.View>
                 </Pressable>
             </Modal>
         )
@@ -1517,39 +1555,7 @@ export default function FeedScreen() {
                     <>
                         {renderGettingStartedBanner()}
 
-                        {!friendsCardDismissed && (
-                            /* Find friends card */
-                            <View style={styles.findFriendsCard}>
-                                <TouchableOpacity
-                                    style={styles.findDismiss}
-                                    onPress={() => setFriendsCardDismissed(true)}
-                                    hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-                                >
-                                    <Text style={styles.findDismissX}>✕</Text>
-                                </TouchableOpacity>
-                                <View style={styles.findTopRow}>
-                                    <View style={styles.findTextBlock}>
-                                        <Text style={styles.findTitle}>Find your people</Text>
-                                        <Text style={styles.findBody}>Compare taste and see more stats.</Text>
-                                    </View>
-                                    <View style={styles.friendStack}>
-                                        {FRIEND_AVATARS.map((f, i) => (
-                                            <View key={f.id} style={[styles.friendStackAva, { backgroundColor: f.color, marginLeft: i > 0 ? -10 : 0 }]}>
-                                                <Text style={styles.friendStackLetter}>{f.initial}</Text>
-                                            </View>
-                                        ))}
-                                    </View>
-                                </View>
-                                <View style={styles.findBtns}>
-                                    <TouchableOpacity style={styles.findBtnPrimary} onPress={handleFindUsers}>
-                                        <Text style={styles.findBtnPrimaryText}>Connect contacts</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity style={styles.findBtnSecondary} onPress={handleFindUsers}>
-                                        <Text style={styles.findBtnSecondaryText}>Invite</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
-                        )}
+                        {renderFindFriends()}
 
                         {renderLockedSection()}
                     </>
@@ -1914,24 +1920,34 @@ const styles = StyleSheet.create({
         letterSpacing: 0.5,
         marginBottom: 8,
     },
-    // ── Activity options popover (springs from the "···") ──────────────────
+    // ── Activity options bottom sheet (slides up from the "···") ───────────
     menuBackdrop: {
         flex: 1,
-        backgroundColor: "rgba(22,20,19,0.18)",
+        justifyContent: "flex-end",
+        backgroundColor: "rgba(22,20,19,0.4)",
     },
-    menuCard: {
-        position: "absolute",
-        width: LIKE_MENU_WIDTH,
+    sheetCard: {
         backgroundColor: colors.paper,
-        borderRadius: 14,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
         borderWidth: 1,
         borderColor: colors.line,
-        padding: 8,
+        paddingHorizontal: 8,
+        paddingTop: 8,
         shadowColor: colors.ink,
         shadowOpacity: 0.18,
         shadowRadius: 18,
-        shadowOffset: { width: 0, height: 8 },
-        elevation: 8,
+        shadowOffset: { width: 0, height: -4 },
+        elevation: 12,
+    },
+    sheetHandle: {
+        alignSelf: "center",
+        width: 36,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: colors.line,
+        marginTop: 2,
+        marginBottom: 8,
     },
     menuHeader: {
         fontFamily: fonts.mono,
