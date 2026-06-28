@@ -6,6 +6,7 @@ import {
     ActivityIndicator,
     Alert,
     Animated,
+    Easing,
     Image,
     Modal,
     ScrollView,
@@ -179,6 +180,37 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
     const globalRatingCount = song.global_rating_count ?? 0
     const globalAvgScore = song.global_avg_score ?? null
     const [menuOpen, setMenuOpen] = useState(false)
+    // The sheet stays mounted while it animates out, so `sheetMounted` lags `menuOpen` on close.
+    const [sheetMounted, setSheetMounted] = useState(false)
+    const backdropAnim = useRef(new Animated.Value(0)).current
+    const sheetTransY = useRef(new Animated.Value(0)).current
+    const sheetHeightRef = useRef(500)
+    useEffect(() => {
+        if (menuOpen) {
+            setSheetMounted(true)
+            // Backdrop fades in fixed; only the sheet slides up — so its shadow never
+            // appears against the bare screen during the transition.
+            sheetTransY.setValue(sheetHeightRef.current)
+            Animated.parallel([
+                Animated.timing(backdropAnim, {
+                    toValue: 1, duration: 200, easing: Easing.out(Easing.quad), useNativeDriver: true,
+                }),
+                Animated.timing(sheetTransY, {
+                    toValue: 0, duration: 280, easing: Easing.out(Easing.cubic), useNativeDriver: true,
+                }),
+            ]).start()
+        } else if (sheetMounted) {
+            Animated.parallel([
+                Animated.timing(backdropAnim, {
+                    toValue: 0, duration: 180, easing: Easing.in(Easing.quad), useNativeDriver: true,
+                }),
+                Animated.timing(sheetTransY, {
+                    toValue: sheetHeightRef.current, duration: 220, easing: Easing.in(Easing.cubic), useNativeDriver: true,
+                }),
+            ]).start(({ finished }) => { if (finished) setSheetMounted(false) })
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [menuOpen])
     const [isRemoving, setIsRemoving] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -613,15 +645,21 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
 
             {/* Actions bottom sheet */}
             <Modal
-                visible={menuOpen}
+                visible={sheetMounted}
                 transparent
-                animationType="slide"
+                animationType="none"
                 statusBarTranslucent
                 onRequestClose={() => setMenuOpen(false)}
             >
                 <View style={styles.sheetBackdrop}>
+                    <Animated.View
+                        style={[StyleSheet.absoluteFillObject, styles.sheetScrim, { opacity: backdropAnim }]}
+                    />
                     <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={() => setMenuOpen(false)} />
-                    <View style={styles.sheet}>
+                    <Animated.View
+                        style={[styles.sheet, { transform: [{ translateY: sheetTransY }] }]}
+                        onLayout={(e) => { sheetHeightRef.current = e.nativeEvent.layout.height }}
+                    >
                         <View style={styles.sheetHandle} />
                         <View style={styles.sheetSongRow}>
                             <View style={styles.sheetCover}>
@@ -638,7 +676,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                         <SheetItem icon={<RefreshIcon />} label="Re-rate" sub="Run the compare again" onPress={handleRateAgain} />
                         <SheetItem icon={<ShareIcon />} label="Share" onPress={handleShare} />
                         <SheetItem icon={<TrashIcon danger />} label="Remove rating" sub="Takes it out of your Rankings" danger onPress={handleRemovePress} />
-                    </View>
+                    </Animated.View>
                 </View>
             </Modal>
         </View>
@@ -982,6 +1020,8 @@ const styles = StyleSheet.create({
     sheetBackdrop: {
         flex: 1,
         justifyContent: "flex-end",
+    },
+    sheetScrim: {
         backgroundColor: "rgba(17,19,28,0.5)",
     },
     sheet: {
