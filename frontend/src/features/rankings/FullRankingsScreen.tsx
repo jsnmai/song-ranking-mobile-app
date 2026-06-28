@@ -558,7 +558,7 @@ const styles = StyleSheet.create({
         fontWeight: "700",
         letterSpacing: 0.8,
     },
-    listContent: { paddingBottom: 24 },
+    listContent: { paddingBottom: 96 },
     row: {
         flexDirection: "row",
         alignItems: "center",
