@@ -7,6 +7,7 @@ import Svg, { Path } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
 import { LockIcon } from "../../components/LockIcon"
+import { PulsingMeterTick } from "../../components/PulsingMeterTick"
 import { AppStackParamList, RankingsStackParamList } from "../../navigation/types"
 import { bucketColor, colors, fonts, goldMeterShade, meterSegment } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
@@ -239,16 +240,20 @@ export default function FullRankingsScreen({ navigation }: FullRankingsScreenPro
                         <Text style={styles.lockBannerCount}>{rankings.length}/{SCORE_UNLOCK_THRESHOLD}</Text>
                     </View>
                     <View style={styles.meter}>
-                        {Array.from({ length: SCORE_UNLOCK_THRESHOLD }).map((_, i) => (
-                            <View
-                                key={i}
-                                style={[
-                                    styles.meterSeg,
-                                    // Filled segments climb the shared gold ramp (muted → bright) like the Feed meter.
-                                    i < rankings.length && { backgroundColor: goldMeterShade(i, SCORE_UNLOCK_THRESHOLD) },
-                                ]}
-                            />
-                        ))}
+                        {Array.from({ length: SCORE_UNLOCK_THRESHOLD }).map((_, i) => {
+                            // The first empty segment pulses to point at the next rating.
+                            if (i === rankings.length) return <PulsingMeterTick key={i} style={styles.meterSeg} />
+                            return (
+                                <View
+                                    key={i}
+                                    style={[
+                                        styles.meterSeg,
+                                        // Filled segments climb the shared gold ramp (muted → bright) like the Feed meter.
+                                        i < rankings.length && { backgroundColor: goldMeterShade(i, SCORE_UNLOCK_THRESHOLD) },
+                                    ]}
+                                />
+                            )
+                        })}
                     </View>
                 </View>
             )}

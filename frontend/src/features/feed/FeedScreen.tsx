@@ -33,6 +33,7 @@ import { ApiError } from "../../api/client"
 import { ArrowLabel } from "../../components/Arrow"
 import BouncyPressable from "../../components/BouncyPressable"
 import HatchBox from "../../components/HatchBox"
+import { PulsingMeterTick } from "../../components/PulsingMeterTick"
 import { AppStackParamList, FeedStackParamList, TabParamList } from "../../navigation/types"
 import { colors, fonts, bucketColor, goldMeterShade, meterSegment, avatarColorFor } from "../../theme"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
@@ -1394,18 +1395,22 @@ export default function FeedScreen() {
                         Rate 5 songs and follow 3 people to unlock the Feed modules below.
                     </Text>
                     <View style={styles.tasteMeterRow}>
-                        {Array.from({ length: 10 }).map((_, i) => (
-                            <View
-                                key={i}
-                                style={[
-                                    styles.tasteMeterSegment,
-                                    // Empty segments all look identical. Reached segments climb a gold
-                                    // ramp — muted gold early, bright luminous gold by 10 — so the bar
-                                    // "shines up" as you progress (same hue, rising brightness).
-                                    i < rated && { backgroundColor: goldMeterShade(i) },
-                                ]}
-                            />
-                        ))}
+                        {Array.from({ length: 10 }).map((_, i) => {
+                            // The first empty segment pulses to point at the next rating.
+                            if (i === rated) return <PulsingMeterTick key={i} style={styles.tasteMeterSegment} />
+                            return (
+                                <View
+                                    key={i}
+                                    style={[
+                                        styles.tasteMeterSegment,
+                                        // Empty segments all look identical. Reached segments climb a gold
+                                        // ramp — muted gold early, bright luminous gold by 10 — so the bar
+                                        // "shines up" as you progress (same hue, rising brightness).
+                                        i < rated && { backgroundColor: goldMeterShade(i) },
+                                    ]}
+                                />
+                            )
+                        })}
                     </View>
                     <Text style={styles.tasteMeterLabel}>
                         {rated} / 10 RATED · CARDS AT 5 · RANKINGS AT 10

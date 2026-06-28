@@ -28,6 +28,7 @@ import { ApiError } from "../../api/client"
 import { ArrowLabel } from "../../components/Arrow"
 import HatchBox from "../../components/HatchBox"
 import { LockIcon } from "../../components/LockIcon"
+import { PulsingMeterTick } from "../../components/PulsingMeterTick"
 import { AppStackParamList, RankingsStackParamList, TabParamList } from "../../navigation/types"
 import { colors, fonts, bucketColor, goldMeterShade, meterSegment } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
@@ -422,13 +423,17 @@ export default function RankingsScreen() {
                     </View>
                 </View>
                 <View style={styles.buildMeter}>
-                    {Array.from({ length: 10 }).map((_, i) => (
-                        <View key={i} style={[
-                            styles.buildMeterBar,
-                            // Filled segments climb the shared gold ramp (muted → bright) like the Feed meter.
-                            i < rated && { backgroundColor: goldMeterShade(i) },
-                        ]} />
-                    ))}
+                    {Array.from({ length: 10 }).map((_, i) => {
+                        // The first empty segment pulses to point at the next rating.
+                        if (i === rated) return <PulsingMeterTick key={i} style={styles.buildMeterBar} />
+                        return (
+                            <View key={i} style={[
+                                styles.buildMeterBar,
+                                // Filled segments climb the shared gold ramp (muted → bright) like the Feed meter.
+                                i < rated && { backgroundColor: goldMeterShade(i) },
+                            ]} />
+                        )
+                    })}
                 </View>
                 <View style={styles.buildFooter}>
                     <Text style={styles.buildStats}>
