@@ -278,6 +278,8 @@ export default function RankMapScreen() {
     const [pan, setPan] = useState<Point>({ x: 0, y: 0 })
     const [zoom, setZoom] = useState(1)
     const [timeTrackWidth, setTimeTrackWidth] = useState(1)
+    // When time travel is still locked, tapping the clock explains what it is + how to unlock.
+    const [showTimeLockInfo, setShowTimeLockInfo] = useState(false)
 
     const panRef = useRef(pan)
     const zoomRef = useRef(zoom)
@@ -341,7 +343,10 @@ export default function RankMapScreen() {
         setEraSel(Number.MAX_SAFE_INTEGER)
     }
     const handleTimeTravelPress = () => {
-        if (!canTimeTravel) return
+        if (!canTimeTravel) {
+            setShowTimeLockInfo(true)
+            return
+        }
         if (timeMode) {
             setTimeMode(false)
             return
@@ -712,10 +717,14 @@ export default function RankMapScreen() {
                             !canTimeTravel && styles.timeTravelTopDisabled,
                         ]}
                         onPress={handleTimeTravelPress}
-                        disabled={!canTimeTravel}
                         accessibilityRole="button"
-                        accessibilityState={{ selected: timeMode, disabled: !canTimeTravel }}
-                        accessibilityLabel={timeMode ? "Exit taste over time" : "Taste over time"}
+                        accessibilityState={{ selected: timeMode }}
+                        accessibilityLabel={
+                            !canTimeTravel
+                                ? "Taste over time, locked"
+                                : timeMode ? "Exit taste over time" : "Taste over time"
+                        }
+                        accessibilityHint={!canTimeTravel ? "Explains how to unlock taste over time" : undefined}
                         hitSlop={8}
                     >
                         <ClockIcon active={timeMode} />
@@ -857,6 +866,36 @@ export default function RankMapScreen() {
                     onOpen={openSelected}
                 />
             )}
+
+            {showTimeLockInfo && (
+                <View style={styles.timeLockOverlay}>
+                    <Pressable
+                        style={StyleSheet.absoluteFill}
+                        onPress={() => setShowTimeLockInfo(false)}
+                        accessibilityLabel="Dismiss"
+                    />
+                    <View style={styles.timeLockCard}>
+                        <Text style={styles.timeLockKicker}>TASTE OVER TIME · LOCKED</Text>
+                        <Text style={styles.timeLockTitle}>Replay how your taste formed</Text>
+                        <Text style={styles.timeLockBody}>
+                            Once unlocked, you can rewind your Rank Map and watch your stars
+                            appear one era at a time, seeing how your taste took shape.
+                        </Text>
+                        <Text style={styles.timeLockBody}>
+                            It opens up as soon as your ratings span more than one week. Keep
+                            rating and check back as your timeline grows with you.
+                        </Text>
+                        <Pressable
+                            style={styles.timeLockBtn}
+                            onPress={() => setShowTimeLockInfo(false)}
+                            accessibilityRole="button"
+                            accessibilityLabel="Got it"
+                        >
+                            <Text style={styles.timeLockBtnText}>Got it</Text>
+                        </Pressable>
+                    </View>
+                </View>
+            )}
         </View>
     )
 }
@@ -967,6 +1006,40 @@ const styles = StyleSheet.create({
     timeTravelTopDisabled: {
         opacity: 0.4,
     },
+
+    timeLockOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        zIndex: 60,
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 28,
+        backgroundColor: "rgba(8,10,16,0.66)",
+    },
+    timeLockCard: {
+        width: "100%",
+        maxWidth: 340,
+        padding: 20,
+        borderRadius: 18,
+        borderWidth: 1,
+        borderColor: "rgba(245,184,64,0.32)",
+        backgroundColor: "rgba(16,20,30,0.97)",
+    },
+    timeLockKicker: { fontFamily: fonts.mono, fontSize: 8, letterSpacing: 1.1, color: colors.gold },
+    timeLockTitle: { fontFamily: fonts.serif, fontSize: 20, color: colors.cream, marginTop: 7 },
+    timeLockBody: {
+        fontSize: 13,
+        lineHeight: 19,
+        color: "rgba(245,238,220,0.74)",
+        marginTop: 11,
+    },
+    timeLockBtn: {
+        marginTop: 18,
+        paddingVertical: 12,
+        borderRadius: 12,
+        backgroundColor: colors.gold,
+        alignItems: "center",
+    },
+    timeLockBtnText: { fontFamily: fonts.serif, fontSize: 15, color: colors.navy },
 
     legendWrap: {
         // A single full-width horizontal strip of filter pills; the zoom controls
