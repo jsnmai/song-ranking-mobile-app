@@ -1117,11 +1117,8 @@ export default function FeedScreen() {
         }
 
         const m = matchMoment
-        // Surface a "snap pick" flourish only for genuinely fast decisions; otherwise just the handle.
-        const snappy = m.decision_duration_ms !== null && m.decision_duration_ms <= 3000
-        const caption = snappy
-            ? `@${m.actor_profile.username} · snap pick ${(m.decision_duration_ms! / 1000).toFixed(1)}s`
-            : `@${m.actor_profile.username}'s head-to-head`
+        const aColor = avatarColorFor(m.actor_profile.avatar_color, m.actor_profile.username)
+        const aInitial = (m.actor_profile.display_name || m.actor_profile.username || "?").charAt(0).toUpperCase()
         return (
             <TouchableOpacity
                 style={[styles.fullCell, { height: 150, backgroundColor: colors.mint }]}
@@ -1134,29 +1131,36 @@ export default function FeedScreen() {
                 <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
                     <View style={styles.fullCellTop}>
                         <View style={styles.lightPill}><Text style={styles.lightPillText}>Match moment</Text></View>
-                    </View>
-                    {/* Head-to-head: winner cover (check badge) › faded loser cover + the two titles */}
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
-                        <View>
-                            {m.winner.cover_url ? (
-                                <Image style={styles.mmWinnerArt} source={{ uri: m.winner.cover_url }} />
-                            ) : (
-                                <View style={[styles.mmWinnerArt, { backgroundColor: "rgba(255,255,255,0.15)" }]} />
-                            )}
-                            <View style={styles.matchMomentCheck} />
+                        {/* Actor avatar, top right */}
+                        <View style={[styles.mmActorAvatar, { backgroundColor: aColor }]}>
+                            <Text style={styles.actorInitial}>{aInitial}</Text>
                         </View>
-                        <Text style={styles.matchMomentGt}>›</Text>
-                        {m.loser.cover_url ? (
-                            <Image style={styles.mmLoserArt} source={{ uri: m.loser.cover_url }} />
-                        ) : (
-                            <View style={[styles.mmLoserArt, { backgroundColor: "rgba(255,255,255,0.12)" }]} />
-                        )}
-                        <View style={{ flex: 1, minWidth: 0 }}>
+                    </View>
+                    {/* Head-to-head: winner cover (check badge) › faded loser cover, then handle + song-over-song */}
+                    <View style={{ gap: 6 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
+                            <View>
+                                {m.winner.cover_url ? (
+                                    <Image style={styles.mmWinnerArt} source={{ uri: m.winner.cover_url }} />
+                                ) : (
+                                    <View style={[styles.mmWinnerArt, { backgroundColor: "rgba(255,255,255,0.15)" }]} />
+                                )}
+                                <View style={styles.matchMomentCheck} />
+                            </View>
+                            <Text style={styles.matchMomentGt}>›</Text>
+                            {m.loser.cover_url ? (
+                                <Image style={styles.mmLoserArt} source={{ uri: m.loser.cover_url }} />
+                            ) : (
+                                <View style={[styles.mmLoserArt, { backgroundColor: "rgba(255,255,255,0.12)" }]} />
+                            )}
+                        </View>
+                        <View>
+                            {/* "@user picked" above the song-over-song decision */}
+                            <Text style={styles.mmActorLine} numberOfLines={1}>@{m.actor_profile.username} picked</Text>
                             <Text style={styles.mmWinnerTitle} numberOfLines={1}>{m.winner.title}</Text>
                             <Text style={styles.mmLoserTitle} numberOfLines={1}>over {m.loser.title}</Text>
                         </View>
                     </View>
-                    <Text style={[styles.lockCardDesc, { flex: 0 }]} numberOfLines={1}>{caption}</Text>
                 </View>
             </TouchableOpacity>
         )
@@ -2878,7 +2882,9 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "flex-end",
         gap: 2,
-        height: 24,
+        // Bars cap at 20px; trimming the container's dead space reclaims the room the
+        // score's taller line box now uses, keeping the card's fixed 138px height.
+        height: 20,
     },
     fullConsBar: {
         flex: 1,
@@ -2889,7 +2895,9 @@ const styles = StyleSheet.create({
     consAvg: {
         fontFamily: fonts.display,
         fontSize: 38,
-        lineHeight: 38,
+        // Taller-than-font line box so the display digits center vertically, giving
+        // even breathing room above and below the score instead of hugging the top.
+        lineHeight: 44,
         letterSpacing: -1,
         color: "#fff",
     },
@@ -2899,6 +2907,8 @@ const styles = StyleSheet.create({
         letterSpacing: 0.8,
         color: "rgba(255,255,255,0.85)",
         marginTop: 2,
+        // Breathing room between the FRIENDS · AVG label and the histogram below it.
+        marginBottom: 3,
     },
     consBarLive: {
         flex: 1,
@@ -2911,7 +2921,7 @@ const styles = StyleSheet.create({
         fontWeight: "700",
         fontSize: 12.5,
         color: "#fff",
-        marginTop: 6,
+        marginTop: 2,
     },
     // Split Decision — live state (two people you follow, far apart)
     splitSong: {
@@ -2981,7 +2991,17 @@ const styles = StyleSheet.create({
         color: "rgba(255,255,255,0.72)",
         flexShrink: 0,
     },
-    // Match Moment (live) — real covers in the winner/loser slots + the two titles.
+    // Match Moment (live) — actor avatar (top right) + real covers in the winner/loser slots + titles.
+    mmActorAvatar: {
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        borderWidth: 1.5,
+        borderColor: "rgba(255,255,255,0.6)",
+    },
     mmWinnerArt: {
         width: 42,
         height: 42,
@@ -2995,11 +3015,19 @@ const styles = StyleSheet.create({
         opacity: 0.7,
         flexShrink: 0,
     },
+    // Actor handle above the song-over-song titles
+    mmActorLine: {
+        fontFamily: fonts.mono,
+        fontSize: 9,
+        letterSpacing: 0.3,
+        color: "rgba(255,255,255,0.8)",
+    },
     mmWinnerTitle: {
         fontFamily: fonts.display,
-        fontSize: 12,
-        lineHeight: 14,
+        fontSize: 15,
+        lineHeight: 17,
         color: "#fff",
+        marginTop: 3,
     },
     mmLoserTitle: {
         fontFamily: fonts.mono,
