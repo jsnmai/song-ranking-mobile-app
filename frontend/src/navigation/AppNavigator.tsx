@@ -325,8 +325,9 @@ const styles = StyleSheet.create({
         justifyContent: "space-between",
         paddingHorizontal: 16,
         paddingTop: 9,
-        // Tint layer on top of the blur — warm paper wash at low opacity
-        backgroundColor: "rgba(253,251,244,0.45)",
+        // Tint layer on top of the blur — warm paper wash kept opaque enough that the bar stays
+        // legibly light even when dark cards (Auxstrology, setup) scroll behind it.
+        backgroundColor: "rgba(253,251,244,0.78)",
         borderTopWidth: StyleSheet.hairlineWidth,
         borderTopColor: "rgba(17,19,28,0.10)",
         shadowColor: "#000",
