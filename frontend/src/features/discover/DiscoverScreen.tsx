@@ -833,27 +833,6 @@ export default function DiscoverScreen() {
                                         </BouncyPressable>
                                     )}
                                 </View>
-
-                                {/* Curated Lists — locked with rated count progress */}
-                                <View style={styles.discoverSectionRow}>
-                                    <Text style={styles.discoverSectionLabel}>CURATED LISTS</Text>
-                                </View>
-                                <BouncyPressable style={styles.curatedCard}>
-                                    <View style={styles.curatedLockWrap}>
-                                        <Svg width={17} height={17} viewBox="0 0 24 24" fill="none">
-                                            <Path d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4"
-                                                stroke={colors.inkSoft} strokeWidth={2}
-                                                strokeLinecap="round" strokeLinejoin="round" />
-                                        </Svg>
-                                    </View>
-                                    <View style={styles.curatedText}>
-                                        <Text style={styles.curatedTitle}>No lists yet</Text>
-                                        <Text style={styles.curatedBody}>
-                                            Rate more songs to unlock lists curated to your taste.
-                                        </Text>
-                                    </View>
-                                    <Text style={styles.trendingCounter}>{Math.min(ratedCount, 30)}/30</Text>
-                                </BouncyPressable>
                             </>
                         )}
                     </>
