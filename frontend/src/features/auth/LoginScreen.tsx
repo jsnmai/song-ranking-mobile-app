@@ -90,6 +90,11 @@ export default function LoginScreen({ navigation }: Props) {
                             keyboardType="email-address"
                             autoCorrect={false}
                         />
+                        {email.length > 0 && (
+                            <TouchableOpacity onPress={() => setEmail("")} hitSlop={8}>
+                                <Text style={styles.clearBtn}>✕</Text>
+                            </TouchableOpacity>
+                        )}
                     </View>
                 </View>
 
@@ -105,6 +110,11 @@ export default function LoginScreen({ navigation }: Props) {
                             placeholderTextColor={INK_DIM}
                             secureTextEntry={!showPassword}
                         />
+                        {password.length > 0 && (
+                            <TouchableOpacity onPress={() => setPassword("")} hitSlop={8}>
+                                <Text style={styles.clearBtn}>✕</Text>
+                            </TouchableOpacity>
+                        )}
                         <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                             <Text style={styles.showHide}>{showPassword ? "Hide" : "Show"}</Text>
                         </TouchableOpacity>
@@ -259,6 +269,11 @@ const styles = StyleSheet.create({
         fontSize: 12.5,
         fontWeight: "600",
         color: INK_SOFT,
+    },
+    clearBtn: {
+        fontSize: 13,
+        fontWeight: "600",
+        color: INK_DIM,
     },
     forgotText: {
         fontSize: 12.5,

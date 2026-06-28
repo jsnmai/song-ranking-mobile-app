@@ -108,6 +108,7 @@ function Field({
     lead,
     suffix,
     autoFocus,
+    clearable,
 }: {
     label: string
     value: string
@@ -119,6 +120,7 @@ function Field({
     lead?: React.ReactNode
     suffix?: React.ReactNode
     autoFocus?: boolean
+    clearable?: boolean
 }) {
     return (
         <View style={styles.fieldGroup}>
@@ -137,6 +139,11 @@ function Field({
                     autoCorrect={false}
                     autoFocus={autoFocus}
                 />
+                {clearable && value.length > 0 && (
+                    <TouchableOpacity onPress={() => onChangeText("")} hitSlop={8}>
+                        <Text style={styles.clearBtn}>✕</Text>
+                    </TouchableOpacity>
+                )}
                 {suffix}
             </View>
         </View>
@@ -188,6 +195,7 @@ function StepAccount({
                 onChangeText={setEmail}
                 placeholder="you@email.com"
                 keyboardType="email-address"
+                clearable
             />
             <Field
                 label="Password"
@@ -195,6 +203,7 @@ function StepAccount({
                 onChangeText={setPassword}
                 placeholder="8+ characters"
                 secureTextEntry={!showPassword}
+                clearable
                 suffix={
                     <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                         <Text style={styles.showHide}>{showPassword ? "Hide" : "Show"}</Text>
@@ -549,6 +558,11 @@ const styles = StyleSheet.create({
         fontSize: 12.5,
         fontWeight: "600",
         color: INK_SOFT,
+    },
+    clearBtn: {
+        fontSize: 13,
+        fontWeight: "600",
+        color: INK_DIM,
     },
     termsRow: {
         flexDirection: "row",
