@@ -26,7 +26,7 @@ import { ArrowLabel } from "../../components/Arrow"
 import BouncyPressable from "../../components/BouncyPressable"
 import HatchBox from "../../components/HatchBox"
 import { AppStackParamList, FeedStackParamList, TabParamList } from "../../navigation/types"
-import { colors, fonts, bucketColor, goldMeterShade, meterSegment } from "../../theme"
+import { colors, fonts, bucketColor, goldMeterShade, meterSegment, avatarColorFor } from "../../theme"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
 import ActivityLikeButton from "../activity/ActivityLikeButton"
 import { updateLikePrivacy } from "../activity/apiRequests"
@@ -60,7 +60,7 @@ const REPORT_REASONS: readonly { value: ReportReason; label: string }[] = [
 ]
 
 const ORBIT_STARS = [
-    { x: 7, y: 10, r: 1.1, o: 0.55 },
+    { x: 38, y: 40, r: 1.1, o: 0.55 },
     { x: 18, y: 22, r: 0.7, o: 0.30 },
     { x: 32, y: 6, r: 0.9, o: 0.45 },
     { x: 47, y: 15, r: 1.3, o: 0.35 },
@@ -705,7 +705,7 @@ export default function FeedScreen() {
                                                 key={r.user_id}
                                                 style={[
                                                     styles.raterAvatar,
-                                                    { backgroundColor: avatarColor(r.username), marginLeft: i > 0 ? -7 : 0 },
+                                                    { backgroundColor: avatarColorFor(r.avatar_color, r.username), marginLeft: i > 0 ? -7 : 0 },
                                                 ]}
                                             >
                                                 <Text style={styles.raterInitial}>
@@ -1045,7 +1045,7 @@ export default function FeedScreen() {
 
         const s = splitDecision
         const bust = (person: SplitDecisionModule["high"]) => (
-            <View style={[styles.splitBust, { backgroundColor: avatarColor(person.profile.username) }]}>
+            <View style={[styles.splitBust, { backgroundColor: avatarColorFor(person.profile.avatar_color, person.profile.username) }]}>
                 <Text style={styles.splitBustLetter}>
                     {(person.profile.display_name || person.profile.username)[0].toUpperCase()}
                 </Text>
@@ -1188,7 +1188,7 @@ export default function FeedScreen() {
     // compact row only while it has no live hero (the live hero is promoted above this grid instead).
     const renderLockedSection = () => (
         <View style={styles.lockedSection}>
-            <View style={[styles.sectionRow, { marginTop: 4, marginBottom: 0 }]}>
+            <View style={[styles.sectionRow, { marginTop: 2, marginBottom: 0 }]}>
                 <Text style={styles.sectionLabel}>UNLOCKING SOON</Text>
             </View>
 
@@ -1488,7 +1488,9 @@ export default function FeedScreen() {
         const isOwnEvent = item.actor_profile.user_id === profile?.user_id
         const bColor = bucketColor(item.new_bucket)
         const bgColor = bucketBgColor(item.new_bucket)
-        const aColor = avatarColor(item.actor_profile.username)
+        // Use the user's chosen avatar color (falling back to a stable per-name hue) so feed
+        // avatars match the user's profile icon everywhere.
+        const aColor = avatarColorFor(item.actor_profile.avatar_color, item.actor_profile.username)
         const nameSrc = item.actor_profile.display_name || item.actor_profile.username
         const initial = nameSrc[0].toUpperCase()
         const actionLabel = _eventLabel(item.event_type)
@@ -1861,12 +1863,6 @@ function _eventLabel(eventType: FeedEvent["event_type"]): string {
     return "RATED"
 }
 
-const AVATAR_PALETTE = [colors.accent, colors.sky, colors.plum, colors.mint, "#d4823a", "#c47ab2"]
-function avatarColor(username: string): string {
-    let h = 0
-    for (let i = 0; i < username.length; i++) h = username.charCodeAt(i) + ((h << 5) - h)
-    return AVATAR_PALETTE[Math.abs(h) % AVATAR_PALETTE.length]
-}
 
 function bucketBgColor(bucket: string): string {
     if (bucket === "like") return "rgba(255,90,60,0.1)"
@@ -3092,7 +3088,7 @@ const styles = StyleSheet.create({
     // ── Locked modules (compact) ──────────────────────────────────────────
     lockedSection: {
         gap: 8,
-        marginTop: 4,
+        marginTop: 0,
     },
     miniRow: {
         borderRadius: 14,
