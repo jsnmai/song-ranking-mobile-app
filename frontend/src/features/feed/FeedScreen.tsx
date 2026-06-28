@@ -514,13 +514,11 @@ export default function FeedScreen() {
 
     const renderRecentVerdict = () => {
         if (heroEvent === null) {
-            // While still getting started (rated < 10), the compact "Recent Verdicts" row in the
-            // UNLOCKING SOON list already represents the locked state — don't double up with a top
-            // teaser. Once rated >= 10 (no compact list), the full locked teaser shows here instead.
-            if (!gettingStartedComplete) return null
-            // Locked teaser — shown until a followed user has a visible verdict.
+            // Locked teaser — shown in every locked state (including while getting started) until a
+            // followed user has a visible verdict, matching the other locked module cards. It swaps to
+            // the live card the moment heroEvent exists.
             return (
-                <View style={styles.fvOuter}>
+                <BouncyPressable style={styles.fvOuter}>
                     <View style={styles.fvInner}>
                         <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
                             {ORBIT_STARS.map((s, i) => (
@@ -551,7 +549,7 @@ export default function FeedScreen() {
                         </View>
                         <Text style={styles.fvHint}>FOLLOW TO UNLOCK</Text>
                     </View>
-                </View>
+                </BouncyPressable>
             )
         }
 
@@ -1145,14 +1143,14 @@ export default function FeedScreen() {
                     </View>
                 </TouchableOpacity>
 
-                {/* Recent Verdict is never gated by rated count — only by having a followed verdict. */}
-                {renderRecentVerdict()}
-
                 {/* The module area is always shown. Below the base gate (rated >= 10 AND follow >= 3)
                     the banner explains how to unlock and the cards stay locked (no data fetched); once
                     the gate is met the cards go live per their own data rules. */}
                 {!modulesGateComplete && renderGettingStartedBanner()}
                 {renderFindFriends()}
+                {/* Recent Verdict sits with the other module cards. It is never gated by rated count —
+                    only by having a followed verdict — so it can go live before the rest. */}
+                {renderRecentVerdict()}
                 {renderUnlockedSection()}
 
                 {events.length > 0 && (
@@ -1494,11 +1492,11 @@ export default function FeedScreen() {
                     </View>
                 </TouchableOpacity>
 
-                {/* Recent Verdict is never gated by rated count — only by having a followed verdict. */}
-                {renderRecentVerdict()}
-
                 {!modulesGateComplete && renderGettingStartedBanner()}
                 {renderFindFriends()}
+                {/* Recent Verdict sits with the other module cards. It is never gated by rated count —
+                    only by having a followed verdict — so it can go live before the rest. */}
+                {renderRecentVerdict()}
                 {renderUnlockedSection()}
 
                 {/* Activity section — always visible */}
@@ -2925,7 +2923,10 @@ const styles = StyleSheet.create({
     // ── Find friends card ─────────────────────────────────────────────────
     findFriendsCard: {
         marginHorizontal: 14,
-        marginBottom: 0,
+        // Even 10px gaps on both sides to match the module stack's internal gap.
+        // Top: orbitCard.marginBottom(8) + 2 = 10. Bottom: 6 + unlockedSection.marginTop(4) = 10.
+        marginTop: 2,
+        marginBottom: 6,
         borderRadius: 16,
         backgroundColor: colors.mint,
         padding: 12,

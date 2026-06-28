@@ -15,6 +15,7 @@ from src.crud.social_access import (
     circle_visible_taste_owner_predicate,
     followed_visible_taste_owner_predicate,
 )
+from src.sqlalchemy_tables.comparison import Comparison
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
@@ -79,6 +80,17 @@ class CircleSplitRow:
     song_id: int
     gap: float
     rater_count: int
+
+
+@dataclass(frozen=True)
+class MatchMomentRow:
+    """One finalized head-to-head pick by someone the viewer follows: winner over loser."""
+
+    actor: Profile
+    winner_song_id: int
+    loser_song_id: int
+    decision_duration_ms: int | None
+    finalized_at: datetime
 
 
 def aggregate_circle_most_rated(
