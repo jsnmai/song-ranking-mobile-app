@@ -1,5 +1,5 @@
 // Rankings tab — shows the user's ranked songs sorted by score.
-import { ReactNode, useCallback, useEffect, useState } from "react"
+import { ReactNode, useCallback, useEffect, useRef, useState } from "react"
 import {
     ActivityIndicator,
     Dimensions,
@@ -19,7 +19,7 @@ import Animated, {
     withTiming,
 } from "react-native-reanimated"
 import { FlashList } from "@shopify/flash-list"
-import { CompositeNavigationProp, useFocusEffect, useNavigation } from "@react-navigation/native"
+import { CompositeNavigationProp, useFocusEffect, useNavigation, useScrollToTop } from "@react-navigation/native"
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import Svg, { Circle, Defs, LinearGradient, Path, RadialGradient, Rect, Stop } from "react-native-svg"
@@ -102,6 +102,12 @@ function DriftLayer({ children }: { children: ReactNode }) {
 export default function RankingsScreen() {
     const navigation = useNavigation<RankingsNavigation>()
     const { token, profile } = useAuth()
+    // Re-tapping the Rankings tab while scrolled down jumps back to the top. One ref
+    // covers whichever scroller is mounted — the FlashList when rated, the ScrollView
+    // when empty (only one ever renders at a time), so it's loosely typed.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const scrollRef = useRef<any>(null)
+    useScrollToTop(scrollRef)
     // Hide the viewer's own scores + positions until they've rated 10 songs.
     const scoresLocked = useScoresLocked()
     const avatarInitial = (profile?.display_name || profile?.username || "?").charAt(0).toUpperCase()
@@ -641,7 +647,7 @@ export default function RankingsScreen() {
 
     if (rankings.length === 0) {
         return (
-            <ScrollView style={styles.container} contentContainerStyle={styles.emptyContent}>
+            <ScrollView ref={scrollRef} style={styles.container} contentContainerStyle={styles.emptyContent}>
                 {/* Header */}
                 <View style={styles.header}>
                     <View style={styles.headerLeft}>
@@ -721,6 +727,7 @@ export default function RankingsScreen() {
         <View style={styles.container}>
             {error !== null && <Text style={styles.inlineError}>{error}</Text>}
             <FlashList
+                ref={scrollRef}
                 data={[]}
                 renderItem={() => null}
                 keyExtractor={() => ""}

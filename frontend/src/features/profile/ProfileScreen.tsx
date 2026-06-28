@@ -1,10 +1,10 @@
 // Profile tab — own profile with identity card, To LISTn shelf, taste & activity.
-import { Fragment, useCallback, useEffect, useState } from "react"
+import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import {
     ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from "react-native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
-import { useFocusEffect, useNavigation } from "@react-navigation/native"
+import { useFocusEffect, useNavigation, useScrollToTop } from "@react-navigation/native"
 import Svg, { Circle, Line, Path } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
@@ -58,6 +58,9 @@ const STAR_DOTS = [
 export default function ProfileScreen() {
     const navigation = useNavigation<ProfileNavigationProp>()
     const { token } = useAuth()
+    // Re-tapping the "You" tab while scrolled down jumps back to the top.
+    const scrollRef = useRef<ScrollView>(null)
+    useScrollToTop(scrollRef)
 
     // Your Activity songs are all rated by you — open them with your ranking so Song Detail offers
     // Re-rate (not Rate). Fall back to the plain song view if the lookup fails. Mirrors the feed.
@@ -257,6 +260,7 @@ export default function ProfileScreen() {
     return (
         <>
         <ScrollView
+            ref={scrollRef}
             style={styles.container}
             contentContainerStyle={styles.contentContainer}
             showsVerticalScrollIndicator={false}
