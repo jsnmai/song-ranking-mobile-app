@@ -14,7 +14,13 @@ def list_my_comparison_history(
     db: Session,
     user_id: int,
 ) -> ComparisonHistoryListResponse:
-    """Return the authenticated user's recent finalized comparison receipts."""
+    """Return the authenticated user's recent finalized comparison receipts.
+
+    Uses the ``only_rated`` default so receipts whose songs the user has since
+    un-rated are hidden from the UI. The underlying comparison rows are retained;
+    call ``list_user_comparison_history(..., only_rated=False)`` for the full
+    history (analytics / future features).
+    """
     rows = list_user_comparison_history(
         db,
         user_id=user_id,
