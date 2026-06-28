@@ -58,7 +58,7 @@ const ANCHOR_DEFS: readonly {
 }[] = [
     { key: "top_like", label: "TOP · LIKE", bucketKey: "like", requiredCount: 1 },
     { key: "median_okay", label: "MEDIAN · OKAY", bucketKey: "alright", requiredCount: 3 },
-    { key: "lowest_dislike", label: "FLOOR · DISLIKE", bucketKey: "dislike", requiredCount: 1 },
+    { key: "lowest_dislike", label: "BOTTOM · DISLIKE", bucketKey: "dislike", requiredCount: 1 },
 ]
 
 // Pseudo-random star generator for the dark navy orbit surface.
@@ -1152,7 +1152,7 @@ const styles = StyleSheet.create({
     },
     anchorLabel: {
         fontFamily: fonts.mono,
-        fontSize: 6.5,
+        fontSize: 7.5,
         letterSpacing: 0.9,
         fontWeight: "700",
         marginBottom: 7,
