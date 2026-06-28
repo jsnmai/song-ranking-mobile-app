@@ -6,7 +6,11 @@ from sqlalchemy.orm import Session
 from src.crud import profile as crud_profile
 from src.crud import profile_modules as crud
 from src.pydantic_schemas.profile_modules import (
+    AlbumFacet,
+    ArtistFacet,
     ProfileActivityResponse,
+    ProfileRankingFacetsResponse,
+    RankingBucketCounts,
     RecentRatingItem,
     RecentRatingsResponse,
 )
@@ -93,6 +97,11 @@ def get_profile_rankings_by_username(
     username: str,
     limit: int = RANKING_PAGE_LIMIT,
     cursor: str | None = None,
+    *,
+    bucket: str | None = None,
+    artist: str | None = None,
+    album: str | None = None,
+    album_artist: str | None = None,
 ) -> RankingListResponse:
     profile = crud_profile.get_by_username(db, username)
     if profile is None:
@@ -106,6 +115,10 @@ def get_profile_rankings_by_username(
         limit=safe_limit + 1,
         cursor_score=cursor_score,
         cursor_id=cursor_id,
+        bucket=bucket,
+        artist=artist,
+        album=album,
+        album_artist=album_artist,
     )
     has_next = len(rows) > safe_limit
     page = rows[:safe_limit]
@@ -128,6 +141,42 @@ def get_profile_rankings_by_username(
             for row in page
         ],
         next_cursor=next_cursor,
+    )
+
+
+def get_profile_ranking_facets(
+    db: Session,
+    viewer_id: int,
+    username: str,
+) -> ProfileRankingFacetsResponse:
+    """Return bucket counts and distinct artists/albums for a profile's visible rankings.
+
+    These power the filter tabs and modal without the client loading every ranking row; the
+    counts always reflect the full visible set, not the currently-applied filter.
+    """
+    profile = crud_profile.get_by_username(db, username)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Profile not found.")
+    facets = crud.profile_ranking_facets(db, viewer_id=viewer_id, owner_id=profile.user_id)
+    like = facets.bucket_counts.get("like", 0)
+    alright = facets.bucket_counts.get("alright", 0)
+    dislike = facets.bucket_counts.get("dislike", 0)
+    albums = sorted(
+        (
+            AlbumFacet(key=f"{artist}\x00{album}", album=album, artist=artist, count=count)
+            for album, artist, count in facets.albums
+        ),
+        key=lambda option: (option.album.lower(), option.artist.lower()),
+    )
+    return ProfileRankingFacetsResponse(
+        bucket_counts=RankingBucketCounts(
+            all=like + alright + dislike,
+            like=like,
+            alright=alright,
+            dislike=dislike,
+        ),
+        artists=[ArtistFacet(artist=artist, count=count) for artist, count in facets.artists],
+        albums=albums,
     )
 
 

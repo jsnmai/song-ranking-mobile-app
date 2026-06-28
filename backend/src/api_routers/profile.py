@@ -24,7 +24,11 @@ from src.pydantic_schemas.profile import (
     ProfileVisibilityUpdate,
     TasteProfileResponse,
 )
-from src.pydantic_schemas.profile_modules import ProfileActivityResponse, RecentRatingsResponse
+from src.pydantic_schemas.profile_modules import (
+    ProfileActivityResponse,
+    ProfileRankingFacetsResponse,
+    RecentRatingsResponse,
+)
 from src.pydantic_schemas.rating import RankingAnchorsResponse, RankingListResponse
 from src.pydantic_schemas.bookmarks import BookmarkListResponse
 from src.services.profile import (
@@ -51,6 +55,7 @@ from src.services.entitlements import viewer_has_premium
 from src.services.profile_modules import (
     get_my_recent_ratings,
     get_profile_ranking_anchors_by_username,
+    get_profile_ranking_facets,
     get_profile_activity,
     get_profile_rankings_by_username,
     get_profile_recent_ratings,
@@ -386,6 +391,25 @@ def profile_ranking_anchors(
 
 
 @router.get(
+    "/{username}/rankings/facets",
+    response_model=ProfileRankingFacetsResponse,
+)
+@limiter.limit("300/minute")
+def profile_ranking_facets(
+    request: Request,
+    username: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ProfileRankingFacetsResponse:
+    """Return bucket counts and distinct artists/albums to populate the rankings filter UI."""
+    return get_profile_ranking_facets(
+        db,
+        viewer_id=current_user.id,
+        username=username,
+    )
+
+
+@router.get(
     "/{username}/rankings",
     response_model=RankingListResponse,
 )
@@ -394,15 +418,26 @@ def profile_rankings(
     request: Request,
     username: str,
     cursor: str | None = Query(default=None),
+    bucket: Literal["like", "alright", "dislike"] | None = Query(default=None),
+    artist: str | None = Query(default=None),
+    album: str | None = Query(default=None),
+    album_artist: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> RankingListResponse:
-    """Return a profile's rankings, enforcing taste visibility rules."""
+    """Return a profile's rankings, enforcing taste visibility rules.
+
+    Optional bucket/artist/album filters narrow the list server-side so pagination stays correct.
+    """
     return get_profile_rankings_by_username(
         db,
         viewer_id=current_user.id,
         username=username,
         cursor=cursor,
+        bucket=bucket,
+        artist=artist,
+        album=album,
+        album_artist=album_artist,
     )
 
 

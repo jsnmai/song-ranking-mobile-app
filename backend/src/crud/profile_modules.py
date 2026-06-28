@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from src.crud.rating import RankingRow
@@ -95,14 +95,32 @@ def list_profile_rankings(
     limit: int,
     cursor_score: float | None = None,
     cursor_id: int | None = None,
+    *,
+    bucket: str | None = None,
+    artist: str | None = None,
+    album: str | None = None,
+    album_artist: str | None = None,
 ) -> list[RankingRow]:
-    """Return visible rankings for owner_id ordered by score descending."""
+    """Return visible rankings for owner_id ordered by score descending.
+
+    Optional bucket/artist/album filters are applied server-side so the viewer paginates
+    the filtered set directly (the screen never holds the full list). ``album`` pairs with
+    ``album_artist`` because the same album title can appear under different artists.
+    """
     statement = (
         select(Ranking, Song)
         .join(Song, Song.id == Ranking.song_id)
         .where(Ranking.user_id == owner_id)
         .where(visible_taste_owner_predicate(viewer_id, Ranking.user_id))
     )
+    if bucket is not None:
+        statement = statement.where(Ranking.bucket == bucket)
+    if artist is not None:
+        statement = statement.where(Song.artist == artist)
+    if album is not None:
+        statement = statement.where(Song.album == album)
+        if album_artist is not None:
+            statement = statement.where(Song.artist == album_artist)
     if cursor_score is not None and cursor_id is not None:
         statement = statement.where(
             or_(
@@ -114,3 +132,59 @@ def list_profile_rankings(
         statement.order_by(Ranking.score.desc(), Ranking.id.asc()).limit(limit)
     ).all()
     return [RankingRow(ranking=row[0], song=row[1]) for row in rows]
+
+
+@dataclass(frozen=True)
+class RankingFacets:
+    """Aggregate counts used to populate the rankings filter UI without loading the full list."""
+
+    bucket_counts: dict[str, int]
+    artists: list[tuple[str, int]]
+    albums: list[tuple[str, str, int]]
+
+
+def profile_ranking_facets(
+    db: Session,
+    viewer_id: int,
+    owner_id: int,
+) -> RankingFacets:
+    """Return per-bucket counts and the distinct artists/albums in owner_id's visible rankings.
+
+    All three aggregates honour the same taste-visibility predicate as the list query, so the
+    filter chips never reveal songs the viewer couldn't otherwise see.
+    """
+    visible = visible_taste_owner_predicate(viewer_id, Ranking.user_id)
+
+    bucket_rows = db.execute(
+        select(Ranking.bucket, func.count())
+        .where(Ranking.user_id == owner_id)
+        .where(visible)
+        .group_by(Ranking.bucket)
+    ).all()
+
+    artist_rows = db.execute(
+        select(Song.artist, func.count())
+        .select_from(Ranking)
+        .join(Song, Song.id == Ranking.song_id)
+        .where(Ranking.user_id == owner_id)
+        .where(visible)
+        .group_by(Song.artist)
+        .order_by(Song.artist.asc())
+    ).all()
+
+    album_rows = db.execute(
+        select(Song.album, Song.artist, func.count())
+        .select_from(Ranking)
+        .join(Song, Song.id == Ranking.song_id)
+        .where(Ranking.user_id == owner_id)
+        .where(visible)
+        .where(Song.album.is_not(None))
+        .where(Song.album != "")
+        .group_by(Song.album, Song.artist)
+    ).all()
+
+    return RankingFacets(
+        bucket_counts={bucket: count for bucket, count in bucket_rows},
+        artists=[(artist, count) for artist, count in artist_rows],
+        albums=[(album, artist, count) for album, artist, count in album_rows],
+    )

@@ -20,7 +20,7 @@ import {
     RecentRatingsResponse,
     TasteProfileResponse,
 } from "./types"
-import { RankingAnchorsResponse, RankingListResponse } from "../comparison/types"
+import { BucketName, RankingAnchorsResponse, RankingFacetsResponse, RankingListResponse } from "../comparison/types"
 import { BookmarkListResponse } from "../bookmarks/types"
 
 // Calls GET /api/v1/profile/me
@@ -160,16 +160,50 @@ export async function getProfileActivity(
     return apiClient.get<ProfileActivityResponse>(path, token)
 }
 
+export type ProfileRankingFilters = {
+    cursor?: string;
+    bucket?: BucketName;
+    artist?: string;
+    album?: string;
+    albumArtist?: string;
+}
+
 // Calls GET /api/v1/profile/{username}/rankings
+// Bucket/artist/album filters are applied server-side so pagination stays correct under a filter.
 export async function getProfileRankings(
     username: string,
     token: string,
-    cursor?: string,
+    filters: ProfileRankingFilters = {},
 ): Promise<RankingListResponse> {
-    const path = cursor
-        ? `/api/v1/profile/${username}/rankings?cursor=${encodeURIComponent(cursor)}`
+    const query: string[] = []
+    if (filters.cursor) {
+        query.push(`cursor=${encodeURIComponent(filters.cursor)}`)
+    }
+    if (filters.bucket) {
+        query.push(`bucket=${encodeURIComponent(filters.bucket)}`)
+    }
+    if (filters.artist) {
+        query.push(`artist=${encodeURIComponent(filters.artist)}`)
+    }
+    if (filters.album) {
+        query.push(`album=${encodeURIComponent(filters.album)}`)
+    }
+    if (filters.albumArtist) {
+        query.push(`album_artist=${encodeURIComponent(filters.albumArtist)}`)
+    }
+    const path = query.length > 0
+        ? `/api/v1/profile/${username}/rankings?${query.join("&")}`
         : `/api/v1/profile/${username}/rankings`
     return apiClient.get<RankingListResponse>(path, token)
+}
+
+// Calls GET /api/v1/profile/{username}/rankings/facets
+// Returns bucket counts and the distinct artists/albums for the filter UI.
+export async function getProfileRankingFacets(
+    username: string,
+    token: string,
+): Promise<RankingFacetsResponse> {
+    return apiClient.get<RankingFacetsResponse>(`/api/v1/profile/${username}/rankings/facets`, token)
 }
 
 // Calls GET /api/v1/profile/{username}/bookmarks

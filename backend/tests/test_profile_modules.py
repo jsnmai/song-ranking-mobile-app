@@ -63,16 +63,22 @@ def _set_visibility(client: TestClient, token: str, visibility: str) -> None:
     assert response.status_code == 200
 
 
-def _create_song(db: Session, deezer_id: int, title: str) -> Song:
+def _create_song(
+    db: Session,
+    deezer_id: int,
+    title: str,
+    artist: str = "Test Artist",
+    album: str = "Test Album",
+) -> Song:
     song = db.execute(select(Song).where(Song.deezer_id == deezer_id)).scalar_one_or_none()
     if song is None:
         song = Song(
             deezer_id=deezer_id,
             isrc=None,
             title=title,
-            artist="Test Artist",
+            artist=artist,
             artist_deezer_id=9999,
-            album="Test Album",
+            album=album,
             cover_url="https://example.com/cover.jpg",
             preview_url="https://example.com/preview.mp3",
             genre_deezer=None,
@@ -322,6 +328,109 @@ def test_only_me_viewer_gets_empty_rankings(client: TestClient, db_session: Sess
     data = _get_rankings(client, viewer_token, "privrank")
 
     assert data["rankings"] == []
+
+
+# ── Rankings filtering + facets ──────────────────────────────────────────────
+
+
+def _get_rankings_filtered(client: TestClient, token: str, username: str, **params) -> dict:
+    limiter._storage.reset()
+    response = client.get(
+        f"/api/v1/profile/{username}/rankings",
+        params=params,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    return response.json()
+
+
+def _get_ranking_facets(client: TestClient, token: str, username: str) -> dict:
+    limiter._storage.reset()
+    response = client.get(
+        f"/api/v1/profile/{username}/rankings/facets",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    return response.json()
+
+
+def test_rankings_bucket_filter(client: TestClient, db_session: Session):
+    """The bucket query param returns only rankings in that bucket."""
+    token = _register(client, "bucketf")
+    like_song = _create_song(db_session, 21001, "Liked One")
+    okay_song = _create_song(db_session, 21002, "Okay One")
+    _create_ranking(db_session, "bucketf", like_song, bucket="like", score=9.0)
+    _create_ranking(db_session, "bucketf", okay_song, bucket="alright", score=6.0)
+
+    data = _get_rankings_filtered(client, token, "bucketf", bucket="like")
+
+    titles = [r["song"]["title"] for r in data["rankings"]]
+    assert titles == ["Liked One"]
+
+
+def test_rankings_artist_filter(client: TestClient, db_session: Session):
+    """The artist query param returns only that artist's rankings."""
+    token = _register(client, "artistf")
+    song_a = _create_song(db_session, 21010, "A Track", artist="Artist A")
+    song_b = _create_song(db_session, 21011, "B Track", artist="Artist B")
+    _create_ranking(db_session, "artistf", song_a, score=9.0)
+    _create_ranking(db_session, "artistf", song_b, score=8.0)
+
+    data = _get_rankings_filtered(client, token, "artistf", artist="Artist A")
+
+    titles = [r["song"]["title"] for r in data["rankings"]]
+    assert titles == ["A Track"]
+
+
+def test_rankings_album_filter_pairs_with_artist(client: TestClient, db_session: Session):
+    """An album filter only matches when the owning artist matches too."""
+    token = _register(client, "albumf")
+    # Same album title under two different artists — only the paired one should match.
+    shared_a = _create_song(db_session, 21020, "Shared A", artist="Artist A", album="Greatest Hits")
+    shared_b = _create_song(db_session, 21021, "Shared B", artist="Artist B", album="Greatest Hits")
+    _create_ranking(db_session, "albumf", shared_a, score=9.0)
+    _create_ranking(db_session, "albumf", shared_b, score=8.0)
+
+    data = _get_rankings_filtered(
+        client, token, "albumf", album="Greatest Hits", album_artist="Artist A"
+    )
+
+    titles = [r["song"]["title"] for r in data["rankings"]]
+    assert titles == ["Shared A"]
+
+
+def test_ranking_facets_counts_and_options(client: TestClient, db_session: Session):
+    """Facets report per-bucket totals and the distinct artists/albums in the list."""
+    token = _register(client, "facetowner")
+    a1 = _create_song(db_session, 21030, "A1", artist="Artist A", album="Album A")
+    a2 = _create_song(db_session, 21031, "A2", artist="Artist A", album="Album A")
+    b1 = _create_song(db_session, 21032, "B1", artist="Artist B", album="Album B")
+    _create_ranking(db_session, "facetowner", a1, bucket="like", score=9.0)
+    _create_ranking(db_session, "facetowner", a2, bucket="alright", score=6.0)
+    _create_ranking(db_session, "facetowner", b1, bucket="dislike", score=2.0)
+
+    facets = _get_ranking_facets(client, token, "facetowner")
+
+    assert facets["bucket_counts"] == {"all": 3, "like": 1, "alright": 1, "dislike": 1}
+    artist_counts = {a["artist"]: a["count"] for a in facets["artists"]}
+    assert artist_counts == {"Artist A": 2, "Artist B": 1}
+    album_counts = {a["album"]: a["count"] for a in facets["albums"]}
+    assert album_counts == {"Album A": 2, "Album B": 1}
+
+
+def test_ranking_facets_respect_visibility(client: TestClient, db_session: Session):
+    """An only-me profile exposes no facet options to other viewers."""
+    owner_token = _register(client, "facetpriv")
+    viewer_token = _register(client, "facetviewer")
+    _set_visibility(client, owner_token, "only_me")
+    song = _create_song(db_session, 21040, "Hidden", artist="Secret Artist")
+    _create_ranking(db_session, "facetpriv", song)
+
+    facets = _get_ranking_facets(client, viewer_token, "facetpriv")
+
+    assert facets["bucket_counts"] == {"all": 0, "like": 0, "alright": 0, "dislike": 0}
+    assert facets["artists"] == []
+    assert facets["albums"] == []
 
 
 # ── Full activity (paginated "view all") ─────────────────────────────────────

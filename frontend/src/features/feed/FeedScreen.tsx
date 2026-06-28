@@ -825,13 +825,11 @@ export default function FeedScreen() {
                 testID={`feed-rerate-radar-${r.rating_event_id}`}
             >
                 <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
-                    {/* Pill with the actor handle directly beneath it, so a long handle still fits. */}
-                    <View>
-                        <View style={styles.fullCellTop}>
-                            <View style={styles.goldPill}><Text style={styles.goldPillText}>Re-rate radar</Text></View>
-                        </View>
-                        <Text style={styles.rrUser} numberOfLines={1}>@{r.actor_profile.username}</Text>
+                    <View style={styles.fullCellTop}>
+                        <View style={styles.goldPill}><Text style={styles.goldPillText}>Re-rate radar</Text></View>
                     </View>
+                    {/* Standalone flex child so space-between gives the handle equal room above and below. */}
+                    <Text style={styles.rrUser} numberOfLines={1}>@{r.actor_profile.username}</Text>
                     <View style={styles.rrBody}>
                         {r.song.cover_url ? (
                             <Image style={styles.rrArt} source={{ uri: r.song.cover_url }} />
@@ -2474,7 +2472,6 @@ const styles = StyleSheet.create({
         fontSize: 9.5,
         letterSpacing: 0.5,
         color: "rgba(241,236,221,0.85)",
-        marginTop: 5,
     },
     rrBody: {
         flexDirection: "row",

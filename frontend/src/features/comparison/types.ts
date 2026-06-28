@@ -64,6 +64,33 @@ export type RankingListResponse = {
     next_cursor: string | null;
 }
 
+// Aggregate filter options for a profile's rankings, computed server-side over the full
+// visible set so the filter UI is accurate even while the list itself is paginated.
+export type RankingBucketCounts = {
+    all: number;
+    like: number;
+    alright: number;
+    dislike: number;
+}
+
+export type ArtistFacet = {
+    artist: string;
+    count: number;
+}
+
+export type AlbumFacet = {
+    key: string;
+    album: string;
+    artist: string;
+    count: number;
+}
+
+export type RankingFacetsResponse = {
+    bucket_counts: RankingBucketCounts;
+    artists: ArtistFacet[];
+    albums: AlbumFacet[];
+}
+
 export type RankingAnchorsResponse = {
     top_like: RankingResponse | null;
     median_okay: RankingResponse | null;

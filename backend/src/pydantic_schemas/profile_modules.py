@@ -26,3 +26,33 @@ class ProfileActivityResponse(BaseModel):
 
     items: list[RecentRatingItem]
     next_cursor: str | None
+
+
+class RankingBucketCounts(BaseModel):
+    """Totals per bucket (plus the combined total) for the rankings filter tabs."""
+
+    all: int
+    like: int
+    alright: int
+    dislike: int
+
+
+class ArtistFacet(BaseModel):
+    artist: str
+    count: int
+
+
+class AlbumFacet(BaseModel):
+    # key is artist + NUL + album so the client can identify an album uniquely across artists.
+    key: str
+    album: str
+    artist: str
+    count: int
+
+
+class ProfileRankingFacetsResponse(BaseModel):
+    """Aggregate filter options for a profile's rankings, computed over the full visible set."""
+
+    bucket_counts: RankingBucketCounts
+    artists: list[ArtistFacet]
+    albums: list[AlbumFacet]
