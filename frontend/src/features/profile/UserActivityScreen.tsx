@@ -11,6 +11,7 @@ import RatingActivityCard from "../activity/RatingActivityCard"
 import { useAuth } from "../auth/AuthContext"
 import { useScoresLocked } from "../../hooks/useScoresLocked"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
+import { getMyRankingByDeezerId } from "../rankings/apiRequests"
 import { getProfileActivity } from "./apiRequests"
 import { RecentRatingItem } from "./types"
 
@@ -67,6 +68,19 @@ export default function UserActivityScreen({ navigation, route }: Props) {
         setIsLoadingMore(false)
     }
 
+    // Open the song. If the VIEWER has rated it (always true for their own activity), open it with
+    // their ranking so Song Detail offers Re-rate; otherwise (e.g. another user's song the viewer
+    // hasn't rated) fall back to the unrated view. Mirrors the feed's song-press lookup.
+    const handleSongPress = async (song: RecentRatingItem["song"]) => {
+        if (!token) return
+        try {
+            const ranking = await getMyRankingByDeezerId(song.deezer_id, token)
+            navigation.navigate("SongDetail", { ranking })
+        } catch {
+            navigation.navigate("SongDetail", { song: song as never })
+        }
+    }
+
     return (
         <View style={styles.container}>
             <View style={styles.header}>
@@ -103,7 +117,7 @@ export default function UserActivityScreen({ navigation, route }: Props) {
                             score={item.score}
                             hideScore={hideScore}
                             note={item.note}
-                            onPress={() => navigation.navigate("SongDetail", { song: item.song as never })}
+                            onPress={() => handleSongPress(item.song)}
                             testID={`activity-card-${item.rating_event_id}`}
                         >
                             <ActivityLikeButton

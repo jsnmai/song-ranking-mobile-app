@@ -1,7 +1,7 @@
 // Profile tab — own profile with identity card, To LISTn shelf, taste & activity.
 import { Fragment, useCallback, useEffect, useState } from "react"
 import {
-    ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View,
+    ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from "react-native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { useFocusEffect, useNavigation } from "@react-navigation/native"
@@ -12,9 +12,11 @@ import { AppStackParamList } from "../../navigation/types"
 import { avatarColorToken, colors, fonts } from "../../theme"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
 import ActivityLikeButton from "../activity/ActivityLikeButton"
+import { updateLikePrivacy } from "../activity/apiRequests"
+import OwnActivitySheet from "../activity/OwnActivitySheet"
 import RatingActivityCard from "../activity/RatingActivityCard"
 import { useAuth } from "../auth/AuthContext"
-import { getMyRankingByDeezerId } from "../rankings/apiRequests"
+import { getMyRankingByDeezerId, removeRating } from "../rankings/apiRequests"
 import {
     getMostCompatible, getMyAuxstrology, getMyProfile, getMyRecentRatings, getMyTasteProfile,
 } from "./apiRequests"
@@ -76,6 +78,10 @@ export default function ProfileScreen() {
     const [aux, setAux] = useState<AuxstrologyResponse | null>(null)
     const [ratings, setRatings] = useState<RecentRatingItem[] | null>(null)
     const [mostCompatible, setMostCompatible] = useState<MostCompatibleItem[] | null>(null)
+    // Three-dots options for your own activity cards (Re-rate / Reorder / Remove / like privacy).
+    const [menuItem, setMenuItem] = useState<RecentRatingItem | null>(null)
+    const [hideLikeCounts, setHideLikeCounts] = useState(false)
+    const [isMutatingActivity, setIsMutatingActivity] = useState(false)
 
     const openFollowers = () => {
         if (!profile) return
@@ -100,6 +106,7 @@ export default function ProfileScreen() {
                 try {
                     const data = await getMyProfile(token!)
                     setProfile(data)
+                    setHideLikeCounts(data.hide_like_counts)
                 } catch (err) {
                     if (err instanceof ApiError) setProfileError(err.detail)
                     else if (err instanceof Error) setProfileError(err.message)
@@ -159,6 +166,70 @@ export default function ProfileScreen() {
     const longestStreak = profile?.user_stats?.longest_streak ?? 0
     const isNew = ratedCount < 10
 
+    // ── Your Activity three-dots actions ──────────────────────────────────
+    const handleActivityReRate = async () => {
+        const item = menuItem
+        if (!item || !token) return
+        setMenuItem(null)
+        try {
+            // Re-rate needs the full catalog song (isrc/artist ids); the ranking carries it.
+            const ranking = await getMyRankingByDeezerId(item.song.deezer_id, token)
+            navigation.navigate("BucketSelection", { song: ranking.song as never })
+        } catch {
+            navigation.navigate("BucketSelection", { song: item.song as never })
+        }
+    }
+
+    const handleActivityReorder = () => {
+        if (isNew) return // reorder stays locked until 10 ratings
+        setMenuItem(null)
+        navigation.navigate("Reorder")
+    }
+
+    const handleActivityRemove = () => {
+        const item = menuItem
+        if (!item || !token) return
+        setMenuItem(null)
+        Alert.alert(
+            "Remove this song from your rankings? This cannot be undone.",
+            undefined,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Remove",
+                    style: "destructive",
+                    onPress: async () => {
+                        if (isMutatingActivity) return
+                        setIsMutatingActivity(true)
+                        try {
+                            await removeRating(item.song.id, token)
+                            setRatings((prev) => prev?.filter((r) => r.rating_event_id !== item.rating_event_id) ?? prev)
+                        } catch {
+                            // best effort — leave the card in place if the removal failed
+                        } finally {
+                            setIsMutatingActivity(false)
+                        }
+                    },
+                },
+            ],
+        )
+    }
+
+    const handleToggleLikePrivacy = async () => {
+        if (!token || isMutatingActivity) return
+        const next = !hideLikeCounts
+        setMenuItem(null)
+        setIsMutatingActivity(true)
+        try {
+            const updated = await updateLikePrivacy(next, token)
+            setHideLikeCounts(updated.hide_like_counts)
+        } catch {
+            // ignore — keep the previous value
+        } finally {
+            setIsMutatingActivity(false)
+        }
+    }
+
     const step1Done = ratedCount > 0
     const step2Done = ratedCount >= 10
     const step3Done = (profile?.following_count ?? 0) >= 3
@@ -185,6 +256,7 @@ export default function ProfileScreen() {
     )
 
     return (
+        <>
         <ScrollView
             style={styles.container}
             contentContainerStyle={styles.contentContainer}
@@ -531,6 +603,8 @@ export default function ProfileScreen() {
                                     hideScore={isNew}
                                     note={item.note}
                                     onPress={() => handleActivitySongPress(item.song)}
+                                    onOptions={() => setMenuItem(item)}
+                                    optionsTestID={`activity-options-${item.rating_event_id}`}
                                     testID={`activity-card-${item.rating_event_id}`}
                                 >
                                     <ActivityLikeButton
@@ -546,6 +620,19 @@ export default function ProfileScreen() {
                 </View>
             )}
         </ScrollView>
+
+        <OwnActivitySheet
+            visible={menuItem !== null}
+            songTitle={menuItem?.song.title}
+            reorderLocked={isNew}
+            hideLikeCounts={hideLikeCounts}
+            onReRate={handleActivityReRate}
+            onReorder={handleActivityReorder}
+            onRemove={handleActivityRemove}
+            onToggleLikePrivacy={handleToggleLikePrivacy}
+            onClose={() => setMenuItem(null)}
+        />
+        </>
     )
 }
 
@@ -945,10 +1032,12 @@ const styles = StyleSheet.create({
         borderColor: colors.line,
         padding: 12,
     },
+    // Kicker matches the Compatibility module's COMPATIBILITY title (mono 9 / 1.8) so the two
+    // stacked stat cards read as one family.
     twoColKicker: {
         fontFamily: fonts.mono,
-        fontSize: 8,
-        letterSpacing: 1.4,
+        fontSize: 9,
+        letterSpacing: 1.8,
         color: colors.inkDim,
         fontWeight: "700",
         marginBottom: 10,
@@ -956,32 +1045,33 @@ const styles = StyleSheet.create({
     bucketRow: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 6,
-        marginBottom: 7,
+        gap: 9,
+        marginBottom: 8,
     },
+    // Label + count mirror the Compatibility row (display 13, ink) so both bar cards look consistent.
     bucketLabel: {
-        fontFamily: fonts.mono,
-        fontSize: 9,
-        color: colors.inkSoft,
-        // Wide enough for "Dislike" (7 mono chars) so the trailing "e" never wraps.
-        width: 44,
+        fontFamily: fonts.display,
+        fontSize: 13,
+        color: colors.ink,
+        // Fixed width so every bar starts at the same x; fits "Dislike" in the display face.
+        width: 64,
     },
     bucketBarTrack: {
         flex: 1,
         height: 7,
         backgroundColor: colors.bg,
-        borderRadius: 3.5,
+        borderRadius: 4,
         overflow: "hidden",
     },
     bucketBar: {
         height: 7,
-        borderRadius: 3.5,
+        borderRadius: 4,
     },
     bucketCount: {
-        fontFamily: fonts.mono,
-        fontSize: 9,
-        color: colors.inkDim,
-        width: 18,
+        fontFamily: fonts.display,
+        fontSize: 13,
+        color: colors.ink,
+        width: 34,
         textAlign: "right",
     },
     // ── Your Activity cards ───────────────────────────────────────────

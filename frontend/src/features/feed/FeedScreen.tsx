@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
     ActivityIndicator,
+    Alert,
     Image,
     Modal,
     Pressable,
@@ -29,10 +30,12 @@ import { colors, fonts, bucketColor, goldMeterShade, meterSegment } from "../../
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
 import ActivityLikeButton from "../activity/ActivityLikeButton"
 import { updateLikePrivacy } from "../activity/apiRequests"
+import OwnActivitySheet from "../activity/OwnActivitySheet"
 import { useAuth } from "../auth/AuthContext"
+import { blockUser } from "../profile/apiRequests"
 import { ProfileBase, ReportReason } from "../profile/types"
 import { RankingResponse } from "../comparison/types"
-import { getMyRankingByDeezerId } from "../rankings/apiRequests"
+import { getMyRankingByDeezerId, removeRating } from "../rankings/apiRequests"
 import { getFeedModules, getSongCircleRaters, listMyFeed, reportRatingEvent } from "./apiRequests"
 import { ConsensusModule, DisagreementModule, FeedEvent, MatchMomentModule, RerateRadarItem, SplitDecisionModule } from "./types"
 
@@ -142,6 +145,26 @@ function EyeIcon({ color, size = 16 }: { color: string; size?: number }) {
     )
 }
 
+function FlagIcon({ color, size = 16 }: { color: string; size?: number }) {
+    return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+            stroke={color} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
+            <Path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+            <Path d="M4 22v-7" />
+        </Svg>
+    )
+}
+
+function BlockIcon({ color, size = 16 }: { color: string; size?: number }) {
+    return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+            stroke={color} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
+            <Circle cx={12} cy={12} r={9} />
+            <Path d="M5.6 5.6l12.8 12.8" />
+        </Svg>
+    )
+}
+
 function SearchIcon() {
     return (
         <Svg width={16} height={16} viewBox="0 0 24 24" fill="none"
@@ -168,10 +191,11 @@ export default function FeedScreen() {
     const [isReporting, setIsReporting] = useState(false)
     const [reportedEventId, setReportedEventId] = useState<number | null>(null)
     const [reportError, setReportError] = useState<string | null>(null)
-    const [likePrivacyEventId, setLikePrivacyEventId] = useState<number | null>(null)
     const [isSavingLikePrivacy, setIsSavingLikePrivacy] = useState(false)
-    const [likePrivacyError, setLikePrivacyError] = useState<string | null>(null)
     const [hideLikeCounts, setHideLikeCounts] = useState(profile?.hide_like_counts ?? false)
+    // Three-dots option sheets: own cards get the full action set; others get report/block.
+    const [ownMenuEvent, setOwnMenuEvent] = useState<FeedEvent | null>(null)
+    const [otherMenuEvent, setOtherMenuEvent] = useState<FeedEvent | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [friendsCardDismissed, setFriendsCardDismissed] = useState(false)
     const [heroRaters, setHeroRaters] = useState<ProfileBase[]>([])
@@ -443,25 +467,6 @@ export default function FeedScreen() {
         navigation.navigate("ActivityLikers", { ratingEventId })
     }
 
-    const toggleLikePrivacyMenu = (eventId: number) => {
-        if (isSavingLikePrivacy) return
-        // Tapping the same row's "···" again closes the open sheet.
-        if (likePrivacyEventId === eventId) {
-            setLikePrivacyEventId(null)
-            return
-        }
-        setReportingEventId(null)
-        setReportError(null)
-        setLikePrivacyError(null)
-        setLikePrivacyEventId(eventId)
-    }
-
-    const closeLikePrivacyMenu = () => {
-        if (isSavingLikePrivacy) return
-        setLikePrivacyEventId(null)
-        setLikePrivacyError(null)
-    }
-
     const closeReport = () => {
         if (isReporting) return
         setReportingEventId(null)
@@ -474,19 +479,12 @@ export default function FeedScreen() {
         if (!token || isSavingLikePrivacy) return
         const nextValue = !hideLikeCounts
         setIsSavingLikePrivacy(true)
-        setLikePrivacyError(null)
         try {
             const updated = await updateLikePrivacy(nextValue, token)
             setHideLikeCounts(updated.hide_like_counts)
             await refreshProfile()
-        } catch (err) {
-            if (err instanceof ApiError) {
-                setLikePrivacyError(err.detail)
-            } else if (err instanceof Error) {
-                setLikePrivacyError(err.message)
-            } else {
-                setLikePrivacyError("Could not update like privacy.")
-            }
+        } catch {
+            // best effort — keep the previous value on failure
         } finally {
             setIsSavingLikePrivacy(false)
         }
@@ -517,6 +515,84 @@ export default function FeedScreen() {
         } finally {
             setIsReporting(false)
         }
+    }
+
+    // ── Own activity card options: Re-rate / Reorder / Remove / like privacy ──
+    const handleOwnReRate = async () => {
+        const ev = ownMenuEvent
+        if (!ev || !token) return
+        setOwnMenuEvent(null)
+        try {
+            // Re-rate needs the full catalog song (isrc/artist ids); the ranking carries it.
+            const ranking = await getMyRankingByDeezerId(ev.song.deezer_id, token)
+            navigation.navigate("BucketSelection", { song: ranking.song as never })
+        } catch {
+            navigation.navigate("BucketSelection", { song: ev.song as never })
+        }
+    }
+
+    const handleOwnReorder = () => {
+        if ((profile?.user_stats?.rated_count ?? 0) < 10) return // locked until 10 ratings
+        setOwnMenuEvent(null)
+        navigation.navigate("Reorder")
+    }
+
+    const handleOwnRemove = () => {
+        const ev = ownMenuEvent
+        if (!ev || !token) return
+        setOwnMenuEvent(null)
+        Alert.alert(
+            "Remove this song from your rankings? This cannot be undone.",
+            undefined,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Remove",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            await removeRating(ev.song.id, token)
+                            setEvents((prev) => prev.filter((e) => e.id !== ev.id))
+                        } catch { /* best effort — leave the card if removal failed */ }
+                    },
+                },
+            ],
+        )
+    }
+
+    const handleOwnToggleLikePrivacy = () => {
+        setOwnMenuEvent(null)
+        toggleLikePrivacy()
+    }
+
+    // ── Other users' card options: report a note / block the user (UGC safety) ──
+    const handleReportFromMenu = () => {
+        const ev = otherMenuEvent
+        setOtherMenuEvent(null)
+        if (ev && ev.note !== null) openReport(ev.id)
+    }
+
+    const handleBlockFromMenu = () => {
+        const ev = otherMenuEvent
+        if (!ev || !token) return
+        setOtherMenuEvent(null)
+        Alert.alert(
+            `Block @${ev.actor_profile.username}?`,
+            "They won't see your taste or appear in your feed, and you won't see theirs.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Block",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            await blockUser(ev.actor_profile.username, token)
+                            setEvents((prev) => prev.filter((e) => e.actor_profile.user_id !== ev.actor_profile.user_id))
+                        } catch { /* best effort */ }
+                    },
+                },
+            ],
+        )
     }
 
     // Recent Verdict module: feature the freshest verdict from someone the viewer follows
@@ -1588,8 +1664,7 @@ export default function FeedScreen() {
                     {isOwnEvent ? (
                         <TouchableOpacity
                             style={styles.moreBtn}
-                            onPress={() => toggleLikePrivacyMenu(item.id)}
-                            disabled={isSavingLikePrivacy}
+                            onPress={() => setOwnMenuEvent(item)}
                             hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
                             accessibilityLabel="Activity options"
                             testID={`feed-options-${item.id}`}
@@ -1599,8 +1674,10 @@ export default function FeedScreen() {
                     ) : (
                         <TouchableOpacity
                             style={styles.moreBtn}
-                            onPress={() => item.note !== null && !reportingEventId && openReport(item.id)}
+                            onPress={() => setOtherMenuEvent(item)}
                             hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                            accessibilityLabel="Activity options"
+                            testID={`feed-options-${item.id}`}
                         >
                             <Text style={styles.moreDots}>···</Text>
                         </TouchableOpacity>
@@ -1615,55 +1692,37 @@ export default function FeedScreen() {
         return <ActivityIndicator color={colors.accent} style={styles.footerSpinner} />
     }
 
-    // Bottom sheet that slides up from the "···" button on your own activity cards.
-    // Only own events open it, so its single option is the like-count privacy toggle.
-    const renderLikePrivacyMenu = () => {
-        if (likePrivacyEventId === null) return null
+    // Other users' activity options: report a note (when present) or block the user.
+    const renderOtherOptionsMenu = () => {
+        if (otherMenuEvent === null) return null
+        const ev = otherMenuEvent
         return (
-            <Modal
-                visible
-                transparent
-                animationType="fade"
-                onRequestClose={closeLikePrivacyMenu}
-            >
-                <Pressable style={styles.menuBackdrop} onPress={closeLikePrivacyMenu}>
-                    <Animated.View
-                        entering={SlideInDown.duration(240)}
-                        exiting={SlideOutDown.duration(180)}
+            <Modal visible transparent animationType="fade" onRequestClose={() => setOtherMenuEvent(null)}>
+                <Pressable style={styles.menuBackdrop} onPress={() => setOtherMenuEvent(null)}>
+                    <View
                         style={[styles.sheetCard, { paddingBottom: insets.bottom + 12 }]}
                         onStartShouldSetResponder={() => true}
-                        testID={`feed-like-privacy-panel-${likePrivacyEventId}`}
+                        testID={`feed-other-options-panel-${ev.id}`}
                     >
                         <View style={styles.sheetHandle} />
                         <Text style={styles.menuHeader}>ACTIVITY OPTIONS</Text>
-                        <TouchableOpacity
-                            style={styles.menuItem}
-                            onPress={toggleLikePrivacy}
-                            disabled={isSavingLikePrivacy}
-                            testID={`feed-hide-like-counts-${likePrivacyEventId}`}
-                        >
-                            <View style={styles.menuItemIcon}>
-                                {hideLikeCounts
-                                    ? <EyeIcon color={colors.ink} />
-                                    : <EyeOffIcon color={colors.ink} />}
-                            </View>
+                        {ev.note !== null && (
+                            <TouchableOpacity style={styles.menuItem} onPress={handleReportFromMenu} testID="feed-report-option">
+                                <View style={styles.menuItemIcon}><FlagIcon color={colors.ink} /></View>
+                                <View style={styles.menuItemText}>
+                                    <Text style={styles.menuItemLabel}>Report note</Text>
+                                    <Text style={styles.menuItemSub}>Flag this note for review</Text>
+                                </View>
+                            </TouchableOpacity>
+                        )}
+                        <TouchableOpacity style={styles.menuItem} onPress={handleBlockFromMenu} testID="feed-block-option">
+                            <View style={[styles.menuItemIcon, styles.menuItemIconDanger]}><BlockIcon color={colors.danger} /></View>
                             <View style={styles.menuItemText}>
-                                <Text style={styles.menuItemLabel}>
-                                    {isSavingLikePrivacy
-                                        ? "Saving…"
-                                        : hideLikeCounts ? "Show like counts" : "Hide like counts"}
-                                </Text>
-                                <Text style={styles.menuItemSub}>
-                                    {hideLikeCounts
-                                        ? "Hidden from others right now"
-                                        : "Others can see who liked this"}
-                                </Text>
+                                <Text style={[styles.menuItemLabel, { color: colors.danger }]}>Block @{ev.actor_profile.username}</Text>
+                                <Text style={styles.menuItemSub}>Hide them from your feed and taste</Text>
                             </View>
                         </TouchableOpacity>
-                        {likePrivacyError !== null && (
-                            <Text style={styles.menuError}>{likePrivacyError}</Text>
-                        )}
-                    </Animated.View>
+                    </View>
                 </Pressable>
             </Modal>
         )
@@ -1780,7 +1839,18 @@ export default function FeedScreen() {
                 contentContainerStyle={styles.listContent}
                 ItemSeparatorComponent={null}
             />
-            {renderLikePrivacyMenu()}
+            {renderOtherOptionsMenu()}
+            <OwnActivitySheet
+                visible={ownMenuEvent !== null}
+                songTitle={ownMenuEvent?.song.title}
+                reorderLocked={(profile?.user_stats?.rated_count ?? 0) < 10}
+                hideLikeCounts={hideLikeCounts}
+                onReRate={handleOwnReRate}
+                onReorder={handleOwnReorder}
+                onRemove={handleOwnRemove}
+                onToggleLikePrivacy={handleOwnToggleLikePrivacy}
+                onClose={() => setOwnMenuEvent(null)}
+            />
         </View>
     )
 }
@@ -2156,6 +2226,9 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
         flexShrink: 0,
+    },
+    menuItemIconDanger: {
+        backgroundColor: "rgba(224,73,46,0.10)",
     },
     menuItemText: {
         flex: 1,

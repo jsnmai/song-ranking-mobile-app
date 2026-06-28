@@ -1,5 +1,6 @@
 // Tests for Feed screen navigation behavior.
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native"
+import { Alert, AlertButton } from "react-native"
 
 import { ApiError } from "../../../api/client"
 import { RankingResponse } from "../../comparison/types"
@@ -20,6 +21,8 @@ const mockUnlikeActivity = jest.fn()
 const mockUpdateLikePrivacy = jest.fn()
 const mockGetSongCircleRaters = jest.fn()
 const mockGetMyRankingByDeezerId = jest.fn()
+const mockRemoveRating = jest.fn()
+const mockBlockUser = jest.fn()
 const mockRefreshProfile = jest.fn()
 let mockCurrentProfile: Profile = {
     id: 1,
@@ -109,6 +112,11 @@ jest.mock("../../activity/apiRequests", () => ({
 
 jest.mock("../../rankings/apiRequests", () => ({
     getMyRankingByDeezerId: (...args: unknown[]) => mockGetMyRankingByDeezerId(...args),
+    removeRating: (...args: unknown[]) => mockRemoveRating(...args),
+}))
+
+jest.mock("../../profile/apiRequests", () => ({
+    blockUser: (...args: unknown[]) => mockBlockUser(...args),
 }))
 
 // Plain function — not a jest.fn() — so jest.resetAllMocks() in beforeEach cannot clear it.
@@ -530,7 +538,7 @@ describe("FeedScreen", () => {
         expect(mockNavigate).toHaveBeenCalledWith("ActivityLikers", { ratingEventId: 9 })
     })
 
-    it("opens hide-like-counts from own feed card options", async () => {
+    it("opens the own-card options sheet with Re-rate / Reorder / Remove / like privacy", async () => {
         const ownEvent: FeedEvent = {
             ...feedEvent,
             id: 12,
@@ -553,8 +561,11 @@ describe("FeedScreen", () => {
         })
         fireEvent.press(screen.getByTestId("feed-options-12"))
 
-        expect(screen.getByTestId("feed-like-privacy-panel-12")).toBeTruthy()
-        fireEvent.press(screen.getByTestId("feed-hide-like-counts-12"))
+        // The full own-activity action sheet (same as Profile), not just the privacy toggle.
+        expect(screen.getByTestId("activity-menu-rerate")).toBeTruthy()
+        expect(screen.getByTestId("activity-menu-reorder")).toBeTruthy()
+        expect(screen.getByTestId("activity-menu-remove")).toBeTruthy()
+        fireEvent.press(screen.getByTestId("activity-menu-like-privacy"))
 
         await waitFor(() => {
             expect(mockUpdateLikePrivacy).toHaveBeenCalledWith(true, "test-token")
@@ -589,6 +600,7 @@ describe("FeedScreen", () => {
             expect(screen.getByText("···")).toBeTruthy()
         })
         fireEvent.press(screen.getByText("···"))
+        fireEvent.press(screen.getByTestId("feed-report-option"))
         fireEvent.press(screen.getByText("Spam"))
         fireEvent.changeText(screen.getByPlaceholderText("Add context for review."), "Repeated spam.")
         fireEvent.press(screen.getByText("Submit report"))
@@ -605,6 +617,31 @@ describe("FeedScreen", () => {
             )
             expect(screen.getByText("Thanks. We'll review this report.")).toBeTruthy()
         })
+    })
+
+    it("blocks a user from another card's options, even with no note", async () => {
+        mockBlockUser.mockResolvedValue({})
+        // Auto-confirm the destructive "Block" button when the confirm Alert fires.
+        jest.spyOn(Alert, "alert").mockImplementation((_t, _m, buttons?: AlertButton[]) => {
+            buttons?.find((b) => b.style === "destructive")?.onPress?.()
+        })
+        const otherEvent: FeedEvent = {
+            ...feedEvent,
+            id: 31,
+            note: null,
+            actor_profile: { ...feedEvent.actor_profile, user_id: 7, username: "theo" },
+        }
+        mockListMyFeed.mockResolvedValue({ events: [otherEvent], next_cursor: null })
+
+        render(<FeedScreen />)
+        await waitFor(() => expect(screen.getByTestId("feed-options-31")).toBeTruthy())
+        fireEvent.press(screen.getByTestId("feed-options-31"))
+
+        // No note → no Report option, but Block is always available for UGC safety.
+        expect(screen.queryByTestId("feed-report-option")).toBeNull()
+        // The auto-confirming Alert mock invokes the destructive Block handler synchronously.
+        fireEvent.press(screen.getByTestId("feed-block-option"))
+        expect(mockBlockUser).toHaveBeenCalledWith("theo", "test-token")
     })
 
     it("surfaces a live Re-rate Radar card with the score delta and opens the song", async () => {

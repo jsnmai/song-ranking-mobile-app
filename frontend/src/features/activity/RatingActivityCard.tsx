@@ -42,6 +42,9 @@ type RatingActivityCardProps = {
     hideScore?: boolean
     note?: string | null
     onPress?: () => void
+    // When provided, renders a "···" options button in the action row (e.g. your own activity).
+    onOptions?: () => void
+    optionsTestID?: string
     children?: ReactNode
     testID?: string
 }
@@ -58,6 +61,8 @@ export default function RatingActivityCard({
     hideScore,
     note,
     onPress,
+    onOptions,
+    optionsTestID,
     children,
     testID,
 }: RatingActivityCardProps) {
@@ -123,9 +128,20 @@ export default function RatingActivityCard({
                 <Text style={styles.noteQuote}>"{note}"</Text>
             )}
 
-            {children && (
+            {(children || onOptions) && (
                 <View style={styles.actionRow}>
                     <View style={styles.actionBtns}>{children}</View>
+                    {onOptions && (
+                        <TouchableOpacity
+                            style={styles.moreBtn}
+                            onPress={onOptions}
+                            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                            accessibilityLabel="Activity options"
+                            testID={optionsTestID}
+                        >
+                            <Text style={styles.moreDots}>···</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
             )}
         </TouchableOpacity>
@@ -274,5 +290,16 @@ const styles = StyleSheet.create({
         alignItems: "center",
         gap: 12,
         flex: 1,
+    },
+    moreBtn: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        flexShrink: 0,
+    },
+    moreDots: {
+        fontSize: 18,
+        lineHeight: 18,
+        color: colors.inkDim,
+        fontWeight: "700",
     },
 })

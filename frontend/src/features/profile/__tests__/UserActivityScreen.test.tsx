@@ -6,11 +6,16 @@ import UserActivityScreen from "../UserActivityScreen"
 const mockNavigate = jest.fn()
 const mockGoBack = jest.fn()
 const mockGetProfileActivity = jest.fn()
+const mockGetMyRankingByDeezerId = jest.fn()
 const mockLikeActivity = jest.fn()
 const mockUnlikeActivity = jest.fn()
 
 jest.mock("../apiRequests", () => ({
     getProfileActivity: (...args: unknown[]) => mockGetProfileActivity(...args),
+}))
+
+jest.mock("../../rankings/apiRequests", () => ({
+    getMyRankingByDeezerId: (...args: unknown[]) => mockGetMyRankingByDeezerId(...args),
 }))
 
 jest.mock("../../auth/AuthContext", () => ({
@@ -67,8 +72,10 @@ describe("UserActivityScreen", () => {
         expect(mockGetProfileActivity).toHaveBeenCalledWith("maya", "test-token", undefined)
     })
 
-    it("opens Song Detail when an activity card's song is tapped", async () => {
+    it("opens Song Detail as a re-rate when the viewer has rated the song", async () => {
         mockGetProfileActivity.mockResolvedValue({ items: [item(42, "Redbone")], next_cursor: null })
+        const ranking = { id: 7, song_id: 10, bucket: "like", position: 1, score: 9.2 }
+        mockGetMyRankingByDeezerId.mockResolvedValue(ranking)
 
         render(<UserActivityScreen navigation={navigationProp} route={routeProp} />)
 
@@ -77,10 +84,29 @@ describe("UserActivityScreen", () => {
         })
         fireEvent.press(screen.getByTestId("activity-card-42"))
 
-        expect(mockNavigate).toHaveBeenCalledWith(
-            "SongDetail",
-            { song: expect.objectContaining({ title: "Redbone" }) },
-        )
+        await waitFor(() => {
+            expect(mockGetMyRankingByDeezerId).toHaveBeenCalledWith(123, "test-token")
+            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
+        })
+    })
+
+    it("falls back to the unrated song view when the viewer has not rated it", async () => {
+        mockGetProfileActivity.mockResolvedValue({ items: [item(42, "Redbone")], next_cursor: null })
+        mockGetMyRankingByDeezerId.mockRejectedValue(new Error("404"))
+
+        render(<UserActivityScreen navigation={navigationProp} route={routeProp} />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("activity-card-42")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("activity-card-42"))
+
+        await waitFor(() => {
+            expect(mockNavigate).toHaveBeenCalledWith(
+                "SongDetail",
+                { song: expect.objectContaining({ title: "Redbone" }) },
+            )
+        })
     })
 
     it("shows the empty state when there is no visible activity", async () => {

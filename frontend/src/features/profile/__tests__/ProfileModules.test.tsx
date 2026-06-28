@@ -1,5 +1,6 @@
 // Tests for RecentRatingsModule, RankingsPreviewModule, and MostCompatibleModule on ProfileScreen and OtherProfileScreen.
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native"
+import { Alert, AlertButton } from "react-native"
 
 import OtherProfileScreen from "../OtherProfileScreen"
 import ProfileScreen from "../ProfileScreen"
@@ -45,6 +46,7 @@ const mockGetProfileAnchors = jest.fn()
 const mockGetUserAuxstrology = jest.fn()
 const mockLikeActivity = jest.fn()
 const mockUnlikeActivity = jest.fn()
+const mockUpdateLikePrivacy = jest.fn()
 
 jest.mock("../apiRequests", () => ({
     getMyProfile: (...args: unknown[]) => mockGetMyProfile(...args),
@@ -70,13 +72,18 @@ jest.mock("../apiRequests", () => ({
 jest.mock("../../activity/apiRequests", () => ({
     likeActivity: (...args: unknown[]) => mockLikeActivity(...args),
     unlikeActivity: (...args: unknown[]) => mockUnlikeActivity(...args),
+    updateLikePrivacy: (...args: unknown[]) => mockUpdateLikePrivacy(...args),
 }))
 
 const mockListMyRankings = jest.fn()
+const mockGetMyRankingByDeezerId = jest.fn()
+const mockRemoveRating = jest.fn()
 
 jest.mock("../../rankings/apiRequests", () => ({
     listMyRankings: (...args: unknown[]) => mockListMyRankings(...args),
     getMyRankingAnchors: jest.fn().mockResolvedValue({ top_like: null, median_okay: null, lowest_dislike: null }),
+    getMyRankingByDeezerId: (...args: unknown[]) => mockGetMyRankingByDeezerId(...args),
+    removeRating: (...args: unknown[]) => mockRemoveRating(...args),
 }))
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -232,6 +239,58 @@ describe("ProfileScreen profile modules", () => {
         })
     })
 
+    it("opens the activity three-dots menu and removes a rating", async () => {
+        mockRemoveRating.mockResolvedValue({ rating_event: { event_type: "removed" } })
+        const alertSpy = jest.spyOn(Alert, "alert")
+
+        render(<ProfileScreen />)
+        await waitFor(() => expect(screen.getByTestId("activity-card-42")).toBeTruthy())
+
+        // Open the three-dots options sheet.
+        fireEvent.press(screen.getByTestId("activity-options-42"))
+        expect(screen.getByTestId("activity-menu-rerate")).toBeTruthy()
+        expect(screen.getByTestId("activity-menu-reorder")).toBeTruthy()
+        expect(screen.getByTestId("activity-menu-remove")).toBeTruthy()
+        expect(screen.getByText("Hide like counts")).toBeTruthy()
+
+        // Remove → confirm → removeRating(song_id).
+        fireEvent.press(screen.getByTestId("activity-menu-remove"))
+        const buttons = alertSpy.mock.calls[0][2] as AlertButton[]
+        await act(async () => { buttons[1].onPress?.() })
+
+        await waitFor(() => {
+            expect(mockRemoveRating).toHaveBeenCalledWith(10, "test-token")
+        })
+    })
+
+    it("toggles like-count privacy from the activity menu", async () => {
+        mockUpdateLikePrivacy.mockResolvedValue({ ...myProfile, hide_like_counts: true })
+
+        render(<ProfileScreen />)
+        await waitFor(() => expect(screen.getByTestId("activity-card-42")).toBeTruthy())
+
+        fireEvent.press(screen.getByTestId("activity-options-42"))
+        await act(async () => {
+            fireEvent.press(screen.getByTestId("activity-menu-like-privacy"))
+        })
+
+        expect(mockUpdateLikePrivacy).toHaveBeenCalledWith(true, "test-token")
+    })
+
+    it("locks Reorder in the activity menu until 10 songs are rated", async () => {
+        mockGetMyProfile.mockResolvedValue({ ...myProfile, user_stats: { rated_count: 4, bookmarked_count: 0 } })
+
+        render(<ProfileScreen />)
+        await waitFor(() => expect(screen.getByTestId("activity-card-42")).toBeTruthy())
+
+        fireEvent.press(screen.getByTestId("activity-options-42"))
+        expect(screen.getByText("LOCKED")).toBeTruthy()
+
+        // Tapping the locked Reorder row does not navigate.
+        fireEvent.press(screen.getByTestId("activity-menu-reorder"))
+        expect(mockNavigate).not.toHaveBeenCalledWith("Reorder")
+    })
+
     it("renders the Auxstrology sign and caption when the reading is active", async () => {
         mockGetMyAuxstrology.mockResolvedValue({
             status: "active",
@@ -325,7 +384,9 @@ describe("ProfileScreen profile modules", () => {
         })
         fireEvent.press(screen.getByTestId(`activity-card-${ratingItem.rating_event_id}`))
 
-        expect(mockNavigate).toHaveBeenCalledWith("SongDetail", expect.anything())
+        await waitFor(() => {
+            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", expect.anything())
+        })
     })
 
     it("renders no activity when ratings list is empty", async () => {
