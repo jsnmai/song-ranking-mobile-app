@@ -74,13 +74,23 @@ export type SplitDecisionModule = {
     gap: number;
 }
 
-// Bundled Feed module aggregates (GET /api/v1/feed/modules). Re-rate Radar, Consensus, Disagreement
-// Spotlight, and Split Decision are live; the rest are reserved and null until each ships. Mirrors
-// backend/src/pydantic_schemas/feed.py::FeedModulesResponse.
+// Match Moment: a recent finalized head-to-head pick by someone the viewer follows — the actor
+// chose `winner` over `loser` in the ranking flow. Audience = people you follow (one-way), viewer
+// excluded. decision_duration_ms is how long the pick took (null for legacy rows).
+export type MatchMomentModule = {
+    actor_profile: ProfileBase;
+    winner: PersistedSong;
+    loser: PersistedSong;
+    decision_duration_ms: number | null;
+    created_at: string;
+}
+
+// Bundled Feed module aggregates (GET /api/v1/feed/modules). Every module is live; a module with no
+// data is null (its card stays locked). Mirrors backend/src/pydantic_schemas/feed.py::FeedModulesResponse.
 export type FeedModulesResponse = {
     rerate_radar: RerateRadarItem | null;
     consensus: ConsensusModule | null;
     disagreement_spotlight: DisagreementModule | null;
     split_decision: SplitDecisionModule | null;
-    match_moment: null;
+    match_moment: MatchMomentModule | null;
 }

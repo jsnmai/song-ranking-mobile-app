@@ -118,19 +118,34 @@ class SplitDecisionModule(BaseModel):
     gap: float
 
 
+class MatchMomentModule(BaseModel):
+    """Match Moment: a recent finalized head-to-head pick by someone the viewer follows.
+
+    The actor chose `winner` over `loser` in the ranking flow. Audience = followed-visible people
+    (one-way follow allowed), never the viewer. `decision_duration_ms` is how long the pick took
+    (None for legacy rows) and powers an optional "snap pick" flourish.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    actor_profile: ProfileResponse
+    winner: SongResponse
+    loser: SongResponse
+    decision_duration_ms: int | None
+    created_at: datetime
+
+
 class FeedModulesResponse(BaseModel):
     """Bundled Feed module aggregates served behind the shared social-access privacy layer.
 
     One endpoint backs every Feed module card so the Feed makes a single request and the
     privacy filtering runs once per load (the paginated activity stream stays its own /feed).
-    Modules that are not built yet are reserved keys that always return null for now; each
-    gains its own typed model as it ships. All fields default to null so the bundled module
-    gate (rated >= 10 and following >= 3) can short-circuit to an empty response.
+    All fields default to null so the bundled module gate (rated >= 10 and following >= 3) can
+    short-circuit to an empty response, and so any individual module with no data stays locked.
     """
 
     rerate_radar: RerateRadarItem | None = None
     consensus: ConsensusModule | None = None
     disagreement_spotlight: DisagreementModule | None = None
     split_decision: SplitDecisionModule | None = None
-    # Reserved — not implemented yet; always null until each module ships.
-    match_moment: None = None
+    match_moment: MatchMomentModule | None = None

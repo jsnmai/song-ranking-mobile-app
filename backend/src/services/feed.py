@@ -12,6 +12,7 @@ from src.crud.circle_aggregates import (
     followed_visible_song_raters,
     get_songs_by_ids,
     list_circle_contributors,
+    match_moment_candidates,
     split_decision_candidates,
     viewer_rated_artist_ids,
 )
@@ -25,6 +26,7 @@ from src.pydantic_schemas.feed import (
     FeedEventResponse,
     FeedListResponse,
     FeedModulesResponse,
+    MatchMomentModule,
     RerateRadarItem,
     SplitDecisionModule,
     SplitPerson,
@@ -42,11 +44,11 @@ MAX_FEED_LIMIT = 50
 RECENT_VERDICT_RATER_LIMIT = 8
 
 # ── Feed module base gate ────────────────────────────────────────────────────
-# The bundled module area unlocks only after the viewer has rated >= 10 songs AND follows >= 3 people
+# The bundled module area unlocks only after the viewer has rated >= 5 songs AND follows >= 3 people
 # (mirrors the getting-started banner). Enforced here so older clients / direct calls can't get live
-# module data before the gate is met. This gate affects ONLY /feed/modules — score reveal and Recent
-# Verdict are unaffected. Per-card data rules still apply after the gate.
-MODULE_GATE_MIN_RATED = 10
+# module data before the gate is met. This gate affects ONLY /feed/modules — the rated >= 10 score
+# reveal is a separate, unaffected calibration gate. Per-card data rules still apply after the gate.
+MODULE_GATE_MIN_RATED = 5
 MODULE_GATE_MIN_FOLLOWING = 3
 
 # ── Consensus module (tunable) ───────────────────────────────────────────────
@@ -82,6 +84,11 @@ DISAGREEMENT_CANDIDATE_LIMIT = 50
 SPLIT_MIN_GAP = 3.0
 SPLIT_CANDIDATE_LIMIT = 50
 
+# ── Match Moment (tunable) ───────────────────────────────────────────────────
+# Bounded set of recent finalized head-to-head picks (already deduped to one per actor+session in
+# SQL, newest first), so the most recent valid pick is never truncated out before the service picks it.
+MATCH_MOMENT_CANDIDATE_LIMIT = 50
+
 
 def list_song_circle_raters(
     db: Session,
@@ -114,9 +121,9 @@ def get_feed_modules(
 ) -> FeedModulesResponse:
     """Return the bundled Feed module aggregates for the viewer.
 
-    Re-rate Radar and Consensus are implemented; the remaining module keys are reserved and
-    return null until each one ships. Every aggregate rides the shared social-access predicates,
-    so the whole module strip honors the same taste-visibility/block/deleted-user rules as the feed.
+    Every module is implemented; any that has no qualifying data simply returns null (the card stays
+    locked). Each aggregate rides the shared social-access predicates, so the whole module strip honors
+    the same taste-visibility/block/deleted-user rules as the feed.
     """
     if not _module_gate_met(db, user_id):
         # Base gate not met — return an all-null response and skip every (expensive) module query.
@@ -127,6 +134,7 @@ def get_feed_modules(
         consensus=_consensus_module(db, user_id),
         disagreement_spotlight=_disagreement_module(db, user_id),
         split_decision=_split_decision_module(db, user_id),
+        match_moment=_match_moment_module(db, user_id),
     )
 
 
@@ -217,6 +225,39 @@ def _split_decision_module(
         high=SplitPerson(profile=ProfileResponse.model_validate(high[0]), score=high[1]),
         low=SplitPerson(profile=ProfileResponse.model_validate(low[0]), score=low[1]),
         gap=round(chosen.gap, 1),
+    )
+
+
+def _match_moment_module(
+    db: Session,
+    user_id: int,
+) -> MatchMomentModule | None:
+    """Surface the most recent finalized head-to-head pick by someone the viewer follows.
+
+    Recency-primary: the candidate query already dedupes to the decisive last comparison per
+    (actor, session) and orders newest-first, so the top row is the pick (no rotation). None
+    (→ locked card) when no followed-visible person has a finalized comparison, or either song
+    has since been purged from the catalog.
+    """
+    candidates = match_moment_candidates(
+        db,
+        user_id,
+        limit=MATCH_MOMENT_CANDIDATE_LIMIT,
+    )
+    if not candidates:
+        return None
+    chosen = candidates[0]
+    songs = get_songs_by_ids(db, [chosen.winner_song_id, chosen.loser_song_id])
+    winner = songs.get(chosen.winner_song_id)
+    loser = songs.get(chosen.loser_song_id)
+    if winner is None or loser is None:
+        return None
+    return MatchMomentModule(
+        actor_profile=ProfileResponse.model_validate(chosen.actor),
+        winner=SongResponse.model_validate(winner),
+        loser=SongResponse.model_validate(loser),
+        decision_duration_ms=chosen.decision_duration_ms,
+        created_at=chosen.finalized_at,
     )
 
 

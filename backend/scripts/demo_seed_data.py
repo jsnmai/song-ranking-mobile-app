@@ -469,6 +469,14 @@ COMPARISON_SPECS_BY_USERNAME: dict[str, tuple[ComparisonSeedSpec, ...]] = {
         ComparisonSeedSpec("power-dislike-1", 9_000_016, 9_000_008, 9_000_008, "dislike", 1, 890, 74.0),
         ComparisonSeedSpec("power-like-older", 9_000_010, 9_000_017, 9_000_010, "like", 1, 4100, 170.0),
     ),
+    # demo_power follows demo_feed (public), so demo_feed's most recent finalized pick fills
+    # demo_power's Feed "Match Moment" card. Two comparisons share one session; the module dedupes
+    # to the decisive last one (index 2) — winner 9_000_002 over loser 9_000_006 — and the fast
+    # 1.1s decision drives the "snap pick" flourish.
+    "demo_feed": (
+        ComparisonSeedSpec("feed-match-1", 9_000_002, 9_000_004, 9_000_002, "like", 1, 1600, 0.5),
+        ComparisonSeedSpec("feed-match-1", 9_000_002, 9_000_006, 9_000_002, "like", 2, 1100, 0.5),
+    ),
 }
 
 COMPATIBILITY_PAIRS: tuple[tuple[str, str], ...] = (

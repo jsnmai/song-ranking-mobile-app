@@ -14,7 +14,7 @@ export async function listMyFeed(
 }
 
 // Calls GET /api/v1/feed/modules
-// One bundled request for every Feed module card (only Re-rate Radar is live so far).
+// One bundled request for every Feed module card; a module with no data comes back null (stays locked).
 export async function getFeedModules(
     token: string,
 ): Promise<FeedModulesResponse> {

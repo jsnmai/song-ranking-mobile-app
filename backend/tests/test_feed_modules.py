@@ -1,19 +1,22 @@
 # Integration tests for the bundled Feed modules endpoint.
-# Live modules: Re-rate Radar, Consensus, Disagreement Spotlight, Split Decision.
+# Live modules: Re-rate Radar, Consensus, Disagreement Spotlight, Split Decision, Match Moment.
 #
-# All modules sit behind a base gate (rated >= 10 AND following >= 3). The autouse fixture below opens
+# All modules sit behind a base gate (rated >= 5 AND following >= 3). The autouse fixture below opens
 # that gate (thresholds -> 0) for the per-module tests so they exercise each module's own logic; the
 # gate's enforcement is covered by the dedicated `test_feed_modules_gate_*` tests, which set the real
-# thresholds. (We don't rate 10 songs per test because the rating API requires a completed comparison
-# session to put more than one song in a bucket — impractical for a unit test.)
+# thresholds. (We don't rate several songs per test because the rating API requires a completed
+# comparison session to put more than one song in a bucket — impractical for a unit test.)
+import uuid
+from datetime import datetime, timedelta, timezone
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from src.sqlalchemy_tables.comparison import Comparison
 from src.sqlalchemy_tables.profile import Profile
-
-RESERVED_MODULE_KEYS = ("match_moment",)
+from src.sqlalchemy_tables.song import Song
 
 
 @pytest.fixture(autouse=True)
@@ -180,8 +183,7 @@ def test_feed_modules_empty_returns_null_modules(client: TestClient):
     assert body["consensus"] is None
     assert body["disagreement_spotlight"] is None
     assert body["split_decision"] is None
-    for key in RESERVED_MODULE_KEYS:
-        assert body[key] is None
+    assert body["match_moment"] is None
 
 
 def test_feed_modules_gate_blocks_below_rated(client: TestClient, monkeypatch):
@@ -247,9 +249,8 @@ def test_rerate_radar_surfaces_followed_rerate_delta(client: TestClient):
     assert radar["new_bucket"] == "dislike"
     assert radar["previous_score"] == 8.75
     assert radar["new_score"] != radar["previous_score"]
-    # The reserved modules stay null even once one module has data.
-    for key in RESERVED_MODULE_KEYS:
-        assert body[key] is None
+    # Match Moment has no comparison data here, so it stays null even once another module fills.
+    assert body["match_moment"] is None
 
 
 def test_rerate_radar_ignores_plain_first_rating(client: TestClient):
@@ -727,3 +728,288 @@ def test_split_high_low_tie_break_is_deterministic(client: TestClient):
     assert d is not None
     assert d["high"]["profile"]["username"] == "alpha"   # lower user_id wins the tie
     assert d["low"]["profile"]["username"] == "charlie"
+
+
+# ── Match Moment ─────────────────────────────────────────────────────────────
+
+
+def _profile_user_id(db_session: Session, username: str) -> int:
+    return db_session.execute(
+        select(Profile).where(Profile.username == username)
+    ).scalar_one().user_id
+
+
+def _song_id(db_session: Session, deezer_id: int) -> int:
+    return db_session.execute(
+        select(Song).where(Song.deezer_id == deezer_id)
+    ).scalar_one().id
+
+
+def _insert_pick(
+    db_session: Session,
+    *,
+    user_id: int,
+    winner_song_id: int,
+    loser_song_id: int,
+    session_uuid: uuid.UUID,
+    comparison_index: int | None = None,
+    decision_duration_ms: int | None = None,
+    finalized_at: datetime | None = None,
+    winner_is_a: bool = True,
+) -> None:
+    """Insert a finalized head-to-head comparison directly (deterministic, no session flow).
+
+    `winner_is_a` flips which slot (song_a/song_b) holds the winner so the loser-derivation branch
+    in `match_moment_candidates` is exercised both ways. Unfinalized rows would be ignored, so we
+    always stamp `finalized_at`.
+    """
+    db_session.add(
+        Comparison(
+            session_uuid=session_uuid,
+            user_id=user_id,
+            song_a_id=winner_song_id if winner_is_a else loser_song_id,
+            song_b_id=loser_song_id if winner_is_a else winner_song_id,
+            winner_id=winner_song_id,
+            bucket="like",
+            comparison_index_in_session=comparison_index,
+            decision_duration_ms=decision_duration_ms,
+            finalized_at=finalized_at if finalized_at is not None else datetime.now(timezone.utc),
+        )
+    )
+    db_session.commit()
+
+
+def _followed_makes_pick(
+    client: TestClient,
+    db_session: Session,
+    viewer_token: str,
+    name: str,
+    *,
+    winner_deezer: int,
+    winner_title: str,
+    loser_deezer: int,
+    loser_title: str,
+    session_uuid: uuid.UUID | None = None,
+    comparison_index: int | None = None,
+    decision_duration_ms: int | None = None,
+    finalized_at: datetime | None = None,
+    winner_is_a: bool = True,
+) -> tuple[str, uuid.UUID]:
+    """Register a user the viewer follows (one-way), give both songs a catalog row, and record a pick.
+
+    Match Moment's audience is followed-visible people, so a one-way follow is the realistic case.
+    The two songs land in different buckets so neither rating needs a comparison session. Returns the
+    actor's token and the comparison session uuid.
+    """
+    token = _register(client, f"{name}@example.com", name)
+    _follow(client, viewer_token, name)
+    _finalize_rating(client, token, winner_deezer, winner_title, "like")
+    _finalize_rating(client, token, loser_deezer, loser_title, "dislike")
+    sid = session_uuid if session_uuid is not None else uuid.uuid4()
+    _insert_pick(
+        db_session,
+        user_id=_profile_user_id(db_session, name),
+        winner_song_id=_song_id(db_session, winner_deezer),
+        loser_song_id=_song_id(db_session, loser_deezer),
+        session_uuid=sid,
+        comparison_index=comparison_index,
+        decision_duration_ms=decision_duration_ms,
+        finalized_at=finalized_at,
+        winner_is_a=winner_is_a,
+    )
+    return token, sid
+
+
+def test_match_moment_null_without_any_pick(client: TestClient):
+    """No finalized comparison from anyone the viewer follows → locked (null)."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+
+    assert _modules(client, viewer)["match_moment"] is None
+
+
+def test_match_moment_surfaces_followed_pick(client: TestClient, db_session: Session):
+    """A followed user's finalized pick surfaces as winner › loser with actor + decision time."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    # winner_is_a=False puts the winner in song_b, exercising the loser-derivation branch.
+    _followed_makes_pick(
+        client,
+        db_session,
+        viewer,
+        "alpha",
+        winner_deezer=301,
+        winner_title="Chosen Song",
+        loser_deezer=302,
+        loser_title="Beaten Song",
+        decision_duration_ms=1200,
+        winner_is_a=False,
+    )
+
+    mm = _modules(client, viewer)["match_moment"]
+    assert mm is not None
+    assert mm["actor_profile"]["username"] == "alpha"
+    assert mm["winner"]["title"] == "Chosen Song"
+    assert mm["loser"]["title"] == "Beaten Song"
+    assert mm["decision_duration_ms"] == 1200
+
+
+def test_match_moment_dedupes_to_decisive_comparison_in_session(client: TestClient, db_session: Session):
+    """Many comparisons share one session → the decisive last one (highest index) is the pick."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    # Early probe (index 1): picked Chosen over Beaten.
+    _, sid = _followed_makes_pick(
+        client,
+        db_session,
+        viewer,
+        "alpha",
+        winner_deezer=301,
+        winner_title="Chosen Song",
+        loser_deezer=302,
+        loser_title="Beaten Song",
+        session_uuid=uuid.uuid4(),
+        comparison_index=1,
+    )
+    # Decisive last comparison (index 5) in the SAME session reverses it: Beaten beats Chosen.
+    _insert_pick(
+        db_session,
+        user_id=_profile_user_id(db_session, "alpha"),
+        winner_song_id=_song_id(db_session, 302),
+        loser_song_id=_song_id(db_session, 301),
+        session_uuid=sid,
+        comparison_index=5,
+    )
+
+    mm = _modules(client, viewer)["match_moment"]
+    assert mm is not None
+    assert mm["winner"]["title"] == "Beaten Song"   # index 5 (decisive) wins, not index 1
+    assert mm["loser"]["title"] == "Chosen Song"
+
+
+def test_match_moment_returns_only_latest_across_followed(client: TestClient, db_session: Session):
+    """When several followed users have picks, only the most recently finalized one shows."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    earlier = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+    _followed_makes_pick(
+        client,
+        db_session,
+        viewer,
+        "alpha",
+        winner_deezer=301,
+        winner_title="Alpha Winner",
+        loser_deezer=302,
+        loser_title="Alpha Loser",
+        finalized_at=earlier,
+    )
+    _followed_makes_pick(
+        client,
+        db_session,
+        viewer,
+        "bravo",
+        winner_deezer=401,
+        winner_title="Bravo Winner",
+        loser_deezer=402,
+        loser_title="Bravo Loser",
+        finalized_at=earlier + timedelta(minutes=5),
+    )
+
+    mm = _modules(client, viewer)["match_moment"]
+    assert mm is not None
+    assert mm["actor_profile"]["username"] == "bravo"
+    assert mm["winner"]["title"] == "Bravo Winner"
+
+
+def test_match_moment_excludes_non_followed_person(client: TestClient, db_session: Session):
+    """A finalized pick by someone the viewer does NOT follow never surfaces."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    stranger = _register(client, "stranger@example.com", "stranger")
+    _finalize_rating(client, stranger, 301, "Chosen Song", "like")
+    _finalize_rating(client, stranger, 302, "Beaten Song", "dislike")
+    _insert_pick(
+        db_session,
+        user_id=_profile_user_id(db_session, "stranger"),
+        winner_song_id=_song_id(db_session, 301),
+        loser_song_id=_song_id(db_session, 302),
+        session_uuid=uuid.uuid4(),
+    )
+
+    assert _modules(client, viewer)["match_moment"] is None
+
+
+def test_match_moment_excludes_own_pick(client: TestClient, db_session: Session):
+    """Match Moment is about people you follow — the viewer's own picks never appear."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    _finalize_rating(client, viewer, 301, "Chosen Song", "like")
+    _finalize_rating(client, viewer, 302, "Beaten Song", "dislike")
+    _insert_pick(
+        db_session,
+        user_id=_profile_user_id(db_session, "viewer"),
+        winner_song_id=_song_id(db_session, 301),
+        loser_song_id=_song_id(db_session, 302),
+        session_uuid=uuid.uuid4(),
+    )
+
+    assert _modules(client, viewer)["match_moment"] is None
+
+
+def test_match_moment_excludes_blocked_actor(client: TestClient, db_session: Session):
+    """Blocking the actor removes their pick from the module."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    _followed_makes_pick(
+        client,
+        db_session,
+        viewer,
+        "alpha",
+        winner_deezer=301,
+        winner_title="Chosen Song",
+        loser_deezer=302,
+        loser_title="Beaten Song",
+    )
+    assert _modules(client, viewer)["match_moment"] is not None
+
+    _block(client, viewer, "alpha")
+
+    assert _modules(client, viewer)["match_moment"] is None
+
+
+def test_match_moment_excludes_private_actor(client: TestClient, db_session: Session):
+    """An actor who hides their taste drops out of the module."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    _followed_makes_pick(
+        client,
+        db_session,
+        viewer,
+        "alpha",
+        winner_deezer=301,
+        winner_title="Chosen Song",
+        loser_deezer=302,
+        loser_title="Beaten Song",
+    )
+    assert _modules(client, viewer)["match_moment"] is not None
+
+    profile = db_session.execute(
+        select(Profile).where(Profile.username == "alpha")
+    ).scalar_one()
+    profile.is_public = False
+    profile.visibility = "only_me"
+    db_session.commit()
+
+    assert _modules(client, viewer)["match_moment"] is None
+
+
+def test_match_moment_blocked_by_base_gate(client: TestClient, db_session: Session, monkeypatch):
+    """Real gate: a finalized pick stays null until the viewer clears rated >= 5 AND following >= 3."""
+    monkeypatch.setattr("src.services.feed.MODULE_GATE_MIN_RATED", 10)
+    monkeypatch.setattr("src.services.feed.MODULE_GATE_MIN_FOLLOWING", 1)
+    viewer = _register(client, "viewer@example.com", "viewer")
+    _followed_makes_pick(
+        client,
+        db_session,
+        viewer,
+        "alpha",
+        winner_deezer=301,
+        winner_title="Chosen Song",
+        loser_deezer=302,
+        loser_title="Beaten Song",
+    )
+    # following = 1 meets that threshold, but the viewer has rated 0 (< 10) → gate blocks the module.
+
+    assert _modules(client, viewer)["match_moment"] is None

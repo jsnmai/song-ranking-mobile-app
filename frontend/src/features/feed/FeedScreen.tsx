@@ -23,8 +23,9 @@ import Svg, { Circle, Ellipse, Path, Polygon, Polyline } from "react-native-svg"
 import { ApiError } from "../../api/client"
 import { ArrowLabel } from "../../components/Arrow"
 import BouncyPressable from "../../components/BouncyPressable"
+import HatchBox from "../../components/HatchBox"
 import { AppStackParamList, FeedStackParamList, TabParamList } from "../../navigation/types"
-import { colors, fonts, bucketColor } from "../../theme"
+import { colors, fonts, bucketColor, goldMeterShade, meterSegment } from "../../theme"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
 import ActivityLikeButton from "../activity/ActivityLikeButton"
 import { updateLikePrivacy } from "../activity/apiRequests"
@@ -33,7 +34,7 @@ import { ProfileBase, ReportReason } from "../profile/types"
 import { RankingResponse } from "../comparison/types"
 import { getMyRankingByDeezerId } from "../rankings/apiRequests"
 import { getFeedModules, getSongCircleRaters, listMyFeed, reportRatingEvent } from "./apiRequests"
-import { ConsensusModule, DisagreementModule, FeedEvent, RerateRadarItem, SplitDecisionModule } from "./types"
+import { ConsensusModule, DisagreementModule, FeedEvent, MatchMomentModule, RerateRadarItem, SplitDecisionModule } from "./types"
 
 type FeedNavigation = CompositeNavigationProp<
     NativeStackNavigationProp<FeedStackParamList, "FeedHome">,
@@ -182,13 +183,19 @@ export default function FeedScreen() {
     const [disagreementOpening, setDisagreementOpening] = useState(false)
     const [splitDecision, setSplitDecision] = useState<SplitDecisionModule | null>(null)
     const [splitOpening, setSplitOpening] = useState(false)
+    const [matchMoment, setMatchMoment] = useState<MatchMomentModule | null>(null)
+    const [matchMomentOpening, setMatchMomentOpening] = useState(false)
     const listRef = useRef<FlashListRef<FeedEvent>>(null)
 
-    // Score reveal + the Recent Verdict locked-teaser are gated on rated count only (calibration).
+    // Score reveal (your own scores) stays gated on rated >= 10 — a separate calibration gate.
     const gettingStartedComplete = (profile?.user_stats?.rated_count ?? 0) >= 10
-    // The Feed module AREA (Split/Consensus/Re-rate/Disagreement/Match) needs rated >= 10 AND
-    // following >= 3. This is the base gate; each card still has its own data requirement on top.
-    const modulesGateComplete = gettingStartedComplete && (profile?.following_count ?? 0) >= 3
+    // The Feed module AREA (Split/Consensus/Re-rate/Disagreement/Match/Recent Verdict) unlocks at
+    // rated >= MODULE_UNLOCK_RATED AND following >= 3. Below it the compact teaser grid shows; at it the
+    // full cards go live per their own data rules. Keep in sync with backend MODULE_GATE_MIN_RATED.
+    const MODULE_UNLOCK_RATED = 5
+    const modulesGateComplete =
+        (profile?.user_stats?.rated_count ?? 0) >= MODULE_UNLOCK_RATED &&
+        (profile?.following_count ?? 0) >= 3
     // Re-pressing the Feed tab while already on the Feed home screen scrolls the
     // activity list back to the top. useScrollToTop only fires when this screen is
     // focused and is the first route in the stack, so it leaves the tab bar's
@@ -233,6 +240,7 @@ export default function FeedScreen() {
         setConsensus(null)
         setDisagreement(null)
         setSplitDecision(null)
+        setMatchMoment(null)
     }, [])
 
     // Feed module aggregates ride their own bundled endpoint, refreshed alongside the feed.
@@ -250,6 +258,7 @@ export default function FeedScreen() {
             setConsensus(modules.consensus)
             setDisagreement(modules.disagreement_spotlight)
             setSplitDecision(modules.split_decision)
+            setMatchMoment(modules.match_moment)
         } catch {
             clearModules()
         }
@@ -357,6 +366,31 @@ export default function FeedScreen() {
             }
         } finally {
             setSplitOpening(false)
+        }
+    }
+
+    // Open the winning song behind the live Match Moment card (same ranking lookup as the other modules).
+    const handleMatchMomentPress = async () => {
+        if (!token || matchMoment === null || matchMomentOpening) return
+        setMatchMomentOpening(true)
+        setError(null)
+        try {
+            const ranking: RankingResponse = await getMyRankingByDeezerId(matchMoment.winner.deezer_id, token)
+            navigation.navigate("SongDetail", { ranking })
+        } catch (err) {
+            if (err instanceof ApiError && err.status === 404) {
+                navigation.navigate("SongDetail", { song: matchMoment.winner })
+                return
+            }
+            if (err instanceof ApiError) {
+                setError(err.detail)
+            } else if (err instanceof Error) {
+                setError(err.message)
+            } else {
+                setError("Could not open this song.")
+            }
+        } finally {
+            setMatchMomentOpening(false)
         }
     }
 
@@ -514,9 +548,11 @@ export default function FeedScreen() {
 
     const renderRecentVerdict = () => {
         if (heroEvent === null) {
-            // Locked teaser — shown in every locked state (including while getting started) until a
-            // followed user has a visible verdict, matching the other locked module cards. It swaps to
-            // the live card the moment heroEvent exists.
+            // Below the module gate the compact "Recent Verdicts" row in renderLockedSection covers
+            // this slot, so don't double up with the full teaser here. Above the gate (no followed
+            // verdict yet), show the full locked teaser like the other unlocked-area cards. The live
+            // hero swaps in the moment heroEvent exists, in either state.
+            if (!modulesGateComplete) return null
             return (
                 <BouncyPressable style={styles.fvOuter}>
                     <View style={styles.fvInner}>
@@ -660,7 +696,7 @@ export default function FeedScreen() {
                         </View>
                         {/* Placeholder text pill next to the empty square */}
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                            <View style={styles.ghostBoxSm} />
+                            <HatchBox size={28} radius={6} tone="light" />
                             <View style={{ flex: 1 }}>
                                 <View style={[styles.skBar, { width: "62%", height: 10, backgroundColor: "rgba(255,255,255,0.3)" }]} />
                             </View>
@@ -843,7 +879,7 @@ export default function FeedScreen() {
                         </View>
                     </View>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 11 }}>
-                        <View style={styles.ghostBoxMd} />
+                        <HatchBox size={48} radius={9} tone="dark" />
                         <View style={{ flex: 1 }}>
                             <Text style={styles.disagreeLockedTitle}>Locked for now</Text>
                             <Text style={styles.disagreeLockedBody}>Rate more to see where you split from your friends.</Text>
@@ -972,20 +1008,12 @@ export default function FeedScreen() {
         )
     }
 
-    const renderUnlockedSection = () => (
-        <View style={styles.unlockedSection}>
-            {/* Row: Split (live-or-locked) + Consensus (138px) */}
-            <View style={styles.fullRow}>
-                {renderSplitDecision()}
-                {renderConsensus()}
-            </View>
-
-            {/* Row: Re-rate Radar (live-or-locked, 150px) + Match Moment (locked, 150px) */}
-            <View style={styles.fullRow}>
-                {renderRerateRadar()}
-
-                {/* Match Moment — locked, 150px, mint */}
-                <BouncyPressable style={[styles.fullCell, { height: 150, backgroundColor: colors.mint }]}>
+    // Match Moment: live when someone the viewer follows has a recent finalized head-to-head pick
+    // (winner › loser), else the original locked placeholder. Audience = people you follow (one-way).
+    const renderMatchMoment = () => {
+        if (matchMoment === null) {
+            return (
+                <BouncyPressable style={[styles.fullCell, { height: 150, backgroundColor: colors.mint }]} testID="feed-match-moment-locked">
                     <View style={styles.matchMomentBlob} />
                     <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
                         <View style={styles.fullCellTop}>
@@ -998,22 +1026,229 @@ export default function FeedScreen() {
                         {/* Head-to-head: winner (check badge) › loser */}
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
                             <View>
-                                <View style={styles.ghostBoxLg} />
+                                <HatchBox size={42} radius={8} tone="light" />
                                 <View style={styles.matchMomentCheck} />
                             </View>
                             <Text style={styles.matchMomentGt}>›</Text>
-                            <View style={styles.ghostBoxMatchLose} />
+                            <HatchBox size={32} radius={7} tone="light" />
                         </View>
                         {/* Caption next to the lock */}
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
                             <View style={styles.lockDotSm}><LockIcon color="#fff" size={13} /></View>
-                            <Text style={[styles.lockCardDesc, { flex: 1 }]}>Head-to-head picks from your circle</Text>
+                            <Text style={[styles.lockCardDesc, { flex: 1 }]}>Head-to-head picks from people you follow</Text>
+                        </View>
+                    </View>
+                </BouncyPressable>
+            )
+        }
+
+        const m = matchMoment
+        // Surface a "snap pick" flourish only for genuinely fast decisions; otherwise just the handle.
+        const snappy = m.decision_duration_ms !== null && m.decision_duration_ms <= 3000
+        const caption = snappy
+            ? `@${m.actor_profile.username} · snap pick ${(m.decision_duration_ms! / 1000).toFixed(1)}s`
+            : `@${m.actor_profile.username}'s head-to-head`
+        return (
+            <TouchableOpacity
+                style={[styles.fullCell, { height: 150, backgroundColor: colors.mint }]}
+                activeOpacity={0.9}
+                onPress={handleMatchMomentPress}
+                disabled={matchMomentOpening}
+                testID={`feed-match-moment-${m.winner.id}`}
+            >
+                <View style={styles.matchMomentBlob} />
+                <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
+                    <View style={styles.fullCellTop}>
+                        <View style={styles.lightPill}><Text style={styles.lightPillText}>Match moment</Text></View>
+                    </View>
+                    {/* Head-to-head: winner cover (check badge) › faded loser cover + the two titles */}
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
+                        <View>
+                            {m.winner.cover_url ? (
+                                <Image style={styles.mmWinnerArt} source={{ uri: m.winner.cover_url }} />
+                            ) : (
+                                <View style={[styles.mmWinnerArt, { backgroundColor: "rgba(255,255,255,0.15)" }]} />
+                            )}
+                            <View style={styles.matchMomentCheck} />
+                        </View>
+                        <Text style={styles.matchMomentGt}>›</Text>
+                        {m.loser.cover_url ? (
+                            <Image style={styles.mmLoserArt} source={{ uri: m.loser.cover_url }} />
+                        ) : (
+                            <View style={[styles.mmLoserArt, { backgroundColor: "rgba(255,255,255,0.12)" }]} />
+                        )}
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={styles.mmWinnerTitle} numberOfLines={1}>{m.winner.title}</Text>
+                            <Text style={styles.mmLoserTitle} numberOfLines={1}>over {m.loser.title}</Text>
+                        </View>
+                    </View>
+                    <Text style={[styles.lockCardDesc, { flex: 0 }]} numberOfLines={1}>{caption}</Text>
+                </View>
+            </TouchableOpacity>
+        )
+    }
+
+    const renderUnlockedSection = () => (
+        <View style={styles.unlockedSection}>
+            {/* Row: Split (live-or-locked) + Consensus (138px) */}
+            <View style={styles.fullRow}>
+                {renderSplitDecision()}
+                {renderConsensus()}
+            </View>
+
+            {/* Row: Re-rate Radar (live-or-locked, 150px) + Match Moment (live-or-locked, 150px) */}
+            <View style={styles.fullRow}>
+                {renderRerateRadar()}
+                {renderMatchMoment()}
+            </View>
+
+            {renderDisagreement()}
+        </View>
+    )
+
+    // Compact "UNLOCKING SOON" teaser grid — shown below the module gate (brand-new accounts). Each
+    // tile is a locked placeholder that bounces on tap; the full-size cards replace this grid once the
+    // gate (rated >= MODULE_UNLOCK_RATED AND following >= 3) is met. Recent Verdict appears here as a
+    // compact row only while it has no live hero (the live hero is promoted above this grid instead).
+    const renderLockedSection = () => (
+        <View style={styles.lockedSection}>
+            <View style={[styles.sectionRow, { marginTop: 4, marginBottom: 0 }]}>
+                <Text style={styles.sectionLabel}>UNLOCKING SOON</Text>
+            </View>
+
+            {/* Recent Verdicts compact teaser — only while it's still locked. Once a followed
+                verdict exists it is promoted to the full hero above, so "UNLOCKING SOON" then
+                heads only the modules below that are still locked. */}
+            {heroEvent === null && (
+                <BouncyPressable style={[styles.miniRow, styles.miniRowNavy]}>
+                    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+                        {ORBIT_STARS.slice(0, 10).map((s, i) => (
+                            <Circle key={i} cx={`${s.x}%`} cy={`${s.y}%`} r={s.r} fill="white" fillOpacity={s.o * 0.7} />
+                        ))}
+                    </Svg>
+                    <View style={styles.miniRowInner}>
+                        <View style={styles.miniLockCircle}>
+                            <LockIcon color={colors.cream} />
+                        </View>
+                        <View style={styles.miniRowText}>
+                            <Text style={styles.miniRowLabel} numberOfLines={1}>Recent Verdicts</Text>
+                            <Text style={[styles.miniRowSub, { color: colors.cdim }]} numberOfLines={1}>
+                                Friends' fresh ratings, front and center
+                            </Text>
+                        </View>
+                        <Text style={[styles.miniLockedTag, { color: colors.cdim }]}>LOCKED</Text>
+                    </View>
+                </BouncyPressable>
+            )}
+
+            {/* 2×2 grid */}
+            <View style={styles.miniGridRow}>
+                <BouncyPressable style={[styles.miniTile, { backgroundColor: "#000" }]}>
+                    <Svg style={StyleSheet.absoluteFill} viewBox="0 0 100 100" preserveAspectRatio="none">
+                        <Polygon points="0,0 100,0 0,100" fill={colors.plum} />
+                        <Polygon points="100,0 100,100 0,100" fill={colors.accent} />
+                    </Svg>
+                    <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(13,15,23,0.42)" }]} />
+                    <View style={styles.miniTileInner}>
+                        <View style={styles.miniTileTop}>
+                            <View style={styles.miniLockCircle}><LockIcon color="#fff" /></View>
+                            <Text style={[styles.miniLockedTag, { color: "rgba(255,255,255,0.6)" }]}>LOCKED</Text>
+                        </View>
+                        <View>
+                            <Text style={[styles.miniTileLabel, { color: "#fff" }]}>Split Decision</Text>
+                            <Text style={[styles.miniTileSub, { color: "rgba(255,255,255,0.78)" }]} numberOfLines={1}>Friends clash on a song</Text>
+                        </View>
+                    </View>
+                </BouncyPressable>
+
+                <BouncyPressable style={[styles.miniTile, { backgroundColor: colors.sky }]}>
+                    <View style={styles.consensusBars}>
+                        {[6, 11, 18, 28, 23, 15, 10].map((v, i) => (
+                            <View key={i} style={[styles.consensusBar, { height: v }]} />
+                        ))}
+                    </View>
+                    <View style={styles.miniTileInner}>
+                        <View style={styles.miniTileTop}>
+                            <View style={styles.miniLockCircle}><LockIcon color="#fff" /></View>
+                            <Text style={[styles.miniLockedTag, { color: "rgba(255,255,255,0.6)" }]}>LOCKED</Text>
+                        </View>
+                        <View>
+                            <Text style={[styles.miniTileLabel, { color: "#fff" }]}>Consensus</Text>
+                            <Text style={[styles.miniTileSub, { color: "rgba(255,255,255,0.78)" }]}>How your circle scores a track</Text>
                         </View>
                     </View>
                 </BouncyPressable>
             </View>
 
-            {renderDisagreement()}
+            <View style={styles.miniGridRow}>
+                <BouncyPressable style={[styles.miniTile, { backgroundColor: colors.navy }]}>
+                    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
+                        {ORBIT_STARS.slice(0, 8).map((s, i) => (
+                            <Circle key={i} cx={`${s.x}%`} cy={`${s.y}%`} r={s.r} fill="white" fillOpacity={s.o * 0.6} />
+                        ))}
+                    </Svg>
+                    <Svg
+                        style={{ position: "absolute", left: 28, right: 10, top: 11, height: 36 }}
+                        viewBox="0 0 100 28"
+                        preserveAspectRatio="none"
+                    >
+                        <Polyline
+                            points="20,23 56,21 78,1"
+                            fill="none"
+                            stroke={colors.gold}
+                            strokeOpacity="0.3"
+                            strokeWidth="2"
+                            strokeDasharray="3 3"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                        />
+                    </Svg>
+                    <View style={styles.miniTileInner}>
+                        <View style={styles.miniTileTop}>
+                            <View style={styles.miniLockCircle}><LockIcon color={colors.cream} /></View>
+                            <Text style={[styles.miniLockedTag, { color: colors.cdim }]}>LOCKED</Text>
+                        </View>
+                        <View>
+                            <Text style={[styles.miniTileLabel, { color: colors.cream }]}>Re-rate Radar</Text>
+                            <Text style={[styles.miniTileSub, { color: colors.cdim }]}>A score a friend moved</Text>
+                        </View>
+                    </View>
+                </BouncyPressable>
+
+                <BouncyPressable style={[styles.miniTile, { backgroundColor: colors.mint }]}>
+                    <View style={styles.versusDecoration}>
+                        <HatchBox size={27} radius={6} tone="light" />
+                        <Text style={styles.matchMomentGt}>›</Text>
+                        <HatchBox size={21} radius={5} tone="light" style={{ opacity: 0.7 }} />
+                    </View>
+                    <View style={styles.miniTileInner}>
+                        <View style={styles.miniTileTop}>
+                            <View style={styles.miniLockCircle}><LockIcon color="#fff" /></View>
+                            <Text style={[styles.miniLockedTag, { color: "rgba(255,255,255,0.6)" }]}>LOCKED</Text>
+                        </View>
+                        <View>
+                            <Text style={[styles.miniTileLabel, { color: "#fff" }]}>Match Moment</Text>
+                            <Text style={[styles.miniTileSub, { color: "rgba(255,255,255,0.78)" }]}>Head-to-head picks</Text>
+                        </View>
+                    </View>
+                </BouncyPressable>
+            </View>
+
+            {/* Disagreement Spotlight row */}
+            <BouncyPressable style={[styles.miniRow, styles.miniRowLight]}>
+                <View style={styles.miniRowInner}>
+                    <View style={[styles.miniLockCircle, { backgroundColor: "rgba(17,19,28,0.05)" }]}>
+                        <LockIcon color={colors.inkDim} />
+                    </View>
+                    <View style={styles.miniRowText}>
+                        <Text style={[styles.miniRowLabel, { color: colors.ink }]} numberOfLines={1}>Disagreement Spotlight</Text>
+                        <Text style={[styles.miniRowSub, { color: colors.inkDim }]} numberOfLines={1}>
+                            You vs. the crowd on one track
+                        </Text>
+                    </View>
+                    <Text style={[styles.miniLockedTag, { color: colors.inkDim }]}>LOCKED</Text>
+                </View>
+            </BouncyPressable>
         </View>
     )
 
@@ -1037,15 +1272,24 @@ export default function FeedScreen() {
                     </View>
                     <Text style={styles.orbitTitle}>{"Rate songs. Follow friends."}</Text>
                     <Text style={styles.orbitBody}>
-                        Rate 10 songs and follow 3 people to unlock the Feed modules below.
+                        Rate 5 songs and follow 3 people to unlock the Feed modules below.
                     </Text>
                     <View style={styles.tasteMeterRow}>
                         {Array.from({ length: 10 }).map((_, i) => (
-                            <View key={i} style={[styles.tasteMeterSegment, i < rated && styles.tasteMeterFilled]} />
+                            <View
+                                key={i}
+                                style={[
+                                    styles.tasteMeterSegment,
+                                    // Empty segments all look identical. Reached segments climb a gold
+                                    // ramp — muted gold early, bright luminous gold by 10 — so the bar
+                                    // "shines up" as you progress (same hue, rising brightness).
+                                    i < rated && { backgroundColor: goldMeterShade(i) },
+                                ]}
+                            />
                         ))}
                     </View>
                     <Text style={styles.tasteMeterLabel}>
-                        {rated} / 10 RATED · CARDS UNLOCK AS YOU GO
+                        {rated} / 10 RATED · CARDS AT 5 · RANKINGS AT 10
                     </Text>
                     <View style={styles.bannerBtns}>
                         <TouchableOpacity
@@ -1143,15 +1387,14 @@ export default function FeedScreen() {
                     </View>
                 </TouchableOpacity>
 
-                {/* The module area is always shown. Below the base gate (rated >= 10 AND follow >= 3)
-                    the banner explains how to unlock and the cards stay locked (no data fetched); once
-                    the gate is met the cards go live per their own data rules. */}
+                {/* Below the gate (rated < 5 or follow < 3): banner + compact teaser grid, no module
+                    data fetched. At the gate: the full-size cards go live per their own data rules. */}
                 {!modulesGateComplete && renderGettingStartedBanner()}
                 {renderFindFriends()}
                 {/* Recent Verdict sits with the other module cards. It is never gated by rated count —
                     only by having a followed verdict — so it can go live before the rest. */}
                 {renderRecentVerdict()}
-                {renderUnlockedSection()}
+                {modulesGateComplete ? renderUnlockedSection() : renderLockedSection()}
 
                 {events.length > 0 && (
                     <View style={styles.sectionRow}>
@@ -1497,7 +1740,7 @@ export default function FeedScreen() {
                 {/* Recent Verdict sits with the other module cards. It is never gated by rated count —
                     only by having a followed verdict — so it can go live before the rest. */}
                 {renderRecentVerdict()}
-                {renderUnlockedSection()}
+                {modulesGateComplete ? renderUnlockedSection() : renderLockedSection()}
 
                 {/* Activity section — always visible */}
                 <View style={styles.sectionRow}>
@@ -2102,15 +2345,9 @@ const styles = StyleSheet.create({
         gap: 4,
         marginTop: 10,
     },
-    tasteMeterSegment: {
-        flex: 1,
-        height: 6,
-        borderRadius: 3,
-        backgroundColor: "rgba(245,238,220,0.15)",
-    },
-    tasteMeterFilled: {
-        backgroundColor: colors.gold,
-    },
+    tasteMeterSegment: meterSegment,
+    // Filled-segment colours come from tasteGoldShade(i) inline (a muted→bright gold ramp), so there
+    // is no flat "filled" style here.
     tasteMeterLabel: {
         fontFamily: fonts.mono,
         fontSize: 8.5,
@@ -2645,48 +2882,7 @@ const styles = StyleSheet.create({
         lineHeight: 21,
         color: "#fff",
     },
-    // Ghost boxes (dashed outline, for skeleton cover art)
-    ghostBoxSm: {
-        width: 28,
-        height: 28,
-        borderRadius: 6,
-        backgroundColor: "rgba(255,255,255,0.08)",
-        borderWidth: 1.5,
-        borderStyle: "dashed",
-        borderColor: "rgba(255,255,255,0.4)",
-        flexShrink: 0,
-    },
-    ghostBoxLg: {
-        width: 42,
-        height: 42,
-        borderRadius: 8,
-        backgroundColor: "rgba(255,255,255,0.08)",
-        borderWidth: 1.5,
-        borderStyle: "dashed",
-        borderColor: "rgba(255,255,255,0.4)",
-        flexShrink: 0,
-    },
-    ghostBoxMd: {
-        width: 48,
-        height: 48,
-        borderRadius: 9,
-        backgroundColor: colors.paper2,
-        borderWidth: 1.5,
-        borderStyle: "dashed",
-        borderColor: colors.inkDim,
-        flexShrink: 0,
-    },
-    // Match Moment (full card) — head-to-head ghost squares + accents
-    ghostBoxMatchLose: {
-        width: 32,
-        height: 32,
-        borderRadius: 7,
-        backgroundColor: "rgba(255,255,255,0.08)",
-        borderWidth: 1.5,
-        borderStyle: "dashed",
-        borderColor: "rgba(255,255,255,0.4)",
-        flexShrink: 0,
-    },
+    // Match Moment (full card) — head-to-head accents
     matchMomentBlob: {
         position: "absolute",
         top: -30,
@@ -2714,6 +2910,33 @@ const styles = StyleSheet.create({
         lineHeight: 20,
         color: "rgba(255,255,255,0.72)",
         flexShrink: 0,
+    },
+    // Match Moment (live) — real covers in the winner/loser slots + the two titles.
+    mmWinnerArt: {
+        width: 42,
+        height: 42,
+        borderRadius: 8,
+        flexShrink: 0,
+    },
+    mmLoserArt: {
+        width: 32,
+        height: 32,
+        borderRadius: 7,
+        opacity: 0.7,
+        flexShrink: 0,
+    },
+    mmWinnerTitle: {
+        fontFamily: fonts.display,
+        fontSize: 12,
+        lineHeight: 14,
+        color: "#fff",
+    },
+    mmLoserTitle: {
+        fontFamily: fonts.mono,
+        fontSize: 8,
+        letterSpacing: 0.5,
+        color: "rgba(255,255,255,0.65)",
+        marginTop: 3,
     },
     // Disagreement Spotlight full locked card
     fullDisagreeCard: {
@@ -2904,21 +3127,6 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         gap: 7,
         paddingBottom: 26,
-    },
-    versusWin: {
-        width: 27,
-        height: 27,
-        borderRadius: 6,
-        backgroundColor: "rgba(255,255,255,0.14)",
-        borderWidth: 2,
-        borderColor: "#fff",
-    },
-    versusLose: {
-        width: 21,
-        height: 21,
-        borderRadius: 5,
-        backgroundColor: "rgba(255,255,255,0.1)",
-        opacity: 0.7,
     },
     // ── Find friends card ─────────────────────────────────────────────────
     findFriendsCard: {

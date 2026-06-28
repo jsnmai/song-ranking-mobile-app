@@ -530,6 +530,79 @@ def followed_visible_song_raters(
     return [(profile, float(score), user_id) for user_id, score, profile in rows]
 
 
+def match_moment_candidates(
+    db: Session,
+    viewer_id: int,
+    *,
+    limit: int,
+) -> list[MatchMomentRow]:
+    """Recent finalized head-to-head picks by people the viewer follows, newest first.
+
+    Audience = followed-visible people (one-way follow allowed, viewer excluded) via
+    `followed_visible_taste_owner_predicate`. The `comparisons` table records one row per pairwise
+    choice, so a single ranking session emits many intermediate probe rows; we dedupe to ONE pick per
+    (actor, session) — the decisive last comparison (highest `comparison_index_in_session`) — via
+    DISTINCT ON, then surface the most recent across actors. Only finalized comparisons count.
+    """
+    decisive = (
+        select(
+            Comparison.id.label("id"),
+            Comparison.user_id.label("user_id"),
+            Comparison.song_a_id.label("song_a_id"),
+            Comparison.song_b_id.label("song_b_id"),
+            Comparison.winner_id.label("winner_id"),
+            Comparison.decision_duration_ms.label("decision_duration_ms"),
+            Comparison.finalized_at.label("finalized_at"),
+            Comparison.created_at.label("created_at"),
+        )
+        .where(Comparison.finalized_at.is_not(None))
+        .where(
+            followed_visible_taste_owner_predicate(
+                viewer_id,
+                Comparison.user_id,
+            )
+        )
+        .distinct(Comparison.user_id, Comparison.session_uuid)
+        .order_by(
+            Comparison.user_id,
+            Comparison.session_uuid,
+            Comparison.comparison_index_in_session.desc().nullslast(),
+            Comparison.id.desc(),
+        )
+        .subquery("match_moment_decisive")
+    )
+    rows = db.execute(
+        select(
+            decisive.c.song_a_id,
+            decisive.c.song_b_id,
+            decisive.c.winner_id,
+            decisive.c.decision_duration_ms,
+            decisive.c.finalized_at,
+            Profile,
+        )
+        .join(
+            Profile,
+            Profile.user_id == decisive.c.user_id,
+        )
+        .order_by(
+            decisive.c.finalized_at.desc(),
+            decisive.c.created_at.desc(),
+            decisive.c.id.desc(),
+        )
+        .limit(limit)
+    ).all()
+    return [
+        MatchMomentRow(
+            actor=profile,
+            winner_song_id=winner_id,
+            loser_song_id=song_a_id if winner_id == song_b_id else song_b_id,
+            decision_duration_ms=decision_duration_ms,
+            finalized_at=finalized_at,
+        )
+        for song_a_id, song_b_id, winner_id, decision_duration_ms, finalized_at, profile in rows
+    ]
+
+
 def circle_disagreement_candidates(
     db: Session,
     viewer_id: int,

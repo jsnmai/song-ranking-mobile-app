@@ -5,7 +5,7 @@ import { ApiError } from "../../../api/client"
 import { RankingResponse } from "../../comparison/types"
 import { Profile } from "../../profile/types"
 import FeedScreen from "../FeedScreen"
-import { ConsensusModule, DisagreementModule, FeedEvent, RerateRadarItem, SplitDecisionModule } from "../types"
+import { ConsensusModule, DisagreementModule, FeedEvent, MatchMomentModule, RerateRadarItem, SplitDecisionModule } from "../types"
 
 jest.mock("react-native-safe-area-context", () => ({
     useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
@@ -215,6 +215,17 @@ const splitDecisionModule: SplitDecisionModule = {
     high: { profile: { ...feedEvent.actor_profile, user_id: 4, username: "maya" }, score: 9.1 },
     low: { profile: { ...feedEvent.actor_profile, id: 6, user_id: 7, username: "theo" }, score: 2.3 },
     gap: 6.8,
+}
+
+const winnerSong = { ...song, id: 88, deezer_id: 555, title: "Solo" }
+const loserSong = { ...song, id: 99, deezer_id: 321, title: "Pyramids" }
+
+const matchMomentModule: MatchMomentModule = {
+    actor_profile: { ...feedEvent.actor_profile, user_id: 4, username: "maya" },
+    winner: winnerSong,
+    loser: loserSong,
+    decision_duration_ms: 1200,
+    created_at: "2026-01-01T00:00:00Z",
 }
 
 // A profile that clears the base module gate (rated >= 10 AND following >= 3).
@@ -773,6 +784,43 @@ describe("FeedScreen", () => {
         expect(screen.getByText("When two people you follow split on a song")).toBeTruthy()
     })
 
+    it("surfaces a live Match Moment card (a followed user's head-to-head pick) and opens the winner", async () => {
+        mockCurrentProfile = { ...mockCurrentProfile, ...gatedProfile }
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+        mockGetFeedModules.mockResolvedValue({ ...emptyModules, match_moment: matchMomentModule })
+        mockGetMyRankingByDeezerId.mockResolvedValue(ranking)
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-match-moment-88")).toBeTruthy()
+        })
+        expect(screen.queryByTestId("feed-match-moment-locked")).toBeNull()
+        expect(screen.getByText("Solo")).toBeTruthy()                // winner title
+        expect(screen.getByText("over Pyramids")).toBeTruthy()       // loser title
+        expect(screen.getByText("@maya · snap pick 1.2s")).toBeTruthy()  // fast decision flourish
+
+        fireEvent.press(screen.getByTestId("feed-match-moment-88"))
+        await waitFor(() => {
+            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
+        })
+    })
+
+    it("falls back to the locked Match Moment card (people you follow) when no pick qualifies", async () => {
+        mockCurrentProfile = { ...mockCurrentProfile, ...gatedProfile }
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+        mockGetFeedModules.mockResolvedValue({ ...emptyModules })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-song-9")).toBeTruthy()
+        })
+        expect(screen.queryByTestId("feed-match-moment-88")).toBeNull()
+        expect(screen.getByTestId("feed-match-moment-locked")).toBeTruthy()
+        expect(screen.getByText("Head-to-head picks from people you follow")).toBeTruthy()
+    })
+
     it("keeps the module strip locked and does not fetch modules below the base gate", async () => {
         // Rated 12 but following < 3 → base gate not met: cards locked, no module fetch, banner explains.
         mockCurrentProfile = {
@@ -787,10 +835,11 @@ describe("FeedScreen", () => {
         await waitFor(() => {
             expect(screen.getByTestId("feed-song-9")).toBeTruthy()
         })
-        // Module section is visible but every card is locked, and we never hit the modules endpoint.
-        expect(screen.getByTestId("feed-split-locked")).toBeTruthy()
-        expect(screen.getByTestId("feed-rerate-radar-locked")).toBeTruthy()
-        expect(screen.getByText("Rate 10 songs and follow 3 people to unlock the Feed modules below.")).toBeTruthy()
+        // Below the gate the compact "UNLOCKING SOON" teaser grid shows (not the full cards), the
+        // banner explains how to unlock, and we never hit the modules endpoint.
+        expect(screen.getByText("UNLOCKING SOON")).toBeTruthy()
+        expect(screen.queryByTestId("feed-split-locked")).toBeNull()
+        expect(screen.getByText("Rate 5 songs and follow 3 people to unlock the Feed modules below.")).toBeTruthy()
         expect(mockGetFeedModules).not.toHaveBeenCalled()
     })
 
