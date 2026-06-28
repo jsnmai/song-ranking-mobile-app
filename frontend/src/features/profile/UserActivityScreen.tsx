@@ -1,18 +1,19 @@
 // "View all" — a paginated list of one user's activity, using the shared feed-style card.
 import { useCallback, useEffect, useState } from "react"
-import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 
 import { ApiError } from "../../api/client"
 import { AppStackParamList } from "../../navigation/types"
 import { colors, fonts } from "../../theme"
 import ActivityLikeButton from "../activity/ActivityLikeButton"
+import OtherActivitySheet from "../activity/OtherActivitySheet"
 import RatingActivityCard from "../activity/RatingActivityCard"
 import { useAuth } from "../auth/AuthContext"
 import { useScoresLocked } from "../../hooks/useScoresLocked"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
 import { getMyRankingByDeezerId } from "../rankings/apiRequests"
-import { getProfileActivity } from "./apiRequests"
+import { blockUser, getProfileActivity } from "./apiRequests"
 import { RecentRatingItem } from "./types"
 
 type Props = NativeStackScreenProps<AppStackParamList, "UserActivity">
@@ -29,12 +30,15 @@ export default function UserActivityScreen({ navigation, route }: Props) {
     const { username } = route.params
     const { token, profile } = useAuth()
     // Only the current user's own scores are locked (< 10 rated); other users' stay visible.
-    const hideScore = useScoresLocked() && profile?.username === username
+    const isOwnProfile = profile?.username === username
+    const hideScore = useScoresLocked() && isOwnProfile
     const [items, setItems] = useState<RecentRatingItem[]>([])
     const [nextCursor, setNextCursor] = useState<string | undefined>(undefined)
     const [isLoading, setIsLoading] = useState(true)
     const [isLoadingMore, setIsLoadingMore] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    // Three-dots options for another user's activity cards: report a note / block them.
+    const [menuItem, setMenuItem] = useState<RecentRatingItem | null>(null)
 
     const fetchPage = useCallback(
         async (cursor?: string) => {
@@ -81,6 +85,30 @@ export default function UserActivityScreen({ navigation, route }: Props) {
         }
     }
 
+    // Block the user whose activity this is. Blocking from their own activity list leaves
+    // nothing to show, so close the menu and back out to the profile (now stale by design).
+    const handleBlock = () => {
+        setMenuItem(null)
+        if (!token) return
+        Alert.alert(
+            `Block @${username}?`,
+            "They won't see your taste or appear in your feed, and you won't see theirs.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Block",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            await blockUser(username, token)
+                            navigation.goBack()
+                        } catch { /* best effort — stay put if the block failed */ }
+                    },
+                },
+            ],
+        )
+    }
+
     return (
         <View style={styles.container}>
             <View style={styles.header}>
@@ -118,6 +146,8 @@ export default function UserActivityScreen({ navigation, route }: Props) {
                             hideScore={hideScore}
                             note={item.note}
                             onPress={() => handleSongPress(item.song)}
+                            onOptions={isOwnProfile ? undefined : () => setMenuItem(item)}
+                            optionsTestID={`activity-options-${item.rating_event_id}`}
                             testID={`activity-card-${item.rating_event_id}`}
                         >
                             <ActivityLikeButton
@@ -130,6 +160,16 @@ export default function UserActivityScreen({ navigation, route }: Props) {
                     )}
                 />
             )}
+
+            <OtherActivitySheet
+                visible={menuItem !== null}
+                username={username}
+                ratingEventId={menuItem?.rating_event_id ?? null}
+                hasNote={menuItem?.note != null}
+                token={token}
+                onBlock={handleBlock}
+                onClose={() => setMenuItem(null)}
+            />
         </View>
     )
 }
