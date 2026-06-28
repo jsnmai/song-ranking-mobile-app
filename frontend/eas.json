@@ -11,16 +11,12 @@
     "preview": {
       "distribution": "internal",
       "channel": "preview",
-      "env": {
-        "EXPO_PUBLIC_API_URL": "https://song-ranking-mobile-app-production.up.railway.app"
-      }
+      "environment": "preview"
     },
     "production": {
       "autoIncrement": true,
       "channel": "production",
-      "env": {
-        "EXPO_PUBLIC_API_URL": "https://song-ranking-mobile-app-production.up.railway.app"
-      }
+      "environment": "production"
     }
   },
   "submit": {
