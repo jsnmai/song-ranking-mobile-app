@@ -50,7 +50,8 @@ export type ProfileStackParamList = SocialScreenParams & {
 
 export type AppStackParamList = {
     MainTabs: NavigatorScreenParams<TabParamList> | undefined;
-    SongDetail: { ranking: RankingResponse } | { song: SongSearchResult };
+    // `origin` lets a removal return to where the user came from (e.g. All Rankings) instead of the Rankings tab.
+    SongDetail: { ranking: RankingResponse; origin?: "FullRankings" } | { song: SongSearchResult };
     OtherProfile: { username: string };
     ProfileList: { username: string; listType: "followers" | "following" };
     ActivityLikers: { ratingEventId: number };

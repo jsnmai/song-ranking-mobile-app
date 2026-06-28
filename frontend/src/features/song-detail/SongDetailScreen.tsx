@@ -265,7 +265,13 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
         try {
             await removeRating(ranking.song_id, token)
             stopAudio()
-            navigation.navigate("MainTabs", { screen: "Rankings" })
+            // Return to where the user came from. From All Rankings, go back to that list (it
+            // refetches on focus, dropping the removed song); otherwise land on the Rankings tab.
+            if ("ranking" in route.params && route.params.origin === "FullRankings") {
+                navigation.goBack()
+            } else {
+                navigation.navigate("MainTabs", { screen: "Rankings" })
+            }
         } catch (err) {
             if (err instanceof ApiError) {
                 setError(err.detail)

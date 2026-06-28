@@ -170,7 +170,7 @@ describe("FullRankingsScreen", () => {
         expect(mockListMyRankings).toHaveBeenNthCalledWith(2, "test-token", "7.5:8")
 
         fireEvent.press(screen.getByTestId("full-ranking-row-9"))
-        expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking: dislikeRanking })
+        expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking: dislikeRanking, origin: "FullRankings" })
         expect(dislikeRanking.position).toBe(3)
     })
 

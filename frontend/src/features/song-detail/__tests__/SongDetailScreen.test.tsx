@@ -166,6 +166,29 @@ describe("SongDetailScreen", () => {
         expect(mockNavigate).toHaveBeenCalledWith("MainTabs", { screen: "Rankings" })
     })
 
+    it("returns to All Rankings after removing when opened from there", async () => {
+        const alertSpy = jest.spyOn(Alert, "alert")
+        mockRemoveRating.mockResolvedValue({ rating_event: { event_type: "removed" } })
+        const fromAllRankings = { params: { ranking, origin: "FullRankings" } }
+
+        render(<SongDetailScreen navigation={navigation as never} route={fromAllRankings as never} />)
+        await act(async () => {})
+
+        fireEvent.press(screen.getByLabelText("More actions"))
+        fireEvent.press(screen.getByText("Remove rating"))
+        const buttons = alertSpy.mock.calls[0][2] as AlertButton[]
+        await act(async () => {
+            buttons[1].onPress?.()
+        })
+
+        await waitFor(() => {
+            expect(mockRemoveRating).toHaveBeenCalledWith(42, "test-token")
+        })
+        // Goes back to All Rankings (which refetches on focus), not the Rankings tab.
+        expect(mockGoBack).toHaveBeenCalled()
+        expect(mockNavigate).not.toHaveBeenCalledWith("MainTabs", { screen: "Rankings" })
+    })
+
     it("does nothing when the remove confirmation is canceled", async () => {
         const alertSpy = jest.spyOn(Alert, "alert")
 

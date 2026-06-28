@@ -309,7 +309,7 @@ export default function FullRankingsScreen({ navigation }: FullRankingsScreenPro
                                 accessibilityLabel={`Open ${item.song.title} details`}
                                 testID={`full-ranking-row-${item.id}`}
                                 style={styles.row}
-                                onPress={() => navigation.navigate("SongDetail", { ranking: item })}
+                                onPress={() => navigation.navigate("SongDetail", { ranking: item, origin: "FullRankings" })}
                             >
                                 <Text style={[styles.position, scoresLocked && { color: colors.inkDim }]}>
                                     {scoresLocked ? "?" : index + 1}
