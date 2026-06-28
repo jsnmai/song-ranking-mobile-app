@@ -3,6 +3,7 @@ import { ActivityIndicator, Image, Modal, ScrollView, StyleSheet, Text, Touchabl
 import { FlashList } from "@shopify/flash-list"
 import { CompositeNavigationProp, useFocusEffect } from "@react-navigation/native"
 import { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 import Svg, { Path } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
@@ -53,6 +54,11 @@ export default function FullRankingsScreen({ navigation }: FullRankingsScreenPro
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const { listRef, showBackToTop, onScroll, scrollToTop } = useBackToTop()
+    const insets = useSafeAreaInsets()
+    // Pad the list by exactly the frosted tab bar's height (56 + safe-area inset) so the last
+    // row, when fully scrolled, lines up with the top edge of the nav bar instead of hiding
+    // behind it or leaving dead space below.
+    const listBottomPad = 56 + insets.bottom
     const ratingsToUnlock = Math.max(0, SCORE_UNLOCK_THRESHOLD - rankings.length)
 
     const artistOptions = useMemo(() => {
@@ -306,7 +312,7 @@ export default function FullRankingsScreen({ navigation }: FullRankingsScreenPro
                     ref={listRef as never}
                     data={filteredRankings}
                     keyExtractor={(item) => item.id.toString()}
-                    contentContainerStyle={styles.listContent}
+                    contentContainerStyle={{ paddingBottom: listBottomPad }}
                     onScroll={onScroll}
                     scrollEventThrottle={16}
                     maintainVisibleContentPosition={{ disabled: true }}
@@ -566,7 +572,6 @@ const styles = StyleSheet.create({
         fontWeight: "700",
         letterSpacing: 0.8,
     },
-    listContent: { paddingBottom: 96 },
     row: {
         flexDirection: "row",
         alignItems: "center",

@@ -22,7 +22,7 @@ type Props = {
 
 export default function BackToTopButton({ visible, onPress, aboveTabBar = false }: Props) {
     const insets = useSafeAreaInsets()
-    const bottom = insets.bottom + (aboveTabBar ? TAB_BAR_HEIGHT : 0) + 16
+    const bottom = insets.bottom + (aboveTabBar ? TAB_BAR_HEIGHT : 0) + 32
 
     const animStyle = useAnimatedStyle(() => ({
         opacity: withTiming(visible ? 1 : 0, TIMING),
@@ -44,7 +44,7 @@ export default function BackToTopButton({ visible, onPress, aboveTabBar = false 
                 onPress={onPress}
                 style={styles.btn}
             >
-                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none"
+                <Svg width={17} height={17} viewBox="0 0 24 24" fill="none"
                     stroke={colors.cream} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
                     <Path d="M12 19V5M5 12l7-7 7 7" />
                 </Svg>
@@ -61,16 +61,17 @@ const styles = StyleSheet.create({
         zIndex: 30,
     },
     btn: {
-        width: 48,
-        height: 48,
+        width: 40,
+        height: 40,
         borderRadius: 999,
-        backgroundColor: colors.ink,
+        // Translucent ink so list content stays faintly visible behind it.
+        backgroundColor: "rgba(17,19,28,0.55)",
         alignItems: "center",
         justifyContent: "center",
         shadowColor: "#000",
-        shadowOpacity: 0.22,
-        shadowRadius: 10,
-        shadowOffset: { width: 0, height: 4 },
-        elevation: 8,
+        shadowOpacity: 0.18,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 3 },
+        elevation: 6,
     },
 })
