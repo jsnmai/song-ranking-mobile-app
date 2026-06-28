@@ -718,15 +718,30 @@ export default function FeedScreen() {
                                 )}
                             </View>
                         </View>
-                        <View style={styles.verdictBody}>
+                        <View style={[styles.verdictBody, !heroEvent.note && styles.verdictBodyNoNote]}>
                             <Text style={styles.verdictScore}>{heroEvent.new_score.toFixed(1)}</Text>
                             <View style={styles.verdictMetaCol}>
                                 <Text style={styles.verdictWho} numberOfLines={1}>
                                     @{heroEvent.actor_profile.username.toUpperCase()} · {bucketLabel}
                                 </Text>
-                                <Text style={styles.verdictNote} numberOfLines={2} ellipsizeMode="tail">
-                                    "{heroEvent.note || "Fresh from your circle."}"
-                                </Text>
+                                {heroEvent.note ? (
+                                    <Text style={styles.verdictNote} numberOfLines={2} ellipsizeMode="tail">
+                                        "{heroEvent.note}"
+                                    </Text>
+                                ) : (
+                                    // No caption on this verdict — same big white text as a note, but
+                                    // unquoted and with a trailing arrow (the hero scrolls to its card).
+                                    <View style={styles.verdictCtaRow}>
+                                        <ArrowLabel
+                                            text="Go to rating"
+                                            direction="right"
+                                            color="#fff"
+                                            textStyle={styles.verdictCtaText}
+                                            size={15}
+                                            gap={6}
+                                        />
+                                    </View>
+                                )}
                             </View>
                         </View>
                     </View>
@@ -2472,6 +2487,9 @@ const styles = StyleSheet.create({
         fontSize: 9.5,
         letterSpacing: 0.5,
         color: "rgba(241,236,221,0.85)",
+        // Extra vertical margin (on top of the even space-between gaps) gives the handle more
+        // breathing room above and below without touching the symmetric top/bottom card padding.
+        marginVertical: 6,
     },
     rrBody: {
         flexDirection: "row",
@@ -2527,7 +2545,9 @@ const styles = StyleSheet.create({
     },
     rrDeltaRow: {
         flexDirection: "row",
-        alignItems: "center",
+        // Baseline-align the scores so the big new score and the small crossed-out one share the
+        // same digit baseline (flex-end floats the big one high because it has more descent space).
+        alignItems: "baseline",
         gap: 8,
     },
     rrPrev: {
@@ -2547,6 +2567,9 @@ const styles = StyleSheet.create({
         borderRadius: 999,
         paddingHorizontal: 8,
         paddingVertical: 3,
+        // The chip aligns by its own text baseline, which leaves its padded box hanging below the
+        // scores' baseline — lift it so the pill's bottom edge meets the scores' bottoms.
+        transform: [{ translateY: -5 }],
     },
     rrDelta: {
         fontFamily: fonts.mono,
@@ -2810,6 +2833,11 @@ const styles = StyleSheet.create({
         gap: 12,
         marginTop: 11,
     },
+    // No-note state: the meta column is a single short CTA line, so center it against
+    // the tall score instead of bottom-pinning it (which left it floating low).
+    verdictBodyNoNote: {
+        alignItems: "center",
+    },
     verdictScore: {
         fontFamily: fonts.display,
         fontSize: 50,
@@ -2835,6 +2863,19 @@ const styles = StyleSheet.create({
         color: "#fff",
         lineHeight: 19,
         marginTop: 4,
+        includeFontPadding: false,
+    },
+    // Shown in place of the note when a verdict has no caption — the same big white
+    // text as a note (unquoted) plus a trailing arrow so it still reads as tappable.
+    verdictCtaRow: {
+        alignSelf: "flex-start",
+        marginTop: 4,
+    },
+    verdictCtaText: {
+        fontFamily: fonts.serifItalic,
+        fontSize: 16,
+        color: "#fff",
+        lineHeight: 19,
         includeFontPadding: false,
     },
     verdictFooter: {
