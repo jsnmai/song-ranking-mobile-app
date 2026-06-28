@@ -6,8 +6,10 @@ import { NativeStackNavigationProp, NativeStackScreenProps } from "@react-naviga
 import Svg, { Path } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
+import BackToTopButton from "../../components/BackToTopButton"
 import { LockIcon } from "../../components/LockIcon"
 import { PulsingMeterTick } from "../../components/PulsingMeterTick"
+import { useBackToTop } from "../../hooks/useBackToTop"
 import { AppStackParamList, RankingsStackParamList } from "../../navigation/types"
 import { bucketColor, colors, fonts, goldMeterShade, meterSegment } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
@@ -50,6 +52,7 @@ export default function FullRankingsScreen({ navigation }: FullRankingsScreenPro
     const [isFilterModalOpen, setIsFilterModalOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const { listRef, showBackToTop, onScroll, scrollToTop } = useBackToTop()
     const ratingsToUnlock = Math.max(0, SCORE_UNLOCK_THRESHOLD - rankings.length)
 
     const artistOptions = useMemo(() => {
@@ -300,9 +303,12 @@ export default function FullRankingsScreen({ navigation }: FullRankingsScreenPro
                 <Text style={styles.empty}>No songs match these filters.</Text>
             ) : (
                 <FlashList
+                    ref={listRef as never}
                     data={filteredRankings}
                     keyExtractor={(item) => item.id.toString()}
                     contentContainerStyle={styles.listContent}
+                    onScroll={onScroll}
+                    scrollEventThrottle={16}
                     maintainVisibleContentPosition={{ disabled: true }}
                     ListFooterComponent={scoresLocked ? (
                         <Text style={styles.lockFooter}>Your sorted order and scores reveal at 10.</Text>
@@ -352,6 +358,8 @@ export default function FullRankingsScreen({ navigation }: FullRankingsScreenPro
                     }}
                 />
             )}
+
+            <BackToTopButton aboveTabBar visible={showBackToTop} onPress={scrollToTop} />
 
             <Modal
                 visible={isFilterModalOpen}

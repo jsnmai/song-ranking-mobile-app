@@ -4,6 +4,8 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack"
 import Svg, { Path } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
+import BackToTopButton from "../../components/BackToTopButton"
+import { useBackToTop } from "../../hooks/useBackToTop"
 import { AppStackParamList } from "../../navigation/types"
 import { bucketColor, colors, fonts } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
@@ -33,6 +35,7 @@ export default function UserRankingsScreen({ navigation, route }: Props) {
     const [isLoading, setIsLoading] = useState(true)
     const [isLoadingMore, setIsLoadingMore] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const { listRef, showBackToTop, onScroll, scrollToTop } = useBackToTop()
 
     const selectedAlbum = facets?.albums.find((option) => option.key === albumFilterKey) ?? null
     const hasDetailFilters = artistFilter !== null || selectedAlbum !== null
@@ -237,9 +240,12 @@ export default function UserRankingsScreen({ navigation, route }: Props) {
                         )}
                     </View>
                     <FlatList
+                        ref={listRef as never}
                         data={rankings}
                         keyExtractor={(item) => String(item.id)}
                         contentContainerStyle={styles.listContent}
+                        onScroll={onScroll}
+                        scrollEventThrottle={16}
                         onEndReached={loadMore}
                         onEndReachedThreshold={0.3}
                         ListEmptyComponent={
@@ -285,6 +291,8 @@ export default function UserRankingsScreen({ navigation, route }: Props) {
                     />
                 </>
             )}
+
+            <BackToTopButton visible={showBackToTop} onPress={scrollToTop} />
 
             <Modal
                 visible={isFilterModalOpen}

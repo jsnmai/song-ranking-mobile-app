@@ -4,6 +4,8 @@ import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity,
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 
 import { ApiError } from "../../api/client"
+import BackToTopButton from "../../components/BackToTopButton"
+import { useBackToTop } from "../../hooks/useBackToTop"
 import { AppStackParamList } from "../../navigation/types"
 import { colors, fonts } from "../../theme"
 import ActivityLikeButton from "../activity/ActivityLikeButton"
@@ -39,6 +41,7 @@ export default function UserActivityScreen({ navigation, route }: Props) {
     const [error, setError] = useState<string | null>(null)
     // Three-dots options for another user's activity cards: report a note / block them.
     const [menuItem, setMenuItem] = useState<RecentRatingItem | null>(null)
+    const { listRef, showBackToTop, onScroll, scrollToTop } = useBackToTop()
 
     const fetchPage = useCallback(
         async (cursor?: string) => {
@@ -124,9 +127,12 @@ export default function UserActivityScreen({ navigation, route }: Props) {
                 <Text style={styles.error}>{error}</Text>
             ) : (
                 <FlatList
+                    ref={listRef as never}
                     data={items}
                     keyExtractor={(item) => String(item.rating_event_id)}
                     contentContainerStyle={styles.list}
+                    onScroll={onScroll}
+                    scrollEventThrottle={16}
                     onEndReached={loadMore}
                     onEndReachedThreshold={0.4}
                     ListEmptyComponent={<Text style={styles.empty}>No visible activity yet.</Text>}
@@ -160,6 +166,8 @@ export default function UserActivityScreen({ navigation, route }: Props) {
                     )}
                 />
             )}
+
+            <BackToTopButton visible={showBackToTop} onPress={scrollToTop} />
 
             <OtherActivitySheet
                 visible={menuItem !== null}

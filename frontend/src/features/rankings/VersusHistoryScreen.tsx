@@ -4,7 +4,9 @@ import { FlashList } from "@shopify/flash-list"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 
 import { ApiError } from "../../api/client"
+import BackToTopButton from "../../components/BackToTopButton"
 import BucketBadge from "../../components/BucketBadge"
+import { useBackToTop } from "../../hooks/useBackToTop"
 import { AppStackParamList } from "../../navigation/types"
 import { colors, fonts } from "../../theme"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
@@ -19,6 +21,7 @@ export default function VersusHistoryScreen({ navigation }: VersusHistoryScreenP
     const [receipts, setReceipts] = useState<ComparisonHistoryReceipt[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const { listRef, showBackToTop, onScroll, scrollToTop } = useBackToTop()
 
     const loadHistory = useCallback(async () => {
         if (!token) {
@@ -81,12 +84,17 @@ export default function VersusHistoryScreen({ navigation }: VersusHistoryScreenP
                 <Text style={styles.empty}>No comparisons yet.</Text>
             ) : (
                 <FlashList
+                    ref={listRef as never}
                     data={receipts}
                     renderItem={({ item }) => <ReceiptRow receipt={item} />}
                     keyExtractor={(item) => item.id.toString()}
                     contentContainerStyle={styles.listContent}
+                    onScroll={onScroll}
+                    scrollEventThrottle={16}
                 />
             )}
+
+            <BackToTopButton visible={showBackToTop} onPress={scrollToTop} />
         </View>
     )
 }
