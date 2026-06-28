@@ -14,7 +14,15 @@ import {
     View,
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import Animated, { SlideInDown, SlideOutDown } from "react-native-reanimated"
+import Animated, {
+    Easing,
+    SlideInDown,
+    SlideOutDown,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withTiming,
+} from "react-native-reanimated"
 import { FlashList, FlashListRef } from "@shopify/flash-list"
 import { CompositeNavigationProp, useNavigation, useScrollToTop } from "@react-navigation/native"
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
@@ -160,6 +168,32 @@ function BlockIcon({ color, size = 16 }: { color: string; size?: number }) {
             <Circle cx={12} cy={12} r={9} />
             <Path d="M5.6 5.6l12.8 12.8" />
         </Svg>
+    )
+}
+
+// Tappable cue — a solid dot with a ring that pulses outward and fades on a loop.
+// Used on the Recent Verdict hero when there's no caption, to signal the card is live/tappable.
+function PulseDot({ color = "#fff", size = 16 }: { color?: string; size?: number }) {
+    const t = useSharedValue(0)
+    useEffect(() => {
+        t.value = withRepeat(withTiming(1, { duration: 1500, easing: Easing.out(Easing.ease) }), -1, false)
+    }, [t])
+    const ringStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: 0.5 + t.value * 1.7 }],
+        opacity: 0.6 * (1 - t.value),
+    }))
+    const dot = Math.round(size * 0.34)
+    return (
+        <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
+            <Animated.View
+                style={[
+                    StyleSheet.absoluteFillObject,
+                    { borderRadius: size / 2, borderWidth: 1.5, borderColor: color },
+                    ringStyle,
+                ]}
+            />
+            <View style={{ width: dot, height: dot, borderRadius: dot / 2, backgroundColor: color }} />
+        </View>
     )
 }
 
@@ -730,16 +764,10 @@ export default function FeedScreen() {
                                     </Text>
                                 ) : (
                                     // No caption on this verdict — same big white text as a note, but
-                                    // unquoted and with a trailing arrow (the hero scrolls to its card).
+                                    // unquoted, with a tap glyph (the hero scrolls to this verdict's card).
                                     <View style={styles.verdictCtaRow}>
-                                        <ArrowLabel
-                                            text="Go to rating"
-                                            direction="right"
-                                            color="#fff"
-                                            textStyle={styles.verdictCtaText}
-                                            size={15}
-                                            gap={6}
-                                        />
+                                        <Text style={styles.verdictCtaText} numberOfLines={1}>See Rating in Feed</Text>
+                                        <PulseDot color="#fff" size={14} />
                                     </View>
                                 )}
                             </View>
@@ -2866,9 +2894,11 @@ const styles = StyleSheet.create({
         includeFontPadding: false,
     },
     // Shown in place of the note when a verdict has no caption — the same big white
-    // text as a note (unquoted) plus a trailing arrow so it still reads as tappable.
+    // text as a note, unquoted, with a trailing tap glyph to read as tappable.
     verdictCtaRow: {
-        alignSelf: "flex-start",
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 11,
         marginTop: 4,
     },
     verdictCtaText: {
