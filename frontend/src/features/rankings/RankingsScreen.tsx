@@ -273,24 +273,20 @@ export default function RankingsScreen() {
 
                 {/* Top-left label */}
                 <View style={styles.rankMapPill}>
-                    <Text style={styles.rankMapPillText}>★ RANK MAP</Text>
+                    <Text style={styles.rankMapStar}>★</Text>
+                    <Text style={styles.rankMapPillText}>RANK MAP</Text>
                 </View>
 
-                {/* Bottom-left: count + who holds the center */}
+                {/* Bottom-left: song count */}
                 <View style={styles.rankMapInfo}>
                     <Text style={styles.rankMapCount}>
                         {rankings.length} songs<Text style={styles.rankMapCountDim}> in orbit</Text>
                     </Text>
-                    {top ? (
-                        <Text style={styles.rankMapHolds} numberOfLines={1}>
-                            ★ {(top.song.title || "Untitled").toUpperCase()} HOLDS YOUR CENTER
-                        </Text>
-                    ) : null}
                 </View>
 
                 {/* Bottom-right CTA */}
                 <View style={styles.openChart}>
-                    <ArrowLabel text="OPEN STAR CHART" direction="right" color={colors.gold} textStyle={styles.openChartText} size={10} />
+                    <ArrowLabel text="OPEN" direction="right" color={colors.gold} textStyle={styles.openChartText} size={10} />
                 </View>
             </TouchableOpacity>
         )
@@ -832,6 +828,8 @@ const styles = StyleSheet.create({
         position: "absolute",
         top: 9,
         left: 11,
+        flexDirection: "row",
+        alignItems: "center",
         backgroundColor: "rgba(245,184,64,0.18)",
         borderRadius: 999,
         paddingHorizontal: 9,
@@ -843,6 +841,16 @@ const styles = StyleSheet.create({
         color: colors.gold,
         fontWeight: "700",
         letterSpacing: 1.2,
+    },
+    // Star rendered as its own element so it centers vertically against the label instead of
+    // riding high on the text baseline.
+    rankMapStar: {
+        fontSize: 8.5,
+        lineHeight: 8.5,
+        color: colors.gold,
+        marginRight: 4,
+        // The ★ glyph rides high in its box; nudge down so it centers against the label.
+        transform: [{ translateY: 1 }],
     },
     heroCover: {
         position: "absolute",
@@ -897,13 +905,6 @@ const styles = StyleSheet.create({
     rankMapCountDim: {
         color: colors.cdim,
     },
-    rankMapHolds: {
-        fontFamily: fonts.mono,
-        fontSize: 7.5,
-        color: colors.cdim,
-        letterSpacing: 1,
-        marginTop: 4,
-    },
     openChart: {
         position: "absolute",
         right: 11,
@@ -915,9 +916,8 @@ const styles = StyleSheet.create({
         paddingVertical: 5,
     },
     openChartText: {
-        fontFamily: fonts.mono,
+        fontFamily: fonts.monoBold,
         fontSize: 8.5,
-        fontWeight: "700",
         color: colors.gold,
         letterSpacing: 0.8,
     },

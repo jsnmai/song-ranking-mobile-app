@@ -45,6 +45,7 @@ export const fonts = {
     // directly (rather than fontStyle: "italic") wherever serif text should be italic.
     serifItalic: "Fraunces_700Bold_Italic",
     mono: "JetBrainsMono_400Regular",
+    monoBold: "JetBrainsMono_700Bold",
     display: "ArchivoBlack_400Regular",
 }
 

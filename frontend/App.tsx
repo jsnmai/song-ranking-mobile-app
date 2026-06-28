@@ -1,6 +1,6 @@
 // App entry point.
 import { useFonts, Fraunces_700Bold, Fraunces_700Bold_Italic } from "@expo-google-fonts/fraunces"
-import { JetBrainsMono_400Regular } from "@expo-google-fonts/jetbrains-mono"
+import { JetBrainsMono_400Regular, JetBrainsMono_700Bold } from "@expo-google-fonts/jetbrains-mono"
 import { ArchivoBlack_400Regular } from "@expo-google-fonts/archivo-black"
 import { GestureHandlerRootView } from "react-native-gesture-handler"
 
@@ -14,6 +14,7 @@ export default function App() {
         Fraunces_700Bold,
         Fraunces_700Bold_Italic,
         JetBrainsMono_400Regular,
+        JetBrainsMono_700Bold,
         ArchivoBlack_400Regular,
     })
 
