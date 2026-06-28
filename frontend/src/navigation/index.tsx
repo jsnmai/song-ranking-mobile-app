@@ -4,11 +4,11 @@
 //   User logged in → AppNavigator (main app)
 
 import { useEffect, useRef } from "react"
-import { ActivityIndicator, View } from "react-native"
 
 // NavigationContainer is the top-level wrapper required by React Navigation — must have exactly one.
 import { NavigationContainer, useNavigationContainerRef } from "@react-navigation/native"
 
+import AppLoading from "../components/AppLoading"
 import { useAuth } from "../features/auth/AuthContext"
 import { promptResumeIfActiveSession } from "../features/comparison/comparisonResume"
 import { AppStackParamList } from "./types"
@@ -32,11 +32,7 @@ export default function RootNavigator() {
     // Show a spinner while AuthContext checks for a stored token on launch —
     // prevents flashing the login screen for users who are already logged in.
     if (isLoading) {
-        return (
-            <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-                <ActivityIndicator size="large" />
-            </View>
-        )
+        return <AppLoading />
     }
 
     return (

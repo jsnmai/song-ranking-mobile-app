@@ -9,11 +9,15 @@ from src.crud.circle_aggregates import (
     circle_consensus_candidates,
     circle_disagreement_candidates,
     circle_score_distribution,
+    followed_visible_song_raters,
     get_songs_by_ids,
     list_circle_contributors,
+    split_decision_candidates,
     viewer_rated_artist_ids,
 )
 from src.crud.feed import FeedEventRow, latest_rerate_from_followed, list_feed_events
+from src.crud.follow import count_following
+from src.crud.rating import count_user_rankings
 from src.pydantic_schemas.feed import (
     CircleRatersResponse,
     ConsensusModule,
@@ -22,6 +26,8 @@ from src.pydantic_schemas.feed import (
     FeedListResponse,
     FeedModulesResponse,
     RerateRadarItem,
+    SplitDecisionModule,
+    SplitPerson,
 )
 from src.pydantic_schemas.profile import ProfileResponse
 from src.pydantic_schemas.song import SongResponse
@@ -34,6 +40,14 @@ DEFAULT_FEED_LIMIT = 20
 MAX_FEED_LIMIT = 50
 # How many circle-member avatars the Recent Verdict hero asks for.
 RECENT_VERDICT_RATER_LIMIT = 8
+
+# ── Feed module base gate ────────────────────────────────────────────────────
+# The bundled module area unlocks only after the viewer has rated >= 10 songs AND follows >= 3 people
+# (mirrors the getting-started banner). Enforced here so older clients / direct calls can't get live
+# module data before the gate is met. This gate affects ONLY /feed/modules — score reveal and Recent
+# Verdict are unaffected. Per-card data rules still apply after the gate.
+MODULE_GATE_MIN_RATED = 10
+MODULE_GATE_MIN_FOLLOWING = 3
 
 # ── Consensus module (tunable) ───────────────────────────────────────────────
 # Bounded candidate set the interestingness heuristic scores (ordered most-recently-active first, so
@@ -62,6 +76,11 @@ CONSENSUS_COVERAGE_FULL = 8.0
 DISAGREEMENT_MIN_GAP = 2.0
 # Bounded set fetched after gap ordering (biggest gaps first), so a high-gap song is never truncated.
 DISAGREEMENT_CANDIDATE_LIMIT = 50
+
+# ── Split Decision (tunable) ─────────────────────────────────────────────────
+# A "split" needs a real clash between two people you follow.
+SPLIT_MIN_GAP = 3.0
+SPLIT_CANDIDATE_LIMIT = 50
 
 
 def list_song_circle_raters(
@@ -99,12 +118,30 @@ def get_feed_modules(
     return null until each one ships. Every aggregate rides the shared social-access predicates,
     so the whole module strip honors the same taste-visibility/block/deleted-user rules as the feed.
     """
+    if not _module_gate_met(db, user_id):
+        # Base gate not met — return an all-null response and skip every (expensive) module query.
+        return FeedModulesResponse()
     rerate_row = latest_rerate_from_followed(db, user_id)
     return FeedModulesResponse(
         rerate_radar=_rerate_radar_item(rerate_row) if rerate_row is not None else None,
         consensus=_consensus_module(db, user_id),
         disagreement_spotlight=_disagreement_module(db, user_id),
+        split_decision=_split_decision_module(db, user_id),
     )
+
+
+def _module_gate_met(
+    db: Session,
+    user_id: int,
+) -> bool:
+    """Whether the viewer has cleared the base module gate: rated >= 10 AND following >= 3.
+
+    `count_user_rankings` is the same count behind `user_stats.rated_count`, so the backend gate
+    matches the frontend's. Rated count is checked first (cheap short-circuit).
+    """
+    if count_user_rankings(db, user_id) < MODULE_GATE_MIN_RATED:
+        return False
+    return count_following(db, user_id) >= MODULE_GATE_MIN_FOLLOWING
 
 
 def _disagreement_module(
@@ -140,6 +177,46 @@ def _disagreement_module(
         friends_count=chosen.friends_count,
         gap=round(chosen.gap, 1),
         direction=direction,
+    )
+
+
+def _split_decision_module(
+    db: Session,
+    user_id: int,
+) -> SplitDecisionModule | None:
+    """Surface a song where two people the viewer follows are far apart (biggest pairwise gap).
+
+    Gap-primary: the candidate query already filters to ≥2 followed-visible raters + gap ≥
+    SPLIT_MIN_GAP and orders biggest-gap-first, so the top row is the split (no rotation). The two
+    people are the highest and lowest scorers, chosen deterministically (ties → lower user_id). The
+    viewer is never a participant (the predicate excludes them). None (→ locked card) when nothing
+    clears the gap.
+    """
+    candidates = split_decision_candidates(
+        db,
+        user_id,
+        minimum_raters=2,
+        min_gap=SPLIT_MIN_GAP,
+        limit=SPLIT_CANDIDATE_LIMIT,
+    )
+    if not candidates:
+        return None
+    chosen = candidates[0]
+    raters = followed_visible_song_raters(db, user_id, chosen.song_id)
+    if len(raters) < 2:
+        return None
+    # high = highest score (ties → lower user_id); low = lowest score (ties → lower user_id).
+    high = min(raters, key=lambda rater: (-rater[1], rater[2]))
+    low = min(raters, key=lambda rater: (rater[1], rater[2]))
+    songs = get_songs_by_ids(db, [chosen.song_id])
+    song = songs.get(chosen.song_id)
+    if song is None:
+        return None
+    return SplitDecisionModule(
+        song=SongResponse.model_validate(song),
+        high=SplitPerson(profile=ProfileResponse.model_validate(high[0]), score=high[1]),
+        low=SplitPerson(profile=ProfileResponse.model_validate(low[0]), score=low[1]),
+        gap=round(chosen.gap, 1),
     )
 
 

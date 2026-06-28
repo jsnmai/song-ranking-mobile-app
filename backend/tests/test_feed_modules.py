@@ -1,11 +1,30 @@
-# Integration tests for the bundled Feed modules endpoint (Re-rate Radar + Consensus + Disagreement live).
+# Integration tests for the bundled Feed modules endpoint.
+# Live modules: Re-rate Radar, Consensus, Disagreement Spotlight, Split Decision.
+#
+# All modules sit behind a base gate (rated >= 10 AND following >= 3). The autouse fixture below opens
+# that gate (thresholds -> 0) for the per-module tests so they exercise each module's own logic; the
+# gate's enforcement is covered by the dedicated `test_feed_modules_gate_*` tests, which set the real
+# thresholds. (We don't rate 10 songs per test because the rating API requires a completed comparison
+# session to put more than one song in a bucket — impractical for a unit test.)
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.sqlalchemy_tables.profile import Profile
 
-RESERVED_MODULE_KEYS = ("split_decision", "match_moment")
+RESERVED_MODULE_KEYS = ("match_moment",)
+
+
+@pytest.fixture(autouse=True)
+def _open_module_gate(monkeypatch):
+    """Open the base module gate so per-module tests reach the module logic.
+
+    Gate enforcement is verified separately by the `test_feed_modules_gate_*` tests, which override
+    these thresholds back to real values.
+    """
+    monkeypatch.setattr("src.services.feed.MODULE_GATE_MIN_RATED", 0)
+    monkeypatch.setattr("src.services.feed.MODULE_GATE_MIN_FOLLOWING", 0)
 
 
 def _register(
@@ -160,8 +179,55 @@ def test_feed_modules_empty_returns_null_modules(client: TestClient):
     assert body["rerate_radar"] is None
     assert body["consensus"] is None
     assert body["disagreement_spotlight"] is None
+    assert body["split_decision"] is None
     for key in RESERVED_MODULE_KEYS:
         assert body[key] is None
+
+
+def test_feed_modules_gate_blocks_below_rated(client: TestClient, monkeypatch):
+    """Real gate: under the rated threshold, every module is null even with qualifying friend data."""
+    monkeypatch.setattr("src.services.feed.MODULE_GATE_MIN_RATED", 10)
+    monkeypatch.setattr("src.services.feed.MODULE_GATE_MIN_FOLLOWING", 3)
+    viewer = _register(client, "viewer@example.com", "viewer")
+    # Follows 3 people who clearly diverge on a song — would feed Split/Consensus if gated in.
+    for name, bucket in (("alpha", "like"), ("bravo", "dislike"), ("charlie", "dislike")):
+        token = _register(client, f"{name}@example.com", name)
+        _follow(client, viewer, name)
+        _finalize_rating(client, token, 101, "Split Song", bucket)
+    # following = 3, but the viewer has rated 0 (< 10) → gate blocks everything.
+
+    body = _modules(client, viewer)
+    assert body["rerate_radar"] is None
+    assert body["consensus"] is None
+    assert body["disagreement_spotlight"] is None
+    assert body["split_decision"] is None
+
+
+def test_feed_modules_gate_blocks_below_following(client: TestClient, monkeypatch):
+    """Real gate: meeting rated but not the following threshold still blocks everything."""
+    monkeypatch.setattr("src.services.feed.MODULE_GATE_MIN_RATED", 0)
+    monkeypatch.setattr("src.services.feed.MODULE_GATE_MIN_FOLLOWING", 3)
+    viewer = _register(client, "viewer@example.com", "viewer")
+    for name, bucket in (("alpha", "like"), ("bravo", "dislike")):
+        token = _register(client, f"{name}@example.com", name)
+        _follow(client, viewer, name)
+        _finalize_rating(client, token, 101, "Split Song", bucket)
+    # following = 2 (< 3) → gate blocks even though a split pair exists.
+
+    assert _modules(client, viewer)["split_decision"] is None
+    assert _modules(client, viewer)["consensus"] is None
+
+
+def test_feed_modules_gate_opens_when_met(client: TestClient, monkeypatch):
+    """Real gate: once the thresholds are met, live module data flows again."""
+    monkeypatch.setattr("src.services.feed.MODULE_GATE_MIN_RATED", 0)
+    monkeypatch.setattr("src.services.feed.MODULE_GATE_MIN_FOLLOWING", 2)
+    viewer = _register(client, "viewer@example.com", "viewer")
+    _followed_rates(client, viewer, "viewer", "alpha", 101, "Split Song", "like")
+    _followed_rates(client, viewer, "viewer", "bravo", 101, "Split Song", "dislike")
+    # following = 2 meets the threshold → the split surfaces.
+
+    assert _modules(client, viewer)["split_decision"] is not None
 
 
 def test_rerate_radar_surfaces_followed_rerate_delta(client: TestClient):
@@ -521,3 +587,143 @@ def test_disagreement_excludes_deleted_friend(client: TestClient):
     assert response.status_code == 204
 
     assert _modules(client, viewer)["disagreement_spotlight"] is None
+
+
+# ── Split Decision ───────────────────────────────────────────────────────────
+
+
+def _followed_rates(
+    client: TestClient,
+    viewer_token: str,
+    viewer_name: str,
+    name: str,
+    deezer_id: int,
+    title: str,
+    bucket: str = "like",
+    *,
+    mutual: bool = False,
+) -> str:
+    """Register a user the viewer follows (one-way by default) who rates one song. Returns token.
+
+    Split's audience is followed-visible people, so a one-way follow is the realistic case.
+    """
+    token = _register(client, f"{name}@example.com", name)
+    _follow(client, viewer_token, name)
+    if mutual:
+        _follow(client, token, viewer_name)
+    _finalize_rating(client, token, deezer_id, title, bucket)
+    return token
+
+
+def test_split_null_without_two_far_apart(client: TestClient):
+    """Split needs >=2 followed-visible people far apart; one rater → null."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    _followed_rates(client, viewer, "viewer", "alpha", 101, "Lonely Song", "like")
+
+    assert _modules(client, viewer)["split_decision"] is None
+
+
+def test_split_surfaces_two_people_you_follow(client: TestClient):
+    """Two people the viewer follows, far apart on one song → high/low + gap."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    _followed_rates(client, viewer, "viewer", "alpha", 101, "Split Song", "like")
+    _followed_rates(client, viewer, "viewer", "bravo", 101, "Split Song", "dislike")
+
+    d = _modules(client, viewer)["split_decision"]
+    assert d is not None
+    assert d["song"]["title"] == "Split Song"
+    assert d["high"]["profile"]["username"] == "alpha"
+    assert d["low"]["profile"]["username"] == "bravo"
+    assert d["high"]["score"] > d["low"]["score"]
+    assert d["gap"] >= 3.0
+
+
+def test_split_includes_one_way_followed_person(client: TestClient):
+    """Participants are followed-visible — a one-way follow (no follow-back) still counts."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    _followed_rates(client, viewer, "viewer", "alpha", 101, "Split Song", "like", mutual=False)
+    _followed_rates(client, viewer, "viewer", "bravo", 101, "Split Song", "dislike", mutual=False)
+
+    d = _modules(client, viewer)["split_decision"]
+    assert d is not None
+    assert {d["high"]["profile"]["username"], d["low"]["profile"]["username"]} == {"alpha", "bravo"}
+
+
+def test_split_excludes_non_followed_person(client: TestClient):
+    """A rater the viewer does NOT follow isn't a participant; dropping below 2 → null."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    _followed_rates(client, viewer, "viewer", "alpha", 101, "Split Song", "like")
+    stranger = _register(client, "stranger@example.com", "stranger")  # not followed
+    _finalize_rating(client, stranger, 101, "Split Song", "dislike")
+
+    assert _modules(client, viewer)["split_decision"] is None
+
+
+def test_split_excludes_viewer_as_participant(client: TestClient):
+    """Even if the viewer rated the song, they are never one of the two shown."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    _finalize_rating(client, viewer, 101, "Split Song", "like")  # viewer rates it too (sole in bucket)
+    _followed_rates(client, viewer, "viewer", "alpha", 101, "Split Song", "like")
+    _followed_rates(client, viewer, "viewer", "bravo", 101, "Split Song", "dislike")
+
+    d = _modules(client, viewer)["split_decision"]
+    assert d is not None
+    names = {d["high"]["profile"]["username"], d["low"]["profile"]["username"]}
+    assert "viewer" not in names
+    assert names == {"alpha", "bravo"}
+
+
+def test_split_excludes_blocked_participant(client: TestClient):
+    """Blocking a participant removes them; dropping below 2 → null."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    _followed_rates(client, viewer, "viewer", "alpha", 101, "Split Song", "like")
+    _followed_rates(client, viewer, "viewer", "bravo", 101, "Split Song", "dislike")
+    assert _modules(client, viewer)["split_decision"] is not None
+
+    _block(client, viewer, "bravo")
+
+    assert _modules(client, viewer)["split_decision"] is None
+
+
+def test_split_excludes_private_participant(client: TestClient, db_session: Session):
+    """A participant who hides their taste leaves the pair; dropping below 2 → null."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    _followed_rates(client, viewer, "viewer", "alpha", 101, "Split Song", "like")
+    _followed_rates(client, viewer, "viewer", "bravo", 101, "Split Song", "dislike")
+    assert _modules(client, viewer)["split_decision"] is not None
+
+    profile = db_session.execute(
+        select(Profile).where(Profile.username == "bravo")
+    ).scalar_one()
+    profile.is_public = False
+    profile.visibility = "only_me"
+    db_session.commit()
+
+    assert _modules(client, viewer)["split_decision"] is None
+
+
+def test_split_picks_biggest_gap_even_when_another_is_more_recent(client: TestClient):
+    """Gap-primary: the biggest-gap song wins even if a smaller-gap song was rated more recently."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    _followed_rates(client, viewer, "viewer", "alpha", 201, "Big Gap Song", "like")
+    _followed_rates(client, viewer, "viewer", "bravo", 201, "Big Gap Song", "dislike")
+    # Smaller gap, rated more recently:
+    _followed_rates(client, viewer, "viewer", "charlie", 202, "Small Gap Song", "like")
+    _followed_rates(client, viewer, "viewer", "delta", 202, "Small Gap Song", "alright")
+
+    d = _modules(client, viewer)["split_decision"]
+    assert d is not None
+    assert d["song"]["title"] == "Big Gap Song"
+
+
+def test_split_high_low_tie_break_is_deterministic(client: TestClient):
+    """Equal high scores resolve by lower user_id (alpha registered before bravo)."""
+    viewer = _register(client, "viewer@example.com", "viewer")
+    _followed_rates(client, viewer, "viewer", "alpha", 101, "Split Song", "like")
+    _followed_rates(client, viewer, "viewer", "bravo", 101, "Split Song", "like")  # ties alpha at the top
+    _followed_rates(client, viewer, "viewer", "charlie", 101, "Split Song", "dislike")
+
+    d = _modules(client, viewer)["split_decision"]
+    assert d is not None
+    assert d["high"]["profile"]["username"] == "alpha"   # lower user_id wins the tie
+    assert d["low"]["profile"]["username"] == "charlie"

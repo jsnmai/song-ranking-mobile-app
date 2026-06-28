@@ -61,13 +61,26 @@ export type DisagreementModule = {
     direction: "viewer_higher" | "friends_higher";
 }
 
-// Bundled Feed module aggregates (GET /api/v1/feed/modules). Re-rate Radar, Consensus, and
-// Disagreement Spotlight are live; the rest are reserved and null until each ships. Mirrors
+// Split Decision: a song where two people the viewer follows are far apart (viewer not involved).
+export type SplitPerson = {
+    profile: ProfileBase;
+    score: number;
+}
+
+export type SplitDecisionModule = {
+    song: PersistedSong;
+    high: SplitPerson;   // higher scorer
+    low: SplitPerson;    // lower scorer
+    gap: number;
+}
+
+// Bundled Feed module aggregates (GET /api/v1/feed/modules). Re-rate Radar, Consensus, Disagreement
+// Spotlight, and Split Decision are live; the rest are reserved and null until each ships. Mirrors
 // backend/src/pydantic_schemas/feed.py::FeedModulesResponse.
 export type FeedModulesResponse = {
     rerate_radar: RerateRadarItem | null;
     consensus: ConsensusModule | null;
     disagreement_spotlight: DisagreementModule | null;
-    split_decision: null;
+    split_decision: SplitDecisionModule | null;
     match_moment: null;
 }

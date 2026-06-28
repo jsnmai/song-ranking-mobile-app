@@ -94,18 +94,43 @@ class DisagreementModule(BaseModel):
     direction: str  # "viewer_higher" | "friends_higher"
 
 
+class SplitPerson(BaseModel):
+    """One side of a Split Decision: a person the viewer follows + their score on the song."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    profile: ProfileResponse
+    score: float
+
+
+class SplitDecisionModule(BaseModel):
+    """Split Decision: a song where two people the viewer follows are far apart.
+
+    Participants are followed-visible people (one-way follow allowed), NOT necessarily mutual
+    friends, and never the viewer. `high` is the higher scorer, `low` the lower; `gap` = high − low.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    song: SongResponse
+    high: SplitPerson
+    low: SplitPerson
+    gap: float
+
+
 class FeedModulesResponse(BaseModel):
     """Bundled Feed module aggregates served behind the shared social-access privacy layer.
 
     One endpoint backs every Feed module card so the Feed makes a single request and the
     privacy filtering runs once per load (the paginated activity stream stays its own /feed).
     Modules that are not built yet are reserved keys that always return null for now; each
-    gains its own typed model as it ships.
+    gains its own typed model as it ships. All fields default to null so the bundled module
+    gate (rated >= 10 and following >= 3) can short-circuit to an empty response.
     """
 
     rerate_radar: RerateRadarItem | None = None
     consensus: ConsensusModule | None = None
     disagreement_spotlight: DisagreementModule | None = None
+    split_decision: SplitDecisionModule | None = None
     # Reserved — not implemented yet; always null until each module ships.
-    split_decision: None = None
     match_moment: None = None

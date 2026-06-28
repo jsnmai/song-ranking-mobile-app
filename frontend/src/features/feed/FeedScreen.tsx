@@ -32,7 +32,7 @@ import { ProfileBase, ReportReason } from "../profile/types"
 import { RankingResponse } from "../comparison/types"
 import { getMyRankingByDeezerId } from "../rankings/apiRequests"
 import { getFeedModules, getSongCircleRaters, listMyFeed, reportRatingEvent } from "./apiRequests"
-import { ConsensusModule, DisagreementModule, FeedEvent, RerateRadarItem } from "./types"
+import { ConsensusModule, DisagreementModule, FeedEvent, RerateRadarItem, SplitDecisionModule } from "./types"
 
 type FeedNavigation = CompositeNavigationProp<
     NativeStackNavigationProp<FeedStackParamList, "FeedHome">,
@@ -179,7 +179,15 @@ export default function FeedScreen() {
     const [consensusOpening, setConsensusOpening] = useState(false)
     const [disagreement, setDisagreement] = useState<DisagreementModule | null>(null)
     const [disagreementOpening, setDisagreementOpening] = useState(false)
+    const [splitDecision, setSplitDecision] = useState<SplitDecisionModule | null>(null)
+    const [splitOpening, setSplitOpening] = useState(false)
     const listRef = useRef<FlashListRef<FeedEvent>>(null)
+
+    // Score reveal + the Recent Verdict locked-teaser are gated on rated count only (calibration).
+    const gettingStartedComplete = (profile?.user_stats?.rated_count ?? 0) >= 10
+    // The Feed module AREA (Split/Consensus/Re-rate/Disagreement/Match) needs rated >= 10 AND
+    // following >= 3. This is the base gate; each card still has its own data requirement on top.
+    const modulesGateComplete = gettingStartedComplete && (profile?.following_count ?? 0) >= 3
     // Re-pressing the Feed tab while already on the Feed home screen scrolls the
     // activity list back to the top. useScrollToTop only fires when this screen is
     // focused and is the first route in the stack, so it leaves the tab bar's
@@ -219,21 +227,32 @@ export default function FeedScreen() {
         }
     }, [token])
 
+    const clearModules = useCallback(() => {
+        setRerateRadar(null)
+        setConsensus(null)
+        setDisagreement(null)
+        setSplitDecision(null)
+    }, [])
+
     // Feed module aggregates ride their own bundled endpoint, refreshed alongside the feed.
-    // A module failure must never blank the feed, so errors just leave the card on its locked state.
+    // Below the base gate we clear state and DON'T fetch — no live module data before the gate is met,
+    // and no stale data lingering if the profile drops back under the gate. A module fetch failure just
+    // leaves cards on their locked state and never blanks the feed.
     const loadModules = useCallback(async () => {
-        if (!token) return
+        if (!token || !modulesGateComplete) {
+            clearModules()
+            return
+        }
         try {
             const modules = await getFeedModules(token)
             setRerateRadar(modules.rerate_radar)
             setConsensus(modules.consensus)
             setDisagreement(modules.disagreement_spotlight)
+            setSplitDecision(modules.split_decision)
         } catch {
-            setRerateRadar(null)
-            setConsensus(null)
-            setDisagreement(null)
+            clearModules()
         }
-    }, [token])
+    }, [token, modulesGateComplete, clearModules])
 
     const handleLoadMore = () => {
         if (!nextCursor || isLoading || isLoadingMore) return
@@ -312,6 +331,31 @@ export default function FeedScreen() {
             }
         } finally {
             setDisagreementOpening(false)
+        }
+    }
+
+    // Open the song behind the live Split Decision card (same ranking lookup as the other modules).
+    const handleSplitDecisionPress = async () => {
+        if (!token || splitDecision === null || splitOpening) return
+        setSplitOpening(true)
+        setError(null)
+        try {
+            const ranking: RankingResponse = await getMyRankingByDeezerId(splitDecision.song.deezer_id, token)
+            navigation.navigate("SongDetail", { ranking })
+        } catch (err) {
+            if (err instanceof ApiError && err.status === 404) {
+                navigation.navigate("SongDetail", { song: splitDecision.song })
+                return
+            }
+            if (err instanceof ApiError) {
+                setError(err.detail)
+            } else if (err instanceof Error) {
+                setError(err.message)
+            } else {
+                setError("Could not open this song.")
+            }
+        } finally {
+            setSplitOpening(false)
         }
     }
 
@@ -440,7 +484,6 @@ export default function FeedScreen() {
         }
     }
 
-    const gettingStartedComplete = (profile?.user_stats?.rated_count ?? 0) >= 10
     // Recent Verdict module: feature the freshest verdict from someone the viewer follows
     // (skip the viewer's own events). Falls back to the locked teaser when there's none yet.
     const heroEvent = events.find((e) => e.actor_profile.user_id !== profile?.user_id) ?? null
@@ -861,12 +904,12 @@ export default function FeedScreen() {
         )
     }
 
-    const renderUnlockedSection = () => (
-        <View style={styles.unlockedSection}>
-            {/* Row: Split (locked) + Consensus (locked, 138px) */}
-            <View style={styles.fullRow}>
-                {/* Split Decision */}
-                <View style={[styles.fullCell, { height: 138, backgroundColor: "#000" }]}>
+    // Split Decision: live when two people the viewer follows are far apart on a song, else locked.
+    // Participants are followed-visible "people you follow" (not necessarily mutual friends).
+    const renderSplitDecision = () => {
+        if (splitDecision === null) {
+            return (
+                <View style={[styles.fullCell, { height: 138, backgroundColor: "#000" }]} testID="feed-split-locked">
                     <Svg style={StyleSheet.absoluteFill} viewBox="0 0 100 100" preserveAspectRatio="none">
                         <Polygon points="0,0 100,0 0,100" fill={colors.plum} />
                         <Polygon points="100,0 100,100 0,100" fill={colors.accent} />
@@ -882,11 +925,59 @@ export default function FeedScreen() {
                         </View>
                         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 8 }}>
                             <View style={styles.lockDotLg}><LockIcon color="#fff" size={18} /></View>
-                            <Text style={styles.fullLockHint}>When two friends split on a song</Text>
+                            <Text style={styles.fullLockHint}>When two people you follow split on a song</Text>
                         </View>
                     </View>
                 </View>
+            )
+        }
 
+        const s = splitDecision
+        const bust = (person: SplitDecisionModule["high"]) => (
+            <View style={[styles.splitBust, { backgroundColor: avatarColor(person.profile.username) }]}>
+                <Text style={styles.splitBustLetter}>
+                    {(person.profile.display_name || person.profile.username)[0].toUpperCase()}
+                </Text>
+            </View>
+        )
+        return (
+            <TouchableOpacity
+                style={[styles.fullCell, { height: 138, backgroundColor: "#000" }]}
+                activeOpacity={0.9}
+                onPress={handleSplitDecisionPress}
+                disabled={splitOpening}
+                testID={`feed-split-${s.song.id}`}
+            >
+                <Svg style={StyleSheet.absoluteFill} viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <Polygon points="0,0 100,0 0,100" fill={colors.plum} />
+                    <Polygon points="100,0 100,100 0,100" fill={colors.accent} />
+                </Svg>
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(13,15,23,0.42)" }]} />
+                <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
+                    <View style={styles.fullCellTop}>
+                        <View style={styles.darkPill}><Text style={styles.darkPillText}>Split · {s.gap.toFixed(1)} gap</Text></View>
+                    </View>
+                    <Text style={styles.splitSong} numberOfLines={1}>{s.song.title}</Text>
+                    <View style={styles.splitRow}>
+                        <View style={styles.splitSide}>
+                            {bust(s.high)}
+                            <Text style={styles.splitScore}>{s.high.score.toFixed(1)}</Text>
+                        </View>
+                        <View style={styles.splitSide}>
+                            <Text style={styles.splitScore}>{s.low.score.toFixed(1)}</Text>
+                            {bust(s.low)}
+                        </View>
+                    </View>
+                </View>
+            </TouchableOpacity>
+        )
+    }
+
+    const renderUnlockedSection = () => (
+        <View style={styles.unlockedSection}>
+            {/* Row: Split (live-or-locked) + Consensus (138px) */}
+            <View style={styles.fullRow}>
+                {renderSplitDecision()}
                 {renderConsensus()}
             </View>
 
@@ -927,147 +1018,6 @@ export default function FeedScreen() {
         </View>
     )
 
-    const renderLockedSection = () => (
-        <View style={styles.lockedSection}>
-            <View style={[styles.sectionRow, { marginTop: 4, marginBottom: 0 }]}>
-                <Text style={styles.sectionLabel}>UNLOCKING SOON</Text>
-            </View>
-
-            {/* Recent Verdicts compact teaser — only while it's still locked. Once a followed
-                verdict exists it is promoted to the full hero above, so "UNLOCKING SOON" then
-                heads only the modules below that are still locked. */}
-            {heroEvent === null && (
-                <View style={[styles.miniRow, styles.miniRowNavy]}>
-                    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
-                        {ORBIT_STARS.slice(0, 10).map((s, i) => (
-                            <Circle key={i} cx={`${s.x}%`} cy={`${s.y}%`} r={s.r} fill="white" fillOpacity={s.o * 0.7} />
-                        ))}
-                    </Svg>
-                    <View style={styles.miniRowInner}>
-                        <View style={styles.miniLockCircle}>
-                            <LockIcon color={colors.cream} />
-                        </View>
-                        <View style={styles.miniRowText}>
-                            <Text style={styles.miniRowLabel} numberOfLines={1}>Recent Verdicts</Text>
-                            <Text style={[styles.miniRowSub, { color: colors.cdim }]} numberOfLines={1}>
-                                Friends' fresh ratings, front and center
-                            </Text>
-                        </View>
-                        <Text style={[styles.miniLockedTag, { color: colors.cdim }]}>LOCKED</Text>
-                    </View>
-                </View>
-            )}
-
-            {/* 2×2 grid */}
-            <View style={styles.miniGridRow}>
-                <View style={[styles.miniTile, { backgroundColor: "#000" }]}>
-                    <Svg style={StyleSheet.absoluteFill} viewBox="0 0 100 100" preserveAspectRatio="none">
-                        <Polygon points="0,0 100,0 0,100" fill={colors.plum} />
-                        <Polygon points="100,0 100,100 0,100" fill={colors.accent} />
-                    </Svg>
-                    <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(13,15,23,0.42)" }]} />
-                    <View style={styles.miniTileInner}>
-                        <View style={styles.miniTileTop}>
-                            <View style={styles.miniLockCircle}><LockIcon color="#fff" /></View>
-                            <Text style={[styles.miniLockedTag, { color: "rgba(255,255,255,0.6)" }]}>LOCKED</Text>
-                        </View>
-                        <View>
-                            <Text style={[styles.miniTileLabel, { color: "#fff" }]}>Split Decision</Text>
-                            <Text style={[styles.miniTileSub, { color: "rgba(255,255,255,0.78)" }]} numberOfLines={1}>Friends clash on a song</Text>
-                        </View>
-                    </View>
-                </View>
-
-                <View style={[styles.miniTile, { backgroundColor: colors.sky }]}>
-                    <View style={styles.consensusBars}>
-                        {[6, 11, 18, 28, 23, 15, 10].map((v, i) => (
-                            <View key={i} style={[styles.consensusBar, { height: v }]} />
-                        ))}
-                    </View>
-                    <View style={styles.miniTileInner}>
-                        <View style={styles.miniTileTop}>
-                            <View style={styles.miniLockCircle}><LockIcon color="#fff" /></View>
-                            <Text style={[styles.miniLockedTag, { color: "rgba(255,255,255,0.6)" }]}>LOCKED</Text>
-                        </View>
-                        <View>
-                            <Text style={[styles.miniTileLabel, { color: "#fff" }]}>Consensus</Text>
-                            <Text style={[styles.miniTileSub, { color: "rgba(255,255,255,0.78)" }]}>How your circle scores a track</Text>
-                        </View>
-                    </View>
-                </View>
-            </View>
-
-            <View style={styles.miniGridRow}>
-                <View style={[styles.miniTile, { backgroundColor: colors.navy }]}>
-                    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
-                        {ORBIT_STARS.slice(0, 8).map((s, i) => (
-                            <Circle key={i} cx={`${s.x}%`} cy={`${s.y}%`} r={s.r} fill="white" fillOpacity={s.o * 0.6} />
-                        ))}
-                    </Svg>
-                    <Svg
-                        style={{ position: "absolute", left: 28, right: 10, top: 11, height: 36 }}
-                        viewBox="0 0 100 28"
-                        preserveAspectRatio="none"
-                    >
-                        <Polyline
-                            points="20,23 56,21 78,1"
-                            fill="none"
-                            stroke={colors.gold}
-                            strokeOpacity="0.3"
-                            strokeWidth="2"
-                            strokeDasharray="3 3"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                        />
-                    </Svg>
-                    <View style={styles.miniTileInner}>
-                        <View style={styles.miniTileTop}>
-                            <View style={styles.miniLockCircle}><LockIcon color={colors.cream} /></View>
-                            <Text style={[styles.miniLockedTag, { color: colors.cdim }]}>LOCKED</Text>
-                        </View>
-                        <View>
-                            <Text style={[styles.miniTileLabel, { color: colors.cream }]}>Re-rate Radar</Text>
-                            <Text style={[styles.miniTileSub, { color: colors.cdim }]}>A score a friend moved</Text>
-                        </View>
-                    </View>
-                </View>
-
-                <View style={[styles.miniTile, { backgroundColor: colors.mint }]}>
-                    <View style={styles.versusDecoration}>
-                        <View style={styles.versusWin} />
-                        <View style={styles.versusLose} />
-                    </View>
-                    <View style={styles.miniTileInner}>
-                        <View style={styles.miniTileTop}>
-                            <View style={styles.miniLockCircle}><LockIcon color="#fff" /></View>
-                            <Text style={[styles.miniLockedTag, { color: "rgba(255,255,255,0.6)" }]}>LOCKED</Text>
-                        </View>
-                        <View>
-                            <Text style={[styles.miniTileLabel, { color: "#fff" }]}>Match Moment</Text>
-                            <Text style={[styles.miniTileSub, { color: "rgba(255,255,255,0.78)" }]}>Head-to-head picks</Text>
-                        </View>
-                    </View>
-                </View>
-            </View>
-
-            {/* Disagreement Spotlight row */}
-            <View style={[styles.miniRow, styles.miniRowLight]}>
-                <View style={styles.miniRowInner}>
-                    <View style={[styles.miniLockCircle, { backgroundColor: "rgba(17,19,28,0.05)" }]}>
-                        <LockIcon color={colors.inkDim} />
-                    </View>
-                    <View style={styles.miniRowText}>
-                        <Text style={[styles.miniRowLabel, { color: colors.ink }]} numberOfLines={1}>Disagreement Spotlight</Text>
-                        <Text style={[styles.miniRowSub, { color: colors.inkDim }]} numberOfLines={1}>
-                            You vs. the crowd on one track
-                        </Text>
-                    </View>
-                    <Text style={[styles.miniLockedTag, { color: colors.inkDim }]}>LOCKED</Text>
-                </View>
-            </View>
-        </View>
-    )
-
     const renderGettingStartedBanner = () => {
         const rated = Math.min(profile?.user_stats?.rated_count ?? 0, 10)
         const friendCount = Math.min(profile?.following_count ?? 0, 3)
@@ -1088,7 +1038,7 @@ export default function FeedScreen() {
                     </View>
                     <Text style={styles.orbitTitle}>{"Rate songs. Follow friends."}</Text>
                     <Text style={styles.orbitBody}>
-                        As your taste sharpens and your circle grows, every card below reveals itself.
+                        Rate 10 songs and follow 3 people to unlock the Feed modules below.
                     </Text>
                     <View style={styles.tasteMeterRow}>
                         {Array.from({ length: 10 }).map((_, i) => (
@@ -1197,18 +1147,12 @@ export default function FeedScreen() {
                 {/* Recent Verdict is never gated by rated count — only by having a followed verdict. */}
                 {renderRecentVerdict()}
 
-                {gettingStartedComplete ? (
-                    <>
-                        {renderUnlockedSection()}
-                        {renderFindFriends()}
-                    </>
-                ) : (
-                    <>
-                        {renderGettingStartedBanner()}
-                        {renderFindFriends()}
-                        {renderLockedSection()}
-                    </>
-                )}
+                {/* The module area is always shown. Below the base gate (rated >= 10 AND follow >= 3)
+                    the banner explains how to unlock and the cards stay locked (no data fetched); once
+                    the gate is met the cards go live per their own data rules. */}
+                {!modulesGateComplete && renderGettingStartedBanner()}
+                {renderFindFriends()}
+                {renderUnlockedSection()}
 
                 {events.length > 0 && (
                     <View style={styles.sectionRow}>
@@ -1552,17 +1496,9 @@ export default function FeedScreen() {
                 {/* Recent Verdict is never gated by rated count — only by having a followed verdict. */}
                 {renderRecentVerdict()}
 
-                {gettingStartedComplete ? (
-                    renderUnlockedSection()
-                ) : (
-                    <>
-                        {renderGettingStartedBanner()}
-
-                        {renderFindFriends()}
-
-                        {renderLockedSection()}
-                    </>
-                )}
+                {!modulesGateComplete && renderGettingStartedBanner()}
+                {renderFindFriends()}
+                {renderUnlockedSection()}
 
                 {/* Activity section — always visible */}
                 <View style={styles.sectionRow}>
@@ -2670,6 +2606,45 @@ const styles = StyleSheet.create({
         fontSize: 12.5,
         color: "#fff",
         marginTop: 6,
+    },
+    // Split Decision — live state (two people you follow, far apart)
+    splitSong: {
+        fontFamily: fonts.serif,
+        fontStyle: "italic",
+        fontWeight: "700",
+        fontSize: 12.5,
+        color: "#fff",
+        textAlign: "center",
+    },
+    splitRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "flex-end",
+    },
+    splitSide: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+    },
+    splitBust: {
+        width: 18,
+        height: 18,
+        borderRadius: 9,
+        alignItems: "center",
+        justifyContent: "center",
+        borderWidth: 1.5,
+        borderColor: "rgba(255,255,255,0.65)",
+    },
+    splitBustLetter: {
+        color: "#fff",
+        fontWeight: "700",
+        fontSize: 9,
+    },
+    splitScore: {
+        fontFamily: fonts.display,
+        fontSize: 21,
+        lineHeight: 21,
+        color: "#fff",
     },
     // Ghost boxes (dashed outline, for skeleton cover art)
     ghostBoxSm: {

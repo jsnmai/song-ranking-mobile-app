@@ -5,7 +5,7 @@ import { ApiError } from "../../../api/client"
 import { RankingResponse } from "../../comparison/types"
 import { Profile } from "../../profile/types"
 import FeedScreen from "../FeedScreen"
-import { ConsensusModule, DisagreementModule, FeedEvent, RerateRadarItem } from "../types"
+import { ConsensusModule, DisagreementModule, FeedEvent, RerateRadarItem, SplitDecisionModule } from "../types"
 
 jest.mock("react-native-safe-area-context", () => ({
     useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
@@ -210,9 +210,19 @@ const disagreementModule: DisagreementModule = {
     direction: "viewer_higher",
 }
 
+const splitDecisionModule: SplitDecisionModule = {
+    song,
+    high: { profile: { ...feedEvent.actor_profile, user_id: 4, username: "maya" }, score: 9.1 },
+    low: { profile: { ...feedEvent.actor_profile, id: 6, user_id: 7, username: "theo" }, score: 2.3 },
+    gap: 6.8,
+}
+
+// A profile that clears the base module gate (rated >= 10 AND following >= 3).
+const gatedProfile = { user_stats: { rated_count: 12, bookmarked_count: 0 }, following_count: 3 }
+
 beforeEach(() => {
     jest.resetAllMocks()
-    mockCurrentProfile = { ...mockCurrentProfile, hide_like_counts: false, user_stats: null }
+    mockCurrentProfile = { ...mockCurrentProfile, hide_like_counts: false, user_stats: null, following_count: 0 }
     mockGetFeedModules.mockResolvedValue({ ...emptyModules })
     mockGetSongCircleRaters.mockResolvedValue({ raters: [] })
     mockRefreshProfile.mockResolvedValue(undefined)
@@ -265,6 +275,7 @@ describe("FeedScreen", () => {
         mockCurrentProfile = {
             ...mockCurrentProfile,
             user_stats: { rated_count: 12, bookmarked_count: 0 },
+            following_count: 3,
         }
         mockGetSongCircleRaters.mockResolvedValue({
             raters: [{ ...feedEvent.actor_profile, user_id: 4, username: "maya", display_name: "Maya" }],
@@ -302,6 +313,7 @@ describe("FeedScreen", () => {
         mockCurrentProfile = {
             ...mockCurrentProfile,
             user_stats: { rated_count: 12, bookmarked_count: 0 },
+            following_count: 3,
         }
         mockListMyFeed.mockResolvedValue({
             events: [{ ...feedEvent, id: 21, actor_profile: { ...feedEvent.actor_profile, user_id: 2, username: "jason" } }],
@@ -334,49 +346,6 @@ describe("FeedScreen", () => {
             expect(screen.getByTestId("feed-recent-verdict-9")).toBeTruthy()
         })
         expect(screen.getByText("Getting started")).toBeTruthy()
-    })
-
-    it("drops the compact Recent Verdicts teaser from UNLOCKING SOON once the hero is unlocked", async () => {
-        // rated < 10 keeps the compact locked section, but with a followed verdict the hero is
-        // promoted to the top, so the redundant compact "Recent Verdicts" row is removed and
-        // "UNLOCKING SOON" heads only the modules still locked below it.
-        mockCurrentProfile = {
-            ...mockCurrentProfile,
-            user_stats: { rated_count: 3, bookmarked_count: 0 },
-        }
-        mockListMyFeed.mockResolvedValue({
-            events: [feedEvent],
-            next_cursor: null,
-        })
-
-        render(<FeedScreen />)
-
-        await waitFor(() => {
-            expect(screen.getByTestId("feed-recent-verdict-9")).toBeTruthy()
-        })
-        expect(screen.getByText("UNLOCKING SOON")).toBeTruthy()
-        expect(screen.queryByText("Recent Verdicts")).toBeNull()
-    })
-
-    it("keeps the locked Recent Verdict only in the compact list while getting started", async () => {
-        // rated < 10 and no followed verdict: Recent Verdict is represented solely by the compact
-        // "Recent Verdicts" row in UNLOCKING SOON — no duplicate full locked teaser at the top.
-        mockCurrentProfile = {
-            ...mockCurrentProfile,
-            user_stats: { rated_count: 3, bookmarked_count: 0 },
-        }
-        mockListMyFeed.mockResolvedValue({
-            events: [{ ...feedEvent, id: 31, actor_profile: { ...feedEvent.actor_profile, user_id: 2, username: "jason" } }],
-            next_cursor: null,
-        })
-
-        render(<FeedScreen />)
-
-        await waitFor(() => {
-            expect(screen.getByText("UNLOCKING SOON")).toBeTruthy()
-        })
-        expect(screen.getByText("Recent Verdicts")).toBeTruthy()
-        expect(screen.queryByText("FOLLOW TO UNLOCK")).toBeNull()
     })
 
     it("opens feed songs in unrated Song Detail when the current user has no ranking", async () => {
@@ -632,6 +601,7 @@ describe("FeedScreen", () => {
         mockCurrentProfile = {
             ...mockCurrentProfile,
             user_stats: { rated_count: 12, bookmarked_count: 0 },
+            following_count: 3,
         }
         mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
         mockGetFeedModules.mockResolvedValue({ ...emptyModules, rerate_radar: rerateRadarItem })
@@ -658,6 +628,7 @@ describe("FeedScreen", () => {
         mockCurrentProfile = {
             ...mockCurrentProfile,
             user_stats: { rated_count: 12, bookmarked_count: 0 },
+            following_count: 3,
         }
         mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
         mockGetFeedModules.mockResolvedValue({ ...emptyModules })
@@ -677,6 +648,7 @@ describe("FeedScreen", () => {
         mockCurrentProfile = {
             ...mockCurrentProfile,
             user_stats: { rated_count: 12, bookmarked_count: 0 },
+            following_count: 3,
         }
         mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
         mockGetFeedModules.mockResolvedValue({ ...emptyModules, consensus: consensusModule })
@@ -703,6 +675,7 @@ describe("FeedScreen", () => {
         mockCurrentProfile = {
             ...mockCurrentProfile,
             user_stats: { rated_count: 12, bookmarked_count: 0 },
+            following_count: 3,
         }
         mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
         mockGetFeedModules.mockResolvedValue({ ...emptyModules })
@@ -720,6 +693,7 @@ describe("FeedScreen", () => {
         mockCurrentProfile = {
             ...mockCurrentProfile,
             user_stats: { rated_count: 12, bookmarked_count: 0 },
+            following_count: 3,
         }
         mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
         mockGetFeedModules.mockResolvedValue({ ...emptyModules, disagreement_spotlight: disagreementModule })
@@ -748,6 +722,7 @@ describe("FeedScreen", () => {
         mockCurrentProfile = {
             ...mockCurrentProfile,
             user_stats: { rated_count: 12, bookmarked_count: 0 },
+            following_count: 3,
         }
         mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
         mockGetFeedModules.mockResolvedValue({ ...emptyModules })
@@ -759,6 +734,88 @@ describe("FeedScreen", () => {
         })
         expect(screen.queryByTestId("feed-disagreement-42")).toBeNull()
         expect(screen.getByTestId("feed-disagreement-locked")).toBeTruthy()
+    })
+
+    it("surfaces a live Split Decision card (two people you follow) and opens the song", async () => {
+        mockCurrentProfile = { ...mockCurrentProfile, ...gatedProfile }
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+        mockGetFeedModules.mockResolvedValue({ ...emptyModules, split_decision: splitDecisionModule })
+        mockGetMyRankingByDeezerId.mockResolvedValue(ranking)
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-split-42")).toBeTruthy()
+        })
+        expect(screen.queryByTestId("feed-split-locked")).toBeNull()
+        expect(screen.getByText("9.1")).toBeTruthy()           // high score
+        expect(screen.getByText("2.3")).toBeTruthy()           // low score
+        expect(screen.getByText("Split · 6.8 gap")).toBeTruthy()
+
+        fireEvent.press(screen.getByTestId("feed-split-42"))
+        await waitFor(() => {
+            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
+        })
+    })
+
+    it("falls back to the locked Split card (people you follow, not friends) when no split qualifies", async () => {
+        mockCurrentProfile = { ...mockCurrentProfile, ...gatedProfile }
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+        mockGetFeedModules.mockResolvedValue({ ...emptyModules })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-song-9")).toBeTruthy()
+        })
+        expect(screen.queryByTestId("feed-split-42")).toBeNull()
+        expect(screen.getByTestId("feed-split-locked")).toBeTruthy()
+        expect(screen.getByText("When two people you follow split on a song")).toBeTruthy()
+    })
+
+    it("keeps the module strip locked and does not fetch modules below the base gate", async () => {
+        // Rated 12 but following < 3 → base gate not met: cards locked, no module fetch, banner explains.
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 12, bookmarked_count: 0 },
+            following_count: 1,
+        }
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-song-9")).toBeTruthy()
+        })
+        // Module section is visible but every card is locked, and we never hit the modules endpoint.
+        expect(screen.getByTestId("feed-split-locked")).toBeTruthy()
+        expect(screen.getByTestId("feed-rerate-radar-locked")).toBeTruthy()
+        expect(screen.getByText("Rate 10 songs and follow 3 people to unlock the Feed modules below.")).toBeTruthy()
+        expect(mockGetFeedModules).not.toHaveBeenCalled()
+    })
+
+    it("still reveals the viewer's own scores below the base gate (score reveal is rated-only)", async () => {
+        // rated >= 10 but following < 3: modules gated off, but own scores are NOT following-gated.
+        const ownEvent: FeedEvent = {
+            ...feedEvent,
+            id: 77,
+            new_score: 8.8,
+            actor_profile: { ...feedEvent.actor_profile, user_id: 2, username: "jason" },
+        }
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 12, bookmarked_count: 0 },
+            following_count: 0,
+        }
+        mockListMyFeed.mockResolvedValue({ events: [ownEvent], next_cursor: null })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-song-77")).toBeTruthy()
+        })
+        expect(screen.getByText("8.8")).toBeTruthy()   // real score, not "?"
+        expect(screen.queryByText("?")).toBeNull()
     })
 
     it("opens Discover user search from the empty state", async () => {

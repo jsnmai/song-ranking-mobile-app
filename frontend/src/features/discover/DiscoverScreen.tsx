@@ -309,7 +309,8 @@ export default function DiscoverScreen() {
         if (trimmedQuery.length < 2) {
             setSongResults([])
             setProfileResults([])
-            setError("Type at least 2 characters.")
+            // Not an error — a gentle "keep typing" hint is rendered instead.
+            setError(null)
             setIsLoading(false)
             return
         }
@@ -480,6 +481,14 @@ export default function DiscoverScreen() {
 
                         {!isLoading && error !== null && (
                             <Text style={styles.errorText}>{error}</Text>
+                        )}
+
+                        {/* Keep-typing hint — gentle, on-theme (shown after 1 character) */}
+                        {!isLoading && error === null && hasQuery && trimmedQuery.length < 2 && (
+                            <View style={styles.searchHint}>
+                                <SearchIcon size={18} />
+                                <Text style={styles.searchHintText}>Keep typing to search…</Text>
+                            </View>
                         )}
 
                         {/* No query: recent searches */}
@@ -1037,6 +1046,17 @@ const styles = StyleSheet.create({
         marginTop: 30,
         textAlign: "center",
         lineHeight: 20,
+    },
+    searchHint: {
+        alignItems: "center",
+        marginTop: 36,
+        gap: 9,
+    },
+    searchHintText: {
+        fontFamily: fonts.mono,
+        fontSize: 11,
+        letterSpacing: 0.8,
+        color: colors.inkDim,
     },
     emptyText: {
         color: colors.inkDim,

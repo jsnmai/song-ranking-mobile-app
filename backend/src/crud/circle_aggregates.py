@@ -11,7 +11,10 @@ from datetime import datetime, timezone
 from sqlalchemy import and_, exists, func, select
 from sqlalchemy.orm import Session, aliased
 
-from src.crud.social_access import circle_visible_taste_owner_predicate
+from src.crud.social_access import (
+    circle_visible_taste_owner_predicate,
+    followed_visible_taste_owner_predicate,
+)
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
@@ -67,6 +70,15 @@ class CircleDisagreementRow:
     friends_average: float
     friends_count: int
     gap: float
+
+
+@dataclass(frozen=True)
+class CircleSplitRow:
+    """One song where two people the viewer follows are far apart (their pairwise score gap)."""
+
+    song_id: int
+    gap: float
+    rater_count: int
 
 
 def aggregate_circle_most_rated(
@@ -393,6 +405,117 @@ def viewer_rated_artist_ids(
         .distinct()
     ).scalars().all()
     return {int(artist_id) for artist_id in artist_ids}
+
+
+def split_decision_candidates(
+    db: Session,
+    viewer_id: int,
+    *,
+    minimum_raters: int,
+    min_gap: float,
+    limit: int,
+) -> list[CircleSplitRow]:
+    """Songs where two people the viewer follows are far apart, biggest pairwise gap first.
+
+    Audience = followed-visible people (one-way follow allowed, viewer excluded) via
+    `followed_visible_taste_owner_predicate` — NOT the mutual circle. gap = max(score) - min(score)
+    among them. Gap-primary: the gap filter and ordering happen in SQL and the `limit` is applied
+    *after* gap ordering, so a big-gap song is never truncated out before the service ranks it. The
+    recency tie-break counts only events from people who CURRENTLY rank the song (join to `Ranking`),
+    so a stale event from someone who removed their rating can't skew it.
+    """
+    recent_at = (
+        select(
+            RatingEvent.song_id.label("song_id"),
+            func.max(RatingEvent.created_at).label("latest_at"),
+        )
+        .join(
+            Ranking,
+            and_(
+                Ranking.user_id == RatingEvent.user_id,
+                Ranking.song_id == RatingEvent.song_id,
+            ),
+        )
+        .where(RatingEvent.event_type.in_(ELIGIBLE_RATING_EVENT_TYPES))
+        .where(
+            followed_visible_taste_owner_predicate(
+                viewer_id,
+                RatingEvent.user_id,
+            )
+        )
+        .group_by(RatingEvent.song_id)
+        .cte("split_recent_at")
+    )
+    rater_count = func.count()
+    gap = func.max(Ranking.score) - func.min(Ranking.score)
+    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    rows = db.execute(
+        select(
+            Ranking.song_id,
+            rater_count.label("rater_count"),
+            gap.label("gap"),
+        )
+        .outerjoin(
+            recent_at,
+            recent_at.c.song_id == Ranking.song_id,
+        )
+        .where(
+            followed_visible_taste_owner_predicate(
+                viewer_id,
+                Ranking.user_id,
+            )
+        )
+        .group_by(
+            Ranking.song_id,
+            recent_at.c.latest_at,
+        )
+        .having(and_(rater_count >= minimum_raters, gap >= min_gap))
+        .order_by(
+            gap.desc(),
+            func.coalesce(recent_at.c.latest_at, epoch).desc(),
+            rater_count.desc(),
+            Ranking.song_id.asc(),
+        )
+        .limit(limit)
+    ).all()
+    return [
+        CircleSplitRow(
+            song_id=row.song_id,
+            gap=float(row.gap),
+            rater_count=row.rater_count,
+        )
+        for row in rows
+    ]
+
+
+def followed_visible_song_raters(
+    db: Session,
+    viewer_id: int,
+    song_id: int,
+) -> list[tuple[Profile, float, int]]:
+    """(profile, score, user_id) for followed-visible people who currently rate one song.
+
+    Viewer excluded by the predicate. The caller derives the high/low pair deterministically.
+    """
+    rows = db.execute(
+        select(
+            Ranking.user_id,
+            Ranking.score,
+            Profile,
+        )
+        .join(
+            Profile,
+            Profile.user_id == Ranking.user_id,
+        )
+        .where(Ranking.song_id == song_id)
+        .where(
+            followed_visible_taste_owner_predicate(
+                viewer_id,
+                Ranking.user_id,
+            )
+        )
+    ).all()
+    return [(profile, float(score), user_id) for user_id, score, profile in rows]
 
 
 def circle_disagreement_candidates(
