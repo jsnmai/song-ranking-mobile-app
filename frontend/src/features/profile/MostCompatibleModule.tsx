@@ -97,11 +97,15 @@ const styles = StyleSheet.create({
     loader: {
         marginVertical: 12,
     },
+    // Matches the curated-lists empty exactly: mono face + dark inkSoft. Dark so it has presence
+    // under the light/dim COMPATIBILITY title, and the mono face keeps it on-brand rather than the
+    // generic system sans (which looked out of place at this darker weight).
     empty: {
+        fontFamily: fonts.mono,
+        fontSize: 10.5,
         color: colors.inkSoft,
-        fontSize: 13,
         marginTop: 10,
-        lineHeight: 18,
+        lineHeight: 15,
     },
     row: {
         flexDirection: "row",

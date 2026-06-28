@@ -147,6 +147,12 @@ export default function RankingsScreen() {
     }
     const handleReorderPress = () => navigation.navigate("Reorder")
     const handleVersusHistoryPress = () => navigation.navigate("VersusHistory")
+    // Tapping a receipt's cover opens that song's page. Versus songs are the viewer's
+    // own rated songs, so they resolve from the already-loaded rankings list.
+    const handleVersusSongPress = (songId: number) => {
+        const ranking = rankings.find((r) => r.song_id === songId)
+        if (ranking) navigation.navigate("SongDetail", { ranking })
+    }
     const handleFullRankingsPress = () => navigation.navigate("FullRankings")
     const handleOpenRankMap = () => navigation.navigate("RankMap", { rankings })
     const handleRateFirstSong = () => navigation.navigate("Discover", { screen: "DiscoverHome", params: { focusSearch: true, searchMode: "songs" } })
@@ -557,17 +563,17 @@ export default function RankingsScreen() {
                     </Text>
                 </View>
             ) : (
-                <TouchableOpacity
-                    style={styles.paperCard}
-                    onPress={handleVersusHistoryPress}
-                    activeOpacity={0.8}
-                    accessibilityLabel="Open Versus History"
-                >
+                <View style={styles.paperCard}>
                     {versusReceipts.slice(0, 3).map((r, i) => (
                         <View key={r.id} style={[styles.versusReceiptRow, i > 0 && styles.versusReceiptBorder]}>
-                            {/* Cover pair */}
+                            {/* Cover pair — each cover opens its song's page */}
                             <View style={styles.versusCovers}>
-                                <View style={styles.versusWinnerCover}>
+                                <TouchableOpacity
+                                    style={styles.versusWinnerCover}
+                                    onPress={() => handleVersusSongPress(r.winner_song_id)}
+                                    activeOpacity={0.8}
+                                    accessibilityLabel={`Open ${r.winner_title}`}
+                                >
                                     {r.winner_cover_url ? (
                                         <Image
                                             source={{ uri: r.winner_cover_url }}
@@ -576,9 +582,14 @@ export default function RankingsScreen() {
                                     ) : (
                                         <View style={[styles.versusCoverImg, { backgroundColor: colors.paper2 }]} />
                                     )}
-                                </View>
+                                </TouchableOpacity>
                                 <Text style={styles.versusReceiptVS}>VS</Text>
-                                <View style={styles.versusLoserCover}>
+                                <TouchableOpacity
+                                    style={styles.versusLoserCover}
+                                    onPress={() => handleVersusSongPress(r.loser_song_id)}
+                                    activeOpacity={0.8}
+                                    accessibilityLabel={`Open ${r.loser_title}`}
+                                >
                                     {r.loser_cover_url ? (
                                         <Image
                                             source={{ uri: r.loser_cover_url }}
@@ -587,7 +598,7 @@ export default function RankingsScreen() {
                                     ) : (
                                         <View style={[styles.versusCoverImg, { backgroundColor: colors.paper2 }]} />
                                     )}
-                                </View>
+                                </TouchableOpacity>
                             </View>
                             {/* Winner info */}
                             <View style={styles.versusWinnerInfo}>
@@ -596,7 +607,7 @@ export default function RankingsScreen() {
                             </View>
                         </View>
                     ))}
-                </TouchableOpacity>
+                </View>
             )}
         </View>
     )
