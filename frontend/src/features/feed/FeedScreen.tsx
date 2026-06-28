@@ -47,8 +47,6 @@ type FeedNavigation = CompositeNavigationProp<
     >
 >
 
-const DAY_ABBRS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
-
 const REPORT_REASONS: readonly { value: ReportReason; label: string }[] = [
     { value: "harassment", label: "Harassment" },
     { value: "hate_or_abuse", label: "Hate or abuse" },
@@ -1428,7 +1426,10 @@ export default function FeedScreen() {
 
     const renderListHeader = () => {
         const today = new Date()
-        const dayAbbr = DAY_ABBRS[today.getDay()]
+        // e.g. "TUE, JUN 27" — a conventional, at-a-glance date.
+        const dateLabel = today
+            .toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+            .toUpperCase()
         const todayCount = events.filter(
             (e) => new Date(e.created_at).toDateString() === today.toDateString()
         ).length
@@ -1438,7 +1439,7 @@ export default function FeedScreen() {
                 {/* BO-style header */}
                 <View style={styles.header}>
                     <View style={styles.headerLeft}>
-                        <Text style={styles.kicker}>TODAY · {dayAbbr}</Text>
+                        <Text style={styles.kicker}>HOME · {dateLabel}</Text>
                         <Text style={styles.heading}>LISTn</Text>
                     </View>
                     <TouchableOpacity

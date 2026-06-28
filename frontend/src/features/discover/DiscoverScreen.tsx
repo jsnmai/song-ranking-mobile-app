@@ -409,7 +409,7 @@ export default function DiscoverScreen() {
             {/* Header */}
             <View style={styles.header}>
                 <View>
-                    <Text style={styles.kicker}>DISCOVER THROUGH TASTE</Text>
+                    <Text style={styles.kicker}>BROWSE</Text>
                     <Text style={styles.heading}>Discover</Text>
                 </View>
                 <TouchableOpacity
