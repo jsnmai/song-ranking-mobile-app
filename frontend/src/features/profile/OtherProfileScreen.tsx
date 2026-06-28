@@ -835,9 +835,14 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         marginTop: 9,
+        // Even spacing matching the design: a gap on both sides of each stretch divider, number + label
+        // inline (so a wide label can't add trailing slack the way a stacked layout did).
+        gap: 14,
     },
     statItem: {
-        alignItems: "flex-start",
+        flexDirection: "row",
+        alignItems: "baseline",
+        gap: 4,
     },
     statNum: {
         fontFamily: fonts.display,
@@ -854,9 +859,8 @@ const styles = StyleSheet.create({
     },
     statDivider: {
         width: 1,
-        height: 22,
+        alignSelf: "stretch",
         backgroundColor: colors.line,
-        marginHorizontal: 10,
     },
     // ── Follow + To LISTn row ────────────────────────────────────────
     // The 50/50 split lives on two empty flex:1 columns (same as the

@@ -233,7 +233,6 @@ export default function ProfileScreen() {
     const step1Done = ratedCount > 0
     const step2Done = ratedCount >= 10
     const step3Done = (profile?.following_count ?? 0) >= 3
-    const stepsCompleted = [step1Done, step2Done, step3Done].filter(Boolean).length
     // Each setup step deep-links to where you complete it: the rating steps open Discover song
     // search, the follow step opens Discover user search.
     const goToDiscoverSearch = (searchMode: "songs" | "users") =>
@@ -267,7 +266,7 @@ export default function ProfileScreen() {
             <View style={styles.header}>
                 <View style={styles.headerTop}>
                     <View>
-                        <Text style={styles.kicker}>LISTENING PROFILE</Text>
+                        <Text style={styles.kicker}>LISTNING PROFILE</Text>
                         <Text style={styles.heading}>You</Text>
                     </View>
                     <View style={styles.headerActions}>
@@ -370,7 +369,6 @@ export default function ProfileScreen() {
                             </View>
                             <View style={styles.setupHeaderRow}>
                                 <Text style={styles.setupKicker}>SET UP YOUR PROFILE</Text>
-                                <Text style={styles.setupCounter}>{stepsCompleted}/3</Text>
                             </View>
                             <View style={styles.setupSteps}>
                                 {([
@@ -744,15 +742,19 @@ const styles = StyleSheet.create({
     statsInlineRow: {
         flexDirection: "row",
         alignItems: "center",
+        // Even spacing matching the design: a gap on both sides of each stretch divider, with the
+        // number + label inline (so a wide label can't add trailing slack the way a stacked layout did).
+        gap: 14,
     },
     statInlineDivider: {
         width: 1,
-        height: 22,
+        alignSelf: "stretch",
         backgroundColor: colors.line,
-        marginHorizontal: 10,
     },
     statInlineBtn: {
-        alignItems: "flex-start",
+        flexDirection: "row",
+        alignItems: "baseline",
+        gap: 4,
     },
     statInlineNum: {
         fontFamily: fonts.display,
@@ -848,12 +850,6 @@ const styles = StyleSheet.create({
         letterSpacing: 1.8,
         color: colors.gold,
         fontWeight: "700",
-    },
-    setupCounter: {
-        fontFamily: fonts.display,
-        fontSize: 13,
-        color: colors.cdim,
-        letterSpacing: -0.2,
     },
     setupSteps: {
         gap: 10,
