@@ -68,12 +68,7 @@ export default function RatingActivityCard({
 }: RatingActivityCardProps) {
     const bColor = bucketColor(bucket)
     return (
-        <TouchableOpacity
-            style={styles.card}
-            onPress={onPress}
-            activeOpacity={0.85}
-            testID={testID}
-        >
+        <View style={styles.card} testID={testID}>
             <View style={styles.cardTopRow}>
                 <View style={styles.cardLeft}>
                     <View style={styles.actorRow}>
@@ -86,8 +81,16 @@ export default function RatingActivityCard({
                             <Text style={styles.actorTime}> · {timeAgo}</Text>
                         </Text>
                     </View>
-                    <Text style={styles.songTitle} numberOfLines={2}>{song.title}</Text>
-                    <Text style={styles.songArtist} numberOfLines={1}>{song.artist}</Text>
+                    {/* Only the song title/artist text opens the song — not the blank areas. */}
+                    <TouchableOpacity
+                        onPress={onPress}
+                        activeOpacity={0.75}
+                        disabled={!onPress}
+                        testID={testID ? `${testID}-song` : undefined}
+                    >
+                        <Text style={styles.songTitle} numberOfLines={2}>{song.title}</Text>
+                        <Text style={styles.songArtist} numberOfLines={1}>{song.artist}</Text>
+                    </TouchableOpacity>
                     <View style={[styles.bucketBadge, { backgroundColor: bucketBgColor(bucket) }]}>
                         <Text style={[styles.bucketBadgeText, { color: bColor }]}>
                             IN {bucketLabel(bucket)}
@@ -95,7 +98,13 @@ export default function RatingActivityCard({
                     </View>
                 </View>
 
-                <View style={styles.ringWrap}>
+                {/* The album art / score ring also opens the song. */}
+                <TouchableOpacity
+                    style={styles.ringWrap}
+                    onPress={onPress}
+                    activeOpacity={0.9}
+                    disabled={!onPress}
+                >
                     <Svg width={RING_SIZE} height={RING_SIZE} style={{ position: "absolute", top: 0, left: 0 }}>
                         <Circle
                             cx={RING_CX}
@@ -121,7 +130,7 @@ export default function RatingActivityCard({
                             <Text style={styles.scoreBadgeText}>{hideScore ? "?" : score.toFixed(1)}</Text>
                         </View>
                     </View>
-                </View>
+                </TouchableOpacity>
             </View>
 
             {note !== null && note !== undefined && note !== "" && (
@@ -144,7 +153,7 @@ export default function RatingActivityCard({
                     )}
                 </View>
             )}
-        </TouchableOpacity>
+        </View>
     )
 }
 

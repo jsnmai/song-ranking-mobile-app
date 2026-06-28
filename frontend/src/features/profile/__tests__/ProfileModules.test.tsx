@@ -382,7 +382,7 @@ describe("ProfileScreen profile modules", () => {
         await waitFor(() => {
             expect(screen.getByTestId(`activity-card-${ratingItem.rating_event_id}`)).toBeTruthy()
         })
-        fireEvent.press(screen.getByTestId(`activity-card-${ratingItem.rating_event_id}`))
+        fireEvent.press(screen.getByTestId(`activity-card-${ratingItem.rating_event_id}-song`))
 
         await waitFor(() => {
             expect(mockNavigate).toHaveBeenCalledWith("SongDetail", expect.anything())

@@ -82,7 +82,7 @@ describe("UserActivityScreen", () => {
         await waitFor(() => {
             expect(screen.getByTestId("activity-card-42")).toBeTruthy()
         })
-        fireEvent.press(screen.getByTestId("activity-card-42"))
+        fireEvent.press(screen.getByTestId("activity-card-42-song"))
 
         await waitFor(() => {
             expect(mockGetMyRankingByDeezerId).toHaveBeenCalledWith(123, "test-token")
@@ -99,7 +99,7 @@ describe("UserActivityScreen", () => {
         await waitFor(() => {
             expect(screen.getByTestId("activity-card-42")).toBeTruthy()
         })
-        fireEvent.press(screen.getByTestId("activity-card-42"))
+        fireEvent.press(screen.getByTestId("activity-card-42-song"))
 
         await waitFor(() => {
             expect(mockNavigate).toHaveBeenCalledWith(
