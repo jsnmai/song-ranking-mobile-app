@@ -20,11 +20,13 @@ import Svg, { Circle, Path } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
 import { ArrowLabel } from "../../components/Arrow"
+import HatchBox from "../../components/HatchBox"
 import { useAudioPlayer } from "../../hooks/useAudioPlayer"
 import { AppStackParamList } from "../../navigation/types"
 import { colors, fonts, bucketColor } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
 import { useScoresLocked } from "../../hooks/useScoresLocked"
+import { LockIcon } from "../../components/LockIcon"
 import { listMyVersusHistory, removeRating } from "../rankings/apiRequests"
 import { ComparisonHistoryReceipt } from "../rankings/types"
 import { fetchPreviewUrl } from "../songs/apiRequests"
@@ -120,15 +122,18 @@ type SheetItemProps = {
     sub?: string | null
     danger?: boolean
     isFirst?: boolean
+    locked?: boolean
     onPress: () => void
 }
 
-function SheetItem({ icon, label, sub, danger, isFirst, onPress }: SheetItemProps) {
+function SheetItem({ icon, label, sub, danger, isFirst, locked, onPress }: SheetItemProps) {
     return (
         <TouchableOpacity
             accessibilityRole="button"
-            style={[styles.sheetItem, isFirst && styles.sheetItemFirst]}
+            accessibilityState={{ disabled: locked === true }}
+            style={[styles.sheetItem, isFirst && styles.sheetItemFirst, locked === true && styles.sheetItemLocked]}
             onPress={onPress}
+            disabled={locked === true}
         >
             <View style={[styles.sheetItemIcon, danger === true && styles.sheetItemIconDanger]}>
                 {icon}
@@ -137,9 +142,18 @@ function SheetItem({ icon, label, sub, danger, isFirst, onPress }: SheetItemProp
                 <Text style={[styles.sheetItemLabel, danger === true && styles.sheetItemLabelDanger]}>
                     {label}
                 </Text>
-                {sub != null && <Text style={styles.sheetItemSub}>{sub}</Text>}
+                {locked === true
+                    ? <Text style={styles.sheetItemSub}>Unlocks once you’ve rated 10 songs</Text>
+                    : (sub != null && <Text style={styles.sheetItemSub}>{sub}</Text>)}
             </View>
-            <ChevronRightIcon />
+            {locked === true ? (
+                <View style={styles.sheetLockTag}>
+                    <LockIcon color={colors.inkDim} size={13} />
+                    <Text style={styles.sheetLockTagText}>LOCKED</Text>
+                </View>
+            ) : (
+                <ChevronRightIcon />
+            )}
         </TouchableOpacity>
     )
 }
@@ -214,6 +228,9 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
     }
 
     const handleReorder = () => {
+        // Reordering is locked until scores unlock (10 ratings); the sheet item is disabled,
+        // but guard here too so the action can never fire from the locked state.
+        if (scoresLocked) return
         setMenuOpen(false)
         stopAudio()
         navigation.navigate("Reorder")
@@ -526,9 +543,9 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                         {versusReceipts.length === 0 ? (
                             <View style={[styles.sdVersusCard, styles.sdVersusEmpty]}>
                                 <View style={styles.sdVersusGhostRow}>
-                                    <View style={styles.sdVersusGhostCover} />
+                                    <HatchBox size={32} radius={7} tone="dark" />
                                     <Text style={styles.sdVersusVSText}>VS</Text>
-                                    <View style={styles.sdVersusGhostCover} />
+                                    <HatchBox size={32} radius={7} tone="dark" />
                                 </View>
                                 <Text style={styles.sdVersusEmptyTitle}>No match-ups yet</Text>
                                 <Text style={styles.sdVersusEmptyBody}>
@@ -611,7 +628,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                                 <Text style={styles.sheetSongArtist}>{song.artist.toUpperCase()}</Text>
                             </View>
                         </View>
-                        <SheetItem isFirst icon={<ReorderIcon />} label="Move in ranking" sub="Reorder by hand" onPress={handleReorder} />
+                        <SheetItem isFirst icon={<ReorderIcon />} label="Reorder" sub="Move songs by hand" locked={scoresLocked} onPress={handleReorder} />
                         <SheetItem icon={<RefreshIcon />} label="Re-rate" sub="Run the compare again" onPress={handleRateAgain} />
                         <SheetItem icon={<ShareIcon />} label="Share" onPress={handleShare} />
                         <SheetItem icon={<TrashIcon danger />} label="Remove rating" sub="Takes it out of your Rankings" danger onPress={handleRemovePress} />
@@ -1034,6 +1051,15 @@ const styles = StyleSheet.create({
     sheetItemLabel: { fontFamily: fonts.display, fontSize: 15, color: colors.ink },
     sheetItemLabelDanger: { color: colors.danger },
     sheetItemSub: { fontSize: 11, color: colors.inkDim, marginTop: 1 },
+    sheetItemLocked: { opacity: 0.55 },
+    sheetLockTag: { flexDirection: "row", alignItems: "center", gap: 5, flexShrink: 0 },
+    sheetLockTagText: {
+        fontFamily: fonts.mono,
+        fontSize: 9,
+        color: colors.inkDim,
+        fontWeight: "700",
+        letterSpacing: 0.8,
+    },
     // ── Versus history section ─────────────────────────────────────────
     sdSectionRow: {
         flexDirection: "row",
@@ -1077,15 +1103,6 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         gap: 9,
-    },
-    sdVersusGhostCover: {
-        width: 32,
-        height: 32,
-        borderRadius: 7,
-        borderWidth: 1,
-        borderStyle: "dashed",
-        borderColor: colors.inkDim,
-        backgroundColor: colors.paper2,
     },
     sdVersusVSText: {
         fontFamily: fonts.display,

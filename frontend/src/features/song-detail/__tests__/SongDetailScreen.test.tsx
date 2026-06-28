@@ -24,9 +24,12 @@ jest.mock("expo-audio", () => ({
     setAudioModeAsync: jest.fn(),
 }))
 
+// Mutable so individual tests can drop below the 10-rating threshold to exercise the locked state.
+let mockRatedCount = 50
 jest.mock("../../auth/AuthContext", () => ({
     useAuth: () => ({
         token: "test-token",
+        profile: { user_stats: { rated_count: mockRatedCount } },
     }),
 }))
 
@@ -93,6 +96,7 @@ const route = {
 
 beforeEach(() => {
     jest.resetAllMocks()
+    mockRatedCount = 50
     mockCreatePlayer.mockReturnValue({
         play: mockPlay,
         pause: jest.fn(),
@@ -106,14 +110,33 @@ beforeEach(() => {
 })
 
 describe("SongDetailScreen", () => {
-    it("opens Reorder from the actions menu", async () => {
+    it("opens Reorder from the actions menu once scores are unlocked", async () => {
         render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
         await act(async () => {})
 
         fireEvent.press(screen.getByLabelText("More actions"))
-        fireEvent.press(screen.getByText("Move in ranking"))
+        fireEvent.press(screen.getByText("Reorder"))
 
         expect(mockNavigate).toHaveBeenCalledWith("Reorder")
+    })
+
+    it("locks Reorder until 10 songs are rated, but keeps Re-rate available", async () => {
+        mockRatedCount = 4 // below the unlock threshold
+
+        render(<SongDetailScreen navigation={navigation as never} route={route as never} />)
+        await act(async () => {})
+
+        fireEvent.press(screen.getByLabelText("More actions"))
+
+        // "Reorder" is shown as LOCKED and does not navigate to Reorder.
+        expect(screen.getByText("LOCKED")).toBeTruthy()
+        fireEvent.press(screen.getByText("Reorder"))
+        expect(mockNavigate).not.toHaveBeenCalledWith("Reorder")
+
+        // Re-rate stays available (the sheet item is the last "Re-rate" in the tree).
+        const reRate = screen.getAllByText("Re-rate")
+        fireEvent.press(reRate[reRate.length - 1])
+        expect(mockNavigate).toHaveBeenCalledWith("BucketSelection", expect.anything())
     })
 
     it("confirms before removing a rating, then returns to Rankings", async () => {

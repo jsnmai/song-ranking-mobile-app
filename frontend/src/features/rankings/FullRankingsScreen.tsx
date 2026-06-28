@@ -6,12 +6,13 @@ import { NativeStackNavigationProp, NativeStackScreenProps } from "@react-naviga
 import Svg, { Path } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
+import { LockIcon } from "../../components/LockIcon"
 import { AppStackParamList, RankingsStackParamList } from "../../navigation/types"
-import { bucketColor, colors, fonts } from "../../theme"
+import { bucketColor, colors, fonts, goldMeterShade, meterSegment } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
 import { BucketName, RankingResponse } from "../comparison/types"
 import { listMyRankings } from "./apiRequests"
-import { useScoresLocked } from "../../hooks/useScoresLocked"
+import { SCORE_UNLOCK_THRESHOLD, useScoresLocked } from "../../hooks/useScoresLocked"
 
 type FullRankingsNavigation = CompositeNavigationProp<
     NativeStackNavigationProp<RankingsStackParamList, "FullRankings">,
@@ -48,6 +49,7 @@ export default function FullRankingsScreen({ navigation }: FullRankingsScreenPro
     const [isFilterModalOpen, setIsFilterModalOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const ratingsToUnlock = Math.max(0, SCORE_UNLOCK_THRESHOLD - rankings.length)
 
     const artistOptions = useMemo(() => {
         const counts = new Map<string, number>()
@@ -101,7 +103,6 @@ export default function FullRankingsScreen({ navigation }: FullRankingsScreenPro
         return true
     }), [artistFilter, bucketFilter, rankings, selectedAlbum])
     const hasDetailFilters = artistFilter !== null || selectedAlbum !== null
-    const hasAnyFilters = bucketFilter !== "all" || hasDetailFilters
 
     const bucketCounts = useMemo(() => ({
         all: rankings.length,
@@ -142,11 +143,6 @@ export default function FullRankingsScreen({ navigation }: FullRankingsScreenPro
     const clearDetailFilters = () => {
         setArtistFilter(null)
         setAlbumFilterKey(null)
-    }
-
-    const clearAllFilters = () => {
-        setBucketFilter("all")
-        clearDetailFilters()
     }
 
     useFocusEffect(
@@ -228,25 +224,67 @@ export default function FullRankingsScreen({ navigation }: FullRankingsScreenPro
                 })}
             </View>
 
+            {scoresLocked && (
+                <View style={styles.lockBanner}>
+                    <View style={styles.lockBannerRow}>
+                        <View style={styles.lockDot}>
+                            <LockIcon color="#fff" size={16} />
+                        </View>
+                        <View style={styles.lockBannerText}>
+                            <Text style={styles.lockBannerTitle}>Order & scores are locked</Text>
+                            <Text style={styles.lockBannerSub}>
+                                Rate {ratingsToUnlock} more {ratingsToUnlock === 1 ? "song" : "songs"} to reveal where each one lands.
+                            </Text>
+                        </View>
+                        <Text style={styles.lockBannerCount}>{rankings.length}/{SCORE_UNLOCK_THRESHOLD}</Text>
+                    </View>
+                    <View style={styles.meter}>
+                        {Array.from({ length: SCORE_UNLOCK_THRESHOLD }).map((_, i) => (
+                            <View
+                                key={i}
+                                style={[
+                                    styles.meterSeg,
+                                    // Filled segments climb the shared gold ramp (muted → bright) like the Feed meter.
+                                    i < rankings.length && { backgroundColor: goldMeterShade(i, SCORE_UNLOCK_THRESHOLD) },
+                                ]}
+                            />
+                        ))}
+                    </View>
+                </View>
+            )}
+
             <View style={styles.summary}>
                 <Text style={styles.summaryText}>
-                    {filteredRankings.length} {filteredRankings.length === 1 ? "SONG" : "SONGS"}
+                    {scoresLocked
+                        ? `${filteredRankings.length} RATED · ORDER HIDDEN`
+                        : `${filteredRankings.length} ${filteredRankings.length === 1 ? "SONG" : "SONGS"}`}
                 </Text>
                 <View style={styles.summaryRight}>
-                    <TouchableOpacity
-                        accessibilityRole="button"
-                        accessibilityLabel="Reorder rankings"
-                        style={styles.reorderPill}
-                        onPress={() => navigation.navigate("Reorder")}
-                    >
-                        <Text style={styles.reorderPillText}>REORDER</Text>
-                        <Svg width={11} height={11} viewBox="0 0 24 24" fill="none"
-                            stroke={colors.ink} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-                            <Path d="M3 9l4-4 4 4M7 5v14M21 15l-4 4-4-4M17 19V5" />
-                        </Svg>
-                    </TouchableOpacity>
-                    {hasAnyFilters && (
-                        <TouchableOpacity accessibilityRole="button" onPress={clearAllFilters}>
+                    {/* Reordering is unavailable while order is hidden — show a LOCKED tag
+                        instead of the Reorder pill, matching the calibrating design. */}
+                    {scoresLocked ? (
+                        <View style={styles.lockedTag}>
+                            <LockIcon color={colors.inkDim} size={11} />
+                            <Text style={styles.lockedTagText}>LOCKED</Text>
+                        </View>
+                    ) : (
+                        <TouchableOpacity
+                            accessibilityRole="button"
+                            accessibilityLabel="Reorder rankings"
+                            style={styles.reorderPill}
+                            onPress={() => navigation.navigate("Reorder")}
+                        >
+                            <Text style={styles.reorderPillText}>REORDER</Text>
+                            <Svg width={11} height={11} viewBox="0 0 24 24" fill="none"
+                                stroke={colors.ink} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                                <Path d="M3 9l4-4 4 4M7 5v14M21 15l-4 4-4-4M17 19V5" />
+                            </Svg>
+                        </TouchableOpacity>
+                    )}
+                    {/* Clear is for the artist/album filters only — the bucket tabs have their
+                        own "All" tab, so selecting Like/Okay/Dislike never surfaces Clear. */}
+                    {hasDetailFilters && (
+                        <TouchableOpacity accessibilityRole="button" onPress={clearDetailFilters}>
                             <Text style={styles.clear}>Clear</Text>
                         </TouchableOpacity>
                     )}
@@ -261,6 +299,9 @@ export default function FullRankingsScreen({ navigation }: FullRankingsScreenPro
                     keyExtractor={(item) => item.id.toString()}
                     contentContainerStyle={styles.listContent}
                     maintainVisibleContentPosition={{ disabled: true }}
+                    ListFooterComponent={scoresLocked ? (
+                        <Text style={styles.lockFooter}>Your sorted order and scores reveal at 10.</Text>
+                    ) : null}
                     renderItem={({ item, index }) => {
                         return (
                             <TouchableOpacity
@@ -285,10 +326,21 @@ export default function FullRankingsScreen({ navigation }: FullRankingsScreenPro
                                     </Text>
                                 </View>
                                 <View style={styles.scoreGroup}>
-                                    <View style={[styles.bucketDot, { backgroundColor: bucketColor(item.bucket) }]} />
-                                    <Text style={[styles.score, { color: bucketColor(item.bucket) }]}>
-                                        {scoresLocked ? "?" : item.score.toFixed(1)}
-                                    </Text>
+                                    {scoresLocked ? (
+                                        <>
+                                            <View style={styles.scoreLockIcon}>
+                                                <LockIcon color={colors.inkDim} size={12} />
+                                            </View>
+                                            <Text style={[styles.score, { color: colors.inkDim }]}>?</Text>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <View style={[styles.bucketDot, { backgroundColor: bucketColor(item.bucket) }]} />
+                                            <Text style={[styles.score, { color: bucketColor(item.bucket) }]}>
+                                                {item.score.toFixed(1)}
+                                            </Text>
+                                        </>
+                                    )}
                                 </View>
                             </TouchableOpacity>
                         )
@@ -493,6 +545,14 @@ const styles = StyleSheet.create({
         letterSpacing: 0.8,
     },
     clear: { fontFamily: fonts.mono, color: colors.clay, fontSize: 10 },
+    lockedTag: { flexDirection: "row", alignItems: "center", gap: 5 },
+    lockedTagText: {
+        fontFamily: fonts.mono,
+        fontSize: 9,
+        color: colors.inkDim,
+        fontWeight: "700",
+        letterSpacing: 0.8,
+    },
     listContent: { paddingBottom: 24 },
     row: {
         flexDirection: "row",
@@ -526,7 +586,50 @@ const styles = StyleSheet.create({
     scoreGroup: { flexDirection: "row", alignItems: "center", gap: 5 },
     bucketDot: { width: 6, height: 6, borderRadius: 3 },
     score: { fontFamily: fonts.display, fontSize: 17, letterSpacing: -0.4 },
-    scoreLockIcon: { width: 22, alignItems: "center", justifyContent: "center" },
+    scoreLockIcon: { alignItems: "center", justifyContent: "center" },
+    lockBanner: {
+        marginHorizontal: 14,
+        marginTop: 12,
+        borderRadius: 16,
+        backgroundColor: colors.navy,
+        padding: 14,
+        overflow: "hidden",
+    },
+    lockBannerRow: { flexDirection: "row", alignItems: "center", gap: 11 },
+    lockDot: {
+        width: 33,
+        height: 33,
+        borderRadius: 999,
+        backgroundColor: "rgba(255,255,255,0.18)",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    lockBannerText: { flex: 1, minWidth: 0 },
+    lockBannerTitle: { fontFamily: fonts.display, fontSize: 14, color: colors.cream },
+    lockBannerSub: {
+        fontFamily: fonts.sans,
+        fontSize: 10.5,
+        color: colors.cdim,
+        marginTop: 2,
+        lineHeight: 14,
+    },
+    lockBannerCount: {
+        fontFamily: fonts.mono,
+        fontSize: 10,
+        color: colors.gold,
+        fontWeight: "700",
+        letterSpacing: 1,
+    },
+    meter: { flexDirection: "row", gap: 4, marginTop: 11 },
+    meterSeg: meterSegment,
+    lockFooter: {
+        fontFamily: fonts.sans,
+        fontSize: 11,
+        color: colors.inkDim,
+        textAlign: "center",
+        marginTop: 14,
+        paddingHorizontal: 24,
+    },
     empty: { color: colors.inkSoft, textAlign: "center", marginTop: 42, fontSize: 14 },
     error: { color: colors.dislike, textAlign: "center", marginBottom: 16 },
     retryButton: { borderWidth: 1, borderColor: colors.ink, borderRadius: 8, padding: 10 },

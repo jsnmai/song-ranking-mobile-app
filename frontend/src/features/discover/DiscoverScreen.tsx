@@ -26,6 +26,7 @@ import Svg, { Circle, Path } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
 import BouncyPressable from "../../components/BouncyPressable"
+import HatchBox from "../../components/HatchBox"
 import { AppStackParamList, DiscoverStackParamList, TabParamList } from "../../navigation/types"
 import { bucketColor, colors, fonts } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
@@ -665,7 +666,7 @@ export default function DiscoverScreen() {
                                                 <Text style={styles.coSignKicker}>FRIENDS' UNANIMOUS 9s</Text>
                                             </View>
                                             <View style={styles.coSignGhostRow}>
-                                                <View style={styles.coSignGhostThumb} />
+                                                <HatchBox size={46} radius={8} tone="light" />
                                                 <View style={styles.coSignGhostLines}>
                                                     <View style={[styles.coSignGhostLine, { width: "72%" }]} />
                                                     <View style={[styles.coSignGhostLine, { width: "46%", opacity: 0.65 }]} />
@@ -771,7 +772,7 @@ export default function DiscoverScreen() {
                                                     </View>
                                                 </View>
                                                 <View style={styles.compatScoreRow}>
-                                                    <Text style={styles.compatPct} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>–%</Text>
+                                                    <Text style={[styles.compatPct, styles.compatPctLocked]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>–%</Text>
                                                     <Text style={styles.compatAlignedLabel}>ALIGNED</Text>
                                                 </View>
                                                 <Text style={styles.compatBody}>Follow friends to see your match.</Text>
@@ -1284,16 +1285,6 @@ const styles = StyleSheet.create({
         gap: 11,
         marginTop: 11,
     },
-    coSignGhostThumb: {
-        width: 46,
-        height: 46,
-        borderRadius: 8,
-        borderWidth: 1.5,
-        borderColor: "rgba(255,255,255,0.5)",
-        borderStyle: "dashed",
-        backgroundColor: "rgba(255,255,255,0.07)",
-        flexShrink: 0,
-    },
     coSignGhostLines: {
         flex: 1,
         gap: 7,
@@ -1444,6 +1435,10 @@ const styles = StyleSheet.create({
         lineHeight: 40,
         letterSpacing: -1,
         flex: 1,
+    },
+    // Locked placeholder "–%" matches the blank bars/lock-circle shade, not bold white.
+    compatPctLocked: {
+        color: "rgba(255,255,255,0.4)",
     },
     compatAlignedLabel: {
         fontFamily: fonts.mono,

@@ -26,23 +26,27 @@ jest.mock("@shopify/flash-list", () => {
     const { View } = require("react-native")
 
     return {
-        FlashList: ({ data, renderItem, keyExtractor }: {
+        FlashList: ({ data, renderItem, keyExtractor, ListFooterComponent }: {
             data: RankingResponse[];
             renderItem: ({ item, index }: { item: RankingResponse; index: number }) => unknown;
             keyExtractor: (item: RankingResponse) => string;
+            ListFooterComponent?: React.ReactNode;
         }) => (
             <View>
                 {data.map((item, index) => (
                     <View key={keyExtractor(item)}>{renderItem({ item, index })}</View>
                 ))}
+                {ListFooterComponent ?? null}
             </View>
         ),
     }
 })
 
+// rated_count >= 10 → scores/positions unlocked, so numbering shows as numbers.
+// Mutable so individual tests can drop below the threshold to exercise the locked state.
+let mockRatedCount = 50
 jest.mock("../../auth/AuthContext", () => ({
-    // rated_count >= 10 → scores/positions unlocked, so numbering shows as numbers.
-    useAuth: () => ({ token: "test-token", profile: { user_stats: { rated_count: 50 } } }),
+    useAuth: () => ({ token: "test-token", profile: { user_stats: { rated_count: mockRatedCount } } }),
 }))
 
 jest.mock("../apiRequests", () => ({
@@ -102,6 +106,7 @@ const navigation = { goBack: mockGoBack, navigate: mockNavigate }
 
 beforeEach(() => {
     jest.resetAllMocks()
+    mockRatedCount = 50
     mockListMyRankings.mockResolvedValue({ rankings, next_cursor: null })
 })
 
@@ -169,19 +174,59 @@ describe("FullRankingsScreen", () => {
         expect(dislikeRanking.position).toBe(3)
     })
 
-    it("shows empty state and clears combined filters", async () => {
+    it("Clear is only for the artist/album filters, not the bucket tabs", async () => {
         render(<FullRankingsScreen navigation={navigation as never} route={{} as never} />)
 
-        fireEvent.press(await screen.findByLabelText("Open rankings filters"))
+        // Selecting a bucket tab alone must NOT surface Clear (it has its own "All" tab).
+        expect(await screen.findByTestId("full-ranking-row-7")).toBeTruthy()
+        expect(screen.queryByText("Clear")).toBeNull()
+        fireEvent.press(screen.getByLabelText("Filter bucket Like"))
+        expect(screen.queryByText("Clear")).toBeNull()
+
+        // Adding an artist filter surfaces Clear...
+        fireEvent.press(screen.getByLabelText("Open rankings filters"))
         fireEvent.press(screen.getByLabelText("Select filter Kendrick Lamar"))
         fireEvent.press(screen.getByText("Done"))
-        fireEvent.press(screen.getByLabelText("Filter bucket Like"))
-
+        // Kendrick (okay bucket) + Like bucket → nothing matches.
         expect(screen.getByText("No songs match these filters.")).toBeTruthy()
+        expect(screen.getByText("Clear")).toBeTruthy()
 
+        // ...and Clear removes only the artist filter — the Like bucket selection persists.
         fireEvent.press(screen.getByText("Clear"))
-        expect(screen.getByTestId("full-ranking-row-7")).toBeTruthy()
-        expect(screen.getByTestId("full-ranking-row-8")).toBeTruthy()
-        expect(screen.getByTestId("full-ranking-row-9")).toBeTruthy()
+        expect(screen.getByTestId("full-ranking-row-7")).toBeTruthy()   // like
+        expect(screen.getByTestId("full-ranking-row-10")).toBeTruthy()  // like
+        expect(screen.queryByTestId("full-ranking-row-8")).toBeNull()   // okay — bucket still Like
+        expect(screen.queryByTestId("full-ranking-row-9")).toBeNull()   // dislike
+        expect(screen.queryByText("Clear")).toBeNull()                  // detail filters gone
+    })
+
+    it("shows the locked banner and greyed '?' rows until 10 songs are rated", async () => {
+        mockRatedCount = 5 // below the unlock threshold → order & scores hidden
+
+        render(<FullRankingsScreen navigation={navigation as never} route={{} as never} />)
+
+        // The "orders and scores are locked" banner with its meter copy.
+        expect(await screen.findByText("Order & scores are locked")).toBeTruthy()
+        expect(screen.getByText("Rate 5 more songs to reveal where each one lands.")).toBeTruthy()
+        expect(screen.getByText("5/10")).toBeTruthy()
+        expect(screen.getByText("Your sorted order and scores reveal at 10.")).toBeTruthy()
+
+        // Reorder is unavailable while locked — a LOCKED tag replaces the Reorder pill.
+        expect(screen.getByText("LOCKED")).toBeTruthy()
+        expect(screen.queryByLabelText("Reorder rankings")).toBeNull()
+
+        // Each row hides its position and score behind "?" (rank "?" + score "?").
+        const row = screen.getByTestId("full-ranking-row-7")
+        expect(within(row).getAllByText("?")).toHaveLength(2)
+        expect(within(row).queryByText("1")).toBeNull()
+        expect(within(row).queryByText("9.0")).toBeNull()
+    })
+
+    it("shows real positions and scores once unlocked (no locked banner)", async () => {
+        render(<FullRankingsScreen navigation={navigation as never} route={{} as never} />)
+
+        expect(await screen.findByTestId("full-ranking-row-7")).toBeTruthy()
+        expect(screen.queryByText("Order & scores are locked")).toBeNull()
+        expect(within(screen.getByTestId("full-ranking-row-7")).getByText("1")).toBeTruthy()
     })
 })

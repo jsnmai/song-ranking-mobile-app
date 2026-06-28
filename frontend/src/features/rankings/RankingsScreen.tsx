@@ -26,8 +26,10 @@ import Svg, { Circle, Defs, LinearGradient, Path, RadialGradient, Rect, Stop } f
 
 import { ApiError } from "../../api/client"
 import { ArrowLabel } from "../../components/Arrow"
+import HatchBox from "../../components/HatchBox"
+import { LockIcon } from "../../components/LockIcon"
 import { AppStackParamList, RankingsStackParamList, TabParamList } from "../../navigation/types"
-import { colors, fonts, bucketColor } from "../../theme"
+import { colors, fonts, bucketColor, goldMeterShade, meterSegment } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
 import { BucketName, RankingAnchorsResponse, RankingResponse } from "../comparison/types"
 import { getMyRankingAnchors, listMyRankings, listMyVersusHistory } from "./apiRequests"
@@ -327,7 +329,10 @@ export default function RankingsScreen() {
                             </Text>
                             <View style={styles.anchorFooter}>
                                 {scoresLocked ? (
-                                    <Text style={[styles.anchorScore, { color: accentColor }]}>?</Text>
+                                    <View style={styles.lockedScore}>
+                                        <LockIcon color={colors.inkDim} size={11} />
+                                        <Text style={[styles.anchorScore, { color: colors.inkDim }]}>?</Text>
+                                    </View>
                                 ) : (
                                     <>
                                         <Text style={[styles.anchorScore, { color: accentColor }]}>
@@ -418,7 +423,8 @@ export default function RankingsScreen() {
                     {Array.from({ length: 10 }).map((_, i) => (
                         <View key={i} style={[
                             styles.buildMeterBar,
-                            i < rated && styles.buildMeterBarFilled,
+                            // Filled segments climb the shared gold ramp (muted → bright) like the Feed meter.
+                            i < rated && { backgroundColor: goldMeterShade(i) },
                         ]} />
                     ))}
                 </View>
@@ -507,9 +513,16 @@ export default function RankingsScreen() {
                                     {item.song.artist.toUpperCase()}
                                 </Text>
                             </View>
-                            <Text style={[styles.rowScore, { color: accent }]}>
-                                {scoresLocked ? "?" : item.score.toFixed(1)}
-                            </Text>
+                            {scoresLocked ? (
+                                <View style={styles.lockedScore}>
+                                    <LockIcon color={colors.inkDim} size={12} />
+                                    <Text style={[styles.rowScore, { color: colors.inkDim }]}>?</Text>
+                                </View>
+                            ) : (
+                                <Text style={[styles.rowScore, { color: accent }]}>
+                                    {item.score.toFixed(1)}
+                                </Text>
+                            )}
                         </TouchableOpacity>
                     )
                 })}
@@ -534,9 +547,9 @@ export default function RankingsScreen() {
             {versusReceipts.length === 0 ? (
                 <View style={[styles.paperCard, styles.versusEmptyCard]}>
                     <View style={styles.versusGhostRow}>
-                        <View style={styles.versusGhostCover} />
+                        <HatchBox size={32} radius={7} tone="dark" />
                         <Text style={styles.versusVS}>VS</Text>
-                        <View style={styles.versusGhostCover} />
+                        <HatchBox size={32} radius={7} tone="dark" />
                     </View>
                     <Text style={styles.versusEmptyTitle}>No match-ups yet</Text>
                     <Text style={styles.versusEmptyBody}>
@@ -678,9 +691,9 @@ export default function RankingsScreen() {
                 </View>
                 <View style={[styles.paperCard, styles.versusEmptyCard]}>
                     <View style={styles.versusGhostRow}>
-                        <View style={styles.versusGhostCover} />
+                        <HatchBox size={32} radius={7} tone="dark" />
                         <Text style={styles.versusVS}>VS</Text>
-                        <View style={styles.versusGhostCover} />
+                        <HatchBox size={32} radius={7} tone="dark" />
                     </View>
                     <Text style={styles.versusEmptyTitle}>No match-ups yet</Text>
                     <Text style={styles.versusEmptyBody}>
@@ -1000,6 +1013,13 @@ const styles = StyleSheet.create({
         letterSpacing: -0.4,
         flexShrink: 0,
     },
+    // Locked score: padlock + greyed "?" sitting where the numeric score goes.
+    lockedScore: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 5,
+        flexShrink: 0,
+    },
     rowLockIcon: {
         width: 28,
         alignItems: "center",
@@ -1016,15 +1036,6 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         gap: 9,
-    },
-    versusGhostCover: {
-        width: 32,
-        height: 32,
-        borderRadius: 7,
-        borderWidth: 1,
-        borderStyle: "dashed",
-        borderColor: colors.inkDim,
-        backgroundColor: colors.paper2,
     },
     versusVS: {
         fontFamily: fonts.display,
@@ -1279,15 +1290,7 @@ const styles = StyleSheet.create({
         gap: 4,
         marginBottom: 10,
     },
-    buildMeterBar: {
-        flex: 1,
-        height: 5,
-        borderRadius: 3,
-        backgroundColor: "rgba(245,238,220,0.15)",
-    },
-    buildMeterBarFilled: {
-        backgroundColor: colors.gold,
-    },
+    buildMeterBar: meterSegment,
     buildFooter: {
         flexDirection: "row",
         alignItems: "center",
