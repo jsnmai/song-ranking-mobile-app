@@ -22,6 +22,7 @@ import Svg, { Circle, Ellipse, Path, Polygon, Polyline } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
 import { ArrowLabel } from "../../components/Arrow"
+import BouncyPressable from "../../components/BouncyPressable"
 import { AppStackParamList, FeedStackParamList, TabParamList } from "../../navigation/types"
 import { colors, fonts, bucketColor } from "../../theme"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
@@ -650,7 +651,7 @@ export default function FeedScreen() {
     const renderRerateRadar = () => {
         if (rerateRadar === null) {
             return (
-                <View style={[styles.fullCell, { height: 150, backgroundColor: colors.navy }]} testID="feed-rerate-radar-locked">
+                <BouncyPressable style={[styles.fullCell, { height: 150, backgroundColor: colors.navy }]} testID="feed-rerate-radar-locked">
                     <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
                         <View style={styles.fullCellTop}>
                             <View style={styles.goldPill}><Text style={styles.goldPillText}>Re-rate radar</Text></View>
@@ -685,7 +686,7 @@ export default function FeedScreen() {
                             <Text style={[styles.lockCardDesc, { flex: 1, color: "rgba(255,255,255,0.55)" }]}>When a friend changes a score</Text>
                         </View>
                     </View>
-                </View>
+                </BouncyPressable>
             )
         }
 
@@ -767,7 +768,7 @@ export default function FeedScreen() {
     const renderConsensus = () => {
         if (consensus === null) {
             return (
-                <View style={[styles.fullCell, { height: 138, backgroundColor: colors.sky }]} testID="feed-consensus-locked">
+                <BouncyPressable style={[styles.fullCell, { height: 138, backgroundColor: colors.sky }]} testID="feed-consensus-locked">
                     <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
                         <View style={styles.fullCellTop}>
                             <View style={styles.lightPill}><Text style={styles.lightPillText}>Consensus</Text></View>
@@ -789,7 +790,7 @@ export default function FeedScreen() {
                             <View style={[styles.skBar, { width: "62%", height: 9, backgroundColor: "rgba(255,255,255,0.3)", marginTop: 5 }]} />
                         </View>
                     </View>
-                </View>
+                </BouncyPressable>
             )
         }
 
@@ -835,7 +836,7 @@ export default function FeedScreen() {
     const renderDisagreement = () => {
         if (disagreement === null) {
             return (
-                <View style={styles.fullDisagreeCard} testID="feed-disagreement-locked">
+                <BouncyPressable style={styles.fullDisagreeCard} testID="feed-disagreement-locked">
                     <View style={styles.fullCellTop}>
                         <View style={styles.butterPill}><Text style={styles.butterPillText}>Disagreement spotlight</Text></View>
                         <View style={styles.lockTagRow}>
@@ -861,7 +862,7 @@ export default function FeedScreen() {
                             </View>
                         </View>
                     </View>
-                </View>
+                </BouncyPressable>
             )
         }
 
@@ -909,7 +910,7 @@ export default function FeedScreen() {
     const renderSplitDecision = () => {
         if (splitDecision === null) {
             return (
-                <View style={[styles.fullCell, { height: 138, backgroundColor: "#000" }]} testID="feed-split-locked">
+                <BouncyPressable style={[styles.fullCell, { height: 138, backgroundColor: "#000" }]} testID="feed-split-locked">
                     <Svg style={StyleSheet.absoluteFill} viewBox="0 0 100 100" preserveAspectRatio="none">
                         <Polygon points="0,0 100,0 0,100" fill={colors.plum} />
                         <Polygon points="100,0 100,100 0,100" fill={colors.accent} />
@@ -928,7 +929,7 @@ export default function FeedScreen() {
                             <Text style={styles.fullLockHint}>When two people you follow split on a song</Text>
                         </View>
                     </View>
-                </View>
+                </BouncyPressable>
             )
         }
 
@@ -986,7 +987,7 @@ export default function FeedScreen() {
                 {renderRerateRadar()}
 
                 {/* Match Moment — locked, 150px, mint */}
-                <View style={[styles.fullCell, { height: 150, backgroundColor: colors.mint }]}>
+                <BouncyPressable style={[styles.fullCell, { height: 150, backgroundColor: colors.mint }]}>
                     <View style={styles.matchMomentBlob} />
                     <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
                         <View style={styles.fullCellTop}>
@@ -1011,7 +1012,7 @@ export default function FeedScreen() {
                             <Text style={[styles.lockCardDesc, { flex: 1 }]}>Head-to-head picks from your circle</Text>
                         </View>
                     </View>
-                </View>
+                </BouncyPressable>
             </View>
 
             {renderDisagreement()}

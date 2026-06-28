@@ -25,6 +25,7 @@ import * as SecureStore from "expo-secure-store"
 import Svg, { Circle, Path } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
+import BouncyPressable from "../../components/BouncyPressable"
 import { AppStackParamList, DiscoverStackParamList, TabParamList } from "../../navigation/types"
 import { bucketColor, colors, fonts } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
@@ -654,7 +655,7 @@ export default function DiscoverScreen() {
                                         ))}
                                     </>
                                 ) : (
-                                    <View style={styles.coSignLockedCard}>
+                                    <BouncyPressable style={styles.coSignLockedCard}>
                                         {/* Left: pill + kicker, then ghost row */}
                                         <View style={styles.coSignLockedLeft}>
                                             <View style={styles.coSignLockedHeader}>
@@ -679,7 +680,7 @@ export default function DiscoverScreen() {
                                                     strokeLinecap="round" strokeLinejoin="round" />
                                             </Svg>
                                         </View>
-                                    </View>
+                                    </BouncyPressable>
                                 )}
 
                                 {/* Trending in your circle — live (top song this week) once the circle backend returns items, else locked */}
@@ -708,7 +709,7 @@ export default function DiscoverScreen() {
                                         </View>
                                     </TouchableOpacity>
                                 ) : (
-                                    <View style={styles.trendingCard}>
+                                    <BouncyPressable style={styles.trendingCard}>
                                         <Text style={styles.trendingKicker}>TRENDING IN YOUR CIRCLE</Text>
                                         <View style={styles.trendingRow}>
                                             <View style={styles.trendingLockCircle}>
@@ -726,12 +727,12 @@ export default function DiscoverScreen() {
                                             </View>
                                             <Text style={styles.trendingCounter}>{Math.min(followingCount, 3)}/3</Text>
                                         </View>
-                                    </View>
+                                    </BouncyPressable>
                                 )}
 
                                 {/* 2-col: Compatibility (live or locked) + Most-Rated (locked) */}
                                 <View style={styles.twoColRow}>
-                                    <View style={[styles.twoColCard, styles.compatCard]}>
+                                    <BouncyPressable style={[styles.twoColCard, styles.compatCard]}>
                                         <View style={styles.compatPill}>
                                             <Text style={styles.compatPillText}>Compatibility</Text>
                                         </View>
@@ -776,7 +777,7 @@ export default function DiscoverScreen() {
                                                 <Text style={styles.compatBody}>Follow friends to see your match.</Text>
                                             </>
                                         )}
-                                    </View>
+                                    </BouncyPressable>
 
                                     {mostRated.length > 0 ? (
                                         <TouchableOpacity
@@ -807,7 +808,7 @@ export default function DiscoverScreen() {
                                             </View>
                                         </TouchableOpacity>
                                     ) : (
-                                        <View style={[styles.twoColCard, styles.circleCard]}>
+                                        <BouncyPressable style={[styles.twoColCard, styles.circleCard]}>
                                             <View style={styles.circlePill}>
                                                 <Text style={styles.circlePillText}>Most-rated · circle</Text>
                                             </View>
@@ -828,7 +829,7 @@ export default function DiscoverScreen() {
                                                 <Text style={styles.circleCountNum}>—</Text>
                                                 <Text style={styles.circleCountLabel}>TOTAL RATINGS</Text>
                                             </View>
-                                        </View>
+                                        </BouncyPressable>
                                     )}
                                 </View>
 
@@ -836,7 +837,7 @@ export default function DiscoverScreen() {
                                 <View style={styles.discoverSectionRow}>
                                     <Text style={styles.discoverSectionLabel}>CURATED LISTS</Text>
                                 </View>
-                                <View style={styles.curatedCard}>
+                                <BouncyPressable style={styles.curatedCard}>
                                     <View style={styles.curatedLockWrap}>
                                         <Svg width={17} height={17} viewBox="0 0 24 24" fill="none">
                                             <Path d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4"
@@ -851,7 +852,7 @@ export default function DiscoverScreen() {
                                         </Text>
                                     </View>
                                     <Text style={styles.trendingCounter}>{Math.min(ratedCount, 30)}/30</Text>
-                                </View>
+                                </BouncyPressable>
                             </>
                         )}
                     </>
