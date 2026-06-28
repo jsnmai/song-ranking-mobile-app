@@ -24,7 +24,7 @@ import Animated, {
     withTiming,
 } from "react-native-reanimated"
 import { FlashList, FlashListRef } from "@shopify/flash-list"
-import { CompositeNavigationProp, useNavigation, useScrollToTop } from "@react-navigation/native"
+import { CompositeNavigationProp, useFocusEffect, useNavigation, useScrollToTop } from "@react-navigation/native"
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import Svg, { Circle, Ellipse, Path, Polygon, Polyline } from "react-native-svg"
@@ -32,6 +32,7 @@ import Svg, { Circle, Ellipse, Path, Polygon, Polyline } from "react-native-svg"
 import { ApiError } from "../../api/client"
 import { ArrowLabel } from "../../components/Arrow"
 import BouncyPressable from "../../components/BouncyPressable"
+import EndOfListCap from "../../components/EndOfListCap"
 import HatchBox from "../../components/HatchBox"
 import { PulsingMeterTick } from "../../components/PulsingMeterTick"
 import { AppStackParamList, FeedStackParamList, TabParamList } from "../../navigation/types"
@@ -39,6 +40,7 @@ import { colors, fonts, bucketColor, goldMeterShade, meterSegment, avatarColorFo
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
 import ActivityLikeButton from "../activity/ActivityLikeButton"
 import { updateLikePrivacy } from "../activity/apiRequests"
+import { getUnreadCount } from "../notifications/apiRequests"
 import OwnActivitySheet from "../activity/OwnActivitySheet"
 import { useAuth } from "../auth/AuthContext"
 import { blockUser } from "../profile/apiRequests"
@@ -208,6 +210,16 @@ function SearchIcon() {
     )
 }
 
+function BellIcon() {
+    return (
+        <Svg width={21} height={21} viewBox="0 0 24 24" fill="none"
+            stroke={colors.ink} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
+            <Path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+            <Path d="M13.7 21a2 2 0 0 1-3.4 0" />
+        </Svg>
+    )
+}
+
 export default function FeedScreen() {
     const navigation = useNavigation<FeedNavigation>()
     const insets = useSafeAreaInsets()
@@ -243,6 +255,17 @@ export default function FeedScreen() {
     const [matchMoment, setMatchMoment] = useState<MatchMomentModule | null>(null)
     const [matchMomentOpening, setMatchMomentOpening] = useState(false)
     const listRef = useRef<FlashListRef<FeedEvent>>(null)
+    // Unread notifications badge on the header bell. Refetched whenever the Feed regains focus
+    // (e.g. returning from the Notifications screen, where they get marked read).
+    const [unreadCount, setUnreadCount] = useState(0)
+    useFocusEffect(
+        useCallback(() => {
+            if (!token) return
+            getUnreadCount(token)
+                .then((res) => setUnreadCount(res.unread_count))
+                .catch(() => {})
+        }, [token]),
+    )
 
     // Score reveal (your own scores) stays gated on rated >= 10 — a separate calibration gate.
     const gettingStartedComplete = (profile?.user_stats?.rated_count ?? 0) >= 10
@@ -869,7 +892,8 @@ export default function FeedScreen() {
                 testID={`feed-rerate-radar-${r.rating_event_id}`}
             >
                 <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
-                    <View style={styles.fullCellTop}>
+                    {/* minHeight matches Match Moment's actor avatar so both cards' pills line up. */}
+                    <View style={[styles.fullCellTop, { minHeight: 26 }]}>
                         <View style={styles.goldPill}><Text style={styles.goldPillText}>Re-rate radar</Text></View>
                     </View>
                     {/* Standalone flex child so space-between gives the handle equal room above and below. */}
@@ -1171,7 +1195,8 @@ export default function FeedScreen() {
             >
                 <View style={styles.matchMomentBlob} />
                 <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
-                    <View style={styles.fullCellTop}>
+                    {/* minHeight reserves the avatar's height so the pill lines up with the Re-rate card's pill. */}
+                    <View style={[styles.fullCellTop, { minHeight: 26 }]}>
                         <View style={styles.lightPill}><Text style={styles.lightPillText}>Match moment</Text></View>
                         {/* Actor avatar, top right */}
                         <View style={[styles.mmActorAvatar, { backgroundColor: aColor }]}>
@@ -1492,13 +1517,28 @@ export default function FeedScreen() {
                         <Text style={styles.kicker}>HOME · {dateLabel}</Text>
                         <Text style={styles.heading}>LISTn</Text>
                     </View>
-                    <TouchableOpacity
-                        style={styles.avatarCircle}
-                        onPress={() => navigation.navigate("Profile")}
-                        accessibilityLabel="Your profile"
-                    >
-                        <Text style={styles.avatarLetter}>{avatarInitial}</Text>
-                    </TouchableOpacity>
+                    <View style={styles.headerRight}>
+                        <TouchableOpacity
+                            style={styles.bellBtn}
+                            onPress={() => navigation.navigate("Notifications")}
+                            accessibilityLabel="Notifications"
+                            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                        >
+                            <BellIcon />
+                            {unreadCount > 0 && (
+                                <View style={styles.bellBadge}>
+                                    <Text style={styles.bellBadgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
+                                </View>
+                            )}
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.avatarCircle}
+                            onPress={() => navigation.navigate("Profile")}
+                            accessibilityLabel="Your profile"
+                        >
+                            <Text style={styles.avatarLetter}>{avatarInitial}</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
 
                 {/* Search bar — taps into Discover */}
@@ -1741,8 +1781,12 @@ export default function FeedScreen() {
     }
 
     const renderFooter = () => {
-        if (!isLoadingMore) return null
-        return <ActivityIndicator color={colors.accent} style={styles.footerSpinner} />
+        if (isLoadingMore) return <ActivityIndicator color={colors.accent} style={styles.footerSpinner} />
+        // Reached the last page — cap the feed off so the bottom feels intentional.
+        if (nextCursor === null && events.length > 0) {
+            return <EndOfListCap label="You're all caught up" />
+        }
+        return null
     }
 
     // Other users' activity options: report a note (when present) or block the user.
@@ -1825,13 +1869,28 @@ export default function FeedScreen() {
                         <Text style={styles.kicker}>{welcomeKicker}</Text>
                         <Text style={styles.heading}>LISTn</Text>
                     </View>
-                    <TouchableOpacity
-                        style={styles.avatarCircle}
-                        onPress={() => navigation.navigate("Profile")}
-                        accessibilityLabel="Your profile"
-                    >
-                        <Text style={styles.avatarLetter}>{avatarInitial}</Text>
-                    </TouchableOpacity>
+                    <View style={styles.headerRight}>
+                        <TouchableOpacity
+                            style={styles.bellBtn}
+                            onPress={() => navigation.navigate("Notifications")}
+                            accessibilityLabel="Notifications"
+                            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                        >
+                            <BellIcon />
+                            {unreadCount > 0 && (
+                                <View style={styles.bellBadge}>
+                                    <Text style={styles.bellBadgeText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
+                                </View>
+                            )}
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.avatarCircle}
+                            onPress={() => navigation.navigate("Profile")}
+                            accessibilityLabel="Your profile"
+                        >
+                            <Text style={styles.avatarLetter}>{avatarInitial}</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
 
                 {/* Search bar */}
@@ -1952,6 +2011,36 @@ const styles = StyleSheet.create({
         justifyContent: "space-between",
     },
     headerLeft: {},
+    headerRight: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 14,
+    },
+    bellBtn: {
+        marginTop: 4,
+        // Anchor for the unread badge.
+        position: "relative",
+    },
+    bellBadge: {
+        position: "absolute",
+        top: -5,
+        right: -6,
+        minWidth: 16,
+        height: 16,
+        borderRadius: 8,
+        paddingHorizontal: 4,
+        backgroundColor: colors.accent,
+        alignItems: "center",
+        justifyContent: "center",
+        borderWidth: 1.5,
+        borderColor: colors.bg,
+    },
+    bellBadgeText: {
+        color: "#fff",
+        fontFamily: fonts.mono,
+        fontSize: 9,
+        fontWeight: "700",
+    },
     kicker: {
         fontFamily: fonts.mono,
         color: colors.inkDim,
