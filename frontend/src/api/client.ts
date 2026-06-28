@@ -1,7 +1,15 @@
 // Configured wrapper for 'fetch' function used by every API call in the app.
 // All requests go through request() — base URL, headers, and error handling live here once.
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000"  // ?? means use left side if it has a value, otherwise use right side
+// Production API base. Public URL (no secret) — also mirrored in .env.production / EAS env vars.
+const PROD_API_URL = "https://song-ranking-mobile-app-production.up.railway.app"
+// EXPO_PUBLIC_* inlining has proven unreliable in locally-bundled EAS Update / export bundles
+// (the value comes through as undefined, so we'd fall back to localhost and every request fails on
+// a real device). React Native's __DEV__ flag is always set correctly by Metro — true on the dev
+// server, false in production builds and OTA update bundles — so use it to choose the API. An
+// explicit EXPO_PUBLIC_API_URL still wins when it actually inlines (e.g. clean EAS Build).
+const BASE_URL =
+    process.env.EXPO_PUBLIC_API_URL ?? (__DEV__ ? "http://localhost:8000" : PROD_API_URL)
 
 type ErrorResponseBody = {
     detail?: unknown;
