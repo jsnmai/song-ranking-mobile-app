@@ -80,6 +80,13 @@ def _follow(db: Session, follower_id: int, following_id: int) -> None:
     db.commit()
 
 
+def _mutual_follow(db: Session, a_id: int, b_id: int) -> None:
+    """Make a_id and b_id mutual follows — i.e. circle members, the default 'friends' scope."""
+    db.add(Follow(follower_id=a_id, following_id=b_id))
+    db.add(Follow(follower_id=b_id, following_id=a_id))
+    db.commit()
+
+
 def _block(db: Session, blocker_id: int, blocked_id: int) -> None:
     """Create a block relationship directly."""
     db.add(Block(blocker_id=blocker_id, blocked_id=blocked_id))
@@ -121,6 +128,7 @@ def test_returns_compatible_user_with_correct_fields(
         shared_top_artists=["Frank Ocean"],
         shared_genres=["R&B"],
     )
+    _mutual_follow(db_session, uid_a, uid_b)
 
     resp = client.get(
         "/api/v1/profile/me/most-compatible",
@@ -153,6 +161,8 @@ def test_sorted_by_score_descending(
     _, uid_c = _register(client, "mc_sort_c@example.com", "mc_sort_c")
     _seed_snapshot(db_session, uid_a, uid_b, similarity_score=0.60)
     _seed_snapshot(db_session, uid_a, uid_c, similarity_score=0.90)
+    _mutual_follow(db_session, uid_a, uid_b)
+    _mutual_follow(db_session, uid_a, uid_c)
 
     resp = client.get(
         "/api/v1/profile/me/most-compatible",
@@ -202,6 +212,7 @@ def test_excludes_low_overlap_snapshots(
     token_a, uid_a = _register(client, "mc_low_a@example.com", "mc_low_a")
     _, uid_b = _register(client, "mc_low_b@example.com", "mc_low_b")
     _seed_snapshot(db_session, uid_a, uid_b, shared_song_count=4)
+    _mutual_follow(db_session, uid_a, uid_b)  # circle member, but too little overlap → excluded
 
     resp = client.get(
         "/api/v1/profile/me/most-compatible",
@@ -219,6 +230,7 @@ def test_includes_exactly_5_shared_songs(
     token_a, uid_a = _register(client, "mc_five_a@example.com", "mc_five_a")
     _, uid_b = _register(client, "mc_five_b@example.com", "mc_five_b")
     _seed_snapshot(db_session, uid_a, uid_b, shared_song_count=5)
+    _mutual_follow(db_session, uid_a, uid_b)
 
     resp = client.get(
         "/api/v1/profile/me/most-compatible",
@@ -241,7 +253,8 @@ def test_excludes_user_blocked_by_viewer(
     token_a, uid_a = _register(client, "mc_blk1_a@example.com", "mc_blk1_a")
     _, uid_b = _register(client, "mc_blk1_b@example.com", "mc_blk1_b")
     _seed_snapshot(db_session, uid_a, uid_b)
-    _block(db_session, uid_a, uid_b)
+    _mutual_follow(db_session, uid_a, uid_b)  # a circle member...
+    _block(db_session, uid_a, uid_b)          # ...but blocked → excluded
 
     resp = client.get(
         "/api/v1/profile/me/most-compatible",
@@ -259,7 +272,8 @@ def test_excludes_user_who_blocked_viewer(
     token_a, uid_a = _register(client, "mc_blk2_a@example.com", "mc_blk2_a")
     _, uid_b = _register(client, "mc_blk2_b@example.com", "mc_blk2_b")
     _seed_snapshot(db_session, uid_a, uid_b)
-    _block(db_session, uid_b, uid_a)
+    _mutual_follow(db_session, uid_a, uid_b)  # a circle member...
+    _block(db_session, uid_b, uid_a)          # ...but they blocked the viewer → excluded
 
     resp = client.get(
         "/api/v1/profile/me/most-compatible",
@@ -282,7 +296,8 @@ def test_excludes_private_users(
     token_a, uid_a = _register(client, "mc_priv_a@example.com", "mc_priv_a")
     _, uid_b = _register(client, "mc_priv_b@example.com", "mc_priv_b")
     _seed_snapshot(db_session, uid_a, uid_b)
-    _make_private(db_session, uid_b)
+    _mutual_follow(db_session, uid_a, uid_b)  # mutual follow...
+    _make_private(db_session, uid_b)          # ...but only_me visibility → excluded
 
     resp = client.get(
         "/api/v1/profile/me/most-compatible",
@@ -332,11 +347,13 @@ def test_includes_friends_only_with_mutual_follow(
     assert "mc_mut_b" in usernames
 
 
-def test_includes_public_users_without_follow(
+def test_friends_scope_excludes_public_without_follow(
     client: TestClient,
     db_session: Session,
 ) -> None:
-    """Public profiles appear in the list without any follow relationship."""
+    """Default (friends) scope is the mutual-follow circle: a public user the viewer does NOT
+    mutually follow is excluded, even with a high-overlap snapshot. They'd surface only in the
+    premium global scope (see the gate test)."""
     token_a, uid_a = _register(client, "mc_pub_a@example.com", "mc_pub_a")
     _, uid_b = _register(client, "mc_pub_b@example.com", "mc_pub_b")
     _seed_snapshot(db_session, uid_a, uid_b)
@@ -346,8 +363,9 @@ def test_includes_public_users_without_follow(
         headers={"Authorization": f"Bearer {token_a}"},
     )
 
+    assert resp.status_code == 200
     usernames = [u["username"] for u in resp.json()["users"]]
-    assert "mc_pub_b" in usernames
+    assert "mc_pub_b" not in usernames
 
 
 # ---------------------------------------------------------------------------
@@ -366,6 +384,7 @@ def test_finds_snapshot_when_viewer_is_user_b(
     assert uid_b < uid_a
 
     _seed_snapshot(db_session, uid_a, uid_b, similarity_score=0.72)
+    _mutual_follow(db_session, uid_a, uid_b)
 
     resp = client.get(
         "/api/v1/profile/me/most-compatible",
@@ -397,6 +416,7 @@ def test_explanation_uses_artist_when_available(
         shared_top_artists=["SZA"],
         shared_genres=["R&B"],
     )
+    _mutual_follow(db_session, uid_a, uid_b)
 
     resp = client.get(
         "/api/v1/profile/me/most-compatible",
@@ -405,3 +425,57 @@ def test_explanation_uses_artist_when_available(
 
     explanation = resp.json()["users"][0]["explanation"]
     assert "SZA" in explanation
+
+
+# ---------------------------------------------------------------------------
+# Scope + premium gate
+# ---------------------------------------------------------------------------
+
+
+def test_friends_scope_is_the_default(client: TestClient, db_session: Session) -> None:
+    """Omitting scope behaves identically to scope=friends (the mutual-follow circle)."""
+    token_a, uid_a = _register(client, "mc_def_a@example.com", "mc_def_a")
+    _, uid_b = _register(client, "mc_def_b@example.com", "mc_def_b")
+    _seed_snapshot(db_session, uid_a, uid_b)
+    _mutual_follow(db_session, uid_a, uid_b)
+
+    default_resp = client.get(
+        "/api/v1/profile/me/most-compatible",
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    explicit_resp = client.get(
+        "/api/v1/profile/me/most-compatible",
+        params={"scope": "friends"},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+
+    assert default_resp.status_code == 200
+    assert default_resp.json() == explicit_resp.json()
+    assert "mc_def_b" in [u["username"] for u in default_resp.json()["users"]]
+
+
+def test_global_scope_is_premium_gated(client: TestClient) -> None:
+    """The global (whole-app) scope is premium-only. With no payment system yet, the entitlement
+    stub always returns False, so global always 403s. See services/entitlements.py (# PAYWALL)."""
+    token, _ = _register(client, "mc_glob@example.com", "mc_glob")
+
+    resp = client.get(
+        "/api/v1/profile/me/most-compatible",
+        params={"scope": "global"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert resp.status_code == 403
+
+
+def test_invalid_scope_rejected(client: TestClient) -> None:
+    """An unknown scope value is rejected by request validation."""
+    token, _ = _register(client, "mc_badscope@example.com", "mc_badscope")
+
+    resp = client.get(
+        "/api/v1/profile/me/most-compatible",
+        params={"scope": "everyone"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert resp.status_code == 422

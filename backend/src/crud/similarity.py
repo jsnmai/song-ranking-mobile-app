@@ -5,7 +5,10 @@ from datetime import datetime, timezone
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
-from src.crud.social_access import visible_taste_owner_predicate
+from src.crud.social_access import (
+    circle_visible_taste_owner_predicate,
+    visible_taste_owner_predicate,
+)
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.song import Song
@@ -169,18 +172,29 @@ def upsert_snapshot(
 def get_most_compatible_users(
     db: Session,
     viewer_id: int,
+    *,
+    scope: str = "friends",
 ) -> list[MostCompatibleRow]:
     """
     Return users most taste-compatible with viewer_id, sorted by score descending.
 
-    Applies visibility and block rules via visible_taste_owner_predicate so callers
-    never see private, blocked, or deleted users in the result.
+    `scope="friends"` (default) restricts results to the viewer's mutual-follow circle via
+    `circle_visible_taste_owner_predicate`; `scope="global"` opens it to every visible user via
+    `visible_taste_owner_predicate`. The global scope is the premium-gated view (see the endpoint /
+    PAYWALL note); the candidate snapshots themselves are computed globally regardless of scope, so
+    switching scope only changes which of the already-computed matches are surfaced. Both scopes
+    still exclude private, blocked, deleted, and self.
     """
     # Snapshots use canonical ordering (user_a_id < user_b_id), so the "other"
     # user is on either side depending on which ID is smaller.
     other_id = case(
         (UserSimilaritySnapshot.user_a_id == viewer_id, UserSimilaritySnapshot.user_b_id),
         else_=UserSimilaritySnapshot.user_a_id,
+    )
+    owner_predicate = (
+        circle_visible_taste_owner_predicate(viewer_id, other_id)
+        if scope == "friends"
+        else visible_taste_owner_predicate(viewer_id, other_id, include_self=False)
     )
     rows = db.execute(
         select(
@@ -202,7 +216,7 @@ def get_most_compatible_users(
         )
         .where(UserSimilaritySnapshot.shared_song_count >= MOST_COMPATIBLE_MIN_SHARED)
         .where(UserSimilaritySnapshot.algorithm_version == _MOST_COMPATIBLE_ALGORITHM)
-        .where(visible_taste_owner_predicate(viewer_id, other_id, include_self=False))
+        .where(owner_predicate)
         .order_by(UserSimilaritySnapshot.similarity_score.desc())
         .limit(MOST_COMPATIBLE_LIMIT)
     ).all()

@@ -1,7 +1,9 @@
 # HTTP layer for profile endpoints.
 # Routers are intentionally thin: parse the request, call the service, return the result.
 # All business logic lives in src/services/profile.py.
-from fastapi import APIRouter, Depends, Query, Request
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
@@ -45,6 +47,7 @@ from src.services.profile import (
     update_my_profile,
     update_my_visibility,
 )
+from src.services.entitlements import viewer_has_premium
 from src.services.profile_modules import (
     get_my_recent_ratings,
     get_profile_ranking_anchors_by_username,
@@ -306,13 +309,24 @@ def profile_blocked(
 @limiter.limit("60/minute")
 def my_most_compatible(
     request: Request,
+    scope: Literal["friends", "global"] = Query("friends"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> MostCompatibleResponse:
-    """Return users most taste-compatible with the current user, sorted by score."""
+    """Most taste-compatible users. `scope=friends` (default, free) is the mutual-follow circle;
+    `scope=global` is the premium whole-app "taste twins" view."""
+    # PAYWALL: the global view is premium-only. `viewer_has_premium` is a stub that's always False
+    # until in-app purchases ship, so global always 403s for now and the client shows the locked
+    # upgrade teaser. The friends scope is always free. See services/entitlements.py.
+    if scope == "global" and not viewer_has_premium(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Global compatibility is a premium feature.",
+        )
     return get_most_compatible(
         db,
         viewer_id=current_user.id,
+        scope=scope,
     )
 
 

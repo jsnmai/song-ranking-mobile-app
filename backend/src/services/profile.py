@@ -798,9 +798,15 @@ def get_compatibility_for_username(
 def get_most_compatible(
     db: Session,
     viewer_id: int,
+    *,
+    scope: str = "friends",
 ) -> MostCompatibleResponse:
-    """Return users most taste-compatible with the current user, sorted by score."""
-    rows = get_most_compatible_users(db, viewer_id)
+    """Return users most taste-compatible with the current user, sorted by score.
+
+    `scope="friends"` (default, free) limits to the mutual-follow circle; `scope="global"` is the
+    premium "taste twins across the whole app" view, gated at the endpoint (see the PAYWALL note).
+    """
+    rows = get_most_compatible_users(db, viewer_id, scope=scope)
     return MostCompatibleResponse(
         users=[
             MostCompatibleItem(

@@ -108,7 +108,7 @@ describe("MostCompatibleScreen", () => {
         render(<MostCompatibleScreen navigation={navigationProp} route={routeProp} />)
 
         await waitFor(() => {
-            expect(screen.getByText("Rate more songs to find compatible listeners.")).toBeTruthy()
+            expect(screen.getByText("Follow friends and rate more songs to see taste matches.")).toBeTruthy()
         })
     })
 

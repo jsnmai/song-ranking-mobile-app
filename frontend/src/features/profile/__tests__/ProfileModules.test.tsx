@@ -446,7 +446,7 @@ describe("ProfileScreen profile modules", () => {
         render(<ProfileScreen />)
 
         await waitFor(() => {
-            expect(screen.getByText("Follow friends and rate to see taste matches.")).toBeTruthy()
+            expect(screen.getByText("Follow friends and rate more songs to see taste matches.")).toBeTruthy()
         })
     })
 })

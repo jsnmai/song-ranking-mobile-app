@@ -37,7 +37,7 @@ export default function MostCompatibleModule({ users, isLoading, onUserPress, on
             </View>
             {isLoading && <ActivityIndicator color={colors.clay} style={styles.loader} />}
             {!isLoading && users !== null && users.length === 0 && (
-                <Text style={styles.empty}>Rate more songs to find compatible listeners.</Text>
+                <Text style={styles.empty} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>Follow friends and rate more songs to see taste matches.</Text>
             )}
             {!isLoading && preview.map((user, i) => {
                 const pct = Math.min(100, Math.max(0, Math.round(user.similarity_score * 100)))
