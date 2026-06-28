@@ -5,6 +5,7 @@ import {
 } from "react-native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { useFocusEffect, useNavigation, useScrollToTop } from "@react-navigation/native"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 import Svg, { Circle, Line, Path } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
@@ -23,6 +24,7 @@ import {
 import {
     AuxstrologyResponse, MostCompatibleItem, Profile, RecentRatingItem, TasteProfileResponse,
 } from "./types"
+import EndOfListCap from "../../components/EndOfListCap"
 import MostCompatibleModule from "./MostCompatibleModule"
 import { OwnStreakChip } from "./StreakBadge"
 
@@ -57,6 +59,7 @@ const STAR_DOTS = [
 
 export default function ProfileScreen() {
     const navigation = useNavigation<ProfileNavigationProp>()
+    const insets = useSafeAreaInsets()
     const { token } = useAuth()
     // Re-tapping the "You" tab while scrolled down jumps back to the top.
     const scrollRef = useRef<ScrollView>(null)
@@ -262,7 +265,10 @@ export default function ProfileScreen() {
         <ScrollView
             ref={scrollRef}
             style={styles.container}
-            contentContainerStyle={styles.contentContainer}
+            // Clear the raised center FAB by the same margin as the Feed: the cap (8) plus the
+            // content view's own bottom padding (8) plus this leaves insets.bottom + 108 under the
+            // last line, matching FeedScreen's listContent override below.
+            contentContainerStyle={[styles.contentContainer, { paddingBottom: insets.bottom + 92 }]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
         >
@@ -621,6 +627,7 @@ export default function ProfileScreen() {
                                 </RatingActivityCard>
                             ))}
                             </View>
+                            <EndOfListCap label="End of your activity" />
                         </View>
                     )}
                 </View>

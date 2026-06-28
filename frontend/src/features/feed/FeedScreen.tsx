@@ -1948,7 +1948,9 @@ export default function FeedScreen() {
                 ListHeaderComponent={renderListHeader()}
                 ListFooterComponent={renderFooter}
                 maintainVisibleContentPosition={{ disabled: true }}
-                contentContainerStyle={styles.listContent}
+                // Clear the raised center FAB and the home indicator. With the cap's own 8px bottom
+                // pad this leaves insets.bottom + 108 under the last line, matching ProfileScreen.
+                contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
                 ItemSeparatorComponent={null}
             />
             {renderOtherOptionsMenu()}
@@ -2472,9 +2474,6 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     // ── Misc ─────────────────────────────────────────────────────────────
-    listContent: {
-        paddingBottom: 96,
-    },
     footerSpinner: { marginVertical: 18 },
     btn: {
         paddingVertical: 12,
