@@ -55,6 +55,32 @@ export function bucketColor(bucket: string): string {
     return colors.inkDim
 }
 
+// Progress-meter gold ramp: a filled segment's colour climbs from a muted gold (first segment) to a
+// bright luminous gold (last), so a segmented "rate to unlock" bar shines up as it fills. `index` is
+// 0-based; `total` is the segment count (default 10). Shared by the Feed taste meter and the Rankings
+// build / lock meters so every progress bar reads the same.
+const GOLD_RAMP_DIM = [193, 141, 48]     // #c18d30 — muted gold at the start
+const GOLD_RAMP_BRIGHT = [255, 228, 150] // #ffe496 — bright gold at the top
+export function goldMeterShade(index: number, total = 10): string {
+    const t = total > 1 ? index / (total - 1) : 0
+    const mix = (a: number, b: number) => Math.round(a + (b - a) * t)
+    const r = mix(GOLD_RAMP_DIM[0], GOLD_RAMP_BRIGHT[0])
+    const g = mix(GOLD_RAMP_DIM[1], GOLD_RAMP_BRIGHT[1])
+    const b = mix(GOLD_RAMP_DIM[2], GOLD_RAMP_BRIGHT[2])
+    return `rgb(${r}, ${g}, ${b})`
+}
+
+// One segment ("tick") of a segmented progress meter — the empty/track look. Shared by every
+// "rate to unlock" bar (Feed taste meter, Rankings build & lock meters) so their ticks are all the
+// same size and thickness. Filled segments override only backgroundColor (via goldMeterShade). Put
+// the inter-tick spacing (gap: 4) on the row container.
+export const meterSegment = {
+    flex: 1,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(245,238,220,0.15)",
+}
+
 // The fixed palette a user can choose for their avatar. The token names mirror
 // AvatarColor in backend/src/pydantic_schemas/profile.py.
 export const AVATAR_COLOR_TOKENS = ["accent", "sky", "plum", "mint", "gold"] as const
