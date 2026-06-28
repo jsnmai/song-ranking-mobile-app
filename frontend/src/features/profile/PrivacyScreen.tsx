@@ -1,8 +1,8 @@
 // Privacy lets the user pick who can see their taste: Public, Friends only, or
 // Only me. "Friends only" means mutual follows; "Only me" hides taste from feeds,
 // compatibility, Co-Signs, and discovery. Mirrors the Bento Orbit privacy artboard.
-import { ComponentType, useEffect, useState } from "react"
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { ComponentType, useEffect, useRef, useState } from "react"
+import { ActivityIndicator, Animated, Easing, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 
 import { ApiError } from "../../api/client"
@@ -53,6 +53,19 @@ export default function PrivacyScreen({ navigation }: PrivacyProps) {
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
 
+    // Drive the like-privacy toggle off its state so it eases between on/off
+    // (track color + thumb position) whenever the value changes — including the
+    // optimistic flip and any revert-on-error.
+    const likeSwitchAnim = useRef(new Animated.Value(0)).current
+    useEffect(() => {
+        Animated.timing(likeSwitchAnim, {
+            toValue: hideLikeCounts ? 1 : 0,
+            duration: 200,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: false,
+        }).start()
+    }, [hideLikeCounts, likeSwitchAnim])
+
     useEffect(() => {
         let active = true
         async function fetchProfile() {
@@ -102,12 +115,15 @@ export default function PrivacyScreen({ navigation }: PrivacyProps) {
             return
         }
         const nextValue = !hideLikeCounts
+        // Flip optimistically so the toggle animates immediately — no spinner, no wait.
+        setHideLikeCounts(nextValue)
         setIsSavingLikePrivacy(true)
         setError(null)
         try {
             const updated = await updateLikePrivacy(nextValue, token)
             setHideLikeCounts(updated.hide_like_counts)
         } catch (err) {
+            setHideLikeCounts(!nextValue) // revert on failure
             setError(errorMessage(err, "Could not update like privacy."))
         } finally {
             setIsSavingLikePrivacy(false)
@@ -189,13 +205,41 @@ export default function PrivacyScreen({ navigation }: PrivacyProps) {
                                 Other people won’t see like counts or who liked your activity. You’ll still see them.
                             </Text>
                         </View>
-                        <View style={[styles.switchTrack, hideLikeCounts && styles.switchTrackOn]}>
-                            {isSavingLikePrivacy ? (
-                                <ActivityIndicator size="small" color={hideLikeCounts ? colors.paper : colors.inkDim} />
-                            ) : (
-                                <View style={[styles.switchThumb, hideLikeCounts && styles.switchThumbOn]} />
-                            )}
-                        </View>
+                        <Animated.View
+                            style={[
+                                styles.switchTrack,
+                                {
+                                    backgroundColor: likeSwitchAnim.interpolate({
+                                        inputRange: [0, 1],
+                                        outputRange: [colors.bg, colors.mint],
+                                    }),
+                                    borderColor: likeSwitchAnim.interpolate({
+                                        inputRange: [0, 1],
+                                        outputRange: [colors.line, colors.mint],
+                                    }),
+                                },
+                            ]}
+                        >
+                            <Animated.View
+                                style={[
+                                    styles.switchThumb,
+                                    {
+                                        backgroundColor: likeSwitchAnim.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [colors.inkDim, colors.paper],
+                                        }),
+                                        transform: [
+                                            {
+                                                translateX: likeSwitchAnim.interpolate({
+                                                    inputRange: [0, 1],
+                                                    outputRange: [0, 18],
+                                                }),
+                                            },
+                                        ],
+                                    },
+                                ]}
+                            />
+                        </Animated.View>
                     </TouchableOpacity>
 
                     {error !== null && <Text style={styles.error}>{error}</Text>}
@@ -382,21 +426,14 @@ const styles = StyleSheet.create({
         backgroundColor: colors.bg,
         padding: 3,
         justifyContent: "center",
+        alignItems: "flex-start",
         flexShrink: 0,
-    },
-    switchTrackOn: {
-        borderColor: colors.ink,
-        backgroundColor: colors.ink,
     },
     switchThumb: {
         width: 18,
         height: 18,
         borderRadius: 9,
         backgroundColor: colors.inkDim,
-    },
-    switchThumbOn: {
-        alignSelf: "flex-end",
-        backgroundColor: colors.paper,
     },
     error: {
         color: colors.danger,
