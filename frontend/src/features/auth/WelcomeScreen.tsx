@@ -3,6 +3,7 @@
 // Step 3 ends with Create account / Sign in CTAs.
 import { useCallback, useRef, useState } from "react"
 import {
+    Pressable,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -10,6 +11,7 @@ import {
     useWindowDimensions,
 } from "react-native"
 import { Gesture, GestureDetector } from "react-native-gesture-handler"
+import Svg, { Path, Rect, ClipPath, Defs } from "react-native-svg"
 import Animated, {
     Easing,
     FadeIn,
@@ -17,6 +19,8 @@ import Animated, {
     runOnJS,
     useAnimatedStyle,
     useSharedValue,
+    withSequence,
+    withSpring,
     withTiming,
 } from "react-native-reanimated"
 import { useFocusEffect } from "@react-navigation/native"
@@ -39,6 +43,37 @@ const SKY = "#5b8def"
 const PLUM = "#7a3ad0"
 const GOLD = "#f5b840"
 
+// Bucket heart glyphs (full / left-half / broken), matching the real rating UI.
+const HEART = "M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+// `crackColor` is the surface behind the heart so the broken-heart split stays visible whether the
+// heart is filled with the bucket color (crack = light bg) or white (crack = the bucket color).
+function BucketHeart({ bucket, color, size = 16, crackColor = "#fff" }: { bucket: "like" | "okay" | "dislike"; color: string; size?: number; crackColor?: string }) {
+    if (bucket === "okay") {
+        return (
+            <Svg width={size} height={size} viewBox="0 0 24 24">
+                <Defs>
+                    <ClipPath id="welcome-lhalf"><Rect x="0" y="0" width="12" height="24" /></ClipPath>
+                </Defs>
+                <Path d={HEART} fill="none" stroke={color} strokeWidth={1.6} />
+                <Path d={HEART} fill={color} clipPath="url(#welcome-lhalf)" />
+            </Svg>
+        )
+    }
+    if (bucket === "dislike") {
+        return (
+            <Svg width={size} height={size} viewBox="0 0 24 24">
+                <Path d={HEART} fill={color} />
+                <Path d="M12 5.5 10 11h4l-2 5.5" stroke={crackColor} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+            </Svg>
+        )
+    }
+    return (
+        <Svg width={size} height={size} viewBox="0 0 24 24">
+            <Path d={HEART} fill={color} />
+        </Svg>
+    )
+}
+
 const SNAP = { duration: 320, easing: Easing.out(Easing.cubic) }
 const N = 3 // step count
 const NEXT_H = 52  // height of the Next button alone
@@ -53,36 +88,53 @@ function AlbumTile({ bg, size, radius = 12 }: { bg: string; size: number; radius
     )
 }
 
-// ── Step 1 visual: song card + Like/Okay/Dislike chips ───────────────────
+// ── Step 1 visual: song card + tappable Like/Okay/Dislike chips ──────────
+const RATE_BUCKETS = [
+    { key: "like", label: "Like", color: ACCENT },
+    { key: "okay", label: "Okay", color: SKY },
+    { key: "dislike", label: "Dislike", color: PLUM },
+] as const
+
 function VisRate() {
+    // Demo-only: tapping a chip selects it and swaps the song-art heart to match.
+    const [bucket, setBucket] = useState<"like" | "okay" | "dislike">("like")
+    const selectedColor = RATE_BUCKETS.find((b) => b.key === bucket)!.color
     return (
         <View style={[styles.stage, { backgroundColor: "rgba(255,90,60,0.07)" }]}>
             <View style={styles.visCard}>
                 <View style={{ alignItems: "center" }}>
                     <View>
                         <AlbumTile bg="#4a3880" size={88} radius={16} />
-                        <View style={styles.heartBadge}>
-                            <Text style={{ color: "#fff", fontSize: 14, lineHeight: 16 }}>♥</Text>
+                        <View style={[styles.heartBadge, { backgroundColor: selectedColor, shadowColor: selectedColor }]}>
+                            <BucketHeart bucket={bucket} color="#fff" size={16} crackColor={selectedColor} />
                         </View>
                     </View>
                     <Text style={styles.visSongTitle}>Song</Text>
                     <Text style={styles.visArtist}>Artist</Text>
                 </View>
                 <View style={{ gap: 9, marginTop: 14 }}>
-                    <View style={[styles.bucketChip, { backgroundColor: ACCENT }]}>
-                        <View style={[styles.bucketDot, { backgroundColor: "#fff" }]} />
-                        <Text style={[styles.bucketLabel, { color: "#fff" }]}>Like</Text>
-                    </View>
-                    <View style={{ flexDirection: "row", gap: 9 }}>
-                        <View style={[styles.bucketChip, { flex: 1, backgroundColor: CARD, borderWidth: 1, borderColor: LINE }]}>
-                            <View style={[styles.bucketDot, { backgroundColor: SKY }]} />
-                            <Text style={[styles.bucketLabel, { color: INK_SOFT }]}>Okay</Text>
-                        </View>
-                        <View style={[styles.bucketChip, { flex: 1, backgroundColor: CARD, borderWidth: 1, borderColor: LINE }]}>
-                            <View style={[styles.bucketDot, { backgroundColor: PLUM }]} />
-                            <Text style={[styles.bucketLabel, { color: INK_SOFT }]}>Dislike</Text>
-                        </View>
-                    </View>
+                    {RATE_BUCKETS.map((b) => {
+                        const selected = bucket === b.key
+                        return (
+                            <TouchableOpacity
+                                key={b.key}
+                                activeOpacity={0.85}
+                                onPress={() => setBucket(b.key)}
+                                accessibilityRole="button"
+                                accessibilityLabel={b.label}
+                                accessibilityState={{ selected }}
+                                style={[
+                                    styles.bucketChip,
+                                    selected
+                                        ? { backgroundColor: b.color }
+                                        : { backgroundColor: CARD, borderWidth: 1, borderColor: LINE },
+                                ]}
+                            >
+                                <BucketHeart bucket={b.key} color={selected ? "#fff" : b.color} crackColor={selected ? b.color : CARD} />
+                                <Text style={[styles.bucketLabel, { color: selected ? "#fff" : INK_SOFT }]}>{b.label}</Text>
+                            </TouchableOpacity>
+                        )
+                    })}
                 </View>
             </View>
         </View>
@@ -90,20 +142,33 @@ function VisRate() {
 }
 
 // ── Step 2 visual: two VS cards ──────────────────────────────────────────
+// One tappable versus card: art matches its glow, and a tap "slams" it (quick squash + spring back).
+function VsSong({ glow, title, artist }: { glow: string; title: string; artist: string }) {
+    const scale = useSharedValue(1)
+    const aStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }))
+    const onPress = () => {
+        scale.value = withSequence(
+            withTiming(0.9, { duration: 70, easing: Easing.out(Easing.quad) }),
+            withSpring(1, { damping: 5, stiffness: 220, mass: 0.6 }),
+        )
+    }
+    return (
+        <Animated.View style={[styles.vsSongWrap, aStyle]}>
+            <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={title} style={[styles.vsCard, { borderColor: `${glow}55`, shadowColor: glow }]}>
+                <AlbumTile bg={glow} size={68} radius={12} />
+                <Text style={styles.vsTitle}>{title}</Text>
+                <Text style={styles.vsArtist}>{artist}</Text>
+            </Pressable>
+        </Animated.View>
+    )
+}
+
 function VisVersus() {
     return (
         <View style={[styles.stage, { backgroundColor: "rgba(91,141,239,0.08)" }]}>
             <View style={{ position: "relative", flexDirection: "row", alignItems: "center", gap: 12, width: 252 }}>
-                <View style={[styles.vsCard, { borderColor: `${ACCENT}55`, shadowColor: ACCENT }]}>
-                    <AlbumTile bg="#2d5a8f" size={68} radius={12} />
-                    <Text style={styles.vsTitle}>Song 1</Text>
-                    <Text style={styles.vsArtist}>Artist 1</Text>
-                </View>
-                <View style={[styles.vsCard, { borderColor: `${SKY}55`, shadowColor: SKY }]}>
-                    <AlbumTile bg="#4a6fa0" size={68} radius={12} />
-                    <Text style={styles.vsTitle}>Song 2</Text>
-                    <Text style={styles.vsArtist}>Artist 2</Text>
-                </View>
+                <VsSong glow={ACCENT} title="Song 1" artist="Artist 1" />
+                <VsSong glow={SKY} title="Song 2" artist="Artist 2" />
                 <View style={styles.vsBadge}>
                     <Text style={styles.vsText}>VS</Text>
                 </View>
@@ -156,7 +221,7 @@ const STEPS: Step[] = [
     {
         visual: <VisRate />,
         title: "Rate it in\none tap.",
-        sub: "Heard a song? Drop it into Like, Okay, or Dislike. No 5-star math — just how it landed.",
+        sub: "Heard a song? Drop it into Like, Okay, or Dislike.\nNo 5-star math — just how it landed.",
     },
     {
         visual: <VisVersus />,
@@ -433,10 +498,8 @@ const styles = StyleSheet.create({
         borderRadius: 999,
         paddingVertical: 16,
         paddingHorizontal: 24,
-        shadowColor: INK,
-        shadowOpacity: 0.18,
-        shadowRadius: 16,
-        shadowOffset: { width: 0, height: 8 },
+        // No shadow: the button lives inside the `overflow: hidden` btnArea (which clips the
+        // height-animated CTA stack), so a shadow gets clipped into a hard rectangle.
     },
     primaryBtnText: {
         color: "#fff",
@@ -500,17 +563,14 @@ const styles = StyleSheet.create({
         paddingHorizontal: 14,
         borderRadius: 999,
     },
-    bucketDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-    },
     bucketLabel: {
         fontSize: 13,
         fontWeight: "700",
     },
-    vsCard: {
+    vsSongWrap: {
         flex: 1,
+    },
+    vsCard: {
         backgroundColor: CARD,
         borderRadius: 18,
         padding: 12,
