@@ -838,7 +838,7 @@ const styles = StyleSheet.create({
     // ── Content area ──────────────────────────────────────────────────
     content: {
         paddingHorizontal: 16,
-        paddingTop: 10,
+        paddingTop: 2,
         gap: 10,
         paddingBottom: 8,
     },
