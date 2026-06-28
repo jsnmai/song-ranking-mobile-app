@@ -589,6 +589,9 @@ export default function ProfileScreen() {
                     {ratings !== null && ratings.length > 0 && (
                         <View>
                             <Text style={styles.activityKicker}>Your Activity</Text>
+                            {/* Pull the cards out to a 14px screen inset so they match the Feed cards
+                                exactly (the surrounding content padding is 16). */}
+                            <View style={styles.activityCards}>
                             {ratings.map((item) => (
                                 <RatingActivityCard
                                     key={item.rating_event_id}
@@ -615,6 +618,7 @@ export default function ProfileScreen() {
                                     />
                                 </RatingActivityCard>
                             ))}
+                            </View>
                         </View>
                     )}
                 </View>
@@ -1084,6 +1088,10 @@ const styles = StyleSheet.create({
         textTransform: "uppercase",
         marginBottom: 9,
         marginLeft: 2,
+    },
+    // Cancels 2px of the content's 16px padding so cards sit at a 14px inset, matching the Feed.
+    activityCards: {
+        marginHorizontal: -2,
     },
 })
 

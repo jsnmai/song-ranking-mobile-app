@@ -44,6 +44,8 @@ class DemoAccountSpec:
     username: str
     display_name: str
     visibility: str
+    # Avatar palette token (accent/sky/plum/mint/gold/ink). None => the deterministic default.
+    avatar_color: str | None = None
 
     @property
     def is_public(self) -> bool:
@@ -114,15 +116,20 @@ def seed_email(username: str) -> str:
 
 
 DEMO_ACCOUNTS: tuple[DemoAccountSpec, ...] = (
-    DemoAccountSpec(demo_email("demo_empty"), "demo_empty", "Demo Empty", "public"),
-    DemoAccountSpec(demo_email("demo_newbie"), "demo_newbie", "Demo Newbie", "public"),
-    DemoAccountSpec(demo_email("demo_power"), "demo_power", "Demo Power", "public"),
-    DemoAccountSpec(demo_email("demo_friend"), "demo_friend", "Demo Friend", "public"),
-    DemoAccountSpec(demo_email("demo_opposite"), "demo_opposite", "Demo Opposite", "public"),
-    DemoAccountSpec(demo_email("demo_private"), "demo_private", "Demo Only Me", "only_me"),
-    DemoAccountSpec(demo_email("demo_friends_only"), "demo_friends_only", "Demo Friends Only", "friends_only"),
-    DemoAccountSpec(demo_email("demo_blocked"), "demo_blocked", "Demo Blocked", "public"),
-    DemoAccountSpec(demo_email("demo_feed"), "demo_feed", "Demo Feed", "public"),
+    # Deliberate avatar colors across the palette so avatars read consistently on the feed and
+    # profiles (and demo the picker); demo_newbie keeps the black "ink" icon as an explicit choice.
+    DemoAccountSpec(demo_email("demo_empty"), "demo_empty", "Demo Empty", "public", avatar_color="gold"),
+    DemoAccountSpec(demo_email("demo_newbie"), "demo_newbie", "Demo Newbie", "public", avatar_color="ink"),
+    DemoAccountSpec(demo_email("demo_power"), "demo_power", "Demo Power", "public", avatar_color="accent"),
+    DemoAccountSpec(demo_email("demo_friend"), "demo_friend", "Demo Friend", "public", avatar_color="sky"),
+    DemoAccountSpec(demo_email("demo_opposite"), "demo_opposite", "Demo Opposite", "public", avatar_color="plum"),
+    DemoAccountSpec(demo_email("demo_private"), "demo_private", "Demo Only Me", "only_me", avatar_color="mint"),
+    DemoAccountSpec(
+        demo_email("demo_friends_only"), "demo_friends_only", "Demo Friends Only",
+        "friends_only", avatar_color="gold",
+    ),
+    DemoAccountSpec(demo_email("demo_blocked"), "demo_blocked", "Demo Blocked", "public", avatar_color="plum"),
+    DemoAccountSpec(demo_email("demo_feed"), "demo_feed", "Demo Feed", "public", avatar_color="mint"),
     # Discovery demo contributors — followed by demo_power for Co-Sign; demo_disc_a is also a
     # mutual follow, so it counts toward demo_power's circle (Trending / Most-rated).
     DemoAccountSpec(demo_email("demo_disc_a"), "demo_disc_a", "Demo Disc A", "public"),

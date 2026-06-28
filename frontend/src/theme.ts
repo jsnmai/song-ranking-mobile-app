@@ -83,7 +83,7 @@ export const meterSegment = {
 
 // The fixed palette a user can choose for their avatar. The token names mirror
 // AvatarColor in backend/src/pydantic_schemas/profile.py.
-export const AVATAR_COLOR_TOKENS = ["accent", "sky", "plum", "mint", "gold"] as const
+export const AVATAR_COLOR_TOKENS = ["ink", "accent", "sky", "plum", "mint", "gold"] as const
 
 const AVATAR_PALETTE: Record<string, string> = {
     accent: colors.accent,
@@ -91,10 +91,22 @@ const AVATAR_PALETTE: Record<string, string> = {
     plum: colors.plum,
     mint: colors.mint,
     gold: colors.gold,
+    ink: colors.ink,
 }
 
 // Resolve a stored avatar-color token to a hex color, falling back to `fallback`
 // (the surface's established default) when the user has not chosen one.
 export function avatarColorToken(token: string | null | undefined, fallback: string): string {
     return (token && AVATAR_PALETTE[token]) || fallback
+}
+
+// Resolve a user's avatar background everywhere they appear (feed, profile, lists): their chosen
+// color if set, otherwise a stable per-username hue from the same palette — so a given user looks
+// identical across surfaces. Use this instead of ad-hoc per-screen hashes.
+const AVATAR_FALLBACK_HUES = [colors.accent, colors.sky, colors.plum, colors.mint, colors.gold]
+export function avatarColorFor(token: string | null | undefined, username: string): string {
+    if (token && AVATAR_PALETTE[token]) return AVATAR_PALETTE[token]
+    let hash = 0
+    for (let i = 0; i < username.length; i++) hash = username.charCodeAt(i) + ((hash << 5) - hash)
+    return AVATAR_FALLBACK_HUES[Math.abs(hash) % AVATAR_FALLBACK_HUES.length]
 }

@@ -4,7 +4,7 @@
 // Mirrors ProfileResponse in backend/src/pydantic_schemas/profile.py
 export type ProfileVisibility = "public" | "friends_only" | "only_me"
 // Mirrors AvatarColor in backend/src/pydantic_schemas/profile.py — fixed palette of design tokens.
-export type AvatarColor = "accent" | "sky" | "plum" | "mint" | "gold"
+export type AvatarColor = "accent" | "sky" | "plum" | "mint" | "gold" | "ink"
 export type ReportTargetType = "user" | "profile" | "rating_event" | "rating_note"
 export type ReportReason =
     | "harassment"

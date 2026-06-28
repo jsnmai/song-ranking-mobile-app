@@ -186,7 +186,7 @@ describe("RankingsScreen", () => {
         expect(screen.queryByTestId("anchors-unlocked")).toBeNull()
         expect(screen.getByText("TOP · LIKE")).toBeTruthy()
         expect(screen.getByText("MEDIAN · OKAY")).toBeTruthy()
-        expect(screen.getByText("FLOOR · DISLIKE")).toBeTruthy()
+        expect(screen.getByText("BOTTOM · DISLIKE")).toBeTruthy()
         expect(screen.getByText("1/1")).toBeTruthy()   // like: 1 of 1 required
         expect(screen.getByText("0/3")).toBeTruthy()   // okay: 0 of 3 required
         expect(screen.getByText("0/1")).toBeTruthy()   // dislike: 0 of 1 required
@@ -257,7 +257,7 @@ describe("RankingsScreen", () => {
         expect(screen.queryByTestId("anchors-locked")).toBeNull()
         expect(screen.getByText("TOP · LIKE")).toBeTruthy()
         expect(screen.getByText("MEDIAN · OKAY")).toBeTruthy()
-        expect(screen.getByText("FLOOR · DISLIKE")).toBeTruthy()
+        expect(screen.getByText("BOTTOM · DISLIKE")).toBeTruthy()
         expect(screen.getByText("Bad Song")).toBeTruthy()
         expect(mockGetMyRankingAnchors).toHaveBeenCalledWith("test-token")
     })

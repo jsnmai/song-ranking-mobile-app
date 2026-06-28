@@ -247,14 +247,15 @@ export default function SettingsScreen({ navigation }: SettingsProps) {
                                         <TouchableOpacity
                                             key={token}
                                             onPress={() => { setColor(token); setSavedOk(false) }}
-                                            style={[
-                                                styles.swatch,
-                                                { backgroundColor: avatarColorToken(token, colors.ink) },
-                                                color === token && styles.swatchSelected,
-                                            ]}
+                                            // The selected ring sits OUTSIDE the color dot with a gap, so it
+                                            // stays visible even on the dark "ink" swatch (a ring on the
+                                            // fill would vanish against black).
+                                            style={[styles.swatch, color === token && styles.swatchSelected]}
                                             accessibilityLabel={`Icon color ${token}`}
                                             testID={`edit-color-${token}`}
-                                        />
+                                        >
+                                            <View style={[styles.swatchDot, { backgroundColor: avatarColorToken(token, colors.ink) }]} />
+                                        </TouchableOpacity>
                                     ))}
                                 </View>
                             </View>
@@ -553,17 +554,25 @@ const styles = StyleSheet.create({
     },
     swatchRow: {
         flexDirection: "row",
+        flexWrap: "wrap",
         gap: 12,
     },
     swatch: {
-        width: 30,
-        height: 30,
-        borderRadius: 15,
+        width: 34,
+        height: 34,
+        borderRadius: 17,
         borderWidth: 2,
         borderColor: "transparent",
+        alignItems: "center",
+        justifyContent: "center",
     },
     swatchSelected: {
         borderColor: colors.ink,
+    },
+    swatchDot: {
+        width: 26,
+        height: 26,
+        borderRadius: 13,
     },
     saveButton: {
         backgroundColor: colors.ink,

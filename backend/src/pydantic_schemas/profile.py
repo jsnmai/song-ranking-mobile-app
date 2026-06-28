@@ -36,7 +36,7 @@ class ProfileSetup(BaseModel):
 
 # Avatar colors are chosen from a fixed palette of design tokens (mirrored in the
 # frontend theme). Stored as the token name; null means "use the deterministic default".
-AvatarColor = Literal["accent", "sky", "plum", "mint", "gold"]
+AvatarColor = Literal["accent", "sky", "plum", "mint", "gold", "ink"]
 
 
 class ProfileEdit(BaseModel):

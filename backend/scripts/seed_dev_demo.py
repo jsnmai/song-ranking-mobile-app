@@ -244,6 +244,7 @@ def upsert_demo_users(
         profile.display_name = account.display_name
         profile.is_public = account.is_public
         profile.visibility = account.visibility
+        profile.avatar_color = account.avatar_color
 
         user_ids[account.username] = user.id
 

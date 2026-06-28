@@ -194,6 +194,21 @@ describe("SettingsScreen", () => {
         await waitFor(() => expect(screen.getByText("Saved ✓")).toBeTruthy())
     })
 
+    it("offers the black (ink) icon color and saves it", async () => {
+        render(<SettingsScreen navigation={navigationProp} route={{} as never} />)
+
+        await waitFor(() => expect(screen.getByTestId("edit-color-ink")).toBeTruthy())
+        fireEvent.press(screen.getByTestId("edit-color-ink"))
+        fireEvent.press(screen.getByTestId("edit-save"))
+
+        await waitFor(() => {
+            expect(mockUpdateMyProfile).toHaveBeenCalledWith(
+                expect.objectContaining({ avatar_color: "ink" }),
+                "test-token",
+            )
+        })
+    })
+
     it("blocks save and shows a hint for an invalid username", async () => {
         render(<SettingsScreen navigation={navigationProp} route={{} as never} />)
 

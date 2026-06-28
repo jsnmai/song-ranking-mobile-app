@@ -70,6 +70,14 @@ def test_edit_avatar_color(client: TestClient):
     assert response.json()["avatar_color"] == "mint"
 
 
+def test_edit_avatar_color_ink(client: TestClient):
+    """The black 'ink' token is a valid, selectable palette color."""
+    token = _register(client, "ink@example.com", "inky")
+    response = _patch(client, token, {"avatar_color": "ink"})
+    assert response.status_code == 200
+    assert response.json()["avatar_color"] == "ink"
+
+
 def test_edit_rejects_unknown_color(client: TestClient):
     """A color outside the fixed palette is rejected with 422."""
     token = _register(client, "e@example.com", "eee")
