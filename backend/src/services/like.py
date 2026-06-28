@@ -25,9 +25,13 @@ from src.crud.like import (
 from src.crud.profile import get_by_user_id
 from src.pydantic_schemas.like import ActivityLikeResponse
 from src.pydantic_schemas.profile import ProfileListResponse
+from src.pydantic_schemas.profile_modules import RecentRatingItem
+from src.pydantic_schemas.song import SongResponse
 from src.services.access import can_view_profile, can_view_taste
+from src.services.notification import notify_like
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.rating_event import RatingEvent
+from src.sqlalchemy_tables.song import Song
 
 
 def like_activity(
@@ -38,6 +42,13 @@ def like_activity(
     """Like a visible activity card (idempotent)."""
     _event, author = _visible_activity_or_404(db, viewer_id, rating_event_id)
     create_like(db, viewer_id, rating_event_id)
+    # Notify the activity's author (self-likes are allowed but never notify yourself).
+    notify_like(
+        db,
+        recipient_id=author.user_id,
+        actor_id=viewer_id,
+        rating_event_id=rating_event_id,
+    )
     db.commit()
     return _like_response(db, viewer_id, rating_event_id, author)
 
@@ -85,6 +96,36 @@ def list_activity_likers(
                 liker_profile.user_id,
             )
         ],
+    )
+
+
+def get_activity_card(
+    db: Session,
+    viewer_id: int,
+    rating_event_id: int,
+) -> RecentRatingItem:
+    """Return one visible activity card (the verdict + viewer-aware like state).
+
+    Backs the "open the activity" tap from a like notification. Rides the same
+    taste-visibility/block rules as the rest of the like surfaces (404 if hidden).
+    """
+    event, author = _visible_activity_or_404(db, viewer_id, rating_event_id)
+    song = db.get(Song, event.song_id)
+    if song is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Activity not found.",
+        )
+    like_state = _like_response(db, viewer_id, rating_event_id, author)
+    return RecentRatingItem(
+        rating_event_id=event.id,
+        song=SongResponse.model_validate(song),
+        bucket=event.new_bucket,
+        score=event.new_score,
+        note=event.note,
+        created_at=event.created_at,
+        like_count=like_state.like_count,
+        liked_by_viewer=like_state.liked_by_viewer,
     )
 
 

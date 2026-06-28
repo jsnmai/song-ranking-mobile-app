@@ -46,6 +46,7 @@ from src.pydantic_schemas.profile import (
 from src.pydantic_schemas.bookmarks import BookmarkListResponse, BookmarkResponse
 from src.services.access import can_view_profile, can_view_taste
 from src.services.access import is_plus as check_is_plus
+from src.services.notification import notify_follow
 from src.services.rating import build_ranking_response
 from src.services.streak import get_streak_state
 from src.sqlalchemy_tables.profile import Profile
@@ -431,6 +432,11 @@ def follow_profile(
             db,
             current_user_id,
             profile.user_id,
+        )
+        notify_follow(
+            db,
+            recipient_id=profile.user_id,
+            actor_id=current_user_id,
         )
         db.commit()
     except IntegrityError:

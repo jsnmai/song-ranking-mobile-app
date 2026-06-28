@@ -19,6 +19,7 @@ from src.api_routers import (
     events,
     feed,
     like,
+    notification,
     profile,
     rating,
     search,
@@ -126,6 +127,10 @@ app.include_router(
 )
 app.include_router(
     like.router,
+    prefix="/api/v1",
+)
+app.include_router(
+    notification.router,
     prefix="/api/v1",
 )
 app.include_router(

@@ -1,6 +1,6 @@
 // API helpers for rating-event activity likes.
 import { apiClient } from "../../api/client"
-import { ProfileListResponse, Profile } from "../profile/types"
+import { ProfileListResponse, Profile, RecentRatingItem } from "../profile/types"
 
 export type ActivityLikeResponse = {
     rating_event_id: number;
@@ -21,6 +21,11 @@ export async function unlikeActivity(ratingEventId: number, token: string): Prom
 // Calls GET /api/v1/activity/{rating_event_id}/likes
 export async function getActivityLikers(ratingEventId: number, token: string): Promise<ProfileListResponse> {
     return apiClient.get<ProfileListResponse>(`/api/v1/activity/${ratingEventId}/likes`, token)
+}
+
+// Calls GET /api/v1/activity/{rating_event_id} — one visible activity card.
+export async function getActivityCard(ratingEventId: number, token: string): Promise<RecentRatingItem> {
+    return apiClient.get<RecentRatingItem>(`/api/v1/activity/${ratingEventId}`, token)
 }
 
 // Calls PUT /api/v1/profile/me/like-privacy

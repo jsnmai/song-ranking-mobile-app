@@ -36,6 +36,9 @@ type SocialScreenParams = {
 
 export type FeedStackParamList = SocialScreenParams & {
     FeedHome: undefined;
+    Notifications: undefined;
+    // Opens a single activity card (the "open the activity" tap from a like notification).
+    SingleActivity: { ratingEventId: number };
 }
 
 export type DiscoverStackParamList = SocialScreenParams & {

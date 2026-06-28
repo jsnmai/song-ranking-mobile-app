@@ -8,6 +8,7 @@ from src.sqlalchemy_tables.comparison import Comparison
 from src.sqlalchemy_tables.comparison_session import ComparisonSession
 from src.sqlalchemy_tables.follow import Follow
 from src.sqlalchemy_tables.like import Like
+from src.sqlalchemy_tables.notification import Notification
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
@@ -89,7 +90,16 @@ def delete_social_rows_for_user(
     db: Session,
     user_id: int,
 ) -> None:
-    """Remove follows and blocks in either direction for the deleted user."""
+    """Remove follows, blocks, and notifications in either direction for the deleted user."""
+    db.execute(
+        delete(Notification)
+        .where(
+            or_(
+                Notification.recipient_id == user_id,
+                Notification.actor_id == user_id,
+            )
+        )
+    )
     db.execute(
         delete(Follow)
         .where(

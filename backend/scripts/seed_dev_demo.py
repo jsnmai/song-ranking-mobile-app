@@ -29,6 +29,8 @@ import src.sqlalchemy_tables.block  # noqa: F401
 # Register all ORM models before any delete/insert touches metadata.
 import src.sqlalchemy_tables.comparison  # noqa: F401
 import src.sqlalchemy_tables.follow  # noqa: F401
+import src.sqlalchemy_tables.like  # noqa: F401
+import src.sqlalchemy_tables.notification  # noqa: F401
 import src.sqlalchemy_tables.profile  # noqa: F401
 import src.sqlalchemy_tables.ranking  # noqa: F401
 import src.sqlalchemy_tables.rating_event  # noqa: F401
@@ -52,6 +54,7 @@ from scripts.demo_seed_data import (
     FEED_EVENT_SPECS,
     FOLLOW_EDGES,
     LEGACY_DEMO_EMAIL_DOMAINS,
+    POWER_NOTIFICATION_SPECS,
     PRODUCTION_URL_DENYLIST,
     RANKINGS_BY_USERNAME,
     RERATE_EVENT_SPECS,
@@ -76,6 +79,8 @@ from src.services.similarity_tasks import _resolve_genre
 from src.sqlalchemy_tables.block import Block
 from src.sqlalchemy_tables.comparison import Comparison
 from src.sqlalchemy_tables.follow import Follow
+from src.sqlalchemy_tables.like import Like
+from src.sqlalchemy_tables.notification import Notification
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
@@ -308,6 +313,14 @@ def clear_demo_scoped_rows(
     if not demo_user_ids:
         return
 
+    # Notifications and likes first: they reference rating_events/users, and the partial unique
+    # indexes on notifications would reject a duplicate row on the next seed run.
+    db.execute(
+        delete(Notification).where(
+            Notification.recipient_id.in_(demo_user_ids) | Notification.actor_id.in_(demo_user_ids),
+        ),
+    )
+    db.execute(delete(Like).where(Like.user_id.in_(demo_user_ids)))
     db.execute(delete(RatingEvent).where(RatingEvent.user_id.in_(demo_user_ids)))
     db.execute(delete(Comparison).where(Comparison.user_id.in_(demo_user_ids)))
     db.execute(delete(Ranking).where(Ranking.user_id.in_(demo_user_ids)))
@@ -496,6 +509,61 @@ def seed_follows(
     db.flush()
 
 
+def seed_notifications(
+    db: Session,
+    user_ids: dict[str, int],
+    song_ids: dict[int, int],
+    anchor: datetime,
+) -> None:
+    """Seed demo_power's in-app notifications (and the underlying likes) so the bell + list have data.
+
+    Every spec's recipient is demo_power. "like" specs also insert the Like row on demo_power's
+    rating event so the activity card shows the count and likers list. Run after rating events exist.
+    """
+    power_id = user_ids["demo_power"]
+
+    # Resolve demo_power's seeded rating events by song so likes/notifications can target them.
+    power_event_by_song: dict[int, int] = {
+        song_id: event_id
+        for song_id, event_id in db.execute(
+            select(RatingEvent.song_id, RatingEvent.id).where(RatingEvent.user_id == power_id),
+        ).all()
+    }
+
+    for spec in POWER_NOTIFICATION_SPECS:
+        actor_id = user_ids[spec.actor_username]
+        created_at = event_created_at(anchor, spec.hours_ago)
+        rating_event_id: int | None = None
+        if spec.type == "like":
+            if spec.deezer_id is None:
+                raise SeedAbortedError("A 'like' notification spec must set deezer_id.")
+            song_id = song_ids[spec.deezer_id]
+            rating_event_id = power_event_by_song.get(song_id)
+            if rating_event_id is None:
+                raise SeedAbortedError(
+                    f"demo_power has no rating event for deezer_id {spec.deezer_id}; "
+                    "add it to the demo_power FEED_EVENT_SPECS.",
+                )
+            db.add(
+                Like(
+                    user_id=actor_id,
+                    rating_event_id=rating_event_id,
+                    created_at=created_at,
+                ),
+            )
+        db.add(
+            Notification(
+                recipient_id=power_id,
+                actor_id=actor_id,
+                type=spec.type,
+                rating_event_id=rating_event_id,
+                created_at=created_at,
+                read_at=anchor if spec.read else None,
+            ),
+        )
+    db.flush()
+
+
 def seed_blocks(
     db: Session,
     user_ids: dict[str, int],
@@ -656,6 +724,7 @@ def seed_demo_data(db: Session) -> SeedResult:
     seed_rating_events(db, user_ids, song_ids, anchor)
     seed_comparisons(db, user_ids, song_ids, anchor)
     seed_follows(db, user_ids)
+    seed_notifications(db, user_ids, song_ids, anchor)
     seed_blocks(db, user_ids)
     friend_score, opposite_score = seed_similarity_snapshots(db, user_ids)
     recompute_aggregates(db, touched_song_ids)

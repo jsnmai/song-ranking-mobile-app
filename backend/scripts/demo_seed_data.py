@@ -90,6 +90,22 @@ class RerateEventSeedSpec:
 
 
 @dataclass(frozen=True)
+class NotificationSeedSpec:
+    """One in-app notification demo_power has received (the recipient is always demo_power).
+
+    `type` is "follow" or "like"; `deezer_id` is the demo_power activity that was liked (a song
+    demo_power has a rating event for) and is None for follows; `read` controls the unread dot
+    and the header badge count.
+    """
+
+    type: str
+    actor_username: str
+    deezer_id: int | None
+    hours_ago: float
+    read: bool
+
+
+@dataclass(frozen=True)
 class ComparisonSeedSpec:
     """One finalized Versus History receipt for a demo account."""
 
@@ -457,6 +473,10 @@ FEED_EVENT_SPECS: tuple[tuple[str, RatingEventSeedSpec], ...] = (
         "demo_power",
         (
             RatingEventSeedSpec(9_000_009, "like", 5, 7.0),
+            # Two more demo_power verdicts so its own activity has variety and there are
+            # multiple distinct activity cards for the seeded "liked your rating" notifications.
+            RatingEventSeedSpec(9_000_001, "like", 1, 30.0),
+            RatingEventSeedSpec(9_000_012, "alright", 1, 52.0),
         ),
     ),
 )
@@ -466,6 +486,24 @@ FEED_EVENT_SPECS: tuple[tuple[str, RatingEventSeedSpec], ...] = (
 # upward move from "alright" to that current "like" placement, so the delta reads as a real bump.
 RERATE_EVENT_SPECS: tuple[tuple[str, RerateEventSeedSpec], ...] = (
     ("demo_friend", RerateEventSeedSpec(9_000_009, "alright", 5.4, "like", 5, 0.4)),
+)
+
+# In-app notifications demo_power has received, so the header bell has an unread badge and the
+# Notifications list shows both kinds with a realistic read/unread + recency spread. Likes target
+# demo_power's own seeded rating events (see the demo_power FEED_EVENT_SPECS above); each like also
+# seeds the underlying Like row so the activity card shows the count and likers list. Actors are all
+# visible to demo_power (public, or friends-only with a mutual follow); demo_blocked is omitted on
+# purpose. The three most recent are unread (badge = 3).
+POWER_NOTIFICATION_SPECS: tuple[NotificationSeedSpec, ...] = (
+    NotificationSeedSpec("like", "demo_friend", 9_000_009, 0.1, False),
+    NotificationSeedSpec("follow", "demo_disc_a", None, 0.4, False),
+    NotificationSeedSpec("like", "demo_opposite", 9_000_009, 1.5, False),
+    NotificationSeedSpec("follow", "demo_friend", None, 5.0, True),
+    NotificationSeedSpec("like", "demo_feed", 9_000_001, 9.0, True),
+    NotificationSeedSpec("follow", "demo_opposite", None, 26.0, True),
+    NotificationSeedSpec("like", "demo_friends_only", 9_000_012, 31.0, True),
+    NotificationSeedSpec("follow", "demo_feed", None, 50.0, True),
+    NotificationSeedSpec("follow", "demo_friends_only", None, 73.0, True),
 )
 
 COMPARISON_SPECS_BY_USERNAME: dict[str, tuple[ComparisonSeedSpec, ...]] = {

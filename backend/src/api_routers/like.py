@@ -6,13 +6,38 @@ from src.core.dependencies import get_current_user, get_db
 from src.core.limiter import limiter
 from src.pydantic_schemas.like import ActivityLikeResponse
 from src.pydantic_schemas.profile import ProfileListResponse
-from src.services.like import like_activity, list_activity_likers, unlike_activity
+from src.pydantic_schemas.profile_modules import RecentRatingItem
+from src.services.like import (
+    get_activity_card,
+    like_activity,
+    list_activity_likers,
+    unlike_activity,
+)
 from src.sqlalchemy_tables.user import User
 
 router = APIRouter(
     prefix="/activity",
     tags=["activity"],
 )
+
+
+@router.get(
+    "/{rating_event_id}",
+    response_model=RecentRatingItem,
+)
+@limiter.limit("300/minute")
+def activity_card(
+    request: Request,
+    rating_event_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RecentRatingItem:
+    """Return one visible activity card (backs the 'open the activity' tap from a like)."""
+    return get_activity_card(
+        db,
+        viewer_id=current_user.id,
+        rating_event_id=rating_event_id,
+    )
 
 
 @router.post(

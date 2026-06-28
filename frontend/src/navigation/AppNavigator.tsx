@@ -21,6 +21,8 @@ import {
     TabParamList,
 } from "./types"
 import ActivityLikersScreen from "../features/activity/ActivityLikersScreen"
+import SingleActivityScreen from "../features/activity/SingleActivityScreen"
+import NotificationsScreen from "../features/notifications/NotificationsScreen"
 import BucketSelectionScreen from "../features/comparison/BucketSelectionScreen"
 import ComparisonFlowScreen from "../features/comparison/ComparisonFlowScreen"
 import ScoreRevealScreen from "../features/comparison/ScoreRevealScreen"
@@ -235,6 +237,8 @@ function FeedNavigator() {
     return (
         <FeedStack.Navigator screenOptions={{ headerShown: false }}>
             <FeedStack.Screen name="FeedHome" component={FeedScreen} />
+            <FeedStack.Screen name="Notifications" component={NotificationsScreen} />
+            <FeedStack.Screen name="SingleActivity" component={SingleActivityScreen} />
             <FeedStack.Screen name="OtherProfile" component={OtherProfileScreen} />
             <FeedStack.Screen name="ProfileList" component={ProfileListScreen} />
             <FeedStack.Screen name="ActivityLikers" component={ActivityLikersScreen} />

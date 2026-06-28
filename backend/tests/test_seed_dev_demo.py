@@ -29,6 +29,7 @@ from src.crud.user import create_user_with_profile
 from src.sqlalchemy_tables.block import Block
 from src.sqlalchemy_tables.comparison import Comparison
 from src.sqlalchemy_tables.follow import Follow
+from src.sqlalchemy_tables.notification import Notification
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
@@ -235,6 +236,24 @@ def test_seed_demo_data_is_idempotent(
     assert any(comparison.decision_duration_ms is None for comparison in power_comparisons)
     assert any(comparison.decision_duration_ms is not None for comparison in power_comparisons)
 
+    # demo_power has in-app notifications to view: both follows and likes, with some unread.
+    power_notifications = db_session.execute(
+        select(Notification).where(Notification.recipient_id == power_id),
+    ).scalars().all()
+    assert {n.type for n in power_notifications} == {"follow", "like"}
+    assert any(n.read_at is None for n in power_notifications)
+    assert any(n.read_at is not None for n in power_notifications)
+    # Every like notification points at one of demo_power's own rating events.
+    like_notifications = [n for n in power_notifications if n.type == "like"]
+    assert like_notifications
+    assert all(n.rating_event_id is not None for n in like_notifications)
+    power_event_ids = set(
+        db_session.execute(
+            select(RatingEvent.id).where(RatingEvent.user_id == power_id),
+        ).scalars(),
+    )
+    assert all(n.rating_event_id in power_event_ids for n in like_notifications)
+
 
 def _demo_counts(
     db_session,
@@ -278,6 +297,13 @@ def _demo_counts(
     bookmark_count = db_session.execute(
         select(func.count()).select_from(Bookmark).where(Bookmark.user_id.in_(demo_user_ids)),
     ).scalar_one()
+    notification_count = db_session.execute(
+        select(func.count())
+        .select_from(Notification)
+        .where(
+            Notification.recipient_id.in_(demo_user_ids) | Notification.actor_id.in_(demo_user_ids),
+        ),
+    ).scalar_one()
     return {
         "profiles": profile_count,
         "rankings": ranking_count,
@@ -287,6 +313,7 @@ def _demo_counts(
         "blocks": block_count,
         "snapshots": snapshot_count,
         "bookmarks": bookmark_count,
+        "notifications": notification_count,
     }
 
 
