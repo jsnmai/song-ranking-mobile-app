@@ -14,6 +14,7 @@ import { formatRelativeTime } from "../../utils/formatRelativeTime"
 import ActivityLikeButton from "../activity/ActivityLikeButton"
 import RatingActivityCard from "../activity/RatingActivityCard"
 import { useAuth } from "../auth/AuthContext"
+import { getMyRankingByDeezerId } from "../rankings/apiRequests"
 import {
     getMostCompatible, getMyAuxstrology, getMyProfile, getMyRecentRatings, getMyTasteProfile,
 } from "./apiRequests"
@@ -55,6 +56,19 @@ const STAR_DOTS = [
 export default function ProfileScreen() {
     const navigation = useNavigation<ProfileNavigationProp>()
     const { token } = useAuth()
+
+    // Your Activity songs are all rated by you — open them with your ranking so Song Detail offers
+    // Re-rate (not Rate). Fall back to the plain song view if the lookup fails. Mirrors the feed.
+    const handleActivitySongPress = async (song: RecentRatingItem["song"]) => {
+        if (!token) return
+        try {
+            const ranking = await getMyRankingByDeezerId(song.deezer_id, token)
+            navigation.navigate("SongDetail", { ranking })
+        } catch {
+            navigation.navigate("SongDetail", { song: song as never })
+        }
+    }
+
     const [profile, setProfile] = useState<Profile | null>(null)
     const [profileError, setProfileError] = useState<string | null>(null)
     const [taste, setTaste] = useState<TasteProfileResponse | null>(null)
@@ -149,6 +163,13 @@ export default function ProfileScreen() {
     const step2Done = ratedCount >= 10
     const step3Done = (profile?.following_count ?? 0) >= 3
     const stepsCompleted = [step1Done, step2Done, step3Done].filter(Boolean).length
+    // Each setup step deep-links to where you complete it: the rating steps open Discover song
+    // search, the follow step opens Discover user search.
+    const goToDiscoverSearch = (searchMode: "songs" | "users") =>
+        navigation.navigate("MainTabs", {
+            screen: "Discover",
+            params: { screen: "DiscoverHome", params: { focusSearch: true, searchMode } },
+        })
 
     const topGenres = taste?.overall?.genres?.slice(0, 3) ?? []
     const topGenreLabel = topGenres[0]?.name ?? null
@@ -281,11 +302,17 @@ export default function ProfileScreen() {
                             </View>
                             <View style={styles.setupSteps}>
                                 {([
-                                    ["Rate your first song", step1Done],
-                                    ["Reach 10 ratings to unlock Rankings", step2Done],
-                                    ["Follow 3 friends", step3Done],
-                                ] as [string, boolean][]).map(([label, done], i) => (
-                                    <View key={i} style={styles.setupStep}>
+                                    ["Rate your first song", step1Done, () => goToDiscoverSearch("songs")],
+                                    ["Reach 10 ratings to unlock Rankings", step2Done, () => goToDiscoverSearch("songs")],
+                                    ["Follow 3 friends", step3Done, () => goToDiscoverSearch("users")],
+                                ] as [string, boolean, () => void][]).map(([label, done, onPress], i) => (
+                                    <TouchableOpacity
+                                        key={i}
+                                        style={styles.setupStep}
+                                        onPress={onPress}
+                                        disabled={done}
+                                        activeOpacity={0.7}
+                                    >
                                         <View style={[styles.setupStepCircle, done && styles.setupStepCircleDone]}>
                                             {done ? (
                                                 <Svg width={10} height={10} viewBox="0 0 24 24">
@@ -314,7 +341,7 @@ export default function ProfileScreen() {
                                                 />
                                             </Svg>
                                         )}
-                                    </View>
+                                    </TouchableOpacity>
                                 ))}
                             </View>
                             <TouchableOpacity
@@ -503,7 +530,7 @@ export default function ProfileScreen() {
                                     score={item.score}
                                     hideScore={isNew}
                                     note={item.note}
-                                    onPress={() => navigation.navigate("SongDetail", { song: item.song as never })}
+                                    onPress={() => handleActivitySongPress(item.song)}
                                     testID={`activity-card-${item.rating_event_id}`}
                                 >
                                     <ActivityLikeButton
