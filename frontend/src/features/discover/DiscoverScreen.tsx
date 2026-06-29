@@ -78,6 +78,15 @@ function MiniSearchIcon() {
     )
 }
 
+function ClearIcon() {
+    return (
+        <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+            <Circle cx={12} cy={12} r={10} fill={colors.inkSoft} />
+            <Path d="m9 9 6 6m0-6-6 6" stroke={colors.paper} strokeWidth={2} strokeLinecap="round" />
+        </Svg>
+    )
+}
+
 type RecentEntry = { query: string; mode: "songs" | "users" }
 
 // Deterministic avatar background per user, matching the follow-list palette.
@@ -437,6 +446,18 @@ export default function DiscoverScreen() {
                             returnKeyType="search"
                             onFocus={handleFocusSearch}
                         />
+                        {query.length > 0 && (
+                            <TouchableOpacity
+                                onPress={() => {
+                                    setQuery("")
+                                    searchRef.current?.focus()
+                                }}
+                                hitSlop={8}
+                                accessibilityLabel="Clear search"
+                            >
+                                <ClearIcon />
+                            </TouchableOpacity>
+                        )}
                     </Pressable>
                     {searchFocused && (
                         <Animated.View entering={FadeInRight.duration(220)} exiting={FadeOutRight.duration(180)}>

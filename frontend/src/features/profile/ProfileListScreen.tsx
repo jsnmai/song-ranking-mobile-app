@@ -61,6 +61,15 @@ function SearchIcon() {
     )
 }
 
+function ClearIcon() {
+    return (
+        <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+            <Circle cx={12} cy={12} r={10} fill={colors.inkSoft} />
+            <Path d="m9 9 6 6m0-6-6 6" stroke={colors.paper} strokeWidth={2} strokeLinecap="round" />
+        </Svg>
+    )
+}
+
 export default function ProfileListScreen({ navigation, route }: ProfileListProps) {
     const { token } = useAuth()
     const { username, listType } = route.params
@@ -220,6 +229,15 @@ export default function ProfileListScreen({ navigation, route }: ProfileListProp
                         autoCapitalize="none"
                         autoCorrect={false}
                     />
+                    {query.length > 0 && (
+                        <TouchableOpacity
+                            onPress={() => setQuery("")}
+                            hitSlop={8}
+                            accessibilityLabel="Clear search"
+                        >
+                            <ClearIcon />
+                        </TouchableOpacity>
+                    )}
                 </View>
 
                 {isLoading ? (
