@@ -45,7 +45,6 @@ import OwnActivitySheet from "../activity/OwnActivitySheet"
 import { useAuth } from "../auth/AuthContext"
 import { blockUser } from "../profile/apiRequests"
 import { ProfileBase, ReportReason } from "../profile/types"
-import { RankingResponse } from "../comparison/types"
 import { getMyRankingByDeezerId, removeRating } from "../rankings/apiRequests"
 import { getFeedModules, getSongCircleRaters, listMyFeed, reportRatingEvent } from "./apiRequests"
 import { ConsensusModule, DisagreementModule, FeedEvent, MatchMomentModule, RerateRadarItem, SplitDecisionModule } from "./types"
@@ -229,7 +228,6 @@ export default function FeedScreen() {
     const [nextCursor, setNextCursor] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(false)
     const [isLoadingMore, setIsLoadingMore] = useState(false)
-    const [openingEventId, setOpeningEventId] = useState<number | null>(null)
     const [reportingEventId, setReportingEventId] = useState<number | null>(null)
     const [reportReason, setReportReason] = useState<ReportReason | null>(null)
     const [reportDetails, setReportDetails] = useState("")
@@ -245,15 +243,10 @@ export default function FeedScreen() {
     const [friendsCardDismissed, setFriendsCardDismissed] = useState(false)
     const [heroRaters, setHeroRaters] = useState<ProfileBase[]>([])
     const [rerateRadar, setRerateRadar] = useState<RerateRadarItem | null>(null)
-    const [rerateOpening, setRerateOpening] = useState(false)
     const [consensus, setConsensus] = useState<ConsensusModule | null>(null)
-    const [consensusOpening, setConsensusOpening] = useState(false)
     const [disagreement, setDisagreement] = useState<DisagreementModule | null>(null)
-    const [disagreementOpening, setDisagreementOpening] = useState(false)
     const [splitDecision, setSplitDecision] = useState<SplitDecisionModule | null>(null)
-    const [splitOpening, setSplitOpening] = useState(false)
     const [matchMoment, setMatchMoment] = useState<MatchMomentModule | null>(null)
-    const [matchMomentOpening, setMatchMomentOpening] = useState(false)
     const listRef = useRef<FlashListRef<FeedEvent>>(null)
     // Unread notifications badge on the header bell. Refetched whenever the Feed regains focus
     // (e.g. returning from the Notifications screen, where they get marked read).
@@ -349,129 +342,34 @@ export default function FeedScreen() {
         loadFeed(nextCursor, false)
     }
 
-    // Open the song behind the live Re-rate Radar card, mirroring handleSongPress' ranking lookup.
-    const handleRerateRadarPress = async () => {
-        if (!token || rerateRadar === null || rerateOpening) return
-        setRerateOpening(true)
-        setError(null)
-        try {
-            const ranking: RankingResponse = await getMyRankingByDeezerId(rerateRadar.song.deezer_id, token)
-            navigation.navigate("SongDetail", { ranking })
-        } catch (err) {
-            if (err instanceof ApiError && err.status === 404) {
-                navigation.navigate("SongDetail", { song: rerateRadar.song })
-                return
-            }
-            if (err instanceof ApiError) {
-                setError(err.detail)
-            } else if (err instanceof Error) {
-                setError(err.message)
-            } else {
-                setError("Could not open this song.")
-            }
-        } finally {
-            setRerateOpening(false)
-        }
+    // Open the song behind the live Re-rate Radar card. Song Detail resolves the viewer's ranking.
+    const handleRerateRadarPress = () => {
+        if (rerateRadar === null) return
+        navigation.navigate("SongDetail", { song: rerateRadar.song })
     }
 
-    // Open the song behind the live Consensus card (same ranking lookup as the other module cards).
-    const handleConsensusPress = async () => {
-        if (!token || consensus === null || consensusOpening) return
-        setConsensusOpening(true)
-        setError(null)
-        try {
-            const ranking: RankingResponse = await getMyRankingByDeezerId(consensus.song.deezer_id, token)
-            navigation.navigate("SongDetail", { ranking })
-        } catch (err) {
-            if (err instanceof ApiError && err.status === 404) {
-                navigation.navigate("SongDetail", { song: consensus.song })
-                return
-            }
-            if (err instanceof ApiError) {
-                setError(err.detail)
-            } else if (err instanceof Error) {
-                setError(err.message)
-            } else {
-                setError("Could not open this song.")
-            }
-        } finally {
-            setConsensusOpening(false)
-        }
+    // Open the song behind the live Consensus card.
+    const handleConsensusPress = () => {
+        if (consensus === null) return
+        navigation.navigate("SongDetail", { song: consensus.song })
     }
 
-    // Open the song behind the live Disagreement card (same ranking lookup as the other module cards).
-    const handleDisagreementPress = async () => {
-        if (!token || disagreement === null || disagreementOpening) return
-        setDisagreementOpening(true)
-        setError(null)
-        try {
-            const ranking: RankingResponse = await getMyRankingByDeezerId(disagreement.song.deezer_id, token)
-            navigation.navigate("SongDetail", { ranking })
-        } catch (err) {
-            if (err instanceof ApiError && err.status === 404) {
-                navigation.navigate("SongDetail", { song: disagreement.song })
-                return
-            }
-            if (err instanceof ApiError) {
-                setError(err.detail)
-            } else if (err instanceof Error) {
-                setError(err.message)
-            } else {
-                setError("Could not open this song.")
-            }
-        } finally {
-            setDisagreementOpening(false)
-        }
+    // Open the song behind the live Disagreement card.
+    const handleDisagreementPress = () => {
+        if (disagreement === null) return
+        navigation.navigate("SongDetail", { song: disagreement.song })
     }
 
-    // Open the song behind the live Split Decision card (same ranking lookup as the other modules).
-    const handleSplitDecisionPress = async () => {
-        if (!token || splitDecision === null || splitOpening) return
-        setSplitOpening(true)
-        setError(null)
-        try {
-            const ranking: RankingResponse = await getMyRankingByDeezerId(splitDecision.song.deezer_id, token)
-            navigation.navigate("SongDetail", { ranking })
-        } catch (err) {
-            if (err instanceof ApiError && err.status === 404) {
-                navigation.navigate("SongDetail", { song: splitDecision.song })
-                return
-            }
-            if (err instanceof ApiError) {
-                setError(err.detail)
-            } else if (err instanceof Error) {
-                setError(err.message)
-            } else {
-                setError("Could not open this song.")
-            }
-        } finally {
-            setSplitOpening(false)
-        }
+    // Open the song behind the live Split Decision card.
+    const handleSplitDecisionPress = () => {
+        if (splitDecision === null) return
+        navigation.navigate("SongDetail", { song: splitDecision.song })
     }
 
-    // Open the winning song behind the live Match Moment card (same ranking lookup as the other modules).
-    const handleMatchMomentPress = async () => {
-        if (!token || matchMoment === null || matchMomentOpening) return
-        setMatchMomentOpening(true)
-        setError(null)
-        try {
-            const ranking: RankingResponse = await getMyRankingByDeezerId(matchMoment.winner.deezer_id, token)
-            navigation.navigate("SongDetail", { ranking })
-        } catch (err) {
-            if (err instanceof ApiError && err.status === 404) {
-                navigation.navigate("SongDetail", { song: matchMoment.winner })
-                return
-            }
-            if (err instanceof ApiError) {
-                setError(err.detail)
-            } else if (err instanceof Error) {
-                setError(err.message)
-            } else {
-                setError("Could not open this song.")
-            }
-        } finally {
-            setMatchMomentOpening(false)
-        }
+    // Open the winning song behind the live Match Moment card.
+    const handleMatchMomentPress = () => {
+        if (matchMoment === null) return
+        navigation.navigate("SongDetail", { song: matchMoment.winner })
     }
 
     const handleFindUsers = () => {
@@ -487,28 +385,9 @@ export default function FeedScreen() {
         }
     }
 
-    const handleSongPress = async (event: FeedEvent) => {
-        if (!token || openingEventId !== null || reportingEventId !== null) return
-        setOpeningEventId(event.id)
-        setError(null)
-        try {
-            const ranking: RankingResponse = await getMyRankingByDeezerId(event.song.deezer_id, token)
-            navigation.navigate("SongDetail", { ranking })
-        } catch (err) {
-            if (err instanceof ApiError && err.status === 404) {
-                navigation.navigate("SongDetail", { song: event.song })
-                return
-            }
-            if (err instanceof ApiError) {
-                setError(err.detail)
-            } else if (err instanceof Error) {
-                setError(err.message)
-            } else {
-                setError("Could not open this song.")
-            }
-        } finally {
-            setOpeningEventId(null)
-        }
+    const handleSongPress = (event: FeedEvent) => {
+        if (reportingEventId !== null) return
+        navigation.navigate("SongDetail", { song: event.song })
     }
 
     const openReport = (eventId: number) => {
@@ -803,18 +682,13 @@ export default function FeedScreen() {
                     style={styles.verdictFooter}
                     activeOpacity={0.7}
                     onPress={() => handleSongPress(heroEvent)}
-                    disabled={openingEventId !== null}
                     testID={`feed-verdict-rate-${heroEvent.id}`}
                 >
                     <View style={{ flex: 1, minWidth: 0 }}>
                         <Text style={styles.verdictSongTitle} numberOfLines={1}>{heroEvent.song.title}</Text>
                         <Text style={styles.verdictSongArtist} numberOfLines={1}>{heroEvent.song.artist.toUpperCase()}</Text>
                     </View>
-                    {openingEventId === heroEvent.id ? (
-                        <ActivityIndicator color={colors.accent} size="small" />
-                    ) : (
-                        <ArrowLabel text="RATE THIS" direction="up-right" color={colors.accent} textStyle={styles.verdictRate} />
-                    )}
+                    <ArrowLabel text="RATE THIS" direction="up-right" color={colors.accent} textStyle={styles.verdictRate} />
                 </TouchableOpacity>
             </View>
         )
@@ -888,7 +762,6 @@ export default function FeedScreen() {
                 style={[styles.fullCell, { height: 150, backgroundColor: colors.navy }]}
                 activeOpacity={0.9}
                 onPress={handleRerateRadarPress}
-                disabled={rerateOpening}
                 testID={`feed-rerate-radar-${r.rating_event_id}`}
             >
                 <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
@@ -975,7 +848,6 @@ export default function FeedScreen() {
                 style={[styles.fullCell, { height: 138, backgroundColor: colors.sky }]}
                 activeOpacity={0.9}
                 onPress={handleConsensusPress}
-                disabled={consensusOpening}
                 testID={`feed-consensus-${c.song.id}`}
             >
                 <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
@@ -1046,7 +918,6 @@ export default function FeedScreen() {
                 style={styles.fullDisagreeCard}
                 activeOpacity={0.9}
                 onPress={handleDisagreementPress}
-                disabled={disagreementOpening}
                 testID={`feed-disagreement-${d.song.id}`}
             >
                 <View style={styles.fullCellTop}>
@@ -1120,7 +991,6 @@ export default function FeedScreen() {
                 style={[styles.fullCell, { height: 138, backgroundColor: "#000" }]}
                 activeOpacity={0.9}
                 onPress={handleSplitDecisionPress}
-                disabled={splitOpening}
                 testID={`feed-split-${s.song.id}`}
             >
                 <Svg style={StyleSheet.absoluteFill} viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -1190,7 +1060,6 @@ export default function FeedScreen() {
                 style={[styles.fullCell, { height: 150, backgroundColor: colors.mint }]}
                 activeOpacity={0.9}
                 onPress={handleMatchMomentPress}
-                disabled={matchMomentOpening}
                 testID={`feed-match-moment-${m.winner.id}`}
             >
                 <View style={styles.matchMomentBlob} />
@@ -1618,7 +1487,6 @@ export default function FeedScreen() {
                         </TouchableOpacity>
                         <TouchableOpacity
                             onPress={() => handleSongPress(item)}
-                            disabled={openingEventId !== null}
                             activeOpacity={0.75}
                             testID={`feed-song-${item.id}`}
                         >
@@ -1636,7 +1504,6 @@ export default function FeedScreen() {
                     <TouchableOpacity
                         style={styles.ringWrap}
                         onPress={() => handleSongPress(item)}
-                        disabled={openingEventId !== null}
                         activeOpacity={0.9}
                     >
                         <Svg
@@ -1665,14 +1532,10 @@ export default function FeedScreen() {
                         </View>
                         <View style={styles.scoreBadgeWrap}>
                             <View style={[styles.scoreBadge, { borderColor: bColor }]}>
-                                {openingEventId === item.id ? (
-                                    <ActivityIndicator color={bColor} size="small" />
-                                ) : (
-                                    <Text style={styles.scoreBadgeText}>
-                                        {/* "?" for the viewer's own score until they've rated 10; others' stay. */}
-                                        {isOwnEvent && !gettingStartedComplete ? "?" : item.new_score.toFixed(1)}
-                                    </Text>
-                                )}
+                                <Text style={styles.scoreBadgeText}>
+                                    {/* "?" for the viewer's own score until they've rated 10; others' stay. */}
+                                    {isOwnEvent && !gettingStartedComplete ? "?" : item.new_score.toFixed(1)}
+                                </Text>
                             </View>
                         </View>
                     </TouchableOpacity>

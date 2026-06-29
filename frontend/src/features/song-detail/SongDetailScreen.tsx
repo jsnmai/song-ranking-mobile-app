@@ -1,7 +1,7 @@
 // Song Detail — Bento Orbit layout.
 // Hero: full-width cover with gradient overlay, bucket tag + title/artist, score numeral.
 // Below: audio preview row, action buttons, context cards (Your Score + Global).
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
     ActivityIndicator,
     Alert,
@@ -28,7 +28,7 @@ import { colors, fonts, bucketColor } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
 import { useScoresLocked } from "../../hooks/useScoresLocked"
 import { LockIcon } from "../../components/LockIcon"
-import { listMyRankings, listMyVersusHistory, removeRating } from "../rankings/apiRequests"
+import { getMyRankingByDeezerId, listMyRankings, listMyVersusHistory, removeRating } from "../rankings/apiRequests"
 import { ComparisonHistoryReceipt } from "../rankings/types"
 import { RankingResponse } from "../comparison/types"
 import { fetchPreviewUrl } from "../songs/apiRequests"
@@ -175,11 +175,49 @@ function _bucketLabel(bucket: string): string {
 export default function SongDetailScreen({ navigation, route }: SongDetailProps) {
     const { token } = useAuth()
     const scoresLocked = useScoresLocked()
-    const isRated = "ranking" in route.params
-    const ranking = isRated ? route.params.ranking : null
-    const song = isRated ? route.params.ranking.song : route.params.song
+    // A caller either hands us a full ranking (e.g. from Rankings, already in hand) or just a song
+    // (instant navigation from feeds, search, and activity lists). When given only a song we resolve
+    // the viewer's ranking here, so the tap opens this screen immediately and the personal score fills
+    // in a moment later — instead of every call site blocking on the lookup before it can navigate.
+    const passedRanking = "ranking" in route.params ? route.params.ranking : null
+    const passedSong = "ranking" in route.params ? route.params.ranking.song : route.params.song
+    const [resolvedRanking, setResolvedRanking] = useState<RankingResponse | null>(passedRanking)
+    const [rankingStatus, setRankingStatus] = useState<"loading" | "ready" | "error">(
+        passedRanking !== null ? "ready" : "loading",
+    )
+    const ranking = resolvedRanking
+    const isRated = resolvedRanking !== null
+    const song = resolvedRanking !== null ? resolvedRanking.song : passedSong
     const globalRatingCount = song.global_rating_count ?? 0
     const globalAvgScore = song.global_avg_score ?? null
+
+    // Look up the viewer's ranking for a song-only param. A 404 means they haven't rated it (the
+    // unrated view is correct); any other failure leaves a retry affordance in the score slots.
+    const resolveRanking = useCallback(async () => {
+        if (!token) {
+            setRankingStatus("ready")
+            return
+        }
+        setRankingStatus("loading")
+        try {
+            const resolved = await getMyRankingByDeezerId(passedSong.deezer_id, token)
+            setResolvedRanking(resolved)
+            setRankingStatus("ready")
+        } catch (err) {
+            if (err instanceof ApiError && err.status === 404) {
+                setResolvedRanking(null)
+                setRankingStatus("ready")
+            } else {
+                setRankingStatus("error")
+            }
+        }
+    }, [token, passedSong.deezer_id])
+
+    useEffect(() => {
+        // Skip the lookup when the caller already handed us the ranking.
+        if (passedRanking !== null) return
+        resolveRanking()
+    }, [passedRanking, resolveRanking])
     const [menuOpen, setMenuOpen] = useState(false)
     // The sheet stays mounted while it animates out, so `sheetMounted` lags `menuOpen` on close.
     const [sheetMounted, setSheetMounted] = useState(false)
@@ -488,7 +526,13 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                             </Text>
                         </View>
                         <View style={styles.heroRight}>
-                            {ranking !== null ? (
+                            {rankingStatus === "loading" ? (
+                                <ActivityIndicator color="#fff" size="small" style={styles.heroScoreSpinner} />
+                            ) : rankingStatus === "error" ? (
+                                <TouchableOpacity onPress={resolveRanking} accessibilityLabel="Retry loading your score">
+                                    <Text style={styles.heroUnrated}>RETRY</Text>
+                                </TouchableOpacity>
+                            ) : ranking !== null ? (
                                 <>
                                     <Text style={styles.heroScore}>{scoresLocked ? "?" : ranking.score.toFixed(1)}</Text>
                                     <Text style={styles.heroScoreLabel}>YOUR SCORE</Text>
@@ -566,7 +610,13 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                     {/* Your score card (paper) */}
                     <View style={styles.paperCard}>
                         <Text style={styles.cardKicker}>YOUR SCORE</Text>
-                        {ranking !== null ? (
+                        {rankingStatus === "loading" ? (
+                            <ActivityIndicator color={colors.inkDim} size="small" style={styles.cardSpinner} />
+                        ) : rankingStatus === "error" ? (
+                            <TouchableOpacity onPress={resolveRanking}>
+                                <Text style={styles.cardRetry}>Couldn't load · Retry</Text>
+                            </TouchableOpacity>
+                        ) : ranking !== null ? (
                             <>
                                 <Text style={[styles.bigScore, { color: accent }]}>
                                     {scoresLocked ? "?" : ranking.score.toFixed(1)}
@@ -859,6 +909,11 @@ const styles = StyleSheet.create({
         letterSpacing: 1.2,
         color: "rgba(255,255,255,0.6)",
     },
+    // Holds the score's vertical space while the viewer's ranking resolves, so the hero doesn't jump.
+    heroScoreSpinner: {
+        height: 46,
+        justifyContent: "center",
+    },
     // ── Preview row ─────────────────────────────────────────────────────
     previewRow: {
         flexDirection: "row",
@@ -1000,6 +1055,15 @@ const styles = StyleSheet.create({
     },
     cardEmpty: {
         color: colors.inkSoft,
+        fontSize: 12,
+        marginTop: 4,
+    },
+    cardSpinner: {
+        alignSelf: "flex-start",
+        marginTop: 4,
+    },
+    cardRetry: {
+        color: colors.accent,
         fontSize: 12,
         marginTop: 4,
     },

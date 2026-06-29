@@ -236,8 +236,9 @@ describe("DiscoverScreen", () => {
         })
     })
 
-    it("opens already-rated search results in Song Detail with rating actions", async () => {
-        mockGetMyRankingByDeezerId.mockResolvedValue(ranking)
+    it("opens already-rated search results in Song Detail (resolved there)", async () => {
+        const ratedSong = { ...song, my_bucket: "like", my_score: 9.4 }
+        mockSearchSongs.mockResolvedValue({ results: [ratedSong] })
         render(<DiscoverScreen />)
 
         fireEvent(screen.getByPlaceholderText("Search songs or people…"), "focus")
@@ -249,10 +250,12 @@ describe("DiscoverScreen", () => {
         const result = await screen.findByText("Nights")
         fireEvent.press(result)
 
+        // Navigation is instant with the song; Song Detail resolves the viewer's ranking and offers
+        // re-rate, so Discover no longer blocks on the lookup.
         await waitFor(() => {
-            expect(mockGetMyRankingByDeezerId).toHaveBeenCalledWith(123, "test-token")
-            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
+            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { song: ratedSong })
         })
+        expect(mockGetMyRankingByDeezerId).not.toHaveBeenCalled()
     })
 
     it("renders the live Trending card from the top circle song and opens it", async () => {

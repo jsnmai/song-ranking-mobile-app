@@ -284,8 +284,9 @@ describe("FeedScreen", () => {
         })
         fireEvent.press(screen.getByTestId("feed-song-9"))
 
+        // Navigation is instant with the song; Song Detail resolves the viewer's ranking itself.
         await waitFor(() => {
-            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
+            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { song })
         })
     })
 
@@ -321,7 +322,7 @@ describe("FeedScreen", () => {
         // "Rate this" opens the song page; tapping the hero body scrolls (does not navigate).
         fireEvent.press(screen.getByTestId("feed-verdict-rate-9"))
         await waitFor(() => {
-            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
+            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { song: { ...song, global_rating_count: 12 } })
         })
         fireEvent.press(screen.getByTestId("feed-verdict-scroll-9"))
         expect(mockNavigate).not.toHaveBeenCalledWith("OtherProfile", expect.anything())
@@ -668,7 +669,7 @@ describe("FeedScreen", () => {
 
         fireEvent.press(screen.getByTestId("feed-rerate-radar-55"))
         await waitFor(() => {
-            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
+            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { song })
         })
     })
 
@@ -715,7 +716,7 @@ describe("FeedScreen", () => {
 
         fireEvent.press(screen.getByTestId("feed-consensus-42"))
         await waitFor(() => {
-            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
+            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { song })
         })
     })
 
@@ -762,7 +763,7 @@ describe("FeedScreen", () => {
 
         fireEvent.press(screen.getByTestId("feed-disagreement-42"))
         await waitFor(() => {
-            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
+            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { song })
         })
     })
 
@@ -802,7 +803,7 @@ describe("FeedScreen", () => {
 
         fireEvent.press(screen.getByTestId("feed-split-42"))
         await waitFor(() => {
-            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
+            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { song })
         })
     })
 
@@ -839,7 +840,7 @@ describe("FeedScreen", () => {
 
         fireEvent.press(screen.getByTestId("feed-match-moment-88"))
         await waitFor(() => {
-            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
+            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { song: winnerSong })
         })
     })
 
