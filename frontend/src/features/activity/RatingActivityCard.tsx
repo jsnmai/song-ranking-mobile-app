@@ -3,7 +3,7 @@
 // badge) beside album art ringed by a colored score arc, with an optional note
 // and an action row (the like button) below.
 import { ReactNode } from "react"
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { Image, StyleProp, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from "react-native"
 import Svg, { Circle, Path } from "react-native-svg"
 
 import { bucketColor, colors, fonts } from "../../theme"
@@ -51,14 +51,26 @@ type RatingActivityCardProps = {
     hideScore?: boolean
     note?: string | null
     onPress?: () => void
+    // testID for the song/artist tap target. Defaults to `${testID}-song`; override when a caller
+    // (e.g. the Feed) needs a different convention like `feed-song-{id}`.
+    songTestID?: string
+    // When provided, the actor row (avatar + name) becomes tappable — e.g. open the actor's profile
+    // on the Feed. Left as a plain row (not tappable) when omitted.
+    onActorPress?: () => void
+    actorTestID?: string
+    actorDisabled?: boolean
     // When provided, renders a "···" options button in the action row (e.g. your own activity).
     onOptions?: () => void
     optionsTestID?: string
     // When provided, renders a share button (just left of the "···") that opens the shareable art.
     onShare?: () => void
     shareTestID?: string
+    // Extra content rendered between the note and the action row (e.g. the Feed's report panel).
+    belowNote?: ReactNode
     children?: ReactNode
     testID?: string
+    // Merged into the card container (e.g. the Feed adds its own horizontal margin).
+    style?: StyleProp<ViewStyle>
 }
 
 export default function RatingActivityCard({
@@ -73,34 +85,56 @@ export default function RatingActivityCard({
     hideScore,
     note,
     onPress,
+    songTestID,
+    onActorPress,
+    actorTestID,
+    actorDisabled,
     onOptions,
     optionsTestID,
     onShare,
     shareTestID,
+    belowNote,
     children,
     testID,
+    style,
 }: RatingActivityCardProps) {
     const bColor = bucketColor(bucket)
+    // Avatar + name/action/time — shared by both the static and tappable actor row.
+    const actorInner = (
+        <>
+            <View style={[styles.actorAvatar, { backgroundColor: avatarColor }]}>
+                <Text style={styles.actorInitial}>{initial}</Text>
+            </View>
+            <Text style={styles.actorMeta} numberOfLines={1}>
+                <Text style={styles.actorHandle}>{who}</Text>
+                <Text style={styles.actorActionWord}> {actionLabel.toLowerCase()}</Text>
+                <Text style={styles.actorTime}> · {timeAgo}</Text>
+            </Text>
+        </>
+    )
     return (
-        <View style={styles.card} testID={testID}>
+        <View style={[styles.card, style]} testID={testID}>
             <View style={styles.cardTopRow}>
                 <View style={styles.cardLeft}>
-                    <View style={styles.actorRow}>
-                        <View style={[styles.actorAvatar, { backgroundColor: avatarColor }]}>
-                            <Text style={styles.actorInitial}>{initial}</Text>
-                        </View>
-                        <Text style={styles.actorMeta} numberOfLines={1}>
-                            <Text style={styles.actorHandle}>{who}</Text>
-                            <Text style={styles.actorActionWord}> {actionLabel.toLowerCase()}</Text>
-                            <Text style={styles.actorTime}> · {timeAgo}</Text>
-                        </Text>
-                    </View>
+                    {onActorPress ? (
+                        <TouchableOpacity
+                            style={styles.actorRow}
+                            onPress={onActorPress}
+                            disabled={actorDisabled}
+                            activeOpacity={0.7}
+                            testID={actorTestID}
+                        >
+                            {actorInner}
+                        </TouchableOpacity>
+                    ) : (
+                        <View style={styles.actorRow}>{actorInner}</View>
+                    )}
                     {/* Only the song title/artist text opens the song — not the blank areas. */}
                     <TouchableOpacity
                         onPress={onPress}
                         activeOpacity={0.75}
                         disabled={!onPress}
-                        testID={testID ? `${testID}-song` : undefined}
+                        testID={songTestID ?? (testID ? `${testID}-song` : undefined)}
                     >
                         <Text style={styles.songTitle} numberOfLines={2}>{song.title}</Text>
                         <Text style={styles.songArtist} numberOfLines={1}>{song.artist}</Text>
@@ -150,6 +184,8 @@ export default function RatingActivityCard({
             {note !== null && note !== undefined && note !== "" && (
                 <Text style={styles.noteQuote}>"{note}"</Text>
             )}
+
+            {belowNote}
 
             {(children || onShare || onOptions) && (
                 <View style={styles.actionRow}>

@@ -39,6 +39,7 @@ import { AppStackParamList, FeedStackParamList, TabParamList } from "../../navig
 import { colors, fonts, bucketColor, goldMeterShade, meterSegment, avatarColorFor } from "../../theme"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
 import ActivityLikeButton from "../activity/ActivityLikeButton"
+import RatingActivityCard from "../activity/RatingActivityCard"
 import { updateLikePrivacy } from "../activity/apiRequests"
 import { getUnreadCount } from "../notifications/apiRequests"
 import OwnActivitySheet from "../activity/OwnActivitySheet"
@@ -90,15 +91,6 @@ const ORBIT_STARS = [
 
 // Re-rate Radar sparkline row height (px); the trajectory node tops are computed against it.
 const SPARK_H = 26
-
-// Ring arc constants for feed event album art
-const RING_SIZE = 84
-const RING_CX = 42
-const RING_CY = 42
-const RING_R = 31
-const RING_C = 2 * Math.PI * RING_R
-const RING_ARC = (290 / 360) * RING_C  // 290° colored arc
-const RING_GAP = RING_C - RING_ARC      // 70° gap at bottom
 
 const FRIEND_AVATARS = [
     { id: 1, initial: "M", color: colors.accent },
@@ -215,16 +207,6 @@ function BellIcon() {
             stroke={colors.ink} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
             <Path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
             <Path d="M13.7 21a2 2 0 0 1-3.4 0" />
-        </Svg>
-    )
-}
-
-// Matches the share glyph in RatingActivityCard so the action shares one icon language.
-function ShareIcon() {
-    return (
-        <Svg width={16} height={16} viewBox="0 0 24 24" fill="none"
-            stroke={colors.inkDim} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
-            <Path d="M12 16V4M8 8l4-4 4 4M5 14v5h14v-5" />
         </Svg>
     )
 }
@@ -1468,224 +1450,132 @@ export default function FeedScreen() {
 
     const renderFeedEvent = ({ item }: { item: FeedEvent; index: number }) => {
         const isOwnEvent = item.actor_profile.user_id === profile?.user_id
-        const bColor = bucketColor(item.new_bucket)
-        const bgColor = bucketBgColor(item.new_bucket)
         // Use the user's chosen avatar color (falling back to a stable per-name hue) so feed
         // avatars match the user's profile icon everywhere.
         const aColor = avatarColorFor(item.actor_profile.avatar_color, item.actor_profile.username)
         const nameSrc = item.actor_profile.display_name || item.actor_profile.username
         const initial = nameSrc[0].toUpperCase()
         const actionLabel = _eventLabel(item.event_type)
-        const bucketLabel = item.new_bucket === "alright" ? "OKAY" : item.new_bucket.toUpperCase()
 
+        // One shared card component across Feed / Your Activity / other-profile / single-activity, so
+        // the visuals can never drift between surfaces. Feed-only behaviour (tappable actor row, the
+        // report panel, own-vs-other options menu) rides in through props and the belowNote slot.
         return (
-            <View testID={`feed-row-${item.id}`} style={styles.eventCard}>
-                {/* Top section: actor info left, ring art right */}
-                <View style={styles.cardTopRow}>
-                    {/* Left col */}
-                    <View style={styles.cardLeft}>
-                        <TouchableOpacity
-                            style={styles.actorRow}
-                            onPress={() => handleActorPress(item)}
-                            disabled={reportingEventId !== null}
-                            testID={`feed-actor-${item.id}`}
-                        >
-                            <View style={[styles.actorAvatar, { backgroundColor: aColor }]}>
-                                <Text style={styles.actorInitial}>{initial}</Text>
-                            </View>
-                            <Text style={styles.actorMeta} numberOfLines={1}>
-                                <Text style={styles.actorHandle}>{isOwnEvent ? "You" : `@${item.actor_profile.username}`}</Text>
-                                <Text style={styles.actorActionWord}> {actionLabel.toLowerCase()}</Text>
-                                <Text style={styles.actorTime}> · {formatRelativeTime(item.created_at)}</Text>
-                            </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            onPress={() => handleSongPress(item)}
-                            activeOpacity={0.75}
-                            testID={`feed-song-${item.id}`}
-                        >
-                            <Text style={styles.songTitle} numberOfLines={2}>{item.song.title}</Text>
-                            <Text style={styles.songArtist} numberOfLines={1}>{item.song.artist}</Text>
-                        </TouchableOpacity>
-                        <View style={[styles.bucketBadge, { backgroundColor: bgColor }]}>
-                            <Text style={[styles.bucketBadgeText, { color: bColor }]}>
-                                IN {bucketLabel}
-                            </Text>
-                        </View>
-                    </View>
-
-                    {/* Right col: circular ring art */}
-                    <TouchableOpacity
-                        style={styles.ringWrap}
-                        onPress={() => handleSongPress(item)}
-                        activeOpacity={0.9}
-                    >
-                        <Svg
-                            width={RING_SIZE}
-                            height={RING_SIZE}
-                            style={{ position: "absolute", top: 0, left: 0 }}
-                        >
-                            <Circle
-                                cx={RING_CX}
-                                cy={RING_CY}
-                                r={RING_R}
-                                stroke={bColor}
-                                strokeWidth={4}
-                                fill="none"
-                                strokeDasharray={`${RING_ARC} ${RING_GAP}`}
-                                transform={`rotate(125 ${RING_CX} ${RING_CY})`}
-                                strokeLinecap="round"
-                            />
-                        </Svg>
-                        <View style={styles.ringArtWrap}>
-                            {item.song.cover_url ? (
-                                <Image style={styles.ringArt} source={{ uri: item.song.cover_url }} />
-                            ) : (
-                                <View style={[styles.ringArt, { backgroundColor: colors.paper2 }]} />
-                            )}
-                        </View>
-                        <View style={styles.scoreBadgeWrap}>
-                            <View style={[styles.scoreBadge, { borderColor: bColor }]}>
-                                <Text style={styles.scoreBadgeText}>
-                                    {/* "?" for the viewer's own score until they've rated 10; others' stay. */}
-                                    {isOwnEvent && !gettingStartedComplete ? "?" : item.new_score.toFixed(1)}
-                                </Text>
-                            </View>
-                        </View>
-                    </TouchableOpacity>
-                </View>
-
-                {/* Note quote */}
-                {item.note !== null && (
-                    <Text style={styles.noteQuote}>"{item.note}"</Text>
-                )}
-
-                {/* Report success */}
-                {reportedEventId === item.id && (
-                    <Text style={styles.reportSuccess}>Thanks. We'll review this report.</Text>
-                )}
-
-                {/* Report panel */}
-                {reportingEventId === item.id && item.note !== null && !isOwnEvent && (
-                    <View style={styles.reportPanel}>
-                        <Text style={styles.reportTitle}>Report note</Text>
-                        <Text style={styles.reportLabel}>Why are you reporting this note?</Text>
-                        <View style={styles.reasonGrid}>
-                            {REPORT_REASONS.map((reason) => (
-                                <TouchableOpacity
-                                    key={reason.value}
-                                    style={[
-                                        styles.reasonButton,
-                                        reportReason === reason.value && styles.reasonButtonActive,
-                                    ]}
-                                    onPress={() => setReportReason(reason.value)}
-                                    disabled={isReporting}
-                                >
-                                    <Text style={[
-                                        styles.reasonText,
-                                        reportReason === reason.value && styles.reasonTextActive,
-                                    ]}>
-                                        {reason.label}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                        <Text style={styles.reportLabel}>Add details, optional</Text>
-                        <TextInput
-                            value={reportDetails}
-                            onChangeText={setReportDetails}
-                            editable={!isReporting}
-                            multiline
-                            maxLength={1000}
-                            placeholder="Add context for review."
-                            placeholderTextColor={colors.inkDim}
-                            style={styles.reportInput}
-                        />
-                        {reportError !== null && (
-                            <Text style={styles.reportError}>{reportError}</Text>
+            <RatingActivityCard
+                testID={`feed-row-${item.id}`}
+                style={styles.feedCardMargin}
+                initial={initial}
+                avatarColor={aColor}
+                who={isOwnEvent ? "You" : `@${item.actor_profile.username}`}
+                actionLabel={actionLabel}
+                timeAgo={formatRelativeTime(item.created_at)}
+                song={item.song}
+                bucket={item.new_bucket}
+                score={item.new_score}
+                // "?" for the viewer's own score until they've rated 10; others' scores always show.
+                hideScore={isOwnEvent && !gettingStartedComplete}
+                note={item.note}
+                onPress={() => handleSongPress(item)}
+                songTestID={`feed-song-${item.id}`}
+                onActorPress={() => handleActorPress(item)}
+                actorTestID={`feed-actor-${item.id}`}
+                actorDisabled={reportingEventId !== null}
+                onShare={() => navigation.navigate("ShareActivity", {
+                    activity: {
+                        username: item.actor_profile.username,
+                        initial,
+                        avatarColor: aColor,
+                        actionLabel,
+                        timeAgo: formatRelativeTime(item.created_at),
+                        song: item.song,
+                        bucket: item.new_bucket,
+                        score: item.new_score,
+                        hideScore: isOwnEvent && !gettingStartedComplete,
+                        note: item.note,
+                    },
+                })}
+                shareTestID={`feed-share-${item.id}`}
+                onOptions={() => (isOwnEvent ? setOwnMenuEvent(item) : setOtherMenuEvent(item))}
+                optionsTestID={`feed-options-${item.id}`}
+                belowNote={
+                    <>
+                        {/* Report success */}
+                        {reportedEventId === item.id && (
+                            <Text style={styles.reportSuccess}>Thanks. We'll review this report.</Text>
                         )}
-                        <View style={styles.reportActions}>
-                            <TouchableOpacity
-                                style={styles.cancelReportButton}
-                                onPress={closeReport}
-                                disabled={isReporting}
-                            >
-                                <Text style={styles.cancelReportText}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                accessibilityState={{ disabled: reportReason === null || isReporting }}
-                                style={[
-                                    styles.submitReportButton,
-                                    (reportReason === null || isReporting) && styles.submitReportButtonDisabled,
-                                ]}
-                                onPress={() => submitReport(item.id)}
-                                disabled={reportReason === null || isReporting}
-                            >
-                                <Text style={styles.submitReportText}>
-                                    {isReporting ? "Submitting..." : "Submit report"}
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                )}
-
-                {/* Action row */}
-                <View style={styles.actionRow}>
-                    <View style={styles.actionBtns}>
-                        <ActivityLikeButton
-                            ratingEventId={item.id}
-                            initialLikedByViewer={item.liked_by_viewer}
-                            initialLikeCount={item.like_count}
-                            onOpenLikers={openActivityLikers}
-                        />
-                    </View>
-                    {/* Share — opens the shareable art poster. The poster always shows the author's
-                        @handle (not "You"), matching the Profile activity card's share. */}
-                    <TouchableOpacity
-                        style={styles.shareBtn}
-                        onPress={() => navigation.navigate("ShareActivity", {
-                            activity: {
-                                username: item.actor_profile.username,
-                                initial,
-                                avatarColor: aColor,
-                                actionLabel,
-                                timeAgo: formatRelativeTime(item.created_at),
-                                song: item.song,
-                                bucket: item.new_bucket,
-                                score: item.new_score,
-                                hideScore: isOwnEvent && !gettingStartedComplete,
-                                note: item.note,
-                            },
-                        })}
-                        hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-                        accessibilityLabel="Share activity"
-                        testID={`feed-share-${item.id}`}
-                    >
-                        <ShareIcon />
-                    </TouchableOpacity>
-                    {isOwnEvent ? (
-                        <TouchableOpacity
-                            style={styles.moreBtn}
-                            onPress={() => setOwnMenuEvent(item)}
-                            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-                            accessibilityLabel="Activity options"
-                            testID={`feed-options-${item.id}`}
-                        >
-                            <Text style={styles.moreDots}>···</Text>
-                        </TouchableOpacity>
-                    ) : (
-                        <TouchableOpacity
-                            style={styles.moreBtn}
-                            onPress={() => setOtherMenuEvent(item)}
-                            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-                            accessibilityLabel="Activity options"
-                            testID={`feed-options-${item.id}`}
-                        >
-                            <Text style={styles.moreDots}>···</Text>
-                        </TouchableOpacity>
-                    )}
-                </View>
-            </View>
+                        {/* Report panel */}
+                        {reportingEventId === item.id && item.note !== null && !isOwnEvent && (
+                            <View style={styles.reportPanel}>
+                                <Text style={styles.reportTitle}>Report note</Text>
+                                <Text style={styles.reportLabel}>Why are you reporting this note?</Text>
+                                <View style={styles.reasonGrid}>
+                                    {REPORT_REASONS.map((reason) => (
+                                        <TouchableOpacity
+                                            key={reason.value}
+                                            style={[
+                                                styles.reasonButton,
+                                                reportReason === reason.value && styles.reasonButtonActive,
+                                            ]}
+                                            onPress={() => setReportReason(reason.value)}
+                                            disabled={isReporting}
+                                        >
+                                            <Text style={[
+                                                styles.reasonText,
+                                                reportReason === reason.value && styles.reasonTextActive,
+                                            ]}>
+                                                {reason.label}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                                <Text style={styles.reportLabel}>Add details, optional</Text>
+                                <TextInput
+                                    value={reportDetails}
+                                    onChangeText={setReportDetails}
+                                    editable={!isReporting}
+                                    multiline
+                                    maxLength={1000}
+                                    placeholder="Add context for review."
+                                    placeholderTextColor={colors.inkDim}
+                                    style={styles.reportInput}
+                                />
+                                {reportError !== null && (
+                                    <Text style={styles.reportError}>{reportError}</Text>
+                                )}
+                                <View style={styles.reportActions}>
+                                    <TouchableOpacity
+                                        style={styles.cancelReportButton}
+                                        onPress={closeReport}
+                                        disabled={isReporting}
+                                    >
+                                        <Text style={styles.cancelReportText}>Cancel</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        accessibilityState={{ disabled: reportReason === null || isReporting }}
+                                        style={[
+                                            styles.submitReportButton,
+                                            (reportReason === null || isReporting) && styles.submitReportButtonDisabled,
+                                        ]}
+                                        onPress={() => submitReport(item.id)}
+                                        disabled={reportReason === null || isReporting}
+                                    >
+                                        <Text style={styles.submitReportText}>
+                                            {isReporting ? "Submitting..." : "Submit report"}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        )}
+                    </>
+                }
+            >
+                <ActivityLikeButton
+                    ratingEventId={item.id}
+                    initialLikedByViewer={item.liked_by_viewer}
+                    initialLikeCount={item.like_count}
+                    onOpenLikers={openActivityLikers}
+                />
+            </RatingActivityCard>
         )
     }
 
@@ -1892,13 +1782,6 @@ function _eventLabel(eventType: FeedEvent["event_type"]): string {
 }
 
 
-function bucketBgColor(bucket: string): string {
-    if (bucket === "like") return "rgba(255,90,60,0.1)"
-    if (bucket === "okay" || bucket === "alright") return "rgba(91,141,239,0.1)"
-    if (bucket === "dislike") return "rgba(122,58,208,0.1)"
-    return "rgba(139,143,156,0.1)"
-}
-
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -2050,170 +1933,16 @@ const styles = StyleSheet.create({
         letterSpacing: 0.5,
     },
     // ── Event card ────────────────────────────────────────────────────────
-    eventCard: {
-        backgroundColor: colors.paper,
+    // The shared RatingActivityCard owns the card chrome (background, border, radius, padding,
+    // shadow). Its `card` style has no horizontal margin so callers place it; the Feed adds 14.
+    feedCardMargin: {
         marginHorizontal: 14,
-        borderRadius: 16,
-        padding: 14,
-        marginBottom: 8,
-        borderWidth: 1,
-        borderColor: colors.line,
-        shadowColor: colors.ink,
-        shadowOpacity: 0.04,
-        shadowRadius: 6,
-        shadowOffset: { width: 0, height: 2 },
     },
-    cardTopRow: {
-        flexDirection: "row",
-        gap: 12,
-        marginBottom: 10,
-    },
-    cardLeft: {
-        flex: 1,
-        minWidth: 0,
-    },
-    actorRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 7,
-        marginBottom: 8,
-    },
-    actorAvatar: {
-        width: 28,
-        height: 28,
-        borderRadius: 14,
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-    },
+    // actorInitial is still used by the Recent Verdict module's mini avatars.
     actorInitial: {
         color: "#fff",
         fontWeight: "700",
         fontSize: 12,
-    },
-    actorMeta: {
-        flex: 1,
-        fontSize: 12,
-        color: colors.inkSoft,
-    },
-    actorHandle: {
-        fontWeight: "700",
-        color: colors.ink,
-    },
-    actorActionWord: {
-        color: colors.inkSoft,
-    },
-    actorTime: {
-        fontFamily: fonts.mono,
-        fontSize: 10,
-        color: colors.inkDim,
-    },
-    songTitle: {
-        fontFamily: fonts.display,
-        fontSize: 20,
-        letterSpacing: -0.4,
-        lineHeight: 22,
-        color: colors.ink,
-        marginBottom: 3,
-    },
-    songArtist: {
-        fontSize: 13,
-        color: colors.inkSoft,
-        marginBottom: 9,
-    },
-    bucketBadge: {
-        alignSelf: "flex-start",
-        borderRadius: 999,
-        paddingHorizontal: 9,
-        paddingVertical: 3.5,
-    },
-    bucketBadgeText: {
-        fontFamily: fonts.mono,
-        fontSize: 9,
-        fontWeight: "700",
-        letterSpacing: 0.5,
-    },
-    // ── Ring art ──────────────────────────────────────────────────────────
-    ringWrap: {
-        width: RING_SIZE,
-        height: RING_SIZE + 12,
-        flexShrink: 0,
-    },
-    ringArtWrap: {
-        position: "absolute",
-        top: 15,
-        left: 15,
-        width: 54,
-        height: 54,
-        borderRadius: 27,
-        overflow: "hidden",
-    },
-    ringArt: {
-        width: 54,
-        height: 54,
-    },
-    scoreBadgeWrap: {
-        position: "absolute",
-        bottom: 0,
-        left: 0,
-        right: 0,
-        alignItems: "center",
-    },
-    scoreBadge: {
-        backgroundColor: colors.paper,
-        borderRadius: 9,
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderWidth: 1.5,
-    },
-    scoreBadgeText: {
-        fontFamily: fonts.display,
-        fontSize: 13,
-        letterSpacing: -0.2,
-        color: colors.ink,
-    },
-    // ── Note + action row ─────────────────────────────────────────────────
-    noteQuote: {
-        fontStyle: "italic",
-        fontSize: 13.5,
-        color: colors.inkSoft,
-        lineHeight: 19,
-        marginBottom: 10,
-    },
-    actionRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        paddingTop: 10,
-        borderTopWidth: StyleSheet.hairlineWidth,
-        borderTopColor: colors.line,
-    },
-    actionBtns: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 12,
-        flex: 1,
-    },
-    actionBtn: {
-        flexDirection: "row",
-        alignItems: "center",
-    },
-    shareBtn: {
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        flexShrink: 0,
-    },
-    // Kept identical to RatingActivityCard's share/more buttons so the action row reads the same
-    // on the Feed as on the Profile, UserActivity, and SingleActivity cards (all share that component).
-    moreBtn: {
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        flexShrink: 0,
-    },
-    moreDots: {
-        fontSize: 18,
-        lineHeight: 18,
-        color: colors.inkDim,
-        fontWeight: "700",
     },
     // ── Report panel ──────────────────────────────────────────────────────
     reportPanel: {
