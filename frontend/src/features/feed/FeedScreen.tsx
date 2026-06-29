@@ -219,6 +219,16 @@ function BellIcon() {
     )
 }
 
+// Matches the share glyph in RatingActivityCard so the action shares one icon language.
+function ShareIcon() {
+    return (
+        <Svg width={16} height={16} viewBox="0 0 24 24" fill="none"
+            stroke={colors.inkDim} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
+            <Path d="M12 16V4M8 8l4-4 4 4M5 14v5h14v-5" />
+        </Svg>
+    )
+}
+
 export default function FeedScreen() {
     const navigation = useNavigation<FeedNavigation>()
     const insets = useSafeAreaInsets()
@@ -1629,6 +1639,30 @@ export default function FeedScreen() {
                             onOpenLikers={openActivityLikers}
                         />
                     </View>
+                    {/* Share — opens the shareable art poster. The poster always shows the author's
+                        @handle (not "You"), matching the Profile activity card's share. */}
+                    <TouchableOpacity
+                        style={styles.shareBtn}
+                        onPress={() => navigation.navigate("ShareActivity", {
+                            activity: {
+                                username: item.actor_profile.username,
+                                initial,
+                                avatarColor: aColor,
+                                actionLabel,
+                                timeAgo: formatRelativeTime(item.created_at),
+                                song: item.song,
+                                bucket: item.new_bucket,
+                                score: item.new_score,
+                                hideScore: isOwnEvent && !gettingStartedComplete,
+                                note: item.note,
+                            },
+                        })}
+                        hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                        accessibilityLabel="Share activity"
+                        testID={`feed-share-${item.id}`}
+                    >
+                        <ShareIcon />
+                    </TouchableOpacity>
                     {isOwnEvent ? (
                         <TouchableOpacity
                             style={styles.moreBtn}
@@ -2163,11 +2197,23 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
     },
-    moreBtn: {},
+    shareBtn: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        flexShrink: 0,
+    },
+    // Kept identical to RatingActivityCard's share/more buttons so the action row reads the same
+    // on the Feed as on the Profile, UserActivity, and SingleActivity cards (all share that component).
+    moreBtn: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        flexShrink: 0,
+    },
     moreDots: {
-        color: colors.inkDim,
         fontSize: 18,
-        letterSpacing: -1,
+        lineHeight: 18,
+        color: colors.inkDim,
+        fontWeight: "700",
     },
     // ── Report panel ──────────────────────────────────────────────────────
     reportPanel: {
