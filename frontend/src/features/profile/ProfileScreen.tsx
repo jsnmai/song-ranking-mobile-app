@@ -405,7 +405,7 @@ export default function ProfileScreen() {
                             <View style={styles.setupSteps}>
                                 {([
                                     ["Rate your first song", step1Done, () => goToDiscoverSearch("songs")],
-                                    ["Reach 10 ratings to unlock Rankings", step2Done, () => goToDiscoverSearch("songs")],
+                                    ["Reach 10 ratings to unlock Rankings and Taste Profile", step2Done, () => goToDiscoverSearch("songs")],
                                     ["Follow 3 friends", step3Done, () => goToDiscoverSearch("users")],
                                 ] as [string, boolean, () => void][]).map(([label, done, onPress], i) => (
                                     <TouchableOpacity
@@ -544,8 +544,38 @@ export default function ProfileScreen() {
                         )}
                     </View>
 
-                    {/* Taste Profile strip — how you rate, at a glance (full users only) */}
-                    {!isNew && (
+                    {/* Taste Profile strip: a skeleton preview of the tiles until 10 ratings, then the live tiles. */}
+                    {isNew ? (
+                        <View style={styles.stripCard}>
+                            <Text style={styles.stripKicker}>TASTE PROFILE</Text>
+                            <View style={styles.stripRow}>
+                                {["RANGE", "TOP ARTIST", "SELECTIVITY"].map((lbl, i) => (
+                                    <Fragment key={lbl}>
+                                        {i > 0 && <View style={styles.stripDivider} />}
+                                        <View style={styles.stripTile}>
+                                            <Text style={styles.stripLabel}>{lbl}</Text>
+                                            <Text style={styles.stripLockedValue}>—</Text>
+                                        </View>
+                                    </Fragment>
+                                ))}
+                            </View>
+                            <View style={styles.stripLockedCaptionRow}>
+                                <Svg width={9} height={9} viewBox="0 0 24 24" fill="none">
+                                    <Path
+                                        d="M8 11V7a4 4 0 0 1 8 0v4"
+                                        stroke={colors.inkDim}
+                                        strokeWidth={2.2}
+                                        strokeLinecap="round"
+                                    />
+                                    <Path
+                                        d="M6 11h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1Z"
+                                        fill={colors.inkDim}
+                                    />
+                                </Svg>
+                                <Text style={styles.stripLockedCaption}>Unlocks at 10 ratings</Text>
+                            </View>
+                        </View>
+                    ) : (
                         <View style={styles.stripCard}>
                             <Text style={styles.stripKicker}>TASTE PROFILE</Text>
                             {tasteLoading ? (
@@ -1119,6 +1149,24 @@ const styles = StyleSheet.create({
         color: colors.inkDim,
         fontWeight: "700",
         marginBottom: 12,
+    },
+    stripLockedValue: {
+        fontFamily: fonts.display,
+        fontSize: 15,
+        color: colors.inkDim,
+        marginTop: 2,
+    },
+    stripLockedCaptionRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 5,
+        marginTop: 12,
+    },
+    stripLockedCaption: {
+        fontFamily: fonts.mono,
+        fontSize: 9,
+        letterSpacing: 0.6,
+        color: colors.inkDim,
     },
     stripRow: {
         flexDirection: "row",
