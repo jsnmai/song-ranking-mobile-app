@@ -32,7 +32,6 @@ import { bucketColor, colors, fonts } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
 import { followUser, getMostCompatible, searchProfiles, unfollowUser } from "../profile/apiRequests"
 import { MostCompatibleItem, Profile } from "../profile/types"
-import { getMyRankingByDeezerId } from "../rankings/apiRequests"
 import { searchSongs } from "../search/apiRequests"
 import { SongSearchResult } from "../search/types"
 import { getCircleMostRated, getCircleTrending, listCoSigns } from "./apiRequests"
@@ -138,7 +137,6 @@ export default function DiscoverScreen() {
     const [profileResults, setProfileResults] = useState<Profile[]>([])
     const [followBusy, setFollowBusy] = useState<Set<string>>(new Set())
     const [isLoading, setIsLoading] = useState(false)
-    const [openingDeezerId, setOpeningDeezerId] = useState<number | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [coSigns, setCoSigns] = useState<CoSignItem[]>([])
     const [isDiscoveryLoading, setIsDiscoveryLoading] = useState(false)
@@ -219,29 +217,10 @@ export default function DiscoverScreen() {
         setRecentSearches(prev => prev.filter(r => !(r.query === item.query && r.mode === item.mode)))
     }
 
-    const handleSongPress = async (song: SongSearchResult) => {
-        if (!token || openingDeezerId !== null) return
-        setOpeningDeezerId(song.deezer_id)
-        setError(null)
+    const handleSongPress = (song: SongSearchResult) => {
         addToRecent(query, "songs")
-        try {
-            const ranking = await getMyRankingByDeezerId(song.deezer_id, token)
-            navigation.navigate("SongDetail", { ranking })
-        } catch (err) {
-            if (err instanceof ApiError && err.status === 404) {
-                navigation.navigate("SongDetail", { song })
-                return
-            }
-            if (err instanceof ApiError) {
-                setError(err.detail)
-            } else if (err instanceof Error) {
-                setError(err.message)
-            } else {
-                setError("Could not open this song.")
-            }
-        } finally {
-            setOpeningDeezerId(null)
-        }
+        // Navigate immediately; Song Detail resolves the viewer's ranking (the row already shows it).
+        navigation.navigate("SongDetail", { song })
     }
 
     const handleProfilePress = (p: Profile) => {
@@ -559,7 +538,6 @@ export default function DiscoverScreen() {
                                             key={song.deezer_id}
                                             style={[styles.resultRow, i > 0 && styles.resultRowBorder]}
                                             onPress={() => handleSongPress(song)}
-                                            disabled={openingDeezerId !== null}
                                             activeOpacity={0.75}
                                         >
                                             <View style={styles.cover}>
@@ -571,9 +549,7 @@ export default function DiscoverScreen() {
                                                 <HighlightedText text={song.title} query={trimmedQuery} style={styles.resultTitle} />
                                                 <HighlightedText text={song.artist} query={trimmedQuery} style={styles.resultArtist} />
                                             </View>
-                                            {openingDeezerId === song.deezer_id ? (
-                                                <ActivityIndicator color={colors.accent} size="small" />
-                                            ) : rated ? (
+                                            {rated ? (
                                                 <View style={styles.ratedCluster}>
                                                     <View style={styles.ratedTagRow}>
                                                         <View style={[styles.ratedDot, { backgroundColor: bucketColor(song.my_bucket!) }]} />
@@ -587,7 +563,6 @@ export default function DiscoverScreen() {
                                                 <TouchableOpacity
                                                     style={styles.ratePill}
                                                     onPress={() => handleSearchRatePress(song)}
-                                                    disabled={openingDeezerId !== null}
                                                 >
                                                     <Text style={styles.ratePillLabel}>Rate</Text>
                                                 </TouchableOpacity>
