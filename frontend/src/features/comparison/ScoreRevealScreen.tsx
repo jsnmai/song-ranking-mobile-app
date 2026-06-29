@@ -100,13 +100,15 @@ export default function ScoreRevealScreen({ navigation, route }: ScoreRevealProp
         ? Math.max(1, Math.round((ranking.position / bucketTotal) * 100))
         : null
 
-    // Return to wherever the rating started, which the user thinks of as the list or
-    // search they picked the song from (Rankings, Discover search, Feed, and so on). The
-    // rate flow pushes SongDetail plus the BucketSelection, ComparisonFlow and ScoreReveal
-    // chain on top of MainTabs while leaving the originating tab active and mounted, so
-    // popping to the top lands back on that tab with its scroll and search state intact,
-    // rather than the intermediate song page.
-    const returnToOrigin = () => navigation.popToTop()
+    // Return to wherever the rating started. The flow replaces BucketSelection, then
+    // ComparisonFlow, then ScoreReveal into a single stack slot, so the screen directly
+    // beneath ScoreReveal is the one the user tapped Rate from (Discover, a song page,
+    // Feed, and so on). Fall back to Discover if there is nothing to go back to, such as
+    // after a crash resume.
+    const returnToOrigin = () => {
+        if (navigation.canGoBack()) navigation.goBack()
+        else navigation.navigate("MainTabs", { screen: "Discover" })
+    }
     const handleClose = returnToOrigin
     const handleShare = async () => {
         try {
@@ -118,7 +120,13 @@ export default function ScoreRevealScreen({ navigation, route }: ScoreRevealProp
         } catch {}
     }
     const handleViewRankings = () => navigation.navigate("MainTabs", { screen: "Rankings" })
-    const handleDone = returnToOrigin
+    // Done: unwind the whole rate flow and land back on the exact tab screen the user was
+    // browsing, skipping any intermediate song page. popToTop only touches the root stack,
+    // so the originating tab (Discover, Feed, Rankings) stays mounted with its scroll and
+    // search state intact — e.g. the Discover search results for the song you just rated.
+    // navigate("MainTabs", ...) instead re-enters the tab fresh, which clears that state
+    // and drops you on the default Discover home.
+    const handleDone = () => navigation.popToTop()
 
     return (
         <View style={styles.root}>
