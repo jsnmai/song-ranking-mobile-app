@@ -72,10 +72,8 @@ describe("UserActivityScreen", () => {
         expect(mockGetProfileActivity).toHaveBeenCalledWith("maya", "test-token", undefined)
     })
 
-    it("opens Song Detail as a re-rate when the viewer has rated the song", async () => {
+    it("opens Song Detail with the song so it can resolve the viewer's ranking", async () => {
         mockGetProfileActivity.mockResolvedValue({ items: [item(42, "Redbone")], next_cursor: null })
-        const ranking = { id: 7, song_id: 10, bucket: "like", position: 1, score: 9.2 }
-        mockGetMyRankingByDeezerId.mockResolvedValue(ranking)
 
         render(<UserActivityScreen navigation={navigationProp} route={routeProp} />)
 
@@ -84,10 +82,14 @@ describe("UserActivityScreen", () => {
         })
         fireEvent.press(screen.getByTestId("activity-card-42-song"))
 
+        // Navigation is instant with the song; Song Detail resolves the viewer's ranking itself.
         await waitFor(() => {
-            expect(mockGetMyRankingByDeezerId).toHaveBeenCalledWith(123, "test-token")
-            expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { ranking })
+            expect(mockNavigate).toHaveBeenCalledWith(
+                "SongDetail",
+                { song: expect.objectContaining({ title: "Redbone" }) },
+            )
         })
+        expect(mockGetMyRankingByDeezerId).not.toHaveBeenCalled()
     })
 
     it("falls back to the unrated song view when the viewer has not rated it", async () => {
