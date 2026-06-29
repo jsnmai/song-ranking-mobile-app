@@ -872,9 +872,9 @@ describe("FeedScreen", () => {
         await waitFor(() => {
             expect(screen.getByTestId("feed-song-9")).toBeTruthy()
         })
-        // Below the gate the compact "UNLOCKING SOON" teaser grid shows (not the full cards), the
+        // Below the gate the compact "SOCIAL CARDS" teaser grid shows (not the full cards), the
         // banner explains how to unlock, and we never hit the modules endpoint.
-        expect(screen.getByText("UNLOCKING SOON")).toBeTruthy()
+        expect(screen.getByText("SOCIAL CARDS")).toBeTruthy()
         expect(screen.queryByTestId("feed-split-locked")).toBeNull()
         expect(screen.getByText("Rate 5 songs and follow 3 people to unlock the Feed modules below.")).toBeTruthy()
         expect(mockGetFeedModules).not.toHaveBeenCalled()

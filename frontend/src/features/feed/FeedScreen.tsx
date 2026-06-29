@@ -1233,6 +1233,15 @@ export default function FeedScreen() {
         )
     }
 
+    // Heads the whole social-cards area (Recent Verdict + the module grid). Rendered above
+    // renderRecentVerdict() so it stays above Recent Verdict whether the verdict is the live hero,
+    // the locked teaser, or the compact locked row — in every gate state.
+    const renderSocialCardsHeader = () => (
+        <View style={[styles.sectionRow, { marginBottom: 0 }]}>
+            <Text style={styles.sectionLabel}>SOCIAL CARDS</Text>
+        </View>
+    )
+
     const renderUnlockedSection = () => (
         <View style={styles.unlockedSection}>
             {/* Row: Split (live-or-locked) + Consensus (138px) */}
@@ -1251,19 +1260,16 @@ export default function FeedScreen() {
         </View>
     )
 
-    // Compact "UNLOCKING SOON" teaser grid — shown below the module gate (brand-new accounts). Each
-    // tile is a locked placeholder that bounces on tap; the full-size cards replace this grid once the
-    // gate (rated >= MODULE_UNLOCK_RATED AND following >= 3) is met. Recent Verdict appears here as a
-    // compact row only while it has no live hero (the live hero is promoted above this grid instead).
+    // Compact teaser grid — shown below the module gate (brand-new accounts). Each tile is a locked
+    // placeholder that bounces on tap; the full-size cards replace this grid once the gate
+    // (rated >= MODULE_UNLOCK_RATED AND following >= 3) is met. The "SOCIAL CARDS" header is rendered
+    // above renderRecentVerdict() in the page body, so it always heads this whole area. Recent Verdict
+    // appears here as a compact row only while it has no live hero (the live hero is promoted above).
     const renderLockedSection = () => (
         <View style={styles.lockedSection}>
-            <View style={[styles.sectionRow, { marginTop: 2, marginBottom: 0 }]}>
-                <Text style={styles.sectionLabel}>UNLOCKING SOON</Text>
-            </View>
-
             {/* Recent Verdicts compact teaser — only while it's still locked. Once a followed
-                verdict exists it is promoted to the full hero above, so "UNLOCKING SOON" then
-                heads only the modules below that are still locked. */}
+                verdict exists it is promoted to the full hero above, so this row drops out and the
+                "SOCIAL CARDS" header then heads only the modules below that are still locked. */}
             {heroEvent === null && (
                 <BouncyPressable style={[styles.miniRow, styles.miniRowNavy]}>
                     <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
@@ -1558,8 +1564,10 @@ export default function FeedScreen() {
                     data fetched. At the gate: the full-size cards go live per their own data rules. */}
                 {!modulesGateComplete && renderGettingStartedBanner()}
                 {renderFindFriends()}
-                {/* Recent Verdict sits with the other module cards. It is never gated by rated count —
-                    only by having a followed verdict — so it can go live before the rest. */}
+                {/* SOCIAL CARDS heads the whole area; Recent Verdict is its first card. Recent Verdict
+                    sits with the other module cards but is never gated by rated count — only by having
+                    a followed verdict — so it can go live before the rest. */}
+                {renderSocialCardsHeader()}
                 {renderRecentVerdict()}
                 {modulesGateComplete ? renderUnlockedSection() : renderLockedSection()}
 
@@ -1908,8 +1916,10 @@ export default function FeedScreen() {
 
                 {!modulesGateComplete && renderGettingStartedBanner()}
                 {renderFindFriends()}
-                {/* Recent Verdict sits with the other module cards. It is never gated by rated count —
-                    only by having a followed verdict — so it can go live before the rest. */}
+                {/* SOCIAL CARDS heads the whole area; Recent Verdict is its first card. Recent Verdict
+                    sits with the other module cards but is never gated by rated count — only by having
+                    a followed verdict — so it can go live before the rest. */}
+                {renderSocialCardsHeader()}
                 {renderRecentVerdict()}
                 {modulesGateComplete ? renderUnlockedSection() : renderLockedSection()}
 
