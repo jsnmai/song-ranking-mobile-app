@@ -14,7 +14,6 @@ import RatingActivityCard from "../activity/RatingActivityCard"
 import { useAuth } from "../auth/AuthContext"
 import { useScoresLocked } from "../../hooks/useScoresLocked"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
-import { getMyRankingByDeezerId } from "../rankings/apiRequests"
 import { blockUser, getProfileActivity } from "./apiRequests"
 import { RecentRatingItem } from "./types"
 
@@ -75,17 +74,10 @@ export default function UserActivityScreen({ navigation, route }: Props) {
         setIsLoadingMore(false)
     }
 
-    // Open the song. If the VIEWER has rated it (always true for their own activity), open it with
-    // their ranking so Song Detail offers Re-rate; otherwise (e.g. another user's song the viewer
-    // hasn't rated) fall back to the unrated view. Mirrors the feed's song-press lookup.
-    const handleSongPress = async (song: RecentRatingItem["song"]) => {
-        if (!token) return
-        try {
-            const ranking = await getMyRankingByDeezerId(song.deezer_id, token)
-            navigation.navigate("SongDetail", { ranking })
-        } catch {
-            navigation.navigate("SongDetail", { song: song as never })
-        }
+    // Navigate immediately; Song Detail resolves the viewer's ranking (Re-rate if they've rated it,
+    // otherwise the unrated view).
+    const handleSongPress = (song: RecentRatingItem["song"]) => {
+        navigation.navigate("SongDetail", { song: song as never })
     }
 
     // Block the user whose activity this is. Blocking from their own activity list leaves
@@ -152,6 +144,21 @@ export default function UserActivityScreen({ navigation, route }: Props) {
                             hideScore={hideScore}
                             note={item.note}
                             onPress={() => handleSongPress(item.song)}
+                            onShare={() => navigation.navigate("ShareActivity", {
+                                activity: {
+                                    username: username,
+                                    initial: username[0].toUpperCase(),
+                                    avatarColor: avatarColor(username),
+                                    actionLabel: "rated",
+                                    timeAgo: formatRelativeTime(item.created_at),
+                                    song: item.song,
+                                    bucket: item.bucket,
+                                    score: item.score,
+                                    hideScore: hideScore,
+                                    note: item.note,
+                                },
+                            })}
+                            shareTestID={`activity-share-${item.rating_event_id}`}
                             onOptions={isOwnProfile ? undefined : () => setMenuItem(item)}
                             optionsTestID={`activity-options-${item.rating_event_id}`}
                             testID={`activity-card-${item.rating_event_id}`}

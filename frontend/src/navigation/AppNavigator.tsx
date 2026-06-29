@@ -22,6 +22,7 @@ import {
 } from "./types"
 import ActivityLikersScreen from "../features/activity/ActivityLikersScreen"
 import SingleActivityScreen from "../features/activity/SingleActivityScreen"
+import ShareActivityScreen from "../features/activity/ShareActivityScreen"
 import NotificationsScreen from "../features/notifications/NotificationsScreen"
 import BucketSelectionScreen from "../features/comparison/BucketSelectionScreen"
 import ComparisonFlowScreen from "../features/comparison/ComparisonFlowScreen"
@@ -313,6 +314,11 @@ export default function AppNavigator() {
             <Stack.Screen name="UserActivity" component={UserActivityScreen} />
             <Stack.Screen name="UserBookmarks" component={UserBookmarksScreen} />
             <Stack.Screen name="MostCompatible" component={MostCompatibleScreen} />
+            <Stack.Screen
+                name="ShareActivity"
+                component={ShareActivityScreen}
+                options={{ presentation: "modal" }}
+            />
         </Stack.Navigator>
     )
 }

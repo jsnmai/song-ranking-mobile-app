@@ -4,9 +4,18 @@
 // and an action row (the like button) below.
 import { ReactNode } from "react"
 import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native"
-import Svg, { Circle } from "react-native-svg"
+import Svg, { Circle, Path } from "react-native-svg"
 
 import { bucketColor, colors, fonts } from "../../theme"
+
+function ShareIcon() {
+    return (
+        <Svg width={16} height={16} viewBox="0 0 24 24" fill="none"
+            stroke={colors.inkDim} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
+            <Path d="M12 16V4M8 8l4-4 4 4M5 14v5h14v-5" />
+        </Svg>
+    )
+}
 
 // Ring arc geometry — matches the Feed event card's album-art ring.
 const RING_SIZE = 84
@@ -45,6 +54,9 @@ type RatingActivityCardProps = {
     // When provided, renders a "···" options button in the action row (e.g. your own activity).
     onOptions?: () => void
     optionsTestID?: string
+    // When provided, renders a share button (just left of the "···") that opens the shareable art.
+    onShare?: () => void
+    shareTestID?: string
     children?: ReactNode
     testID?: string
 }
@@ -63,6 +75,8 @@ export default function RatingActivityCard({
     onPress,
     onOptions,
     optionsTestID,
+    onShare,
+    shareTestID,
     children,
     testID,
 }: RatingActivityCardProps) {
@@ -137,9 +151,20 @@ export default function RatingActivityCard({
                 <Text style={styles.noteQuote}>"{note}"</Text>
             )}
 
-            {(children || onOptions) && (
+            {(children || onShare || onOptions) && (
                 <View style={styles.actionRow}>
                     <View style={styles.actionBtns}>{children}</View>
+                    {onShare && (
+                        <TouchableOpacity
+                            style={styles.shareBtn}
+                            onPress={onShare}
+                            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                            accessibilityLabel="Share activity"
+                            testID={shareTestID}
+                        >
+                            <ShareIcon />
+                        </TouchableOpacity>
+                    )}
                     {onOptions && (
                         <TouchableOpacity
                             style={styles.moreBtn}
@@ -299,6 +324,11 @@ const styles = StyleSheet.create({
         alignItems: "center",
         gap: 12,
         flex: 1,
+    },
+    shareBtn: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        flexShrink: 0,
     },
     moreBtn: {
         paddingHorizontal: 8,

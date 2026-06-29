@@ -11,7 +11,6 @@ import { avatarColorToken, colors, fonts } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
 import { useScoresLocked } from "../../hooks/useScoresLocked"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
-import { getMyRankingByDeezerId } from "../rankings/apiRequests"
 import { RecentRatingItem } from "../profile/types"
 import ActivityLikeButton from "./ActivityLikeButton"
 import RatingActivityCard from "./RatingActivityCard"
@@ -50,16 +49,9 @@ export default function SingleActivityScreen({ navigation, route }: Props) {
         load().finally(() => setIsLoading(false))
     }, [load])
 
-    // Open the song with the viewer's ranking so Song Detail offers Re-rate; fall back to the
-    // unrated view if the lookup fails. Mirrors the feed's song-press behavior.
-    const handleSongPress = async (song: RecentRatingItem["song"]) => {
-        if (!token) return
-        try {
-            const ranking = await getMyRankingByDeezerId(song.deezer_id, token)
-            navigation.navigate("SongDetail", { ranking })
-        } catch {
-            navigation.navigate("SongDetail", { song: song as never })
-        }
+    // Navigate immediately; Song Detail resolves the viewer's ranking so it offers Re-rate.
+    const handleSongPress = (song: RecentRatingItem["song"]) => {
+        navigation.navigate("SongDetail", { song: song as never })
     }
 
     const profileInitial = profile
@@ -93,6 +85,21 @@ export default function SingleActivityScreen({ navigation, route }: Props) {
                         hideScore={hideScore}
                         note={item.note}
                         onPress={() => handleSongPress(item.song)}
+                        onShare={() => navigation.navigate("ShareActivity", {
+                            activity: {
+                                username: profile?.username ?? "",
+                                initial: profileInitial,
+                                avatarColor: avatarColorToken(profile?.avatar_color, colors.ink),
+                                actionLabel: "rated",
+                                timeAgo: formatRelativeTime(item.created_at),
+                                song: item.song,
+                                bucket: item.bucket,
+                                score: item.score,
+                                hideScore: hideScore,
+                                note: item.note,
+                            },
+                        })}
+                        shareTestID={`activity-share-${item.rating_event_id}`}
                         testID={`activity-card-${item.rating_event_id}`}
                     >
                         <ActivityLikeButton

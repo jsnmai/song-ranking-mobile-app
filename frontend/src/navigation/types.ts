@@ -72,4 +72,21 @@ export type AppStackParamList = {
     UserActivity: { username: string };
     UserBookmarks: { username: string };
     MostCompatible: undefined;
+    ShareActivity: { activity: ActivityShareData };
+}
+
+// Everything ShareActivityScreen needs to render the shareable art card. The poster shows the
+// author's @handle (not "You") so a shared image is identifiable and viewers can find the profile.
+export type ActivityShareData = {
+    // Bare handle (no leading @); the poster renders it as "@username".
+    username: string;
+    initial: string;
+    avatarColor: string;
+    actionLabel: string;
+    timeAgo: string;
+    song: { title: string; artist: string; cover_url: string | null };
+    bucket: string;
+    score: number;
+    hideScore?: boolean;
+    note?: string | null;
 }

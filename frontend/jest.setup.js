@@ -46,3 +46,19 @@ jest.mock('react-native-reanimated', () => {
         Easing: { bezier: jest.fn(), linear: jest.fn(), inOut: jest.fn() },
     }
 })
+
+// Native modules for the activity share art (image capture + save/share). They have no JS-only
+// implementation, so stub them for tests. Mirrors the factory-form mock convention above.
+jest.mock('react-native-view-shot', () => ({
+    captureRef: jest.fn(() => Promise.resolve('file:///tmp/listn-activity.png')),
+}))
+
+jest.mock('expo-media-library', () => ({
+    requestPermissionsAsync: jest.fn(() => Promise.resolve({ granted: true })),
+    saveToLibraryAsync: jest.fn(() => Promise.resolve()),
+}))
+
+jest.mock('expo-sharing', () => ({
+    isAvailableAsync: jest.fn(() => Promise.resolve(true)),
+    shareAsync: jest.fn(() => Promise.resolve()),
+}))

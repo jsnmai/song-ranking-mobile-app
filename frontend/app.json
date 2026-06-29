@@ -55,7 +55,16 @@
         }
       ],
       "expo-font",
-      "expo-asset"
+      "expo-asset",
+      "expo-sharing",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow LISTn to save your activity art to your photo library.",
+          "savePhotosPermission": "Allow LISTn to save your activity art to your photo library.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ]
     ],
     "extra": {
       "eas": {
