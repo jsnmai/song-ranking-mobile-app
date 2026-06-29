@@ -28,8 +28,9 @@ import { colors, fonts, bucketColor } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
 import { useScoresLocked } from "../../hooks/useScoresLocked"
 import { LockIcon } from "../../components/LockIcon"
-import { listMyVersusHistory, removeRating } from "../rankings/apiRequests"
+import { listMyRankings, listMyVersusHistory, removeRating } from "../rankings/apiRequests"
 import { ComparisonHistoryReceipt } from "../rankings/types"
+import { RankingResponse } from "../comparison/types"
 import { fetchPreviewUrl } from "../songs/apiRequests"
 import { bookmarkSong, getBookmarkStatus, removeBookmark } from "../bookmarks/apiRequests"
 import { Bookmark } from "../bookmarks/types"
@@ -357,6 +358,38 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
         return () => { isActive = false }
     }, [token, ranking])
 
+    // Tapping a song in the Versus preview. The song currently being viewed just scrolls back to the
+    // top (opening a fresh copy of the same page would be pointless); the opponent opens its own
+    // detail page. Versus songs are always the viewer's own rated songs, so the opponent's ranking
+    // resolves from the viewer's rankings list — fetched lazily on first tap and cached after.
+    const scrollRef = useRef<ScrollView>(null)
+    const rankingsCacheRef = useRef<RankingResponse[] | null>(null)
+    const handleVersusSongPress = async (songId: number) => {
+        if (ranking !== null && songId === ranking.song_id) {
+            scrollRef.current?.scrollTo({ y: 0, animated: true })
+            return
+        }
+        if (!token) return
+        try {
+            let all = rankingsCacheRef.current
+            if (all === null) {
+                all = []
+                let cursor: string | null = null
+                do {
+                    const res = await listMyRankings(token, cursor ?? undefined)
+                    all.push(...res.rankings)
+                    cursor = res.next_cursor
+                } while (cursor !== null)
+                rankingsCacheRef.current = all
+            }
+            const opponent = all.find((r) => r.song_id === songId)
+            // push (not navigate) so this stacks a new Song Detail instead of mutating the current one.
+            if (opponent) navigation.push("SongDetail", { ranking: opponent })
+        } catch {
+            /* non-critical: if the lookup fails the tap is a no-op */
+        }
+    }
+
     useEffect(() => {
         return navigation.addListener("blur", () => { stopAudio() })
     }, [navigation, stopAudio])
@@ -422,6 +455,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
             </View>
 
             <ScrollView
+                ref={scrollRef}
                 style={styles.scroll}
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
@@ -591,19 +625,19 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                                 </Text>
                             </View>
                         ) : (
-                            <TouchableOpacity
-                                style={styles.sdVersusCard}
-                                onPress={() => navigation.navigate("VersusHistory")}
-                                activeOpacity={0.8}
-                                accessibilityLabel="Open Versus History"
-                            >
+                            <View style={styles.sdVersusCard}>
                                 {versusReceipts.slice(0, 3).map((r, i) => (
                                     <View
                                         key={r.id}
                                         style={[styles.sdVersusRow, i > 0 && styles.sdVersusRowBorder]}
                                     >
                                         <View style={styles.versusCovers}>
-                                            <View style={styles.versusWinnerCover}>
+                                            <TouchableOpacity
+                                                style={styles.versusWinnerCover}
+                                                onPress={() => handleVersusSongPress(r.winner_song_id)}
+                                                activeOpacity={0.8}
+                                                accessibilityLabel={`Open ${r.winner_title}`}
+                                            >
                                                 {r.winner_cover_url ? (
                                                     <Image
                                                         source={{ uri: r.winner_cover_url }}
@@ -612,9 +646,14 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                                                 ) : (
                                                     <View style={[styles.versusCoverImg, { backgroundColor: colors.paper2 }]} />
                                                 )}
-                                            </View>
+                                            </TouchableOpacity>
                                             <Text style={styles.versusVSLabel}>VS</Text>
-                                            <View style={styles.versusLoserCover}>
+                                            <TouchableOpacity
+                                                style={styles.versusLoserCover}
+                                                onPress={() => handleVersusSongPress(r.loser_song_id)}
+                                                activeOpacity={0.8}
+                                                accessibilityLabel={`Open ${r.loser_title}`}
+                                            >
                                                 {r.loser_cover_url ? (
                                                     <Image
                                                         source={{ uri: r.loser_cover_url }}
@@ -623,19 +662,24 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                                                 ) : (
                                                     <View style={[styles.versusCoverImg, { backgroundColor: colors.paper2 }]} />
                                                 )}
-                                            </View>
+                                            </TouchableOpacity>
                                         </View>
-                                        <View style={styles.versusWinnerInfo}>
+                                        <TouchableOpacity
+                                            style={styles.versusWinnerInfo}
+                                            onPress={() => handleVersusSongPress(r.winner_song_id)}
+                                            activeOpacity={0.8}
+                                            accessibilityLabel={`Open ${r.winner_title}`}
+                                        >
                                             <Text style={styles.versusWinnerTitle} numberOfLines={1}>
                                                 {r.winner_title}
                                             </Text>
                                             <Text style={styles.versusOverLabel} numberOfLines={1}>
                                                 over {r.loser_title}
                                             </Text>
-                                        </View>
+                                        </TouchableOpacity>
                                     </View>
                                 ))}
-                            </TouchableOpacity>
+                            </View>
                         )}
                     </>
                 )}
