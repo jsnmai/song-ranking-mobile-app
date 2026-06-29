@@ -126,7 +126,6 @@ const RING_SIZE = 46
 const RING_R = 20
 const RING_C = 2 * Math.PI * RING_R
 
-const PREVIEW_MS = 30_000
 const CX = RING_SIZE / 2
 
 function ProgressRing({ progress, color }: { progress: number; color: string }) {
@@ -177,13 +176,16 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [note, setNote] = useState("")
     const [error, setError] = useState<string | null>(null)
-    const { isPlaying, toggle: toggleAudio, stop: stopAudio } = useAudioPlayer(song.preview_url)
+    const { isPlaying, currentTime, duration, toggle: toggleAudio, stop: stopAudio } = useAudioPlayer(song.preview_url)
+    // Fill the ring from the actual audio clock (currentTime/duration) rather than a wall-clock
+    // timer started on tap. isPlaying flips true synchronously when the play button is pressed, but
+    // the audio doesn't start until the native player finishes buffering — a tap-started timer would
+    // run ahead of the sound during that gap. currentTime only advances once playback truly begins.
+    const ringProgress = duration != null && duration > 0 ? Math.min(1, currentTime / duration) : 0
 
     const backdropAnim = useRef(new Animated.Value(0)).current
     const sheetAnim = useRef(new Animated.Value(screenH)).current
     const isClosing = useRef(false)
-    const [ringProgress, setRingProgress] = useState(0)
-    const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
     // Entrance: backdrop fades in full-screen, sheet slides up independently
     useEffect(() => {
@@ -192,27 +194,6 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
             Animated.timing(sheetAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
         ]).start()
     }, [])
-
-    // Progress ring: fills from 0→1 over 30s while playing; resets on pause
-    useEffect(() => {
-        if (isPlaying) {
-            setRingProgress(0)
-            const start = Date.now()
-            intervalRef.current = setInterval(() => {
-                const p = (Date.now() - start) / PREVIEW_MS
-                if (p >= 1) {
-                    setRingProgress(1)
-                    clearInterval(intervalRef.current!)
-                } else {
-                    setRingProgress(p)
-                }
-            }, 80)
-        } else {
-            if (intervalRef.current) clearInterval(intervalRef.current)
-            setRingProgress(0)
-        }
-        return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
-    }, [isPlaying])
 
     useEffect(() => {
         return navigation.addListener("blur", () => {
