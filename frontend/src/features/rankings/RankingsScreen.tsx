@@ -607,11 +607,16 @@ export default function RankingsScreen() {
                                     )}
                                 </TouchableOpacity>
                             </View>
-                            {/* Winner info */}
-                            <View style={styles.versusWinnerInfo}>
+                            {/* Winner info — tapping the winner's area also opens its song page */}
+                            <TouchableOpacity
+                                style={styles.versusWinnerInfo}
+                                onPress={() => handleVersusSongPress(r.winner_song_id)}
+                                activeOpacity={0.8}
+                                accessibilityLabel={`Open ${r.winner_title}`}
+                            >
                                 <Text style={styles.versusReceiptWinner} numberOfLines={1}>{r.winner_title}</Text>
                                 <Text style={styles.versusReceiptOver} numberOfLines={1}>over {r.loser_title}</Text>
-                            </View>
+                            </TouchableOpacity>
                         </View>
                     ))}
                 </View>
