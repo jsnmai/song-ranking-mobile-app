@@ -5,19 +5,25 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from src.crud.profile import get_by_username
-from src.crud.taste import TasteRow, get_taste_rows
+from src.crud.taste import TasteRow, get_population_like_shares, get_taste_rows
 from src.pydantic_schemas.profile import (
     TasteArtistItem,
     TasteBucketBreakdown,
     TasteBucketSection,
     TasteByBucket,
     TasteGenreItem,
+    TasteHarshness,
     TasteProfileResponse,
     TasteSection,
 )
 from src.services.access import can_view_profile, can_view_taste
 
 _TOP_ARTIST_LIMIT = 5
+
+# Harshness needs enough of the user's own ratings to be stable and enough peers
+# to rank against before it means anything; until then the tile reads "forming".
+_MIN_RATINGS_FOR_HARSHNESS = 10
+_MIN_POPULATION_FOR_HARSHNESS = 10
 
 
 def get_my_taste_profile(
@@ -26,7 +32,8 @@ def get_my_taste_profile(
 ) -> TasteProfileResponse:
     """Return the taste profile for the authenticated user."""
     rows = get_taste_rows(db, user_id)
-    return _build_taste_profile(rows)
+    harshness = _compute_harshness(db, user_id, rows)
+    return _build_taste_profile(rows, harshness)
 
 
 def get_user_taste_profile_by_username(
@@ -59,10 +66,45 @@ def get_user_taste_profile_by_username(
             detail="Profile not found.",
         )
     rows = get_taste_rows(db, profile.user_id)
-    return _build_taste_profile(rows)
+    harshness = _compute_harshness(db, profile.user_id, rows)
+    return _build_taste_profile(rows, harshness)
 
 
-def _build_taste_profile(rows: list[TasteRow]) -> TasteProfileResponse:
+def _compute_harshness(
+    db: Session,
+    user_id: int,
+    rows: list[TasteRow],
+) -> TasteHarshness:
+    """Percentile-rank how harsh the user is against the rest of the population.
+
+    Harshness = a low share of "like" ratings. We compare the user's like-share
+    with everyone else's and report the fraction of raters they are harsher than.
+    Stays "forming" until the user and the population both have enough ratings.
+    """
+    total = len(rows)
+    if total < _MIN_RATINGS_FOR_HARSHNESS:
+        return TasteHarshness(status="forming", percentile=None)
+    population = get_population_like_shares(
+        db,
+        _MIN_RATINGS_FOR_HARSHNESS,
+        exclude_user_id=user_id,
+    )
+    if len(population) < _MIN_POPULATION_FOR_HARSHNESS:
+        return TasteHarshness(status="forming", percentile=None)
+    like_share = sum(1 for r in rows if r.bucket == "like") / total
+    # Harsher = fewer likes, so the percentile is the share of raters who are
+    # more generous (a higher like-share) than this user.
+    harsher_than = sum(1 for share in population if share > like_share)
+    return TasteHarshness(
+        status="ready",
+        percentile=round(harsher_than / len(population) * 100),
+    )
+
+
+def _build_taste_profile(
+    rows: list[TasteRow],
+    harshness: TasteHarshness,
+) -> TasteProfileResponse:
     """Compute the full taste profile from ranked song rows."""
     total = len(rows)
     avg_score = round(sum(r.score for r in rows) / total, 2) if total > 0 else None
@@ -85,6 +127,7 @@ def _build_taste_profile(rows: list[TasteRow]) -> TasteProfileResponse:
             okay=_build_bucket_section(alright_rows),
             dislike=_build_bucket_section(dislike_rows),
         ),
+        harshness=harshness,
     )
 
 

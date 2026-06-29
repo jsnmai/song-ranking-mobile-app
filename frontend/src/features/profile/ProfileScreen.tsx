@@ -27,6 +27,7 @@ import {
 import EndOfListCap from "../../components/EndOfListCap"
 import MostCompatibleModule from "./MostCompatibleModule"
 import { OwnStreakChip } from "./StreakBadge"
+import TasteStripTile from "./TasteStripTile"
 
 type ProfileNavigationProp = NativeStackNavigationProp<AppStackParamList, "MainTabs">
 
@@ -65,16 +66,9 @@ export default function ProfileScreen() {
     const scrollRef = useRef<ScrollView>(null)
     useScrollToTop(scrollRef)
 
-    // Your Activity songs are all rated by you — open them with your ranking so Song Detail offers
-    // Re-rate (not Rate). Fall back to the plain song view if the lookup fails. Mirrors the feed.
-    const handleActivitySongPress = async (song: RecentRatingItem["song"]) => {
-        if (!token) return
-        try {
-            const ranking = await getMyRankingByDeezerId(song.deezer_id, token)
-            navigation.navigate("SongDetail", { ranking })
-        } catch {
-            navigation.navigate("SongDetail", { song: song as never })
-        }
+    // Navigate immediately; Song Detail resolves the viewer's ranking so it offers Re-rate (not Rate).
+    const handleActivitySongPress = (song: RecentRatingItem["song"]) => {
+        navigation.navigate("SongDetail", { song: song as never })
     }
 
     const [profile, setProfile] = useState<Profile | null>(null)
@@ -250,6 +244,34 @@ export default function ProfileScreen() {
     const topGenres = taste?.overall?.genres?.slice(0, 3) ?? []
     const topGenreLabel = topGenres[0]?.name ?? null
     const GENRE_COLORS = [colors.accent, colors.plum, colors.mint]
+
+    // Taste Profile strip stats. Range counts distinct genres, including the
+    // "Unknown" bucket (untagged songs count as one group, matching Top Genres);
+    // Top Artist is the most-rated artist. Both come straight from the taste
+    // response — no extra fetch.
+    const genreCount = taste?.overall?.genres?.length ?? 0
+    const topArtist = taste?.overall?.top_artists?.[0]?.name ?? null
+    const topArtistCount = taste?.overall?.top_artists?.[0]?.count ?? 0
+    // Selectivity "warms up": the percentile is null/forming until there are
+    // enough peers to rank against. The backend percentile is how harsh you are
+    // (share of raters more generous than you), so we flip it to a positive
+    // "Top X%" on whichever side you lean — SELECTIVITY when you give few likes,
+    // GENEROSITY when you give many — so the tile never reads as negative.
+    const harshness = taste?.harshness ?? null
+    const selectivityPct = harshness?.status === "ready" ? harshness.percentile : null
+    const selectivityLabel =
+        selectivityPct === null || selectivityPct >= 50 ? "SELECTIVITY" : "GENEROSITY"
+    const selectivityText =
+        selectivityPct === null
+            ? "Forming"
+            : selectivityPct >= 50
+                ? `Top ${100 - selectivityPct}%`
+                : `Top ${selectivityPct}%`
+    const selectivityTitle = selectivityLabel === "GENEROSITY" ? "Generosity" : "Selectivity"
+    const selectivityDesc =
+        selectivityPct === null
+            ? "How often you give a 'like' rating compared to everyone else. We'll rank you once enough other people have rated songs too."
+            : "How often you give a 'like' rating compared to everyone else. Fewer likes ranks you as more selective, more likes as more generous. 'Top X%' is where you land among all raters."
 
     // Bucket bars are scaled to the largest bucket, so the biggest is always a
     // full bar (a new user with one Like shows a full Like bar, the rest empty).
@@ -522,11 +544,48 @@ export default function ProfileScreen() {
                         )}
                     </View>
 
-                    {/* Taste Profile — top genres (full users only) */}
+                    {/* Taste Profile strip — how you rate, at a glance (full users only) */}
+                    {!isNew && (
+                        <View style={styles.stripCard}>
+                            <Text style={styles.stripKicker}>TASTE PROFILE</Text>
+                            {tasteLoading ? (
+                                <ActivityIndicator color={colors.accent} style={styles.tasteLoader} />
+                            ) : (
+                                <View style={styles.stripRow}>
+                                    <TasteStripTile
+                                        label="RANGE"
+                                        value={`${genreCount} ${genreCount === 1 ? "genre" : "genres"}`}
+                                        title="Range"
+                                        description="How many different genres you've rated across. Songs we couldn't tag are grouped as one 'Unknown' genre."
+                                        testID="strip-range"
+                                    />
+                                    <View style={styles.stripDivider} />
+                                    <TasteStripTile
+                                        label="TOP ARTIST"
+                                        value={topArtist ?? "—"}
+                                        title="Top artist"
+                                        description="The artist you've rated the most songs by."
+                                        statValue={topArtistCount > 0 ? String(topArtistCount) : undefined}
+                                        statLabel="SONGS RATED"
+                                        testID="strip-top-artist"
+                                    />
+                                    <View style={styles.stripDivider} />
+                                    <TasteStripTile
+                                        label={selectivityLabel}
+                                        value={selectivityText}
+                                        title={selectivityTitle}
+                                        description={selectivityDesc}
+                                        testID="strip-selectivity"
+                                    />
+                                </View>
+                            )}
+                        </View>
+                    )}
+
+                    {/* Top genres (full users only) */}
                     {!isNew && (
                         <View style={styles.tasteCard}>
                             <View style={styles.tasteCardHeader}>
-                                <Text style={styles.tasteCardKicker}>TASTE PROFILE</Text>
                                 <Text style={styles.tasteCardKicker}>TOP GENRES</Text>
                             </View>
                             {tasteLoading ? (
@@ -614,6 +673,21 @@ export default function ProfileScreen() {
                                     hideScore={isNew}
                                     note={item.note}
                                     onPress={() => handleActivitySongPress(item.song)}
+                                    onShare={() => navigation.navigate("ShareActivity", {
+                                        activity: {
+                                            username: profile?.username ?? "",
+                                            initial: profileInitial,
+                                            avatarColor: avatarColorToken(profile?.avatar_color, colors.ink),
+                                            actionLabel: "rated",
+                                            timeAgo: formatRelativeTime(item.created_at),
+                                            song: item.song,
+                                            bucket: item.bucket,
+                                            score: item.score,
+                                            hideScore: isNew,
+                                            note: item.note,
+                                        },
+                                    })}
+                                    shareTestID={`activity-share-${item.rating_event_id}`}
                                     onOptions={() => setMenuItem(item)}
                                     optionsTestID={`activity-options-${item.rating_event_id}`}
                                     testID={`activity-card-${item.rating_event_id}`}
@@ -1029,6 +1103,49 @@ const styles = StyleSheet.create({
         fontSize: 10.5,
         color: colors.inkDim,
         paddingVertical: 6,
+    },
+    // ── Taste Profile strip ───────────────────────────────────────────
+    stripCard: {
+        backgroundColor: colors.paper,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: colors.line,
+        padding: 14,
+    },
+    stripKicker: {
+        fontFamily: fonts.mono,
+        fontSize: 9,
+        letterSpacing: 1.4,
+        color: colors.inkDim,
+        fontWeight: "700",
+        marginBottom: 12,
+    },
+    stripRow: {
+        flexDirection: "row",
+        alignItems: "center",
+    },
+    stripTile: {
+        flex: 1,
+        gap: 4,
+    },
+    stripDivider: {
+        width: 1,
+        alignSelf: "stretch",
+        backgroundColor: colors.line,
+        marginHorizontal: 10,
+    },
+    stripLabel: {
+        fontFamily: fonts.mono,
+        fontSize: 8.5,
+        letterSpacing: 1,
+        color: colors.inkDim,
+        fontWeight: "700",
+    },
+    stripValue: {
+        fontFamily: fonts.display,
+        fontSize: 14,
+        letterSpacing: -0.2,
+        color: colors.ink,
     },
     // ── 2-col grid ────────────────────────────────────────────────────
     twoColRow: {

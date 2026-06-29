@@ -134,6 +134,13 @@ export type TasteBucketBreakdown = {
     dislike: number;
 }
 
+// Mirrors TasteHarshness in backend/src/pydantic_schemas/profile.py
+export type TasteHarshness = {
+    status: "forming" | "ready";
+    // Share of raters you are harsher than (0-100), or null while forming.
+    percentile: number | null;
+}
+
 // Mirrors TasteProfileResponse in backend/src/pydantic_schemas/profile.py
 export type TasteProfileResponse = {
     total_rated: number;
@@ -145,6 +152,7 @@ export type TasteProfileResponse = {
         okay: TasteBucketSection;
         dislike: TasteBucketSection;
     };
+    harshness: TasteHarshness;
 }
 
 // Mirrors AuxstrologySign in backend/src/pydantic_schemas/auxstrology.py

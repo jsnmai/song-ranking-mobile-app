@@ -14,6 +14,7 @@ const emptyTaste: TasteProfileResponse = {
         okay: { avg_score: null, count: 0, genres: [], top_artists: [] },
         dislike: { avg_score: null, count: 0, genres: [], top_artists: [] },
     },
+    harshness: { status: "forming", percentile: null },
 }
 
 const fullTaste: TasteProfileResponse = {
@@ -51,6 +52,7 @@ const fullTaste: TasteProfileResponse = {
             top_artists: [],
         },
     },
+    harshness: { status: "ready", percentile: 72 },
 }
 
 describe("TasteTabContent", () => {

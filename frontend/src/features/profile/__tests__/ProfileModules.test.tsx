@@ -473,6 +473,7 @@ describe("OtherProfileScreen profile modules", () => {
             okay: { genres: [], top_artists: [], avg_score: null, count: 0 },
             dislike: { genres: [], top_artists: [], avg_score: null, count: 0 },
         },
+        harshness: { status: "forming", percentile: null },
     }
 
     beforeEach(() => {

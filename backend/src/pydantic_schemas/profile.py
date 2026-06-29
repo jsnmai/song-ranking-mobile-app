@@ -285,6 +285,18 @@ class TasteByBucket(BaseModel):
     dislike: TasteBucketSection
 
 
+class TasteHarshness(BaseModel):
+    """How tough a rater the user is, as a percentile over the rating population.
+
+    `status` stays "forming" until the user and the population both have enough
+    ratings for the percentile to mean anything. `percentile` is the share of
+    raters the user is harsher than (0-100), or None while forming.
+    """
+
+    status: Literal["forming", "ready"]
+    percentile: int | None
+
+
 class TasteProfileResponse(BaseModel):
     """Full taste profile response."""
 
@@ -293,6 +305,7 @@ class TasteProfileResponse(BaseModel):
     bucket_breakdown: TasteBucketBreakdown
     overall: TasteSection
     by_bucket: TasteByBucket
+    harshness: TasteHarshness
 
 
 class CompatibilityResponse(BaseModel):

@@ -251,3 +251,73 @@ def test_taste_profile_by_bucket_avg_score(client: TestClient) -> None:
     assert data["by_bucket"]["okay"]["avg_score"] is not None
     assert data["by_bucket"]["dislike"]["avg_score"] is not None
     assert data["by_bucket"]["like"]["avg_score"] > data["by_bucket"]["dislike"]["avg_score"]
+
+
+def test_harshness_present_and_forming_for_new_user(client: TestClient) -> None:
+    """The taste response always carries harshness; a lone user is still 'forming'."""
+    token, _ = _register(client, "harshforming@example.com", "harshforming")
+    _rate(client, token, deezer_id=1, artist="Artist A", bucket="like", genre_deezer="Rock")
+
+    data = _get_taste(client, token).json()
+
+    assert data["harshness"]["status"] == "forming"
+    assert data["harshness"]["percentile"] is None
+
+
+def test_harshness_forming_when_few_own_ratings() -> None:
+    """Under the own-ratings floor, harshness is 'forming' without touching the population."""
+    from src.crud.taste import TasteRow
+    from src.services import taste as taste_service
+
+    rows = [
+        TasteRow(bucket="like", score=8.0, genres_mb=None, genre_deezer="Rock", artist="A")
+        for _ in range(3)
+    ]
+
+    result = taste_service._compute_harshness(None, 1, rows)
+
+    assert result.status == "forming"
+    assert result.percentile is None
+
+
+def test_harshness_forming_when_small_population(monkeypatch) -> None:
+    """Enough own ratings but too few peers still yields 'forming'."""
+    from src.crud.taste import TasteRow
+    from src.services import taste as taste_service
+
+    rows = [
+        TasteRow(bucket="like", score=8.0, genres_mb=None, genre_deezer="Rock", artist="A")
+        for _ in range(10)
+    ]
+    monkeypatch.setattr(taste_service, "get_population_like_shares", lambda *a, **k: [0.5, 0.6])
+
+    result = taste_service._compute_harshness(None, 1, rows)
+
+    assert result.status == "forming"
+    assert result.percentile is None
+
+
+def test_harshness_percentile_ranks_against_population(monkeypatch) -> None:
+    """A user harsher than most of the population gets a high percentile."""
+    from src.crud.taste import TasteRow
+    from src.services import taste as taste_service
+
+    # 3 of 10 ratings are likes -> like-share 0.3 (fairly harsh).
+    rows = [
+        TasteRow(
+            bucket="like" if i < 3 else "dislike",
+            score=5.0,
+            genres_mb=None,
+            genre_deezer="Rock",
+            artist="A",
+        )
+        for i in range(10)
+    ]
+    # 8 of 10 peers are more generous (like-share > 0.3).
+    population = [0.1, 0.2, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 1.0]
+    monkeypatch.setattr(taste_service, "get_population_like_shares", lambda *a, **k: population)
+
+    result = taste_service._compute_harshness(None, 1, rows)
+
+    assert result.status == "ready"
+    assert result.percentile == 80
