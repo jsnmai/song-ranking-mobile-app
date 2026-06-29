@@ -1106,7 +1106,11 @@ export default function FeedScreen() {
     // renderRecentVerdict() so it stays above Recent Verdict whether the verdict is the live hero,
     // the locked teaser, or the compact locked row — in every gate state.
     const renderSocialCardsHeader = () => (
-        <View style={[styles.sectionRow, { marginBottom: 0 }]}>
+        // The header owns both its margins so it sits right in every state. For an empty user
+        // Recent Verdict below is null, so the header can't lean on that card's top margin for its
+        // bottom gap — hence an explicit marginBottom. Top is trimmed so the gap up to the Find
+        // your people card above doesn't read as a void.
+        <View style={[styles.sectionRow, { marginTop: 6, marginBottom: 8 }]}>
             <Text style={styles.sectionLabel}>SOCIAL CARDS</Text>
         </View>
     )
@@ -2574,7 +2578,8 @@ const styles = StyleSheet.create({
     // Recent Verdicts full card
     fvOuter: {
         marginHorizontal: 14,
-        marginTop: 8,
+        // No top margin: Recent Verdict always sits right under the SOCIAL CARDS header, which now
+        // owns the 8px gap below itself (so the gap is identical whether or not this card renders).
         marginBottom: 10,
         borderRadius: 20,
         backgroundColor: colors.paper,
