@@ -117,6 +117,8 @@ export default function ScoreRevealScreen({ navigation, route }: ScoreRevealProp
         <View style={styles.root}>
             <ScrollView
                 showsVerticalScrollIndicator={false}
+                bounces={false}
+                overScrollMode="never"
                 contentContainerStyle={{ paddingBottom: 80 + insets.bottom }}
             >
                 {/* ── Hero ──────────────────────────────────────────────── */}
