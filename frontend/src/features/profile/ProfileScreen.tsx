@@ -682,9 +682,13 @@ export default function ProfileScreen() {
                         onViewAll={() => navigation.navigate("MostCompatible")}
                     />
 
-                    {/* Your Activity — feed-style cards */}
-                    {ratings !== null && ratings.length > 0 && (
+                    {/* Your Activity — feed-style cards. For a brand-new user with no ratings the
+                        "Your Activity" label and cards drop out, but the end cap stays so the bottom
+                        of the profile still reads as a finished edge. */}
+                    {ratings !== null && (
                         <View>
+                            {ratings.length > 0 && (
+                            <>
                             <Text style={styles.activityKicker}>Your Activity</Text>
                             {/* Pull the cards out to a 14px screen inset so they match the Feed cards
                                 exactly (the surrounding content padding is 16). */}
@@ -731,6 +735,8 @@ export default function ProfileScreen() {
                                 </RatingActivityCard>
                             ))}
                             </View>
+                            </>
+                            )}
                             <EndOfListCap label="End of your activity" />
                         </View>
                     )}

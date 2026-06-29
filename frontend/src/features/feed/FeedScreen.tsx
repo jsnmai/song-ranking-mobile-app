@@ -1737,7 +1737,12 @@ export default function FeedScreen() {
         const welcomeKicker = displayName ? `WELCOME, ${displayName.toUpperCase()}` : "WELCOME"
 
         return (
-            <ScrollView style={styles.container} contentContainerStyle={styles.newUserContent}>
+            <ScrollView
+                style={styles.container}
+                // Match the populated FlashList's bottom inset so the empty "Your feed is empty"
+                // card clears the raised center FAB and the home indicator (insets.bottom + 100).
+                contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+            >
                 {/* Header */}
                 <View style={styles.header}>
                     <View style={styles.headerLeft}>
@@ -2370,9 +2375,6 @@ const styles = StyleSheet.create({
         textAlign: "center",
     },
     // ── FeedNew getting-started banner ────────────────────────────────────
-    newUserContent: {
-        paddingBottom: 96,
-    },
     orbitCard: {
         marginHorizontal: 14,
         marginTop: 10,
