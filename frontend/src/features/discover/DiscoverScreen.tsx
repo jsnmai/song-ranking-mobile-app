@@ -145,6 +145,13 @@ export default function DiscoverScreen() {
     const [trending, setTrending] = useState<CircleTrendingItem[]>([])
     const [mostRated, setMostRated] = useState<CircleMostRatedItem[]>([])
 
+    // Latest search params mirrored into refs so the on-focus refresh can read them
+    // without re-subscribing (and re-firing) on every keystroke.
+    const queryRef = useRef(query)
+    const searchModeRef = useRef(searchMode)
+    queryRef.current = query
+    searchModeRef.current = searchMode
+
     // Load persisted recent searches on mount
     useEffect(() => {
         SecureStore.getItemAsync(RECENT_KEY)
@@ -382,6 +389,37 @@ export default function DiscoverScreen() {
                     if (isCurrentRequest) setIsDiscoveryLoading(false)
                 })
             return () => { isCurrentRequest = false }
+        }, [token]),
+    )
+
+    // When the screen regains focus after the rate flow (or any push), silently re-run
+    // the active song search so a row the user just rated shows its new score instead of
+    // the Rate pill. Skips the first focus (the debounced effect handles initial load)
+    // and stays silent — no spinner, no clearing — so the existing rows don't flash.
+    const skipFirstFocusRefresh = useRef(true)
+    useFocusEffect(
+        useCallback(() => {
+            if (skipFirstFocusRefresh.current) {
+                skipFirstFocusRefresh.current = false
+                return
+            }
+            if (!token || searchModeRef.current !== "songs") return
+            const trimmed = queryRef.current.trim()
+            if (trimmed.length < 2) return
+            let isCurrentRefresh = true
+            searchSongs(trimmed, token)
+                .then((response) => {
+                    // Only apply if the query/mode hasn't moved on since we fired.
+                    if (isCurrentRefresh
+                        && searchModeRef.current === "songs"
+                        && queryRef.current.trim() === trimmed) {
+                        setSongResults(response.results)
+                    }
+                })
+                .catch(() => {
+                    // Leave the existing rows in place; a failed refresh shouldn't blank them.
+                })
+            return () => { isCurrentRefresh = false }
         }, [token]),
     )
 
