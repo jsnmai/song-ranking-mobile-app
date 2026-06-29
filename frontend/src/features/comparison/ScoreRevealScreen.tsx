@@ -100,7 +100,14 @@ export default function ScoreRevealScreen({ navigation, route }: ScoreRevealProp
         ? Math.max(1, Math.round((ranking.position / bucketTotal) * 100))
         : null
 
-    const handleClose = () => navigation.navigate("MainTabs", { screen: "Rankings" })
+    // Return to wherever the rating started, which the user thinks of as the list or
+    // search they picked the song from (Rankings, Discover search, Feed, and so on). The
+    // rate flow pushes SongDetail plus the BucketSelection, ComparisonFlow and ScoreReveal
+    // chain on top of MainTabs while leaving the originating tab active and mounted, so
+    // popping to the top lands back on that tab with its scroll and search state intact,
+    // rather than the intermediate song page.
+    const returnToOrigin = () => navigation.popToTop()
+    const handleClose = returnToOrigin
     const handleShare = async () => {
         try {
             await Share.share({
@@ -111,7 +118,7 @@ export default function ScoreRevealScreen({ navigation, route }: ScoreRevealProp
         } catch {}
     }
     const handleViewRankings = () => navigation.navigate("MainTabs", { screen: "Rankings" })
-    const handleDone = () => navigation.navigate("MainTabs", { screen: "Discover" })
+    const handleDone = returnToOrigin
 
     return (
         <View style={styles.root}>
