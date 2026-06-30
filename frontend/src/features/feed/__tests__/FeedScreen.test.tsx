@@ -207,6 +207,8 @@ const consensusModule: ConsensusModule = {
     average_score: 8.4,
     contributor_count: 5,
     distribution: [0, 0, 0, 0, 0, 0, 0, 0, 3, 2],
+    low_score: 8.2,
+    high_score: 9.0,
 }
 
 const disagreementModule: DisagreementModule = {
@@ -710,8 +712,8 @@ describe("FeedScreen", () => {
         })
         expect(screen.queryByTestId("feed-consensus-locked")).toBeNull()
         expect(screen.getByText("8.4")).toBeTruthy()
-        // Friend count uses "FRIENDS", never "IN YOUR CIRCLE".
-        expect(screen.getByText("5 FRIENDS · AVG")).toBeTruthy()
+        // Card reads as a sentence: "5 friends rated <song>". Friend count uses "FRIENDS", never "IN YOUR CIRCLE".
+        expect(screen.getByText("5 FRIENDS RATED")).toBeTruthy()
         expect(screen.queryByText(/IN YOUR CIRCLE/)).toBeNull()
 
         fireEvent.press(screen.getByTestId("feed-consensus-42"))

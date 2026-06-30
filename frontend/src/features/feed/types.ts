@@ -48,6 +48,8 @@ export type ConsensusModule = {
     average_score: number;
     contributor_count: number;
     distribution: number[];   // always 10 bins, scores [0,1)…[9,10]
+    low_score: number;        // lowest friend score — spread bar's left endpoint
+    high_score: number;       // highest friend score — spread bar's right endpoint
 }
 
 // Disagreement Spotlight: the song where YOUR score diverges most from your friends' average.

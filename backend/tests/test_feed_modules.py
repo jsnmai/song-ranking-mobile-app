@@ -362,6 +362,8 @@ def test_consensus_surfaces_with_three_friends(client: TestClient):
     assert len(consensus["distribution"]) == 10
     assert sum(consensus["distribution"]) == 3
     assert consensus["distribution"][8] == 3  # all three landed in [8,9)
+    assert consensus["low_score"] == 8.75   # all three identical → spread bar's endpoints coincide
+    assert consensus["high_score"] == 8.75
 
 
 def test_consensus_excludes_viewer_from_aggregate(client: TestClient):

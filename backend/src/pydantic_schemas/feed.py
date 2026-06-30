@@ -62,9 +62,10 @@ class RerateRadarItem(BaseModel):
 class ConsensusModule(BaseModel):
     """Consensus: how the viewer's friends (mutual follows) collectively scored one song.
 
-    Shows the friend average, the friend count, and a 10-bin score distribution (the histogram
-    payoff). The viewer's own rating is never part of the aggregate. Friends = mutual follows,
-    visible to the viewer (the same circle predicate the rest of the social surfaces use).
+    Shows the friend average, the friend count, a 10-bin score distribution, and the low/high friend
+    scores (the spread bar's endpoints). The viewer's own rating is never part of the aggregate.
+    Friends = mutual follows, visible to the viewer (the same circle predicate the rest of the social
+    surfaces use).
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -74,6 +75,9 @@ class ConsensusModule(BaseModel):
     contributor_count: int
     # Always exactly 10 bins: scores [0,1), [1,2), … [9,10].
     distribution: list[int]
+    # Lowest and highest friend score — the endpoints of the spread bar (viewer excluded).
+    low_score: float
+    high_score: float
 
 
 class DisagreementModule(BaseModel):

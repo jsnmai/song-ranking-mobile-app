@@ -312,14 +312,16 @@ def _consensus_module(
     index = (user_id + epoch_day // CONSENSUS_ROTATE_DAYS) % len(near_best)
     _, chosen, chosen_song = near_best[index]
 
-    distribution = _score_distribution_bins(
-        circle_score_distribution(db, user_id, chosen.song_id)
-    )
+    friend_scores = circle_score_distribution(db, user_id, chosen.song_id)
+    distribution = _score_distribution_bins(friend_scores)
     return ConsensusModule(
         song=SongResponse.model_validate(chosen_song),
         average_score=chosen.average_score,
         contributor_count=chosen.contributor_count,
         distribution=distribution,
+        # Real min/max friend scores anchor the spread bar's endpoints (candidate has ≥3 raters).
+        low_score=min(friend_scores),
+        high_score=max(friend_scores),
     )
 
 
