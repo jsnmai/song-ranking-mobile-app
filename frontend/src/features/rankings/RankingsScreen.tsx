@@ -371,7 +371,7 @@ export default function RankingsScreen() {
                                                 {formatCount(currentCount)}
                                             </Text>
                                             {/* Stemless chevron (no shaft) — bold, matching the Claude design. */}
-                                            <Svg width={11} height={11} viewBox="0 0 24 24" fill="none">
+                                            <Svg width={10} height={10} viewBox="0 0 24 24" fill="none">
                                                 <Path d="M9 5l7 7-7 7" stroke={accentColor} strokeWidth={3.4} strokeLinecap="round" strokeLinejoin="round" />
                                             </Svg>
                                         </TouchableOpacity>
@@ -1263,13 +1263,13 @@ const styles = StyleSheet.create({
         alignItems: "center",
         gap: 3,
         flexShrink: 0,
-        borderRadius: 7,
-        paddingHorizontal: 6,
-        paddingVertical: 4,
+        borderRadius: 6,
+        paddingHorizontal: 5,
+        paddingVertical: 3,
     },
     anchorCount: {
         fontFamily: fonts.display,
-        fontSize: 14,
+        fontSize: 13,
         letterSpacing: -0.3,
     },
     // ── Empty / error ──────────────────────────────────────────────────
