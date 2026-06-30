@@ -28,6 +28,7 @@ import EndOfListCap from "../../components/EndOfListCap"
 import MostCompatibleModule from "./MostCompatibleModule"
 import { OwnStreakChip } from "./StreakBadge"
 import TasteStripTile from "./TasteStripTile"
+import TopGenresCard from "./TopGenresCard"
 
 type ProfileNavigationProp = NativeStackNavigationProp<AppStackParamList, "MainTabs">
 
@@ -57,6 +58,23 @@ const STAR_DOTS = [
     r: i % 3 === 0 ? 1 : 0.6,
     op: 0.2 + (i % 4) * 0.08,
 }))
+
+// A small rainbow spectrum under the Range count — a visual stand-in for "variety of genres" so the
+// tile reads as a spread, not a lone number. Ordered as a spectrum (warm → cool).
+const RANGE_COLORS = [colors.accent, colors.butter, colors.mint, colors.sky, colors.plum]
+
+// "Forming" indicator for Selectivity: gold bars climbing upward — the stat is accumulating as more
+// ratings come in across the app, so it reads as "building, arrives on its own", not a lock (which
+// would imply you have to do something, the way the pre-10-ratings skeleton does).
+function FormingBars() {
+    return (
+        <View style={styles.formingBars}>
+            {[0.35, 0.55, 0.78, 1].map((op, i) => (
+                <View key={i} style={[styles.formingBar, { height: 11 + i * 6, opacity: op }]} />
+            ))}
+        </View>
+    )
+}
 
 export default function ProfileScreen() {
     const navigation = useNavigation<ProfileNavigationProp>()
@@ -242,8 +260,6 @@ export default function ProfileScreen() {
         })
 
     const topGenres = taste?.overall?.genres?.slice(0, 3) ?? []
-    const topGenreLabel = topGenres[0]?.name ?? null
-    const GENRE_COLORS = [colors.accent, colors.plum, colors.mint]
 
     // Taste Profile strip stats. Range counts distinct genres, including the
     // "Unknown" bucket (untagged songs count as one group, matching Top Genres);
@@ -272,6 +288,8 @@ export default function ProfileScreen() {
         selectivityPct === null
             ? "How often you give a 'like' rating compared to everyone else. We'll rank you once enough other people have rated songs too."
             : "How often you give a 'like' rating compared to everyone else. Fewer likes ranks you as more selective, more likes as more generous. 'Top X%' is where you land among all raters."
+    // Caption under the value: labels the hourglass while forming, gives percentile context once ready.
+    const selectivitySublabel = selectivityPct === null ? "FORMING" : "OF ALL RATERS"
 
     // Bucket bars are scaled to the largest bucket, so the biggest is always a
     // full bar (a new user with one Like shows a full Like bar, the rest empty).
@@ -576,71 +594,67 @@ export default function ProfileScreen() {
                             </View>
                         </View>
                     ) : (
-                        <View style={styles.stripCard}>
+                        <View>
                             <Text style={styles.stripKicker}>TASTE PROFILE</Text>
                             {tasteLoading ? (
                                 <ActivityIndicator color={colors.accent} style={styles.tasteLoader} />
                             ) : (
-                                <View style={styles.stripRow}>
+                                <View style={styles.tasteTileGrid}>
                                     <TasteStripTile
                                         label="RANGE"
-                                        value={`${genreCount} ${genreCount === 1 ? "genre" : "genres"}`}
+                                        sublabel={genreCount === 1 ? "GENRE" : "GENRES"}
                                         title="Range"
                                         description="How many different genres you've rated across. Songs we couldn't tag are grouped as one 'Unknown' genre."
                                         testID="strip-range"
-                                    />
-                                    <View style={styles.stripDivider} />
+                                    >
+                                        <Text style={styles.rangeNumber}>{genreCount}</Text>
+                                        <View style={styles.rangeSpectrum}>
+                                            {Array.from({ length: Math.max(1, Math.min(genreCount, 5)) }).map((_, i) => (
+                                                <View key={i} style={[styles.rangeSeg, { backgroundColor: RANGE_COLORS[i % RANGE_COLORS.length] }]} />
+                                            ))}
+                                        </View>
+                                    </TasteStripTile>
                                     <TasteStripTile
                                         label="TOP ARTIST"
-                                        value={topArtist ?? "—"}
                                         title="Top artist"
                                         description="The artist you've rated the most songs by."
                                         statValue={topArtistCount > 0 ? String(topArtistCount) : undefined}
                                         statLabel="SONGS RATED"
                                         testID="strip-top-artist"
-                                    />
-                                    <View style={styles.stripDivider} />
+                                        foot={topArtist ? <Text style={styles.artistName} numberOfLines={1}>{topArtist}</Text> : undefined}
+                                    >
+                                        {topArtist ? (
+                                            <View style={styles.artistDisc}>
+                                                <Text style={styles.artistDiscLetter}>{topArtist.charAt(0).toUpperCase()}</Text>
+                                            </View>
+                                        ) : (
+                                            <Text style={styles.artistEmpty}>Not enough ratings yet</Text>
+                                        )}
+                                    </TasteStripTile>
                                     <TasteStripTile
                                         label={selectivityLabel}
-                                        value={selectivityText}
+                                        value={selectivityPct === null ? undefined : selectivityText}
+                                        sublabel={selectivitySublabel}
                                         title={selectivityTitle}
                                         description={selectivityDesc}
                                         testID="strip-selectivity"
-                                    />
+                                    >
+                                        {selectivityPct === null ? <FormingBars /> : undefined}
+                                    </TasteStripTile>
                                 </View>
                             )}
                         </View>
                     )}
 
-                    {/* Top genres (full users only) */}
+                    {/* Top genres (full users only) — shared card with the other-profile screen. */}
                     {!isNew && (
-                        <View style={styles.tasteCard}>
-                            <View style={styles.tasteCardHeader}>
-                                <Text style={styles.tasteCardKicker}>TOP GENRES</Text>
-                            </View>
-                            {tasteLoading ? (
-                                <ActivityIndicator color={colors.accent} style={styles.tasteLoader} />
-                            ) : topGenres.length > 0 ? (
-                                topGenres.map((g, i) => (
-                                    <View key={g.name} style={styles.genreRow}>
-                                        <Text style={styles.genreLabel}>{g.name}</Text>
-                                        <View style={styles.genreBarTrack}>
-                                            <View
-                                                style={[
-                                                    styles.genreBar,
-                                                    {
-                                                        width: `${Math.min(g.percentage, 40) * 2.5}%`,
-                                                        backgroundColor: GENRE_COLORS[i] ?? colors.accent,
-                                                    },
-                                                ]}
-                                            />
-                                        </View>
-                                        <Text style={styles.genrePct}>{g.percentage.toFixed(0)}%</Text>
-                                    </View>
-                                ))
-                            ) : (
-                                <Text style={styles.tasteEmpty}>Rate more songs to see your top genres.</Text>
-                            )}
+                        <View>
+                            <Text style={styles.stripKicker}>TOP GENRES</Text>
+                            <TopGenresCard
+                                genres={topGenres}
+                                loading={tasteLoading}
+                                emptyText="Rate more songs to see your top genres."
+                            />
                         </View>
                     )}
 
@@ -1081,64 +1095,69 @@ const styles = StyleSheet.create({
         lineHeight: 15,
     },
     // ── Taste Profile card ────────────────────────────────────────────
-    tasteCard: {
-        backgroundColor: colors.paper,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: colors.line,
-        padding: 14,
-    },
-    tasteCardHeader: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        marginBottom: 12,
-    },
-    tasteCardKicker: {
-        fontFamily: fonts.mono,
-        fontSize: 9,
-        letterSpacing: 1.4,
-        color: colors.inkDim,
-        fontWeight: "700",
-    },
     tasteLoader: {
         marginVertical: 16,
     },
-    genreRow: {
+    // ── Taste Profile tiles (3-up card grid that mirrors the other-profile tiles) ──
+    tasteTileGrid: {
         flexDirection: "row",
-        alignItems: "center",
         gap: 8,
-        marginBottom: 8,
     },
-    genreLabel: {
-        fontFamily: fonts.mono,
-        fontSize: 10,
-        color: colors.inkSoft,
-        width: 82,
+    // Top Artist tile body: a navy disc with the artist's initial, name + song count below.
+    artistDisc: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        backgroundColor: colors.navy,
+        alignItems: "center",
+        justifyContent: "center",
     },
-    genreBarTrack: {
-        flex: 1,
-        height: 6,
-        backgroundColor: colors.bg,
-        borderRadius: 3,
-        overflow: "hidden",
+    artistDiscLetter: {
+        fontFamily: fonts.display,
+        fontSize: 15,
+        color: colors.cream,
     },
-    genreBar: {
-        height: 6,
-        borderRadius: 3,
-        opacity: 0.8,
+    artistName: {
+        fontFamily: fonts.display,
+        fontSize: 13,
+        lineHeight: 15,
+        color: colors.ink,
+        textAlign: "center",
     },
-    genrePct: {
-        fontFamily: fonts.mono,
-        fontSize: 9.5,
+    artistEmpty: {
+        fontSize: 11,
         color: colors.inkDim,
-        width: 26,
-        textAlign: "right",
+        textAlign: "center",
     },
-    tasteEmpty: {
-        fontFamily: fonts.mono,
-        fontSize: 10.5,
-        color: colors.inkDim,
-        paddingVertical: 6,
+    // Range hero: the genre count above a small multi-color spectrum bar.
+    rangeNumber: {
+        fontFamily: fonts.display,
+        fontSize: 25,
+        lineHeight: 27,
+        letterSpacing: -0.5,
+        color: colors.ink,
+    },
+    rangeSpectrum: {
+        flexDirection: "row",
+        gap: 2,
+        marginTop: 5,
+    },
+    rangeSeg: {
+        width: 7,
+        height: 5,
+        borderRadius: 2.5,
+    },
+    // Forming indicator: gold bars climbing upward (sized to match the other tiles' heroes).
+    formingBars: {
+        flexDirection: "row",
+        alignItems: "flex-end",
+        gap: 3.5,
+        height: 29,
+    },
+    formingBar: {
+        width: 5,
+        borderRadius: 2.5,
+        backgroundColor: colors.gold,
     },
     // ── Taste Profile strip ───────────────────────────────────────────
     stripCard: {

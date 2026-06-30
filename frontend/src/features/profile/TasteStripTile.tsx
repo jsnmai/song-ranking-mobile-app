@@ -2,7 +2,7 @@
 // small dark popover explaining what the stat means (and how it's found). Mirrors
 // the streak popover pattern in StreakBadge — a measure-anchored Modal popover
 // with a pointer — so the two explainers feel like the same family.
-import { useRef, useState } from "react"
+import { ReactNode, useRef, useState } from "react"
 import { Dimensions, Modal, Pressable, StyleSheet, Text, View } from "react-native"
 
 import { colors, fonts } from "../../theme"
@@ -16,20 +16,30 @@ const SCREEN_W = Dimensions.get("window").width
 export default function TasteStripTile({
     label,
     value,
+    sublabel,
     title,
     description,
     statValue,
     statLabel,
     testID,
+    children,
+    foot,
 }: {
     label: string
-    value: string
+    // The hero value (e.g. "7" or "Top 12%"). Omit when passing a custom `children` body.
+    value?: string
+    // Small caption under the value (e.g. "GENRES", "OF RATERS").
+    sublabel?: string
     title: string
     description: string
     // Optional prominent stat shown in the popover (e.g. a bold "12 SONGS RATED").
     statValue?: string
     statLabel?: string
     testID?: string
+    // Custom hero body in the top group (e.g. the Top Artist disc, or the forming icon).
+    children?: ReactNode
+    // Custom bottom element (e.g. the Top Artist name) — overrides the plain `sublabel`.
+    foot?: ReactNode
 }) {
     const [open, setOpen] = useState(false)
     const [anchor, setAnchor] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
@@ -62,8 +72,26 @@ export default function TasteStripTile({
                 accessibilityLabel={`${title}. ${description}`}
                 testID={testID}
             >
-                <Text style={styles.label}>{label}</Text>
-                <Text style={styles.value} numberOfLines={1}>{value}</Text>
+                {/* Label + hero pinned to the top, sublabel to the bottom (space-between), so every
+                    tile's label starts at the same line and the captions align across the row. */}
+                <View style={styles.top}>
+                    <Text style={styles.label}>{label}</Text>
+                    {/* Fixed-height, centered zone so every tile's hero (number, disc, bars) sits on the
+                        same line regardless of its intrinsic height. */}
+                    <View style={styles.heroZone}>
+                        {children ?? (value !== undefined ? (
+                            <Text
+                                style={styles.value}
+                                numberOfLines={1}
+                                adjustsFontSizeToFit
+                                minimumFontScale={0.55}
+                            >
+                                {value}
+                            </Text>
+                        ) : null)}
+                    </View>
+                </View>
+                {foot ?? (sublabel ? <Text style={styles.sublabel}>{sublabel}</Text> : <View style={styles.subSpacer} />)}
             </Pressable>
             <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
                 <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)}>
@@ -90,24 +118,64 @@ export default function TasteStripTile({
 }
 
 const styles = StyleSheet.create({
+    // Each tile is its own bordered/shadowed card (matches the other-profile Top Artist tile), so a
+    // row of them reads as the same visual family across both profile screens.
     tile: {
         flex: 1,
+        minHeight: 100,
+        backgroundColor: colors.paper,
+        borderWidth: 1,
+        borderColor: colors.line,
+        borderRadius: 14,
+        paddingVertical: 12,
+        paddingHorizontal: 10,
+        shadowColor: colors.ink,
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
     },
+    // Label+hero pinned top, sublabel pinned bottom: every tile's label sits on the same line and the
+    // captions align across the row, so the set reads as one tidy unit instead of floating mid-card.
     tileInner: {
-        gap: 4,
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "space-between",
+    },
+    top: {
+        alignItems: "center",
+    },
+    heroZone: {
+        height: 40,
+        alignItems: "center",
+        justifyContent: "center",
     },
     label: {
         fontFamily: fonts.mono,
-        fontSize: 8.5,
+        fontSize: 7.5,
         letterSpacing: 1,
-        color: colors.inkDim,
+        color: colors.accent,
         fontWeight: "700",
+        textAlign: "center",
+        marginBottom: 8,
     },
     value: {
         fontFamily: fonts.display,
-        fontSize: 14,
-        letterSpacing: -0.2,
+        fontSize: 30,
+        letterSpacing: -0.5,
         color: colors.ink,
+        textAlign: "center",
+    },
+    sublabel: {
+        fontFamily: fonts.mono,
+        fontSize: 7.5,
+        letterSpacing: 0.7,
+        fontWeight: "700",
+        color: colors.inkDim,
+        textAlign: "center",
+    },
+    // Keeps the top group pinned up when a tile has no sublabel (space-between needs a 2nd child).
+    subSpacer: {
+        height: 0,
     },
     popover: {
         position: "absolute",
