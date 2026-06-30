@@ -42,12 +42,13 @@ const BUCKET_FILTERS: readonly { value: BucketName | "all"; label: string }[] = 
     { value: "dislike", label: "Dislike" },
 ]
 
-export default function FullRankingsScreen({ navigation }: FullRankingsScreenProps) {
+export default function FullRankingsScreen({ navigation, route }: FullRankingsScreenProps) {
     const { token } = useAuth()
     // Hide the viewer's own scores + positions until they've rated 10 songs.
     const scoresLocked = useScoresLocked()
     const [rankings, setRankings] = useState<RankingResponse[]>([])
-    const [bucketFilter, setBucketFilter] = useState<BucketName | "all">("all")
+    // Pre-select a bucket tab when opened from an anchor's count (else show all).
+    const [bucketFilter, setBucketFilter] = useState<BucketName | "all">(route.params?.initialBucket ?? "all")
     const [artistFilter, setArtistFilter] = useState<string | null>(null)
     const [albumFilterKey, setAlbumFilterKey] = useState<string | null>(null)
     const [isFilterModalOpen, setIsFilterModalOpen] = useState(false)

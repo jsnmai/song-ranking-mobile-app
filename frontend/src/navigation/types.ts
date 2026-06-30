@@ -3,7 +3,7 @@
 // Any screen that needs to navigate between tabs or read tab params imports from here.
 import { NavigatorScreenParams } from "@react-navigation/native"
 
-import { ComparisonSessionResponse, RankingResponse, RatingFinalizeResponse } from "../features/comparison/types"
+import { BucketName, ComparisonSessionResponse, RankingResponse, RatingFinalizeResponse } from "../features/comparison/types"
 import { SongSearchResult } from "../features/search/types"
 
 // TabParamList maps each tab name to its route params.
@@ -18,7 +18,8 @@ export type TabParamList = {
 
 export type RankingsStackParamList = {
     RankingsOverview: undefined;
-    FullRankings: undefined;
+    // initialBucket pre-selects a bucket tab (e.g. tapping an anchor's count opens that bucket's list).
+    FullRankings: { initialBucket?: BucketName } | undefined;
     // RankMap receives the already-loaded rankings as a snapshot so the immersive
     // cosmos opens instantly (no second fetch) — mirrors how SongDetail takes a ranking.
     RankMap: { rankings: RankingResponse[] };
