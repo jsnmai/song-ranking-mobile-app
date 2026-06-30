@@ -81,6 +81,14 @@ function makeStars(count: number) {
 }
 const STARS = makeStars(40)
 
+// Compact a bucket's song count so a 100s/1000s library never blows out the narrow anchor footer:
+// 999 stays "999", then "1.2k", "12k". Keeps the pill ~3 chars wide at most.
+function formatCount(n: number): string {
+    if (n < 1000) return String(n)
+    const k = n / 1000
+    return `${k < 10 ? k.toFixed(1).replace(/\.0$/, "") : Math.round(k)}k`
+}
+
 // The hero covers slowly drift around the sun (one full turn every 95s), matching
 // the design's living thumbnail. Fills the map so its center is the sun's center,
 // so a plain rotation orbits every cover around the #1. Honors reduced motion.
@@ -344,14 +352,29 @@ export default function RankingsScreen() {
                                     </View>
                                 ) : (
                                     <>
-                                        <Text style={[styles.anchorScore, { color: accentColor }]}>
+                                        <Text
+                                            style={[styles.anchorScore, { color: accentColor }]}
+                                            numberOfLines={1}
+                                            adjustsFontSizeToFit
+                                            minimumFontScale={0.7}
+                                        >
                                             {anchor.score.toFixed(1)}
                                         </Text>
-                                        <View style={[styles.anchorCountPill, { backgroundColor: `${accentColor}20` }]}>
-                                            <Text style={[styles.anchorCount, { color: accentColor }]}>
-                                                #{anchor.position}
+                                        {/* Total songs in this bucket → tap to open the bucket's filtered list. */}
+                                        <TouchableOpacity
+                                            style={[styles.anchorCountPill, { backgroundColor: `${accentColor}24` }]}
+                                            onPress={() => navigation.navigate("FullRankings", { initialBucket: bucketKey })}
+                                            accessibilityLabel={`See all ${currentCount} ${label} songs`}
+                                            hitSlop={{ top: 6, right: 6, bottom: 6, left: 6 }}
+                                        >
+                                            <Text style={[styles.anchorCount, { color: accentColor }]} numberOfLines={1}>
+                                                {formatCount(currentCount)}
                                             </Text>
-                                        </View>
+                                            {/* Stemless chevron (no shaft) — bold, matching the Claude design. */}
+                                            <Svg width={11} height={11} viewBox="0 0 24 24" fill="none">
+                                                <Path d="M9 5l7 7-7 7" stroke={accentColor} strokeWidth={3.4} strokeLinecap="round" strokeLinejoin="round" />
+                                            </Svg>
+                                        </TouchableOpacity>
                                     </>
                                 )}
                             </View>
@@ -1224,21 +1247,30 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
+        gap: 6,
     },
     anchorScore: {
         fontFamily: fonts.display,
         fontSize: 19,
         letterSpacing: -0.4,
+        // Shrinks (with adjustsFontSizeToFit) if a wide count pill leaves it little room, so the two
+        // never collide in a packed bucket; the pill itself keeps its size.
+        flexShrink: 1,
+        minWidth: 0,
     },
     anchorCountPill: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 3,
+        flexShrink: 0,
         borderRadius: 7,
         paddingHorizontal: 6,
         paddingVertical: 4,
     },
     anchorCount: {
-        fontFamily: fonts.mono,
-        fontSize: 10,
-        fontWeight: "700",
+        fontFamily: fonts.display,
+        fontSize: 14,
+        letterSpacing: -0.3,
     },
     // ── Empty / error ──────────────────────────────────────────────────
     listContent: {
