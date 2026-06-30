@@ -201,8 +201,7 @@ export default function ReorderScreen({ navigation }: ReorderScreenProps) {
                         <Path d="M12 11v5M12 8h.01" />
                     </Svg>
                     <Text style={styles.infoText}>
-                        Drag to hand-tune your ranking order. A song&apos;s bucket follows wherever you
-                        drop it across a boundary.
+                        Drag to hand-tune your ranking order.
                     </Text>
                 </View>
 
