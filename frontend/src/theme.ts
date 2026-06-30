@@ -24,6 +24,7 @@ export const colors = {
     butter: "#f5c343",   // trending / highlight
     gold: "#f5b840",     // FAB / cosmic orbit
     danger: "#e0492e",
+    red: "#e0312e",      // like heart
     // Cosmic orbit dark surface
     navy: "#11141d",
     navyHi: "#1b2230",

@@ -617,7 +617,7 @@ export default function ProfileScreen() {
                                     <TasteStripTile
                                         label="TOP ARTIST"
                                         title="Top artist"
-                                        description="The artist you've rated the most songs by."
+                                        description="The artist you've rated the most songs from."
                                         statValue={topArtistCount > 0 ? String(topArtistCount) : undefined}
                                         statLabel="SONGS RATED"
                                         testID="strip-top-artist"

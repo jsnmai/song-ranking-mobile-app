@@ -21,6 +21,10 @@ const mockBookmarkSong = jest.fn()
 const mockRemoveBookmark = jest.fn()
 const mockCreatePlayer = jest.fn()
 
+jest.mock("react-native-safe-area-context", () => ({
+    useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}))
+
 jest.mock("expo-audio", () => ({
     createAudioPlayer: (...args: unknown[]) => mockCreatePlayer(...args),
     setAudioModeAsync: jest.fn(),
@@ -319,13 +323,13 @@ describe("DiscoverScreen", () => {
         // "FRANK OCEAN" also appears in the Popular on LISTn placeholders, so scope to the Most-rated card.
         expect(within(screen.getByLabelText("Open Nights")).getByText("FRANK OCEAN")).toBeTruthy()
         // Trending had no items, so its locked state remains.
-        expect(screen.getByText("Locked for now")).toBeTruthy()
+        expect(screen.getByText("Locked")).toBeTruthy()
     })
 
     it("keeps both circle cards locked when there is no circle data", async () => {
         render(<DiscoverScreen />)
 
-        expect(await screen.findByText("Locked for now")).toBeTruthy()
+        expect(await screen.findByText("Locked")).toBeTruthy()
         expect(screen.getByText("TOTAL RATINGS")).toBeTruthy()
     })
 

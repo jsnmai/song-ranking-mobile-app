@@ -99,13 +99,13 @@ export default function ActivityLikeButton({
                 activeOpacity={0.75}
             >
                 {isSaving ? (
-                    <ActivityIndicator size="small" color={likedByViewer ? colors.paper : colors.accent} />
+                    <ActivityIndicator size="small" color={likedByViewer ? colors.paper : colors.red} />
                 ) : (
                     <Svg width={compact ? 14 : 16} height={compact ? 14 : 16} viewBox="0 0 24 24">
                         <Path
                             d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"
-                            fill={likedByViewer ? colors.accent : "none"}
-                            stroke={likedByViewer ? colors.accent : colors.inkSoft}
+                            fill={likedByViewer ? colors.red : "none"}
+                            stroke={likedByViewer ? colors.red : colors.inkSoft}
                             strokeWidth={2}
                             strokeLinecap="round"
                             strokeLinejoin="round"
@@ -157,8 +157,8 @@ const styles = StyleSheet.create({
         borderRadius: 8,
     },
     heartButtonActive: {
-        borderColor: "rgba(255,90,60,0.28)",
-        backgroundColor: "rgba(255,90,60,0.10)",
+        borderColor: "rgba(224,49,46,0.28)",
+        backgroundColor: "rgba(224,49,46,0.10)",
     },
     disabled: {
         opacity: 0.5,

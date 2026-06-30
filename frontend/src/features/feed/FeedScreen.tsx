@@ -595,6 +595,13 @@ export default function FeedScreen() {
         }, 420)
     }
 
+    // Tapping "{n} TODAY" jumps down to the top of the activity list (the first event), landing it just
+    // below the notch — same safe-area offset trick as the hero tap so the Dynamic Island can't clip it.
+    const scrollToActivityTop = () => {
+        if (events.length === 0) return
+        listRef.current?.scrollToIndex({ index: 0, animated: true, viewPosition: 0, viewOffset: -(insets.top + 16) })
+    }
+
     const renderRecentVerdict = () => {
         if (heroEvent === null) {
             // Below the module gate the compact "Recent Verdicts" row in renderLockedSection covers
@@ -1528,7 +1535,14 @@ export default function FeedScreen() {
                     <View style={styles.sectionRow}>
                         <Text style={styles.sectionLabel}>ACTIVITY</Text>
                         {todayCount > 0 && (
-                            <Text style={styles.sectionRight}>{todayCount} TODAY</Text>
+                            <TouchableOpacity
+                                onPress={scrollToActivityTop}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Jump to today's activity, ${todayCount} new`}
+                                hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                            >
+                                <Text style={styles.sectionRight}>{todayCount} TODAY</Text>
+                            </TouchableOpacity>
                         )}
                     </View>
                 )}

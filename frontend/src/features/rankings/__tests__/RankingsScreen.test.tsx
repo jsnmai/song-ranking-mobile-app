@@ -9,6 +9,10 @@ const mockListMyRankings = jest.fn()
 const mockGetMyRankingAnchors = jest.fn()
 const mockListMyVersusHistory = jest.fn()
 
+jest.mock("react-native-safe-area-context", () => ({
+    useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}))
+
 jest.mock("@react-navigation/native", () => {
     const actual = jest.requireActual("@react-navigation/native")
     const React = require("react")
@@ -23,6 +27,8 @@ jest.mock("@react-navigation/native", () => {
                 callback()
             }, [])
         },
+        // No-op: the real one calls useRoute, which needs a navigator the test doesn't mount.
+        useScrollToTop: () => {},
     }
 })
 

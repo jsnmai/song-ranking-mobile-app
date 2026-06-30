@@ -12,6 +12,7 @@ import {
     useWindowDimensions,
     View,
 } from "react-native"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 import Animated, {
     FadeInDown,
     FadeInRight,
@@ -136,6 +137,7 @@ export default function DiscoverScreen() {
     const route = useRoute<DiscoverRouteProp>()
     const navigation = useNavigation<DiscoverNavigationProp>()
     const { token, profile } = useAuth()
+    const insets = useSafeAreaInsets()
     const avatarInitial = (profile?.display_name || profile?.username || "?").charAt(0).toUpperCase()
     const searchRef = useRef<TextInput>(null)
     const [searchFocused, setSearchFocused] = useState(false)
@@ -531,7 +533,7 @@ export default function DiscoverScreen() {
             {/* Content */}
             <ScrollView
                 style={styles.scroll}
-                contentContainerStyle={styles.scrollContent}
+                contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 92 }]}
                 keyboardShouldPersistTaps="handled"
             >
                 {searchFocused ? (
@@ -837,7 +839,7 @@ export default function DiscoverScreen() {
                                                 </Svg>
                                             </View>
                                             <View style={styles.trendingTextBlock}>
-                                                <Text style={styles.trendingTitle}>Locked for now</Text>
+                                                <Text style={styles.trendingTitle}>Locked</Text>
                                                 <Text style={styles.trendingBody}>
                                                     Follow friends to see what's hot in your circle.
                                                 </Text>
@@ -904,7 +906,7 @@ export default function DiscoverScreen() {
                                             accessibilityLabel={`Open ${mostRated[0].song.title}`}
                                         >
                                             <View style={styles.circlePill}>
-                                                <Text style={styles.circlePillText}>Most-rated · circle</Text>
+                                                <Text style={styles.circlePillText}>Most-rated</Text>
                                             </View>
                                             <View style={styles.circleLiveRow}>
                                                 <View style={styles.circleCoverGlow}>
@@ -927,7 +929,7 @@ export default function DiscoverScreen() {
                                     ) : (
                                         <BouncyPressable style={[styles.twoColCard, styles.circleCard]}>
                                             <View style={styles.circlePill}>
-                                                <Text style={styles.circlePillText}>Most-rated · circle</Text>
+                                                <Text style={styles.circlePillText}>Most-rated</Text>
                                             </View>
                                             <View style={styles.circleLockRow}>
                                                 <View style={styles.circleLockSquare}>
