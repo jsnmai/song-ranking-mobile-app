@@ -981,6 +981,12 @@ const styles = StyleSheet.create({
         backgroundColor: colors.accent,
         borderRadius: 13,
         paddingVertical: 13,
+        // Hard offset shadow — the design's primary-button treatment (same as the Follow CTA). The 9px
+        // row gap and the row's bottom margin absorb the 3px overhang, so it stays purely visual.
+        shadowColor: colors.ink,
+        shadowOpacity: 1,
+        shadowRadius: 0,
+        shadowOffset: { width: 3, height: 3 },
     },
     accentBtnText: {
         fontWeight: "700",
