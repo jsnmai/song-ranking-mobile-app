@@ -1,5 +1,5 @@
 // Feed tab — shows rating activity from users the current user follows.
-import { useCallback, useEffect, useRef, useState } from "react"
+import { ReactNode, useCallback, useEffect, useRef, useState } from "react"
 import {
     ActivityIndicator,
     Alert,
@@ -21,8 +21,11 @@ import Animated, {
     useAnimatedStyle,
     useSharedValue,
     withRepeat,
+    withSequence,
+    withSpring,
     withTiming,
 } from "react-native-reanimated"
+import type { SharedValue } from "react-native-reanimated"
 import { FlashList, FlashListRef } from "@shopify/flash-list"
 import { CompositeNavigationProp, useFocusEffect, useNavigation, useScrollToTop } from "@react-navigation/native"
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
@@ -200,6 +203,17 @@ function PulseDot({ color = "#fff", size = 16 }: { color?: string; size?: number
     )
 }
 
+// Wraps a feed card so the hero verdict's card can play the "pull out, then slam" pulse after the
+// tap-to-scroll lands. Only the hero card (isTarget) binds to the shared scale; every other card
+// holds a constant 1, so the single shared value drives exactly one card. Wrapping here keeps the
+// shared RatingActivityCard plain rather than threading an animated style through it.
+function SlamCell({ isTarget, scale, children }: { isTarget: boolean; scale: SharedValue<number>; children: ReactNode }) {
+    const animatedStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: isTarget ? scale.value : 1 }],
+    }))
+    return <Animated.View style={animatedStyle}>{children}</Animated.View>
+}
+
 function SearchIcon() {
     return (
         <Svg width={16} height={16} viewBox="0 0 24 24" fill="none"
@@ -249,6 +263,11 @@ export default function FeedScreen() {
     const [splitDecision, setSplitDecision] = useState<SplitDecisionModule | null>(null)
     const [matchMoment, setMatchMoment] = useState<MatchMomentModule | null>(null)
     const listRef = useRef<FlashListRef<FeedEvent>>(null)
+    // Drives the "pull out then slam" emphasis pulse on the hero verdict's activity card once the
+    // tap-to-scroll lands on it. A single shared value is enough — only the hero card binds to it.
+    const slamScale = useSharedValue(1)
+    const slamTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+    useEffect(() => () => { if (slamTimeout.current) clearTimeout(slamTimeout.current) }, [])
     // Unread notifications badge on the header bell. Refetched whenever the Feed regains focus
     // (e.g. returning from the Notifications screen, where they get marked read).
     const [unreadCount, setUnreadCount] = useState(0)
@@ -550,12 +569,30 @@ export default function FeedScreen() {
         return () => { active = false }
     }, [token, heroSongId])
 
-    // Tapping the hero scrolls down to the same verdict's card in the activity list.
+    // Tapping the hero scrolls down to the same verdict's card in the activity list, then gives that
+    // card a quick "pull out, then slam" pulse so the eye lands on exactly what the tap pointed at.
     const scrollToHeroActivity = () => {
         if (heroEvent === null) return
         const index = events.findIndex((e) => e.id === heroEvent.id)
         if (index < 0) return
-        listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0 })
+        // viewOffset keeps the card from landing flush against the screen top (where the status bar /
+        // Dynamic Island would clip it once the list header scrolls away) — drop it the safe-area
+        // inset plus a little breathing room so it rests comfortably just below the notch. FlashList
+        // ADDS viewOffset to the scroll position, so a negative value scrolls less far / lands lower.
+        listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0, viewOffset: -(insets.top + 16) })
+        // Wait for the scroll to roughly settle so the pulse plays on a card that's already in view.
+        if (slamTimeout.current) clearTimeout(slamTimeout.current)
+        slamScale.value = 1
+        slamTimeout.current = setTimeout(() => {
+            slamScale.value = withSequence(
+                // Pull out: lift the card toward the viewer.
+                withTiming(1.06, { duration: 190, easing: Easing.out(Easing.cubic) }),
+                // Slam: snap it back down fast, just past resting...
+                withTiming(0.97, { duration: 90, easing: Easing.in(Easing.cubic) }),
+                // ...then settle to rest with a crisp hint of bounce.
+                withSpring(1, { damping: 12, stiffness: 420, mass: 0.6 }),
+            )
+        }, 420)
     }
 
     const renderRecentVerdict = () => {
@@ -1511,7 +1548,10 @@ export default function FeedScreen() {
         // One shared card component across Feed / Your Activity / other-profile / single-activity, so
         // the visuals can never drift between surfaces. Feed-only behaviour (tappable actor row, the
         // report panel, own-vs-other options menu) rides in through props and the belowNote slot.
+        // This event's card is the hero's scroll target — it binds to the slam pulse.
+        const isHeroCard = heroEvent !== null && item.id === heroEvent.id
         return (
+            <SlamCell isTarget={isHeroCard} scale={slamScale}>
             <RatingActivityCard
                 testID={`feed-row-${item.id}`}
                 style={styles.feedCardMargin}
@@ -1627,6 +1667,7 @@ export default function FeedScreen() {
                     onOpenLikers={openActivityLikers}
                 />
             </RatingActivityCard>
+            </SlamCell>
         )
     }
 
