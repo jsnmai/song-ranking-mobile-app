@@ -1,5 +1,5 @@
 import { apiClient } from "../../api/client"
-import { CircleMostRatedResponse, CircleTrendingResponse, CoSignsResponse } from "./types"
+import { CircleMostRatedResponse, CircleTrendingResponse, CoSignsResponse, PopularResponse } from "./types"
 
 export async function listCoSigns(token: string): Promise<CoSignsResponse> {
     return apiClient.get<CoSignsResponse>("/api/v1/discover/co-signs", token)
@@ -11,4 +11,8 @@ export async function getCircleTrending(token: string): Promise<CircleTrendingRe
 
 export async function getCircleMostRated(token: string): Promise<CircleMostRatedResponse> {
     return apiClient.get<CircleMostRatedResponse>("/api/v1/discover/circle/most-rated", token)
+}
+
+export async function getPopular(token: string): Promise<PopularResponse> {
+    return apiClient.get<PopularResponse>("/api/v1/discover/popular", token)
 }

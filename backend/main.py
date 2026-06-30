@@ -20,6 +20,7 @@ from src.api_routers import (
     feed,
     like,
     notification,
+    popular,
     profile,
     rating,
     search,
@@ -143,6 +144,10 @@ app.include_router(
 )
 app.include_router(
     circle_aggregates.router,
+    prefix="/api/v1",
+)
+app.include_router(
+    popular.router,
     prefix="/api/v1",
 )
 app.include_router(

@@ -61,3 +61,20 @@ export type CircleMostRatedItem = {
 export type CircleMostRatedResponse = {
     items: CircleMostRatedItem[];
 }
+
+// --- Popular on LISTn (global, anonymous) ---
+// "week": items are the songs the most people rated in the last window_days.
+// "all_time": the week was too thin, so items are the all-time most-rated songs instead;
+// the UI drops the "this week" label so it stays honest.
+export type PopularWindow = "week" | "all_time"
+
+export type PopularItem = {
+    song: PersistedSong;
+    rating_count: number;
+}
+
+export type PopularResponse = {
+    items: PopularItem[];
+    window: PopularWindow;
+    window_days: number;
+}

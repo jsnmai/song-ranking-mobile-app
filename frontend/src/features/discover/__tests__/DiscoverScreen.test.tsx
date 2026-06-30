@@ -1,5 +1,5 @@
 // Tests for Discover search navigation into Song Detail.
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react-native"
 import * as SecureStore from "expo-secure-store"
 
 import { ApiError } from "../../../api/client"
@@ -16,6 +16,7 @@ const mockListCoSigns = jest.fn()
 const mockGetMostCompatible = jest.fn()
 const mockGetCircleTrending = jest.fn()
 const mockGetCircleMostRated = jest.fn()
+const mockGetPopular = jest.fn()
 const mockBookmarkSong = jest.fn()
 const mockRemoveBookmark = jest.fn()
 const mockCreatePlayer = jest.fn()
@@ -76,6 +77,7 @@ jest.mock("../apiRequests", () => ({
     listCoSigns: (...args: unknown[]) => mockListCoSigns(...args),
     getCircleTrending: (...args: unknown[]) => mockGetCircleTrending(...args),
     getCircleMostRated: (...args: unknown[]) => mockGetCircleMostRated(...args),
+    getPopular: (...args: unknown[]) => mockGetPopular(...args),
 }))
 
 jest.mock("../../bookmarks/apiRequests", () => ({
@@ -168,6 +170,20 @@ const mostRatedItem = {
     latest_circle_rating_at: "2026-01-02T00:00:00Z",
 }
 
+// Distinct song so its "Open …" label never collides with the circle cards (which use "Nights").
+const popularSong = {
+    ...ranking.song,
+    id: 99,
+    deezer_id: 999,
+    title: "Redbone",
+    artist: "Childish Gambino",
+}
+
+const popularItem = {
+    song: popularSong,
+    rating_count: 128,
+}
+
 beforeEach(() => {
     jest.useFakeTimers()
     jest.resetAllMocks()
@@ -179,6 +195,7 @@ beforeEach(() => {
     mockGetMostCompatible.mockResolvedValue({ users: [] })
     mockGetCircleTrending.mockResolvedValue({ items: [], window_days: 7 })
     mockGetCircleMostRated.mockResolvedValue({ items: [] })
+    mockGetPopular.mockResolvedValue({ items: [], window: "all_time", window_days: 7 })
     mockBookmarkSong.mockResolvedValue({ id: 9 })
     mockRemoveBookmark.mockResolvedValue({ song_id: 42, removed: true })
     mockCreatePlayer.mockReturnValue({
@@ -197,7 +214,30 @@ describe("DiscoverScreen", () => {
     it("shows new-user discovery state when no co-signs exist", async () => {
         render(<DiscoverScreen />)
 
-        expect(await screen.findByText("No lists yet")).toBeTruthy()
+        // Default mock is an empty all-time Popular: header stays, label drops "this week",
+        // and the honest empty note shows instead of fabricated tiles.
+        expect(await screen.findByText("POPULAR ON LISTN")).toBeTruthy()
+        expect(screen.getByText("Nothing here yet. Rate a song to get it going.")).toBeTruthy()
+        expect(screen.getByText("No lists yet")).toBeTruthy()
+    })
+
+    it("renders Popular this-week tiles and opens song detail", async () => {
+        mockGetPopular.mockResolvedValue({ items: [popularItem], window: "week", window_days: 7 })
+        render(<DiscoverScreen />)
+
+        expect(await screen.findByText("POPULAR ON LISTN · THIS WEEK")).toBeTruthy()
+        expect(screen.getByText("CHILDISH GAMBINO")).toBeTruthy()
+        fireEvent.press(await screen.findByLabelText("Open Redbone"))
+        expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { song: popularSong })
+    })
+
+    it("relabels Popular to all-time when the week is too thin", async () => {
+        mockGetPopular.mockResolvedValue({ items: [popularItem], window: "all_time", window_days: 7 })
+        render(<DiscoverScreen />)
+
+        expect(await screen.findByText("POPULAR ON LISTN")).toBeTruthy()
+        expect(screen.getByText("Redbone")).toBeTruthy()
+        expect(screen.queryByText("POPULAR ON LISTN · THIS WEEK")).toBeNull()
     })
 
     it("renders social discovery cards and opens song detail", async () => {
@@ -276,7 +316,8 @@ describe("DiscoverScreen", () => {
 
         expect(await screen.findByText("TOTAL RATINGS")).toBeTruthy()
         expect(screen.getByText("12")).toBeTruthy()
-        expect(screen.getByText("FRANK OCEAN")).toBeTruthy()
+        // "FRANK OCEAN" also appears in the Popular on LISTn placeholders, so scope to the Most-rated card.
+        expect(within(screen.getByLabelText("Open Nights")).getByText("FRANK OCEAN")).toBeTruthy()
         // Trending had no items, so its locked state remains.
         expect(screen.getByText("Locked for now")).toBeTruthy()
     })

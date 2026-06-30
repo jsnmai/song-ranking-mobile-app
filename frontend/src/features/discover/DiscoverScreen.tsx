@@ -34,9 +34,9 @@ import { followUser, getMostCompatible, searchProfiles, unfollowUser } from "../
 import { MostCompatibleItem, Profile } from "../profile/types"
 import { searchSongs } from "../search/apiRequests"
 import { SongSearchResult } from "../search/types"
-import { getCircleMostRated, getCircleTrending, listCoSigns } from "./apiRequests"
+import { getCircleMostRated, getCircleTrending, getPopular, listCoSigns } from "./apiRequests"
 import SocialDiscoveryCard from "./SocialDiscoveryCard"
-import { CircleMostRatedItem, CircleTrendingItem, CoSignItem } from "./types"
+import { CircleMostRatedItem, CircleTrendingItem, CoSignItem, PopularItem, PopularWindow } from "./types"
 
 const RECENT_KEY = "discover_recent_searches"
 
@@ -144,6 +144,8 @@ export default function DiscoverScreen() {
     const [topCompatUser, setTopCompatUser] = useState<MostCompatibleItem | null>(null)
     const [trending, setTrending] = useState<CircleTrendingItem[]>([])
     const [mostRated, setMostRated] = useState<CircleMostRatedItem[]>([])
+    const [popular, setPopular] = useState<PopularItem[]>([])
+    const [popularWindow, setPopularWindow] = useState<PopularWindow>("week")
 
     // Latest search params mirrored into refs so the on-focus refresh can read them
     // without re-subscribing (and re-firing) on every keystroke.
@@ -368,13 +370,16 @@ export default function DiscoverScreen() {
                 getMostCompatible(token),
                 getCircleTrending(token),
                 getCircleMostRated(token),
+                getPopular(token),
             ])
-                .then(([coSignResponse, compatResponse, trendingResponse, mostRatedResponse]) => {
+                .then(([coSignResponse, compatResponse, trendingResponse, mostRatedResponse, popularResponse]) => {
                     if (!isCurrentRequest) return
                     setCoSigns(coSignResponse.items)
                     setTopCompatUser(compatResponse.users[0] ?? null)
                     setTrending(trendingResponse.items)
                     setMostRated(mostRatedResponse.items)
+                    setPopular(popularResponse.items)
+                    setPopularWindow(popularResponse.window)
                 })
                 .catch((err) => {
                     if (isCurrentRequest) {
@@ -676,6 +681,45 @@ export default function DiscoverScreen() {
                         )}
                         {!isDiscoveryLoading && !discoveryError && (
                             <>
+                                {/* Popular on LISTn — global, always visible. Label adapts: a real
+                                    "this week" chart when the window has signal, else all-time backfill. */}
+                                <View style={styles.discoverSectionRow}>
+                                    <Text style={styles.discoverSectionLabel}>
+                                        {popularWindow === "week" ? "POPULAR ON LISTN · THIS WEEK" : "POPULAR ON LISTN"}
+                                    </Text>
+                                </View>
+                                {popular.length > 0 ? (
+                                    <View style={styles.popularRow}>
+                                        {popular.map((item) => (
+                                            <TouchableOpacity
+                                                key={item.song.id}
+                                                style={styles.popularTile}
+                                                activeOpacity={0.7}
+                                                onPress={() => navigation.navigate("SongDetail", { song: item.song })}
+                                                accessibilityLabel={`Open ${item.song.title}`}
+                                            >
+                                                <View style={styles.popularCoverBox}>
+                                                    {item.song.cover_url ? (
+                                                        <Image source={{ uri: item.song.cover_url }} style={styles.popularCover} />
+                                                    ) : (
+                                                        <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                                                            <Path d="M9 18V5l12-2v13M9 18a3 3 0 01-6 0 3 3 0 016 0zm12-2a3 3 0 01-6 0 3 3 0 016 0z"
+                                                                stroke={colors.inkDim} strokeWidth={1.5}
+                                                                strokeLinecap="round" strokeLinejoin="round" />
+                                                        </Svg>
+                                                    )}
+                                                </View>
+                                                <Text style={styles.popularTileTitle} numberOfLines={1}>{item.song.title}</Text>
+                                                <Text style={styles.popularTileArtist} numberOfLines={1}>{item.song.artist.toUpperCase()}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                ) : (
+                                    <Text style={styles.popularEmptyNote}>
+                                        Nothing here yet. Rate a song to get it going.
+                                    </Text>
+                                )}
+
                                 {/* Co-Sign — live when friends co-sign exist, locked otherwise */}
                                 {coSigns.length > 0 ? (
                                     <>
@@ -1271,6 +1315,49 @@ const styles = StyleSheet.create({
         letterSpacing: 1.6,
         color: colors.inkDim,
         fontWeight: "700",
+    },
+    popularRow: {
+        flexDirection: "row",
+        gap: 10,
+        paddingBottom: 12,
+    },
+    popularTile: {
+        flex: 1,
+    },
+    popularCoverBox: {
+        width: "100%",
+        aspectRatio: 1,
+        borderRadius: 12,
+        backgroundColor: colors.paper2,
+        alignItems: "center",
+        justifyContent: "center",
+        marginBottom: 6,
+        overflow: "hidden",
+    },
+    popularCover: {
+        width: "100%",
+        height: "100%",
+    },
+    popularEmptyNote: {
+        fontFamily: fonts.mono,
+        fontSize: 11,
+        color: colors.inkDim,
+        paddingBottom: 12,
+    },
+    popularTileTitle: {
+        fontWeight: "700",
+        fontSize: 11.5,
+        color: colors.ink,
+        textAlign: "left",
+        lineHeight: 14,
+        marginBottom: 2,
+    },
+    popularTileArtist: {
+        fontFamily: fonts.mono,
+        fontSize: 8,
+        color: colors.inkDim,
+        textAlign: "left",
+        letterSpacing: 0.3,
     },
     coSignLockedCard: {
         backgroundColor: colors.berry,
