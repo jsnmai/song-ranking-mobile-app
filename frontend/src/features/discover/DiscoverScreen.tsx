@@ -809,12 +809,18 @@ export default function DiscoverScreen() {
                                             <Text style={styles.trendingBody} numberOfLines={1}>{trending[0].song.artist.toUpperCase()}</Text>
                                         </View>
                                         <View style={styles.trendingStatBlock}>
-                                            {/* count centered against the arrow's middle; THIS WEEK spans below both */}
+                                            {/* spacer mirrors THIS WEEK's height below, so the count+arrow row sits centered */}
+                                            <View style={styles.trendingStatSpacer} />
                                             <View style={styles.trendingStatNumRow}>
                                                 <Text style={styles.trendingStatNum}>{trending[0].recent_circle_rating_count}</Text>
-                                                <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
-                                                    <Path d="M4 20L20 4M15 4H20V9" stroke={colors.ink} strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" />
-                                                </Svg>
+                                                {/* The 32px SVG has ~5px of dead padding each side; this box crops the layout
+                                                    width to the visible arrow so the row's geometric centre (where THIS WEEK
+                                                    centres) tracks the ink — correct for 1, 2, or 3 digits with no magic offset. */}
+                                                <View style={styles.trendingStatArrowBox}>
+                                                    <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
+                                                        <Path d="M4 20L20 4M15 4H20V9" stroke={colors.ink} strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" />
+                                                    </Svg>
+                                                </View>
                                             </View>
                                             <Text style={styles.trendingStatLabel}>THIS WEEK</Text>
                                         </View>
@@ -1786,32 +1792,54 @@ const styles = StyleSheet.create({
         overflow: "hidden",
         backgroundColor: "rgba(0,0,0,0.14)",
     },
-    // Column: the count + long-stemmed arrow row, with THIS WEEK spanning below both.
+    // [spacer][count+arrow row][THIS WEEK] — the spacer equals the label block below it, so the
+    // count+arrow row lands at the column's centre while the label still counts toward the card
+    // height (stays inside the card).
     trendingStatBlock: {
-        alignItems: "flex-end",
+        alignItems: "center",
         flexShrink: 0,
-        maxWidth: 72,
+        // Roomy enough that a rare 3-digit count + gap + arrow never clips; 1–2 digits size to content.
+        maxWidth: 84,
     },
-    // alignItems center lines the number up with the arrow's vertical middle.
+    trendingStatSpacer: {
+        height: 12,
+    },
+    // alignItems center lines the number up with the arrow's vertical middle. The gap restores the
+    // breathing room the cropped arrow box removed (it's symmetric, so it doesn't affect centering).
     trendingStatNumRow: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 2,
+        gap: 6,
+    },
+    // Crops the arrow's layout width to its visible ink (the 32px SVG, centered, overflows this box
+    // by ~5px each side). Keeps the SVG's full height so the vertical alignment is untouched.
+    trendingStatArrowBox: {
+        width: 22,
+        alignItems: "center",
+        justifyContent: "center",
     },
     trendingStatNum: {
         fontFamily: fonts.display,
         fontSize: 22,
         color: colors.ink,
         lineHeight: 22,
+        // Digits sit a couple px high in their line box; nudge down so the number reads as centered
+        // on the arrow's vertical middle.
+        marginTop: 4,
     },
     trendingStatLabel: {
+        // In flow, directly under the count+arrow row (mirrored by the spacer above). lineHeight is
+        // fixed so the spacer can match this block's height exactly. No manual offset: alignItems
+        // center on the column centres it under the row, which is now correct for any digit count
+        // because the arrow box is cropped to its ink.
+        marginTop: 2,
+        lineHeight: 10,
         fontFamily: fonts.mono,
         fontSize: 7.5,
         letterSpacing: 1.2,
-        textAlign: "right",
+        textAlign: "center",
         color: "rgba(17,19,28,0.5)",
         fontWeight: "700",
-        marginTop: 3,
     },
     circleLiveRow: {
         flexDirection: "row",
