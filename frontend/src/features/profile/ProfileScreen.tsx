@@ -594,7 +594,7 @@ export default function ProfileScreen() {
                             </View>
                         </View>
                     ) : (
-                        <View>
+                        <View style={styles.labeledSection}>
                             <Text style={styles.stripKicker}>TASTE PROFILE</Text>
                             {tasteLoading ? (
                                 <ActivityIndicator color={colors.accent} style={styles.tasteLoader} />
@@ -648,7 +648,7 @@ export default function ProfileScreen() {
 
                     {/* Top genres (full users only) — shared card with the other-profile screen. */}
                     {!isNew && (
-                        <View>
+                        <View style={styles.labeledSection}>
                             <Text style={styles.stripKicker}>TOP GENRES</Text>
                             <TopGenresCard
                                 genres={topGenres}
@@ -1173,7 +1173,13 @@ const styles = StyleSheet.create({
         letterSpacing: 1.4,
         color: colors.inkDim,
         fontWeight: "700",
-        marginBottom: 12,
+        marginBottom: 6,
+    },
+    // Section wrappers that lead with a stripKicker label (TASTE PROFILE, TOP GENRES) get a touch more
+    // room above so the label groups with the content below it, matching the other-profile screen's
+    // 13-above / 6-below rhythm (the content container already contributes 10 of the gap above).
+    labeledSection: {
+        marginTop: 3,
     },
     stripLockedValue: {
         fontFamily: fonts.display,
