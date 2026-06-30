@@ -123,6 +123,15 @@ function LockIcon({ color, size = 14 }: { color: string; size?: number }) {
     )
 }
 
+function CheckIcon({ color, size = 12 }: { color: string; size?: number }) {
+    return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+            stroke={color} strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round">
+            <Polyline points="20 6 9 17 4 12" />
+        </Svg>
+    )
+}
+
 function EyeOffIcon({ color, size = 16 }: { color: string; size?: number }) {
     return (
         <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
@@ -834,7 +843,22 @@ export default function FeedScreen() {
         }
 
         const c = consensus
-        const maxBin = Math.max(1, ...c.distribution)
+        // Histogram: flat-bottomed bars spanning the friends' low→high range (their values flank it),
+        // heights following a bell peaked at the average so the tallest bar IS the average (marked with a
+        // dot). The peak's horizontal position shows skew within the range; the raw 10-bin distribution
+        // couldn't do this with only a handful of friends (every occupied bin held one rater, all equal).
+        const WAVE_BARS = 15
+        const range = c.high_score - c.low_score
+        const avgRel = range > 0.05 ? Math.min(1, Math.max(0, (c.average_score - c.low_score) / range)) : 0.5
+        const sigma = 0.26 // bell width in normalized range units — fixed, so the wave always fills the space
+        const avgBarIndex = Math.round(avgRel * (WAVE_BARS - 1))
+        const waveBars = Array.from({ length: WAVE_BARS }, (_, i) => {
+            if (i === avgBarIndex) return 1 // force the average bar to the tallest peak
+            const x = i / (WAVE_BARS - 1)
+            const bell = Math.exp(-((x - avgRel) ** 2) / (2 * sigma * sigma))
+            const ripple = 0.82 + 0.18 * Math.abs(Math.sin(i * 1.9)) // gentle waveform texture (deterministic)
+            return Math.max(0.16, bell * ripple * 0.94)
+        })
         return (
             <TouchableOpacity
                 style={[styles.fullCell, { height: 138, backgroundColor: colors.sky }]}
@@ -846,23 +870,37 @@ export default function FeedScreen() {
                     <View style={styles.fullCellTop}>
                         <View style={styles.lightPill}><Text style={styles.lightPillText}>Consensus</Text></View>
                     </View>
+                    {/* "N friends rated <song>". Each line is its own space-between child so the
+                        pill→label, label→title, and title→verdict gaps all come out equal. */}
+                    <Text style={styles.consRatedLabel}>{c.contributor_count} FRIENDS RATED</Text>
+                    <Text style={styles.consSong} numberOfLines={1}>{c.song.title}</Text>
+                    {/* Their verdict: the average (big number + label) peaking over a low→high histogram. */}
                     <View>
-                        <Text style={styles.consAvg}>{c.average_score.toFixed(1)}</Text>
-                        <Text style={styles.consMeta}>{c.contributor_count} FRIENDS · AVG</Text>
-                    </View>
-                    <View>
-                        <View style={styles.consensusFullBars}>
-                            {c.distribution.map((count, i) => (
-                                <View
-                                    key={i}
-                                    style={[
-                                        styles.consBarLive,
-                                        { height: Math.max(2, (count / maxBin) * 20), opacity: count > 0 ? 0.95 : 0.25 },
-                                    ]}
-                                />
-                            ))}
+                        <View style={styles.consAvgRow}>
+                            <Text style={styles.consAvg}>{c.average_score.toFixed(1)}</Text>
+                            <Text style={styles.consAvgLabel}>average</Text>
                         </View>
-                        <Text style={styles.consSong} numberOfLines={1}>{c.song.title}</Text>
+                        <View style={styles.consSpread} testID="feed-consensus-spread">
+                            <Text style={styles.consSpreadEndLabel}>{c.low_score.toFixed(1)}</Text>
+                            <View style={styles.consWave}>
+                                {waveBars.map((v, i) => (
+                                    <View
+                                        key={i}
+                                        style={[
+                                            styles.consWaveBar,
+                                            {
+                                                height: Math.max(3, v * 13),
+                                                opacity: i === avgBarIndex ? 1 : 0.4 + 0.45 * v,
+                                            },
+                                        ]}
+                                    >
+                                        {/* Dot lives inside the peak bar so left:50% centers it exactly on this notch. */}
+                                        {i === avgBarIndex && <View style={styles.consWaveAvgDot} />}
+                                    </View>
+                                ))}
+                            </View>
+                            <Text style={styles.consSpreadEndLabel}>{c.high_score.toFixed(1)}</Text>
+                        </View>
                     </View>
                 </View>
             </TouchableOpacity>
@@ -905,6 +943,10 @@ export default function FeedScreen() {
         }
 
         const d = disagreement
+        // Backend gap = abs(your_score − friends_average) on raw scores. Derive the displayed "APART"
+        // from the SAME rounded values shown below so YOU, FRIENDS, and APART always reconcile on screen
+        // (rounding each independently could otherwise leave them looking 0.1 off, e.g. 7.5 − 4.9 ≠ 2.5).
+        const apart = Math.abs(Number(d.your_score.toFixed(1)) - Number(d.friends_average.toFixed(1)))
         return (
             <TouchableOpacity
                 style={styles.fullDisagreeCard}
@@ -914,7 +956,7 @@ export default function FeedScreen() {
             >
                 <View style={styles.fullCellTop}>
                     <View style={styles.butterPill}><Text style={styles.butterPillText}>Disagreement spotlight</Text></View>
-                    <Text style={styles.disagreeApart}>{d.gap.toFixed(1)} APART</Text>
+                    <Text style={styles.disagreeApart}>{apart.toFixed(1)} APART</Text>
                 </View>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 11 }}>
                     {d.song.cover_url ? (
@@ -989,12 +1031,21 @@ export default function FeedScreen() {
                     <Polygon points="0,0 100,0 0,100" fill={colors.plum} />
                     <Polygon points="100,0 100,100 0,100" fill={colors.accent} />
                 </Svg>
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(13,15,23,0.42)" }]} />
+                {/* Light scrim only — keep the plum/orange vibrant for the live split while holding white text legible. */}
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(13,15,23,0.14)" }]} />
                 <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
                     <View style={styles.fullCellTop}>
                         <View style={styles.darkPill}><Text style={styles.darkPillText}>Split · {s.gap.toFixed(1)} gap</Text></View>
                     </View>
-                    <Text style={styles.splitSong} numberOfLines={1}>{s.song.title}</Text>
+                    {/* Centerpiece: the split song, circular with a white ring, title sitting just below. */}
+                    <View style={styles.splitCenter}>
+                        {s.song.cover_url ? (
+                            <Image style={styles.splitArt} source={{ uri: s.song.cover_url }} />
+                        ) : (
+                            <View style={[styles.splitArt, { backgroundColor: "rgba(0,0,0,0.2)" }]} />
+                        )}
+                        <Text style={styles.splitSong} numberOfLines={1}>‘{s.song.title}’</Text>
+                    </View>
                     <View style={styles.splitRow}>
                         <View style={styles.splitSide}>
                             {bust(s.high)}
@@ -1029,7 +1080,7 @@ export default function FeedScreen() {
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
                             <View>
                                 <HatchBox size={42} radius={8} tone="light" />
-                                <View style={styles.matchMomentCheck} />
+                                <View style={styles.matchMomentCheck}><CheckIcon color={colors.mint} size={10} /></View>
                             </View>
                             <Text style={styles.matchMomentGt}>›</Text>
                             <HatchBox size={32} radius={7} tone="light" />
@@ -1073,7 +1124,7 @@ export default function FeedScreen() {
                                 ) : (
                                     <View style={[styles.mmWinnerArt, { backgroundColor: "rgba(255,255,255,0.15)" }]} />
                                 )}
-                                <View style={styles.matchMomentCheck} />
+                                <View style={styles.matchMomentCheck}><CheckIcon color={colors.mint} size={10} /></View>
                             </View>
                             <Text style={styles.matchMomentGt}>›</Text>
                             {m.loser.cover_url ? (
@@ -2707,29 +2758,81 @@ const styles = StyleSheet.create({
         backgroundColor: "rgba(255,255,255,0.28)",
         borderRadius: 1,
     },
-    // Consensus — live half-tile (friend average + distribution)
+    // Consensus — live half-tile. "N FRIENDS RATED" caption sits above the song title so the card
+    // reads as a sentence; the pill ("· Circle Avg") labels the big number as the friend average.
+    consRatedLabel: {
+        fontFamily: fonts.mono,
+        fontSize: 8,
+        letterSpacing: 0.8,
+        color: "rgba(255,255,255,0.85)",
+        textTransform: "uppercase",
+    },
+    // Big score + a small "average" label, baseline-aligned, with a gap down to the soundwave.
+    consAvgRow: {
+        flexDirection: "row",
+        alignItems: "baseline",
+        marginBottom: 4,
+    },
     consAvg: {
         fontFamily: fonts.display,
-        fontSize: 38,
-        // Taller-than-font line box so the display digits center vertically, giving
-        // even breathing room above and below the score instead of hugging the top.
-        lineHeight: 44,
+        fontSize: 34,
+        // Line box kept close to the font size (not taller) so the big number doesn't carry extra
+        // vertical padding — that reclaimed space goes to even gaps without shrinking the digits.
+        lineHeight: 35,
         letterSpacing: -1,
         color: "#fff",
     },
-    consMeta: {
+    consAvgLabel: {
         fontFamily: fonts.mono,
-        fontSize: 7.5,
-        letterSpacing: 0.8,
-        color: "rgba(255,255,255,0.85)",
-        marginTop: 2,
-        // Breathing room between the FRIENDS · AVG label and the histogram below it.
+        fontSize: 9,
+        letterSpacing: 0.4,
+        color: "rgba(255,255,255,0.7)",
+        marginLeft: 6,
+    },
+    // Consensus histogram row: the low/high friend scores flank the bars, bottom-aligned so the
+    // numbers sit on the same baseline the bars rise from.
+    consSpread: {
+        flexDirection: "row",
+        alignItems: "flex-end",
+        gap: 7,
+    },
+    consSpreadEndLabel: {
+        fontFamily: fonts.mono,
+        fontSize: 10,
+        fontWeight: "700",
+        color: "#fff",
+    },
+    // The bars themselves: bottom-aligned so they rise from a flat baseline like a histogram. Kept
+    // compact (peak ~13px in a 15px box) — it's the secondary element, so the hero average number gets
+    // the vertical room. marginBottom lifts the whole histogram up so its baseline meets the low/high
+    // digits' baseline (the text's descender space otherwise leaves the bars a few px lower).
+    consWave: {
+        flex: 1,
+        height: 15,
+        flexDirection: "row",
+        alignItems: "flex-end",
+        gap: 2,
         marginBottom: 3,
     },
-    consBarLive: {
+    consWaveBar: {
         flex: 1,
+        borderRadius: 1.5,
         backgroundColor: "#fff",
-        borderRadius: 1,
+    },
+    // Dark dot (white ring) marks the average. As a child of the peak bar, left:50% puts its left
+    // edge at the bar's centre and translateX(-half) slides it back so the dot is centred on the bar;
+    // top lifts it just above the bar's crown.
+    consWaveAvgDot: {
+        position: "absolute",
+        top: -4,
+        left: "50%",
+        transform: [{ translateX: -3.5 }],
+        width: 7,
+        height: 7,
+        borderRadius: 3.5,
+        backgroundColor: colors.ink,
+        borderWidth: 1.5,
+        borderColor: "#fff",
     },
     consSong: {
         fontFamily: fonts.serif,
@@ -2737,7 +2840,6 @@ const styles = StyleSheet.create({
         fontWeight: "700",
         fontSize: 12.5,
         color: "#fff",
-        marginTop: 2,
     },
     // Split Decision — live state (two people you follow, far apart)
     splitSong: {
@@ -2745,8 +2847,27 @@ const styles = StyleSheet.create({
         fontStyle: "italic",
         fontWeight: "700",
         fontSize: 12.5,
+        lineHeight: 14,
         color: "#fff",
         textAlign: "center",
+        alignSelf: "stretch",
+    },
+    splitCenter: {
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 5,
+    },
+    splitArt: {
+        width: 42,
+        height: 42,
+        borderRadius: 21,
+        borderWidth: 2,
+        borderColor: "rgba(255,255,255,0.92)",
+        shadowColor: "#000",
+        shadowOpacity: 0.4,
+        shadowOffset: { width: 0, height: 2 },
+        shadowRadius: 8,
     },
     splitRow: {
         flexDirection: "row",
@@ -2796,9 +2917,11 @@ const styles = StyleSheet.create({
         width: 16,
         height: 16,
         borderRadius: 8,
-        backgroundColor: "rgba(255,255,255,0.85)",
+        backgroundColor: "#fff",
         borderWidth: 2,
         borderColor: colors.mint,
+        alignItems: "center",
+        justifyContent: "center",
     },
     matchMomentGt: {
         fontFamily: fonts.display,
