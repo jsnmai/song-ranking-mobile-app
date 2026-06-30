@@ -60,20 +60,29 @@ function SearchIcon({ size = 16 }: { size?: number }) {
     )
 }
 
-function PersonIcon() {
+function PersonIcon({ size = 10 }: { size?: number }) {
     return (
-        <Svg width={11} height={11} viewBox="0 0 24 24" fill="none">
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
             <Circle cx="12" cy="8" r="4" stroke={colors.inkSoft} strokeWidth={2} strokeLinecap="round" />
             <Path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" stroke={colors.inkSoft} strokeWidth={2} strokeLinecap="round" />
         </Svg>
     )
 }
 
-function MiniSearchIcon() {
+function MiniSearchIcon({ size = 9 }: { size?: number }) {
     return (
-        <Svg width={11} height={11} viewBox="0 0 24 24" fill="none">
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
             <Circle cx={11} cy={11} r={7} stroke={colors.inkSoft} strokeWidth={2} />
             <Path d="m20 20-3.4-3.4" stroke={colors.inkSoft} strokeWidth={2} strokeLinecap="round" />
+        </Svg>
+    )
+}
+
+// Small X for the recent-chip dismiss badge (the badge supplies the circle).
+function RecentCloseIcon() {
+    return (
+        <Svg width={9} height={9} viewBox="0 0 24 24" fill="none">
+            <Path d="M6 6l12 12M18 6 6 18" stroke={colors.inkSoft} strokeWidth={2.6} strokeLinecap="round" />
         </Svg>
     )
 }
@@ -553,14 +562,22 @@ export default function DiscoverScreen() {
                                 <View style={styles.recentChips}>
                                     {recentSearches.map((item, i) => (
                                         <View key={i} style={styles.recentChip}>
-                                            <View style={styles.recentChipIcon}>
-                                                {item.mode === "songs" ? <MiniSearchIcon /> : <PersonIcon />}
-                                            </View>
-                                            <TouchableOpacity onPress={() => handleRecentPress(item)}>
+                                            <TouchableOpacity
+                                                style={styles.recentChipBody}
+                                                onPress={() => handleRecentPress(item)}
+                                                activeOpacity={0.7}
+                                            >
+                                                <View style={styles.recentChipIcon}>
+                                                    {item.mode === "songs" ? <MiniSearchIcon /> : <PersonIcon />}
+                                                </View>
                                                 <Text style={styles.recentChipText}>{item.query}</Text>
                                             </TouchableOpacity>
-                                            <TouchableOpacity onPress={() => handleRemoveRecent(item)} style={styles.recentChipClose}>
-                                                <Text style={styles.recentChipCloseText}>×</Text>
+                                            <TouchableOpacity
+                                                onPress={() => handleRemoveRecent(item)}
+                                                style={styles.recentChipClose}
+                                                hitSlop={6}
+                                            >
+                                                <RecentCloseIcon />
                                             </TouchableOpacity>
                                         </View>
                                     ))}
@@ -792,12 +809,14 @@ export default function DiscoverScreen() {
                                             <Text style={styles.trendingBody} numberOfLines={1}>{trending[0].song.artist.toUpperCase()}</Text>
                                         </View>
                                         <View style={styles.trendingStatBlock}>
+                                            {/* count centered against the arrow's middle; THIS WEEK spans below both */}
                                             <View style={styles.trendingStatNumRow}>
                                                 <Text style={styles.trendingStatNum}>{trending[0].recent_circle_rating_count}</Text>
-                                                {/* increasing arrow — ↗ glyph at 22, matching the design */}
-                                                <Text style={styles.trendingStatArrow}>↗</Text>
+                                                <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
+                                                    <Path d="M4 20L20 4M15 4H20V9" stroke={colors.ink} strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" />
+                                                </Svg>
                                             </View>
-                                            <Text style={styles.trendingStatLabel}>Friends rated this week</Text>
+                                            <Text style={styles.trendingStatLabel}>THIS WEEK</Text>
                                         </View>
                                     </TouchableOpacity>
                                 ) : (
@@ -1087,10 +1106,9 @@ const styles = StyleSheet.create({
         fontWeight: "700",
     },
     clearText: {
-        fontFamily: fonts.mono,
-        fontSize: 11,
+        fontFamily: fonts.display,
+        fontSize: 11.5,
         color: colors.accent,
-        fontWeight: "600",
     },
     recentChips: {
         flexDirection: "row",
@@ -1100,30 +1118,44 @@ const styles = StyleSheet.create({
     recentChip: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 6,
+        gap: 8,
         backgroundColor: colors.paper,
         borderWidth: 1,
         borderColor: colors.line,
         borderRadius: 999,
         paddingVertical: 8,
-        paddingHorizontal: 11,
+        // Asymmetric: tighter on the icon side, roomier past the dismiss badge.
+        paddingLeft: 10,
+        paddingRight: 11,
+    },
+    // Icon + query as one tap target, so tapping the icon re-runs the search too.
+    recentChipBody: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
     },
     recentChipIcon: {
-        opacity: 0.7,
+        width: 18,
+        height: 18,
+        borderRadius: 9,
+        backgroundColor: colors.bg,
+        borderWidth: 1,
+        borderColor: colors.line,
+        alignItems: "center",
+        justifyContent: "center",
     },
     recentChipText: {
-        fontSize: 13,
+        fontFamily: fonts.display,
+        fontSize: 12.5,
         color: colors.ink,
-        fontWeight: "500",
     },
     recentChipClose: {
-        paddingLeft: 2,
-    },
-    recentChipCloseText: {
-        fontSize: 15,
-        color: colors.inkDim,
-        lineHeight: 16,
-        marginTop: -1,
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        backgroundColor: colors.line,
+        alignItems: "center",
+        justifyContent: "center",
     },
     // ── Results ────────────────────────────────────────────────────────
     scroll: { flex: 1 },
@@ -1476,9 +1508,9 @@ const styles = StyleSheet.create({
     },
     trendingLiveKicker: {
         fontFamily: fonts.mono,
-        fontSize: 8,
+        fontSize: 9.5,
         letterSpacing: 0.4,
-        color: "rgba(17,19,28,0.55)",
+        color: "rgba(17,19,28,0.82)",
         fontWeight: "700",
         marginBottom: 4,
     },
@@ -1754,15 +1786,17 @@ const styles = StyleSheet.create({
         overflow: "hidden",
         backgroundColor: "rgba(0,0,0,0.14)",
     },
+    // Column: the count + long-stemmed arrow row, with THIS WEEK spanning below both.
     trendingStatBlock: {
         alignItems: "flex-end",
         flexShrink: 0,
-        maxWidth: 82,
+        maxWidth: 72,
     },
+    // alignItems center lines the number up with the arrow's vertical middle.
     trendingStatNumRow: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 3,
+        gap: 2,
     },
     trendingStatNum: {
         fontFamily: fonts.display,
@@ -1770,21 +1804,14 @@ const styles = StyleSheet.create({
         color: colors.ink,
         lineHeight: 22,
     },
-    // ↗ glyph (system font — display fonts often lack it), sized to the design's arrow.
-    trendingStatArrow: {
-        fontSize: 22,
-        lineHeight: 22,
-        color: colors.ink,
-    },
     trendingStatLabel: {
         fontFamily: fonts.mono,
         fontSize: 7.5,
-        letterSpacing: 0.2,
-        lineHeight: 10,
+        letterSpacing: 1.2,
         textAlign: "right",
-        color: "rgba(17,19,28,0.55)",
-        fontWeight: "600",
-        marginTop: 4,
+        color: "rgba(17,19,28,0.5)",
+        fontWeight: "700",
+        marginTop: 3,
     },
     circleLiveRow: {
         flexDirection: "row",
