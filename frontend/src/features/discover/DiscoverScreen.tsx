@@ -4,6 +4,7 @@ import {
     ActivityIndicator,
     Image,
     Pressable,
+    RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
@@ -14,23 +15,29 @@ import {
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import Animated, {
+    FadeIn,
     FadeInDown,
+    FadeInLeft,
     FadeInRight,
     FadeOut,
     FadeOutRight,
     LinearTransition,
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
 } from "react-native-reanimated"
 import { CompositeNavigationProp, useFocusEffect, useNavigation, useRoute, RouteProp } from "@react-navigation/native"
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import * as SecureStore from "expo-secure-store"
-import Svg, { Circle, Path } from "react-native-svg"
+import Svg, { Circle, Defs, Path, RadialGradient, Rect, Stop } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
 import BouncyPressable from "../../components/BouncyPressable"
 import HatchBox from "../../components/HatchBox"
 import { AppStackParamList, DiscoverStackParamList, TabParamList } from "../../navigation/types"
 import { bucketColor, colors, fonts } from "../../theme"
+import { usePullRefresh } from "../../hooks/usePullRefresh"
 import { useAuth } from "../auth/AuthContext"
 import { followUser, getMostCompatible, searchProfiles, unfollowUser } from "../profile/apiRequests"
 import { MostCompatibleItem, Profile } from "../profile/types"
@@ -41,6 +48,10 @@ import SocialDiscoveryCard from "./SocialDiscoveryCard"
 import { CircleMostRatedItem, CircleTrendingItem, CoSignItem, PopularItem, PopularWindow } from "./types"
 
 const RECENT_KEY = "discover_recent_searches"
+// Recents are kept per scope (songs vs people). Show this many at rest; the rest sit
+// behind a "Show more" chip, with each scope's stored history capped independently.
+const PREVIEW_RECENTS = 6
+const RECENT_CAP_PER_MODE = 12
 
 type DiscoverRouteProp = RouteProp<DiscoverStackParamList, "DiscoverHome">
 type DiscoverNavigationProp = CompositeNavigationProp<
@@ -97,6 +108,21 @@ function ClearIcon() {
     )
 }
 
+// Caret for the recents "Show more / Show less" chip.
+function ChevronIcon({ up = false, size = 11 }: { up?: boolean; size?: number }) {
+    return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+            <Path
+                d={up ? "M6 15l6-6 6 6" : "M6 9l6 6 6-6"}
+                stroke={colors.inkSoft}
+                strokeWidth={2.4}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+        </Svg>
+    )
+}
+
 type RecentEntry = { query: string; mode: "songs" | "users" }
 
 // Deterministic avatar background per user, matching the follow-list palette.
@@ -133,6 +159,85 @@ function HighlightedText({
     )
 }
 
+// One Popular-on-LISTn tile. The first tap "arms" a View confirmation rather than navigating: the
+// cover art zooms in inside its fixed frame and dims, surfacing a frosted-glass VIEW chip, so a
+// stray tap previews intent instead of yanking the user to the song page. Tapping VIEW opens it;
+// tapping the card again — or scrolling the row — backs out.
+function PopularCard({
+    item,
+    size,
+    isConfirming,
+    onArm,
+    onDismiss,
+    onView,
+}: {
+    item: PopularItem;
+    size: number;
+    isConfirming: boolean;
+    onArm: () => void;
+    onDismiss: () => void;
+    onView: () => void;
+}) {
+    // Only the artwork scales — the tile frame stays put, so the zoom reads as the image pushing
+    // into its clipped square rather than the whole card growing.
+    const zoom = useSharedValue(1)
+    useEffect(() => {
+        zoom.value = withSpring(isConfirming ? 1.14 : 1, { damping: 16, stiffness: 320, mass: 0.6 })
+    }, [isConfirming, zoom])
+    const imageStyle = useAnimatedStyle(() => ({ transform: [{ scale: zoom.value }] }))
+
+    return (
+        <View style={{ width: size }}>
+            <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={isConfirming ? onDismiss : onArm}
+                accessibilityLabel={isConfirming ? `Dismiss ${item.song.title}` : `Preview ${item.song.title}`}
+            >
+                <View style={[styles.popularCoverBox, { width: size, height: size }]}>
+                    {item.song.cover_url ? (
+                        <Animated.Image source={{ uri: item.song.cover_url }} style={[styles.popularCover, imageStyle]} />
+                    ) : (
+                        <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                            <Path d="M9 18V5l12-2v13M9 18a3 3 0 01-6 0 3 3 0 016 0zm12-2a3 3 0 01-6 0 3 3 0 016 0z"
+                                stroke={colors.inkDim} strokeWidth={1.5}
+                                strokeLinecap="round" strokeLinejoin="round" />
+                        </Svg>
+                    )}
+                    {isConfirming && (
+                        <View style={styles.popularConfirmOverlay}>
+                            {/* Center-weighted scrim — darkest behind the label, fading out so the
+                                zoomed art still reads at the edges. pointerEvents off so taps on the
+                                dim fall through to the card (dismiss). */}
+                            <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} pointerEvents="none">
+                                <Defs>
+                                    <RadialGradient id={`viewDim-${item.song.id}`} cx="50%" cy="50%" r="72%">
+                                        <Stop offset="0" stopColor="#0c0e16" stopOpacity={0.62} />
+                                        <Stop offset="1" stopColor="#0c0e16" stopOpacity={0.16} />
+                                    </RadialGradient>
+                                </Defs>
+                                <Rect x="0" y="0" width="100%" height="100%" fill={`url(#viewDim-${item.song.id})`} />
+                            </Svg>
+                            <BouncyPressable
+                                style={styles.popularViewStack}
+                                onPress={onView}
+                                accessibilityLabel={`View ${item.song.title}`}
+                                hitSlop={{ top: 14, bottom: 14, left: 18, right: 18 }}
+                            >
+                                <Text style={styles.popularViewLabel}>VIEW</Text>
+                                <Svg width={17} height={17} viewBox="0 0 24 24" fill="none" style={styles.popularViewChevron}>
+                                    <Path d="M5 12H19M12 5L19 12L12 19" stroke={colors.cream} strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" />
+                                </Svg>
+                            </BouncyPressable>
+                        </View>
+                    )}
+                </View>
+                <Text style={styles.popularTileTitle} numberOfLines={1}>{item.song.title}</Text>
+                <Text style={styles.popularTileArtist} numberOfLines={1}>{item.song.artist.toUpperCase()}</Text>
+            </TouchableOpacity>
+        </View>
+    )
+}
+
 export default function DiscoverScreen() {
     const route = useRoute<DiscoverRouteProp>()
     const navigation = useNavigation<DiscoverNavigationProp>()
@@ -144,6 +249,8 @@ export default function DiscoverScreen() {
     const [searchMode, setSearchMode] = useState<"songs" | "users">(route.params?.searchMode ?? "songs")
     const [query, setQuery] = useState("")
     const [recentSearches, setRecentSearches] = useState<RecentEntry[]>([])
+    // Whether the current scope's recents are expanded past the preview count.
+    const [recentsExpanded, setRecentsExpanded] = useState(false)
     const recentLoaded = useRef(false)
     const [songResults, setSongResults] = useState<SongSearchResult[]>([])
     const [profileResults, setProfileResults] = useState<Profile[]>([])
@@ -158,6 +265,8 @@ export default function DiscoverScreen() {
     const [mostRated, setMostRated] = useState<CircleMostRatedItem[]>([])
     const [popular, setPopular] = useState<PopularItem[]>([])
     const [popularWindow, setPopularWindow] = useState<PopularWindow>("week")
+    // Which Popular tile is showing its "View" confirmation (null = none armed).
+    const [confirmingPopularId, setConfirmingPopularId] = useState<number | null>(null)
     // Size the 4 Popular tiles to fill the content row exactly (14px padding each side, three
     // 10px gaps), so the scroller rests flush with both screen edges while still bouncing.
     const { width: windowWidth } = useWindowDimensions()
@@ -215,10 +324,17 @@ export default function DiscoverScreen() {
     }, [navigation, searchFocused])
 
     const addToRecent = (q: string, mode: "songs" | "users") => {
-        if (q.trim().length < 2) return
+        const trimmed = q.trim()
+        if (trimmed.length < 2) return
         setRecentSearches(prev => {
-            const filtered = prev.filter(r => !(r.query === q.trim() && r.mode === mode))
-            return [{ query: q.trim(), mode }, ...filtered].slice(0, 8)
+            const filtered = prev.filter(r => !(r.query === trimmed && r.mode === mode))
+            const next = [{ query: trimmed, mode }, ...filtered]
+            // Cap each scope's history independently while keeping global recency order.
+            const seen: Record<string, number> = { songs: 0, users: 0 }
+            return next.filter(r => {
+                seen[r.mode] += 1
+                return seen[r.mode] <= RECENT_CAP_PER_MODE
+            })
         })
     }
 
@@ -231,6 +347,7 @@ export default function DiscoverScreen() {
         setSongResults([])
         setProfileResults([])
         setError(null)
+        setRecentsExpanded(false)
     }
 
     const handleRecentPress = (item: RecentEntry) => {
@@ -240,6 +357,12 @@ export default function DiscoverScreen() {
 
     const handleRemoveRecent = (item: RecentEntry) => {
         setRecentSearches(prev => prev.filter(r => !(r.query === item.query && r.mode === item.mode)))
+    }
+
+    // "Clear" only wipes the scope you're looking at, leaving the other tab's history intact.
+    const handleClearRecents = () => {
+        setRecentSearches(prev => prev.filter(r => r.mode !== searchMode))
+        setRecentsExpanded(false)
     }
 
     const handleSongPress = (song: SongSearchResult) => {
@@ -296,6 +419,7 @@ export default function DiscoverScreen() {
 
     const setMode = (mode: "songs" | "users") => {
         setSearchMode(mode)
+        setRecentsExpanded(false)
         setSongResults([])
         setProfileResults([])
         setError(null)
@@ -372,9 +496,35 @@ export default function DiscoverScreen() {
         }
     }, [query, searchMode, token])
 
-    // Refetch on focus (not just on token change) so a transient backend error
-    // can't leave the discovery section permanently stuck on a stale error —
-    // matching how Feed and Profile recover when the tab regains focus.
+    // Pull-to-refresh re-runs the full social-discovery fetch on demand. It keeps its own state, so
+    // the on-focus loader below is left untouched.
+    const refreshDiscovery = useCallback(async () => {
+        if (!token) return
+        setDiscoveryError(null)
+        try {
+            const [coSignResponse, compatResponse, trendingResponse, mostRatedResponse, popularResponse] =
+                await Promise.all([
+                    listCoSigns(token),
+                    getMostCompatible(token),
+                    getCircleTrending(token),
+                    getCircleMostRated(token),
+                    getPopular(token),
+                ])
+            setCoSigns(coSignResponse.items)
+            setTopCompatUser(compatResponse.users[0] ?? null)
+            setTrending(trendingResponse.items)
+            setMostRated(mostRatedResponse.items)
+            setPopular(popularResponse.items)
+            setPopularWindow(popularResponse.window)
+        } catch (err) {
+            setDiscoveryError(
+                err instanceof ApiError ? err.detail : "Social discovery is temporarily unavailable.",
+            )
+        }
+    }, [token])
+
+    // Refetch on focus (not just on token change) so a transient backend error can't leave the
+    // discovery section stuck on a stale error — matching how Feed and Profile recover on focus.
     useFocusEffect(
         useCallback(() => {
             if (!token) return
@@ -413,6 +563,8 @@ export default function DiscoverScreen() {
         }, [token]),
     )
 
+    const { refreshing, onRefresh } = usePullRefresh(refreshDiscovery)
+
     // When the screen regains focus after the rate flow (or any push), silently re-run
     // the active song search so a row the user just rated shows its new score instead of
     // the Rate pill. Skips the first focus (the debounced effect handles initial load)
@@ -446,6 +598,9 @@ export default function DiscoverScreen() {
 
     const trimmedQuery = query.trim()
     const hasQuery = trimmedQuery.length > 0
+    // Recents are scoped to the active tab; collapse to a preview unless expanded.
+    const tabRecents = recentSearches.filter(r => r.mode === searchMode)
+    const visibleRecents = recentsExpanded ? tabRecents : tabRecents.slice(0, PREVIEW_RECENTS)
     const followingCount = profile?.following_count ?? 0
     const ratedCount = profile?.user_stats?.rated_count ?? 0
     // Hide the viewer's own score in search results until they've rated 10 songs.
@@ -535,6 +690,7 @@ export default function DiscoverScreen() {
                 style={styles.scroll}
                 contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 92 }]}
                 keyboardShouldPersistTaps="handled"
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.inkDim} />}
             >
                 {searchFocused ? (
                     <>
@@ -552,18 +708,32 @@ export default function DiscoverScreen() {
                             </View>
                         )}
 
-                        {/* No query: recent searches */}
-                        {!isLoading && error === null && !hasQuery && recentSearches.length > 0 && (
+                        {/* No query: recent searches, scoped to the active tab. The RECENT /
+                            Clear header stays anchored; only the chip cloud below it slides
+                            toward the tab you just tapped. */}
+                        {!isLoading && error === null && !hasQuery && tabRecents.length > 0 && (
                             <>
                                 <View style={styles.recentHeader}>
                                     <Text style={styles.recentLabel}>RECENT</Text>
-                                    <TouchableOpacity onPress={() => setRecentSearches([])}>
+                                    <TouchableOpacity onPress={handleClearRecents}>
                                         <Text style={styles.clearText}>Clear</Text>
                                     </TouchableOpacity>
                                 </View>
-                                <View style={styles.recentChips}>
-                                    {recentSearches.map((item, i) => (
-                                        <View key={i} style={styles.recentChip}>
+                                <Animated.View
+                                    key={searchMode}
+                                    entering={(searchMode === "users" ? FadeInRight : FadeInLeft).duration(240)}
+                                    exiting={FadeOut.duration(120)}
+                                    layout={LinearTransition.duration(220)}
+                                    style={styles.recentChips}
+                                >
+                                    {visibleRecents.map((item) => (
+                                        <Animated.View
+                                            key={`${item.mode}:${item.query}`}
+                                            entering={FadeIn.duration(160)}
+                                            exiting={FadeOut.duration(120)}
+                                            layout={LinearTransition.duration(220)}
+                                            style={styles.recentChip}
+                                        >
                                             <TouchableOpacity
                                                 style={styles.recentChipBody}
                                                 onPress={() => handleRecentPress(item)}
@@ -581,9 +751,23 @@ export default function DiscoverScreen() {
                                             >
                                                 <RecentCloseIcon />
                                             </TouchableOpacity>
-                                        </View>
+                                        </Animated.View>
                                     ))}
-                                </View>
+                                    {tabRecents.length > PREVIEW_RECENTS && (
+                                        <Animated.View key="more-toggle" layout={LinearTransition.duration(220)}>
+                                            <TouchableOpacity
+                                                style={styles.recentMoreChip}
+                                                onPress={() => setRecentsExpanded((e) => !e)}
+                                                activeOpacity={0.7}
+                                            >
+                                                <Text style={styles.recentMoreText}>
+                                                    {recentsExpanded ? "Show less" : "Show more"}
+                                                </Text>
+                                                <ChevronIcon up={recentsExpanded} />
+                                            </TouchableOpacity>
+                                        </Animated.View>
+                                    )}
+                                </Animated.View>
                             </>
                         )}
 
@@ -718,29 +902,21 @@ export default function DiscoverScreen() {
                                         showsHorizontalScrollIndicator={false}
                                         style={styles.popularScroll}
                                         contentContainerStyle={styles.popularScrollContent}
+                                        onScrollBeginDrag={() => setConfirmingPopularId(null)}
                                     >
                                         {popular.map((item) => (
-                                            <TouchableOpacity
+                                            <PopularCard
                                                 key={item.song.id}
-                                                style={{ width: popularTileSize }}
-                                                activeOpacity={0.7}
-                                                onPress={() => navigation.navigate("SongDetail", { song: item.song })}
-                                                accessibilityLabel={`Open ${item.song.title}`}
-                                            >
-                                                <View style={[styles.popularCoverBox, { width: popularTileSize, height: popularTileSize }]}>
-                                                    {item.song.cover_url ? (
-                                                        <Image source={{ uri: item.song.cover_url }} style={styles.popularCover} />
-                                                    ) : (
-                                                        <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                                                            <Path d="M9 18V5l12-2v13M9 18a3 3 0 01-6 0 3 3 0 016 0zm12-2a3 3 0 01-6 0 3 3 0 016 0z"
-                                                                stroke={colors.inkDim} strokeWidth={1.5}
-                                                                strokeLinecap="round" strokeLinejoin="round" />
-                                                        </Svg>
-                                                    )}
-                                                </View>
-                                                <Text style={styles.popularTileTitle} numberOfLines={1}>{item.song.title}</Text>
-                                                <Text style={styles.popularTileArtist} numberOfLines={1}>{item.song.artist.toUpperCase()}</Text>
-                                            </TouchableOpacity>
+                                                item={item}
+                                                size={popularTileSize}
+                                                isConfirming={confirmingPopularId === item.song.id}
+                                                onArm={() => setConfirmingPopularId(item.song.id)}
+                                                onDismiss={() => setConfirmingPopularId(null)}
+                                                onView={() => {
+                                                    setConfirmingPopularId(null)
+                                                    navigation.navigate("SongDetail", { song: item.song })
+                                                }}
+                                            />
                                         ))}
                                     </ScrollView>
                                 ) : (
@@ -1165,6 +1341,23 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
     },
+    // "Show more / less" expander — chip-shaped but quieter (no fill, no dismiss badge).
+    recentMoreChip: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 5,
+        backgroundColor: colors.bg,
+        borderWidth: 1,
+        borderColor: colors.line,
+        borderRadius: 999,
+        paddingVertical: 8,
+        paddingHorizontal: 13,
+    },
+    recentMoreText: {
+        fontFamily: fonts.display,
+        fontSize: 12,
+        color: colors.inkSoft,
+    },
     // ── Results ────────────────────────────────────────────────────────
     scroll: { flex: 1 },
     scrollContent: {
@@ -1415,6 +1608,32 @@ const styles = StyleSheet.create({
         color: colors.inkDim,
         textAlign: "left",
         letterSpacing: 0.3,
+    },
+    // Dim is drawn by the radial-gradient Svg; the overlay itself just centers the label.
+    popularConfirmOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    // No container — label + a chevron stacked beneath it, bouncing together over the center-
+    // weighted scrim. monoBold + letter spacing matches the app's CTA labels; cream is its warm
+    // off-white for text on dark surfaces. Column keeps the word horizontally centered.
+    popularViewStack: {
+        alignItems: "center",
+        gap: 1,
+        paddingHorizontal: 8,
+        paddingVertical: 5,
+    },
+    // Archivo Black (display) so the word carries the same geometric heft as the bold arrow, and
+    // flat — no shadow — so the two read as one drawn asset rather than text-plus-icon.
+    popularViewLabel: {
+        fontFamily: fonts.display,
+        fontSize: 13,
+        letterSpacing: 0.5,
+        color: colors.cream,
+    },
+    popularViewChevron: {
+        marginTop: 2,
     },
     coSignLockedCard: {
         backgroundColor: colors.berry,
