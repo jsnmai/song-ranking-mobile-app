@@ -23,15 +23,20 @@ export default function TopGenresCard({
     genres,
     loading = false,
     emptyText,
+    title,
 }: {
     genres: Genre[]
     loading?: boolean
     // Shown when there are no genres yet. Omit to render nothing in that case
     // (the other-profile screen gates the whole section on having genres).
     emptyText?: string
+    // When set, the section title renders inside the card (own profile, matching the YOUR BUCKETS
+    // card). Omit to render no title — the other-profile screen labels the card externally instead.
+    title?: string
 }) {
     return (
         <View style={styles.card}>
+            {title ? <Text style={styles.title}>{title}</Text> : null}
             {loading ? (
                 <ActivityIndicator color={colors.accent} style={styles.loader} />
             ) : genres.length > 0 ? (
@@ -117,6 +122,15 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.05,
         shadowRadius: 8,
         shadowOffset: { width: 0, height: 2 },
+    },
+    // In-card section title (own profile), matching the YOUR BUCKETS card's kicker.
+    title: {
+        fontFamily: fonts.mono,
+        fontSize: 9,
+        letterSpacing: 1.8,
+        color: colors.inkDim,
+        fontWeight: "700",
+        marginBottom: 10,
     },
     // The stacked bar. The 2.5px gaps reveal the card behind it as hairline dividers between segments.
     bar: {

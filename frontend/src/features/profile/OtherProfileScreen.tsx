@@ -42,6 +42,7 @@ import {
 } from "./types"
 import RecentRatingsModule from "./RecentRatingsModule"
 import { StreakBadge } from "./StreakBadge"
+import TopGenresCard from "./TopGenresCard"
 
 type OtherProfileProps = NativeStackScreenProps<AppStackParamList, "OtherProfile">
 
@@ -81,7 +82,6 @@ const STAR_DOTS = Array.from({ length: 20 }, (_, i) => ({
     op: 0.2 + (i % 4) * 0.08,
 }))
 
-const GENRE_COLORS = [colors.accent, colors.plum, colors.mint]
 
 function BackIcon() {
     return (
@@ -323,7 +323,6 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
         ? taste.overall.top_artists[0]
         : null
     const topGenres = taste ? taste.overall.genres.slice(0, 3) : []
-    const maxGenrePct = topGenres.length > 0 ? Math.max(...topGenres.map((g) => g.percentage)) : 0
 
     const auxActive = aux !== null && aux.status === "active" && aux.sign !== null
 
@@ -643,35 +642,12 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
                             </>
                         )}
 
-                        {/* Top genres */}
+                        {/* Top genres — shared card with the own-profile screen; the title sits inside
+                            the card to match the own-profile treatment. */}
                         {profile.can_view_taste && topGenres.length > 0 && (
-                            <>
-                                {sectionLabel("TOP GENRES")}
-                                <View style={styles.genresCard}>
-                                    {topGenres.map((genre, i) => {
-                                        const color = GENRE_COLORS[i] ?? colors.accent
-                                        return (
-                                            <View key={genre.name} style={styles.genreRow}>
-                                                <Text style={styles.genreName} numberOfLines={1}>{genre.name}</Text>
-                                                <View style={styles.genreBarTrack}>
-                                                    <View
-                                                        style={[
-                                                            styles.genreBarFill,
-                                                            {
-                                                                width: `${maxGenrePct > 0 ? (genre.percentage / maxGenrePct) * 100 : 0}%`,
-                                                                backgroundColor: color,
-                                                            },
-                                                        ]}
-                                                    />
-                                                </View>
-                                                <Text style={[styles.genrePct, { color }]}>
-                                                    {Math.round(genre.percentage)}%
-                                                </Text>
-                                            </View>
-                                        )
-                                    })}
-                                </View>
-                            </>
+                            <View style={styles.genresSection}>
+                                <TopGenresCard title="TOP GENRES" genres={topGenres} />
+                            </View>
                         )}
 
                         {/* Auxstrology — their taste signature */}
@@ -1108,6 +1084,11 @@ const styles = StyleSheet.create({
         fontWeight: "700",
         color: colors.inkDim,
     },
+    // The genre card carries its title internally (matching the own-profile screen), so it stands in
+    // for a section on its own — give it the same top gap the sectionLabel rows provide.
+    genresSection: {
+        marginTop: 13,
+    },
     sectionLabelLink: {
         fontFamily: fonts.mono,
         fontSize: 8,
@@ -1176,48 +1157,6 @@ const styles = StyleSheet.create({
         fontFamily: fonts.display,
         fontSize: 20,
         flexShrink: 0,
-    },
-    // ── Genres ───────────────────────────────────────────────────────
-    genresCard: {
-        backgroundColor: colors.paper,
-        borderWidth: 1,
-        borderColor: colors.line,
-        borderRadius: 16,
-        paddingVertical: 11,
-        paddingHorizontal: 12,
-        gap: 9,
-        shadowColor: colors.ink,
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 2 },
-    },
-    genreRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 10,
-    },
-    genreName: {
-        fontSize: 11.5,
-        fontWeight: "700",
-        color: colors.ink,
-        width: 84,
-    },
-    genreBarTrack: {
-        flex: 1,
-        height: 8,
-        borderRadius: 5,
-        backgroundColor: colors.bg,
-        overflow: "hidden",
-    },
-    genreBarFill: {
-        height: "100%",
-        borderRadius: 5,
-    },
-    genrePct: {
-        fontFamily: fonts.display,
-        fontSize: 13,
-        width: 34,
-        textAlign: "right",
     },
     // ── Auxstrology orbit card ───────────────────────────────────────
     auxCard: {

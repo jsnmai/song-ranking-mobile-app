@@ -594,7 +594,7 @@ export default function ProfileScreen() {
                             </View>
                         </View>
                     ) : (
-                        <View style={styles.labeledSection}>
+                        <View>
                             <Text style={styles.stripKicker}>TASTE PROFILE</Text>
                             {tasteLoading ? (
                                 <ActivityIndicator color={colors.accent} style={styles.tasteLoader} />
@@ -646,16 +646,16 @@ export default function ProfileScreen() {
                         </View>
                     )}
 
-                    {/* Top genres (full users only) — shared card with the other-profile screen. */}
+                    {/* Top genres (full users only) — shared card with the other-profile screen. The
+                        title sits inside the card here (like YOUR BUCKETS); the other-profile screen
+                        labels it externally instead. */}
                     {!isNew && (
-                        <View style={styles.labeledSection}>
-                            <Text style={styles.stripKicker}>TOP GENRES</Text>
-                            <TopGenresCard
-                                genres={topGenres}
-                                loading={tasteLoading}
-                                emptyText="Rate more songs to see your top genres."
-                            />
-                        </View>
+                        <TopGenresCard
+                            title="TOP GENRES"
+                            genres={topGenres}
+                            loading={tasteLoading}
+                            emptyText="Rate more songs to see your top genres."
+                        />
                     )}
 
                     {/* Your Buckets */}
@@ -1174,12 +1174,6 @@ const styles = StyleSheet.create({
         color: colors.inkDim,
         fontWeight: "700",
         marginBottom: 6,
-    },
-    // Section wrappers that lead with a stripKicker label (TASTE PROFILE, TOP GENRES) get a touch more
-    // room above so the label groups with the content below it, matching the other-profile screen's
-    // 13-above / 6-below rhythm (the content container already contributes 10 of the gap above).
-    labeledSection: {
-        marginTop: 3,
     },
     stripLockedValue: {
         fontFamily: fonts.display,
