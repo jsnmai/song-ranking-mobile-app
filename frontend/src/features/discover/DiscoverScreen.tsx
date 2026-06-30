@@ -9,6 +9,7 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
+    useWindowDimensions,
     View,
 } from "react-native"
 import Animated, {
@@ -146,6 +147,10 @@ export default function DiscoverScreen() {
     const [mostRated, setMostRated] = useState<CircleMostRatedItem[]>([])
     const [popular, setPopular] = useState<PopularItem[]>([])
     const [popularWindow, setPopularWindow] = useState<PopularWindow>("week")
+    // Size the 4 Popular tiles to fill the content row exactly (14px padding each side, three
+    // 10px gaps), so the scroller rests flush with both screen edges while still bouncing.
+    const { width: windowWidth } = useWindowDimensions()
+    const popularTileSize = (windowWidth - 28 - 30) / 4
 
     // Latest search params mirrored into refs so the on-focus refresh can read them
     // without re-subscribing (and re-firing) on every keystroke.
@@ -689,16 +694,21 @@ export default function DiscoverScreen() {
                                     </Text>
                                 </View>
                                 {popular.length > 0 ? (
-                                    <View style={styles.popularRow}>
+                                    <ScrollView
+                                        horizontal
+                                        showsHorizontalScrollIndicator={false}
+                                        style={styles.popularScroll}
+                                        contentContainerStyle={styles.popularScrollContent}
+                                    >
                                         {popular.map((item) => (
                                             <TouchableOpacity
                                                 key={item.song.id}
-                                                style={styles.popularTile}
+                                                style={{ width: popularTileSize }}
                                                 activeOpacity={0.7}
                                                 onPress={() => navigation.navigate("SongDetail", { song: item.song })}
                                                 accessibilityLabel={`Open ${item.song.title}`}
                                             >
-                                                <View style={styles.popularCoverBox}>
+                                                <View style={[styles.popularCoverBox, { width: popularTileSize, height: popularTileSize }]}>
                                                     {item.song.cover_url ? (
                                                         <Image source={{ uri: item.song.cover_url }} style={styles.popularCover} />
                                                     ) : (
@@ -713,7 +723,7 @@ export default function DiscoverScreen() {
                                                 <Text style={styles.popularTileArtist} numberOfLines={1}>{item.song.artist.toUpperCase()}</Text>
                                             </TouchableOpacity>
                                         ))}
-                                    </View>
+                                    </ScrollView>
                                 ) : (
                                     <Text style={styles.popularEmptyNote}>
                                         Nothing here yet. Rate a song to get it going.
@@ -765,25 +775,33 @@ export default function DiscoverScreen() {
                                 {/* Trending in your circle — live (top song this week) once the circle backend returns items, else locked */}
                                 {trending.length > 0 ? (
                                     <TouchableOpacity
-                                        style={styles.trendingCard}
+                                        style={styles.trendingCardLive}
                                         activeOpacity={0.85}
                                         onPress={() => navigation.navigate("SongDetail", { song: trending[0].song })}
                                         accessibilityLabel={`Open ${trending[0].song.title}`}
                                     >
-                                        <Text style={styles.trendingKicker}>TRENDING IN YOUR CIRCLE</Text>
-                                        <View style={styles.trendingRow}>
-                                            <View style={styles.circleCoverFrame}>
-                                                {trending[0].song.cover_url
-                                                    ? <Image source={{ uri: trending[0].song.cover_url }} style={styles.circleCover} />
-                                                    : null}
-                                            </View>
+                                        {/* Album art fills the full left edge of the card (clipped to the rounded corners).
+                                            Absolutely positioned so the image's intrinsic height never drives the card height. */}
+                                        <View style={styles.trendingCoverFull}>
+                                            {trending[0].song.cover_url
+                                                ? <Image source={{ uri: trending[0].song.cover_url }} style={styles.trendingCoverImg} />
+                                                : null}
+                                        </View>
+                                        <View style={styles.trendingContent}>
                                             <View style={styles.trendingTextBlock}>
+                                                <Text style={styles.trendingLiveKicker} numberOfLines={1}>TRENDING IN YOUR CIRCLE</Text>
                                                 <Text style={styles.trendingTitle} numberOfLines={1}>{trending[0].song.title}</Text>
                                                 <Text style={styles.trendingBody} numberOfLines={1}>{trending[0].song.artist.toUpperCase()}</Text>
                                             </View>
                                             <View style={styles.trendingStatBlock}>
-                                                <Text style={styles.trendingStatNum}>{trending[0].recent_circle_rating_count}</Text>
-                                                <Text style={styles.trendingStatLabel}>THIS WEEK</Text>
+                                                <View style={styles.trendingStatNumRow}>
+                                                    <Text style={styles.trendingStatNum}>{trending[0].recent_circle_rating_count}</Text>
+                                                    {/* increasing (trending-up) arrow to the right of the count — sized to match the design */}
+                                                    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+                                                        <Path d="M7 17L17 7M9 7H17V15" stroke={colors.ink} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+                                                    </Svg>
+                                                </View>
+                                                <Text style={styles.trendingStatLabel}>Friends rated this week</Text>
                                             </View>
                                         </View>
                                     </TouchableOpacity>
@@ -1256,6 +1274,11 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         paddingHorizontal: 15,
         flexShrink: 0,
+        // Hard offset shadow, matching the people-results Follow pill.
+        shadowColor: colors.ink,
+        shadowOpacity: 1,
+        shadowRadius: 0,
+        shadowOffset: { width: 2, height: 2 },
     },
     ratePillLabel: {
         fontFamily: fonts.display,
@@ -1316,17 +1339,15 @@ const styles = StyleSheet.create({
         color: colors.inkDim,
         fontWeight: "700",
     },
-    popularRow: {
-        flexDirection: "row",
+    popularScroll: {
+        marginHorizontal: -14,
+    },
+    popularScrollContent: {
+        paddingHorizontal: 14,
         gap: 10,
         paddingBottom: 12,
     },
-    popularTile: {
-        flex: 1,
-    },
     popularCoverBox: {
-        width: "100%",
-        aspectRatio: 1,
         borderRadius: 12,
         backgroundColor: colors.paper2,
         alignItems: "center",
@@ -1429,6 +1450,47 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         padding: 14,
         marginBottom: 8,
+    },
+    // Live trending card: album art bleeds to the full left edge (clipped to the rounded
+    // corners via overflow), text + stat sit in a padded row to its right.
+    trendingCardLive: {
+        backgroundColor: colors.butter,
+        borderRadius: 16,
+        marginBottom: 8,
+        flexDirection: "row",
+        alignItems: "stretch",
+        overflow: "hidden",
+    },
+    trendingCoverFull: {
+        // Square: stretches to the card's (content-driven) height, aspectRatio makes width match.
+        aspectRatio: 1,
+        backgroundColor: "rgba(0,0,0,0.14)",
+        overflow: "hidden",
+    },
+    // Absolute fill: the image stretches to the cover's (content-driven) height without its
+    // intrinsic pixel height pushing the card taller.
+    trendingCoverImg: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+    },
+    trendingContent: {
+        flex: 1,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+        paddingVertical: 12,
+        paddingHorizontal: 13,
+    },
+    trendingLiveKicker: {
+        fontFamily: fonts.mono,
+        fontSize: 8,
+        letterSpacing: 0.4,
+        color: "rgba(17,19,28,0.55)",
+        fontWeight: "700",
+        marginBottom: 4,
     },
     trendingKicker: {
         fontFamily: fonts.mono,
@@ -1705,6 +1767,12 @@ const styles = StyleSheet.create({
     trendingStatBlock: {
         alignItems: "flex-end",
         flexShrink: 0,
+        maxWidth: 82,
+    },
+    trendingStatNumRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 3,
     },
     trendingStatNum: {
         fontFamily: fonts.display,
@@ -1715,10 +1783,12 @@ const styles = StyleSheet.create({
     trendingStatLabel: {
         fontFamily: fonts.mono,
         fontSize: 7.5,
-        letterSpacing: 1.2,
-        color: "rgba(17,19,28,0.5)",
-        fontWeight: "700",
-        marginTop: 2,
+        letterSpacing: 0.2,
+        lineHeight: 10,
+        textAlign: "right",
+        color: "rgba(17,19,28,0.55)",
+        fontWeight: "600",
+        marginTop: 4,
     },
     circleLiveRow: {
         flexDirection: "row",
