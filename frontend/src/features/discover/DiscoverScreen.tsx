@@ -780,29 +780,24 @@ export default function DiscoverScreen() {
                                         onPress={() => navigation.navigate("SongDetail", { song: trending[0].song })}
                                         accessibilityLabel={`Open ${trending[0].song.title}`}
                                     >
-                                        {/* Album art fills the full left edge of the card (clipped to the rounded corners).
-                                            Absolutely positioned so the image's intrinsic height never drives the card height. */}
+                                        {/* Rounded square album art on the left (design treatment) */}
                                         <View style={styles.trendingCoverFull}>
                                             {trending[0].song.cover_url
                                                 ? <Image source={{ uri: trending[0].song.cover_url }} style={styles.trendingCoverImg} />
                                                 : null}
                                         </View>
-                                        <View style={styles.trendingContent}>
-                                            <View style={styles.trendingTextBlock}>
-                                                <Text style={styles.trendingLiveKicker} numberOfLines={1}>TRENDING IN YOUR CIRCLE</Text>
-                                                <Text style={styles.trendingTitle} numberOfLines={1}>{trending[0].song.title}</Text>
-                                                <Text style={styles.trendingBody} numberOfLines={1}>{trending[0].song.artist.toUpperCase()}</Text>
+                                        <View style={styles.trendingTextBlock}>
+                                            <Text style={styles.trendingLiveKicker} numberOfLines={1}>TRENDING IN YOUR CIRCLE</Text>
+                                            <Text style={styles.trendingTitle} numberOfLines={1}>{trending[0].song.title}</Text>
+                                            <Text style={styles.trendingBody} numberOfLines={1}>{trending[0].song.artist.toUpperCase()}</Text>
+                                        </View>
+                                        <View style={styles.trendingStatBlock}>
+                                            <View style={styles.trendingStatNumRow}>
+                                                <Text style={styles.trendingStatNum}>{trending[0].recent_circle_rating_count}</Text>
+                                                {/* increasing arrow — ↗ glyph at 22, matching the design */}
+                                                <Text style={styles.trendingStatArrow}>↗</Text>
                                             </View>
-                                            <View style={styles.trendingStatBlock}>
-                                                <View style={styles.trendingStatNumRow}>
-                                                    <Text style={styles.trendingStatNum}>{trending[0].recent_circle_rating_count}</Text>
-                                                    {/* increasing (trending-up) arrow to the right of the count — sized to match the design */}
-                                                    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-                                                        <Path d="M7 17L17 7M9 7H17V15" stroke={colors.ink} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-                                                    </Svg>
-                                                </View>
-                                                <Text style={styles.trendingStatLabel}>Friends rated this week</Text>
-                                            </View>
+                                            <Text style={styles.trendingStatLabel}>Friends rated this week</Text>
                                         </View>
                                     </TouchableOpacity>
                                 ) : (
@@ -1269,12 +1264,13 @@ const styles = StyleSheet.create({
         letterSpacing: -0.3,
     },
     ratePill: {
-        backgroundColor: colors.ink,
+        // Accent fill + hard ink offset shadow — the same primary-action treatment as the
+        // people-results Follow pill (an ink shadow only reads against the accent fill, not an ink one).
+        backgroundColor: colors.accent,
         borderRadius: 999,
         paddingVertical: 8,
         paddingHorizontal: 15,
         flexShrink: 0,
-        // Hard offset shadow, matching the people-results Follow pill.
         shadowColor: colors.ink,
         shadowOpacity: 1,
         shadowRadius: 0,
@@ -1451,38 +1447,32 @@ const styles = StyleSheet.create({
         padding: 14,
         marginBottom: 8,
     },
-    // Live trending card: album art bleeds to the full left edge (clipped to the rounded
-    // corners via overflow), text + stat sit in a padded row to its right.
+    // Live trending card: a rounded square album art on the left, then text + stat in a centered
+    // row (matches the core-screen design treatment).
     trendingCardLive: {
         backgroundColor: colors.butter,
         borderRadius: 16,
         marginBottom: 8,
+        padding: 12,
         flexDirection: "row",
-        alignItems: "stretch",
-        overflow: "hidden",
+        alignItems: "center",
+        gap: 11,
     },
     trendingCoverFull: {
-        // Square: stretches to the card's (content-driven) height, aspectRatio makes width match.
-        aspectRatio: 1,
+        width: 54,
+        height: 54,
+        borderRadius: 9,
         backgroundColor: "rgba(0,0,0,0.14)",
         overflow: "hidden",
+        flexShrink: 0,
     },
-    // Absolute fill: the image stretches to the cover's (content-driven) height without its
-    // intrinsic pixel height pushing the card taller.
+    // Absolute fill keeps the album art's intrinsic pixel height from driving any layout.
     trendingCoverImg: {
         position: "absolute",
         top: 0,
         left: 0,
         right: 0,
         bottom: 0,
-    },
-    trendingContent: {
-        flex: 1,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 10,
-        paddingVertical: 12,
-        paddingHorizontal: 13,
     },
     trendingLiveKicker: {
         fontFamily: fonts.mono,
@@ -1779,6 +1769,12 @@ const styles = StyleSheet.create({
         fontSize: 22,
         color: colors.ink,
         lineHeight: 22,
+    },
+    // ↗ glyph (system font — display fonts often lack it), sized to the design's arrow.
+    trendingStatArrow: {
+        fontSize: 22,
+        lineHeight: 22,
+        color: colors.ink,
     },
     trendingStatLabel: {
         fontFamily: fonts.mono,
