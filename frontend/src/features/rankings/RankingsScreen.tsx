@@ -10,6 +10,7 @@ import {
     TouchableOpacity,
     View,
 } from "react-native"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 import Animated, {
     Easing,
     useAnimatedStyle,
@@ -26,6 +27,7 @@ import Svg, { Circle, Defs, LinearGradient, Path, RadialGradient, Rect, Stop } f
 
 import { ApiError } from "../../api/client"
 import { ArrowLabel } from "../../components/Arrow"
+import BouncyPressable from "../../components/BouncyPressable"
 import HatchBox from "../../components/HatchBox"
 import { LockIcon } from "../../components/LockIcon"
 import { PulsingMeterTick } from "../../components/PulsingMeterTick"
@@ -110,6 +112,7 @@ function DriftLayer({ children }: { children: ReactNode }) {
 export default function RankingsScreen() {
     const navigation = useNavigation<RankingsNavigation>()
     const { token, profile } = useAuth()
+    const insets = useSafeAreaInsets()
     // Re-tapping the Rankings tab while scrolled down jumps back to the top. One ref
     // covers whichever scroller is mounted — the FlashList when rated, the ScrollView
     // when empty (only one ever renders at a time), so it's loosely typed.
@@ -315,8 +318,12 @@ export default function RankingsScreen() {
         requiredCount: number,
     ) => {
         const accentColor = bucketColor(bucketKey)
+        // Locked anchors get the same springy "squish then bounce back" press feedback as the
+        // locked Feed/social modules; unlocked anchors stay a plain card so the inner count pill
+        // owns the press.
+        const CardRoot = anchor === null ? BouncyPressable : View
         return (
-            <View style={styles.anchorCard}>
+            <CardRoot style={styles.anchorCard}>
                 <View style={[styles.anchorTopBar, { backgroundColor: accentColor, opacity: anchor === null ? 0.5 : 1 }]} />
                 <View style={styles.anchorBody}>
                     <Text style={[styles.anchorLabel, { color: accentColor }]} numberOfLines={1}>
@@ -381,7 +388,7 @@ export default function RankingsScreen() {
                         </>
                     )}
                 </View>
-            </View>
+            </CardRoot>
         )
     }
 
@@ -485,7 +492,7 @@ export default function RankingsScreen() {
             {/* BO-style header */}
             <View style={styles.header}>
                 <View style={styles.headerLeft}>
-                    <Text style={styles.kicker}>{rankings.length} SONGS · YOUR MUSIC</Text>
+                    <Text style={styles.kicker}>{rankings.length} SONGS · CALIBRATED</Text>
                     <Text style={styles.heading}>Rankings</Text>
                 </View>
                 <View style={styles.headerActions}>
@@ -508,14 +515,14 @@ export default function RankingsScreen() {
                 renderBuildCard()
             )}
 
-            {/* Rankings · ALL section */}
+            {/* Your Podium section (full ranked list) */}
             <View style={styles.sectionRow}>
-                <Text style={styles.sectionLabel}>RANKINGS · ALL</Text>
+                <Text style={styles.sectionLabel}>YOUR PODIUM</Text>
                 <TouchableOpacity
                     onPress={handleFullRankingsPress}
                     accessibilityLabel="View All / Filter Rankings"
                 >
-                    <ArrowLabel text="VIEW ALL" direction="right" color={colors.accent} textStyle={styles.sectionRight} />
+                    <ArrowLabel text="VIEW FULL LIST" direction="right" color={colors.accent} textStyle={styles.sectionRight} />
                 </TouchableOpacity>
             </View>
 
@@ -679,7 +686,7 @@ export default function RankingsScreen() {
                 {/* Header */}
                 <View style={styles.header}>
                     <View style={styles.headerLeft}>
-                        <Text style={styles.kicker}>YOUR MUSIC · CALIBRATED</Text>
+                        <Text style={styles.kicker}>{rankings.length} SONGS · CALIBRATED</Text>
                         <Text style={styles.heading}>Rankings</Text>
                     </View>
                     <View style={styles.headerActions}>
@@ -760,7 +767,7 @@ export default function RankingsScreen() {
                 renderItem={() => null}
                 keyExtractor={() => ""}
                 ListHeaderComponent={renderListHeader()}
-                contentContainerStyle={styles.listContent}
+                contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 92 }]}
                 maintainVisibleContentPosition={{ disabled: true }}
             />
         </View>
