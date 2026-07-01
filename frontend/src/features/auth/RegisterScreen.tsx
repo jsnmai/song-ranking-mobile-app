@@ -139,7 +139,7 @@ function Field({
                     autoCorrect={false}
                     autoFocus={autoFocus}
                 />
-                {suffix}
+                {value.length > 0 && suffix}
                 {clearable && value.length > 0 && (
                     <TouchableOpacity onPress={() => onChangeText("")} hitSlop={8}>
                         <Text style={styles.clearBtn}>✕</Text>
