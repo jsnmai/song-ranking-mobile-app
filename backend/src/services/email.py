@@ -156,6 +156,36 @@ def send_password_reset_code(
     send_email(to, subject, html, text)
 
 
+def send_no_account_notice(
+    to: str,
+) -> None:
+    """
+    Email a gentle "there is no account for this address" notice.
+
+    Sent when a password reset is requested for an unregistered email. It goes
+    only to the address that was entered (never revealed to the requester) and
+    rides the same per-email throttle as a real code, so it adds no enumeration
+    vector and cannot be used to spam an inbox. It reassures the recipient
+    rather than implying an account exists.
+    """
+    subject = "No LISTn account for this email"
+    text = (
+        "Someone (possibly you) asked to reset a LISTn password for this email "
+        "address, but there is no LISTn account for it.\n\n"
+        "If you meant to sign up, you can create an account in the app. If this "
+        "wasn't you, you can safely ignore this email. No account exists and "
+        "nothing has changed."
+    )
+    html = (
+        "<p>Someone (possibly you) asked to reset a LISTn password for this email "
+        "address, but there is no LISTn account for it.</p>"
+        "<p>If you meant to sign up, you can create an account in the app. If this "
+        "wasn't you, you can safely ignore this email. No account exists and "
+        "nothing has changed.</p>"
+    )
+    send_email(to, subject, html, text)
+
+
 def send_password_changed_notice(
     to: str,
 ) -> None:

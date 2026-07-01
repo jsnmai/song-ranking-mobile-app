@@ -43,7 +43,7 @@ from src.crud.song import recompute_song_aggregates
 from src.crud.user import create_user_with_profile, get_by_email, set_password
 from src.pydantic_schemas.auth import GenericMessage
 from src.pydantic_schemas.user import RegisterResponse, Token, UserRegister, UserResponse
-from src.services.email import send_password_changed_notice, send_password_reset_code
+from src.services.email import send_no_account_notice, send_password_changed_notice, send_password_reset_code
 from src.sqlalchemy_tables.user import User
 
 AGE_GATE_VERSION = "2026-06-13-plus-v1"
@@ -229,6 +229,13 @@ def request_password_reset(
                 expires_at=now + timedelta(minutes=settings.reset_code_ttl_minutes),
             )
             background_tasks.add_task(send_password_reset_code, user.email, code)
+        else:
+            # No account for this address: send a gentle courtesy note to the
+            # entered address so a mistyped or unregistered email gets a clarifying
+            # nudge instead of silence. It goes only to that address (never the
+            # requester) and rides the throttle above, so it adds no enumeration
+            # vector and cannot spam an inbox.
+            background_tasks.add_task(send_no_account_notice, email)
 
         db.commit()
     except Exception:

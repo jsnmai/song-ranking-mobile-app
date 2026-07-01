@@ -44,6 +44,10 @@ def captured_codes(monkeypatch) -> list[tuple[str, str]]:
         "src.services.auth.send_password_changed_notice",
         lambda to: None,
     )
+    monkeypatch.setattr(
+        "src.services.auth.send_no_account_notice",
+        lambda to: None,
+    )
     return codes
 
 
@@ -100,6 +104,45 @@ def test_forgot_password_creates_token_for_known_email_only(
         select(func.count()).select_from(PasswordResetToken)
     ).scalar_one()
     assert token_count == 1
+
+
+def test_unknown_email_gets_courtesy_notice_known_email_gets_code(
+    client: TestClient, db_session: Session, monkeypatch
+):
+    """Unknown email → a gentle 'no account' courtesy email (no code, no token).
+
+    Known email → a reset code (no courtesy). The response body is identical
+    either way, so the courtesy email adds no enumeration signal.
+    """
+    codes: list[tuple[str, str]] = []
+    notices: list[str] = []
+    monkeypatch.setattr(
+        "src.services.auth.send_password_reset_code",
+        lambda to, code: codes.append((to, code)),
+    )
+    monkeypatch.setattr(
+        "src.services.auth.send_no_account_notice",
+        lambda to: notices.append(to),
+    )
+    monkeypatch.setattr("src.services.auth.send_password_changed_notice", lambda to: None)
+
+    _register(client)  # creates user@example.com
+
+    unknown = _forgot(client, "nobody@example.com")
+    assert unknown.status_code == 200
+    assert codes == []                          # no reset code for a non-account
+    assert notices == ["nobody@example.com"]    # a courtesy note instead
+
+    known = _forgot(client, "user@example.com")
+    assert known.status_code == 200
+    assert len(codes) == 1 and codes[0][0] == "user@example.com"  # code for the real account
+    assert notices == ["nobody@example.com"]    # no courtesy added for the known email
+
+    assert unknown.json() == known.json()       # identical response — no enumeration
+    token_count = db_session.execute(
+        select(func.count()).select_from(PasswordResetToken)
+    ).scalar_one()
+    assert token_count == 1                      # only the known email minted a token
 
 
 # --- happy path + single use -------------------------------------------------
@@ -348,3 +391,87 @@ def test_account_deletion_succeeds_with_outstanding_reset_token(
     assert db_session.execute(
         select(func.count()).select_from(PasswordResetToken)
     ).scalar_one() == 0
+
+
+# --- code is scoped to its own account (IDOR) --------------------------------
+
+def test_reset_code_is_scoped_to_its_own_account(
+    client: TestClient, db_session: Session
+):
+    """A valid code for one account cannot reset a different account (IDOR).
+
+    Codes are verified against the token row belonging to the looked-up user, so
+    one user's code must never be accepted for another user, even if both have an
+    active reset in flight.
+    """
+    from src.core.security import hash_password
+
+    _register(client)  # user@example.com
+    _register(client, email="other@example.com", username="otheruser")
+
+    user_a = db_session.execute(
+        select(User).where(User.email == "user@example.com")
+    ).scalar_one()
+    user_b = db_session.execute(
+        select(User).where(User.email == "other@example.com")
+    ).scalar_one()
+
+    expires = datetime.now(timezone.utc) + timedelta(minutes=15)
+    db_session.add(
+        PasswordResetToken(user_id=user_a.id, hashed_code=hash_password("111111"), expires_at=expires)
+    )
+    db_session.add(
+        PasswordResetToken(user_id=user_b.id, hashed_code=hash_password("222222"), expires_at=expires)
+    )
+    db_session.commit()
+
+    # B's code aimed at A's account is rejected...
+    cross = _reset(client, "user@example.com", "222222", "newpassword456")
+    assert cross.status_code == 400
+    assert cross.json()["detail"] == "Invalid or expired code."
+
+    # ...while A's own code still works.
+    own = _reset(client, "user@example.com", "111111", "newpassword456")
+    assert own.status_code == 204
+
+
+# --- a new request invalidates the previous code -----------------------------
+
+def test_new_reset_request_invalidates_the_previous_code(
+    client: TestClient, db_session: Session, captured_codes
+):
+    """Requesting a new code makes the previous one stop working.
+
+    invalidate_user_tokens runs on every request, so a leaked or shoulder-surfed
+    older code cannot be used once the user has asked for a fresh one.
+    """
+    from src.core.security import hash_password
+
+    _register(client)
+    user = db_session.execute(
+        select(User).where(User.email == "user@example.com")
+    ).scalar_one()
+
+    # An existing, still-valid code for the user.
+    db_session.add(
+        PasswordResetToken(
+            user_id=user.id,
+            hashed_code=hash_password("111111"),
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=15),
+        )
+    )
+    db_session.commit()
+
+    # A fresh request invalidates that prior code and issues a new one.
+    _forgot(client, "user@example.com")
+    assert len(captured_codes) == 1
+    _, new_code = captured_codes[0]
+
+    # The old code no longer works...
+    old = _reset(client, "user@example.com", "111111", "newpassword456")
+    assert old.status_code == 400
+    assert old.json()["detail"] == "Invalid or expired code."
+
+    # ...but the freshly-issued one does.
+    fresh = _reset(client, "user@example.com", new_code, "newpassword456")
+    assert fresh.status_code == 204
