@@ -66,4 +66,14 @@ def get_current_user(
     if user is None:
         raise credentials_exception
 
+    # Session invalidation: when the user has reset their password, every token
+    # issued at or before that moment is rejected, forcing other devices to
+    # re-login. iat is integer-second epoch, so compare with <= — a token minted
+    # in the same second as the reset must not survive. A token with no iat
+    # (issued before this feature) is also rejected once a reset has happened.
+    if user.password_changed_at is not None:
+        issued_at = payload.get("iat")
+        if issued_at is None or issued_at <= int(user.password_changed_at.timestamp()):
+            raise credentials_exception
+
     return user

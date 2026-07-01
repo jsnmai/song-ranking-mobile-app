@@ -2,7 +2,7 @@
 // One function per backend endpoint — AuthContext calls these, never fetch directly.
 
 import { apiClient } from "../../api/client"
-import { RegisterResponse, Token, User } from "./types"
+import { GenericMessage, RegisterResponse, Token, User } from "./types"
 
 // Calls POST /api/v1/auth/register
 // Creates user + profile atomically in a single backend transaction.
@@ -37,4 +37,25 @@ export async function me(token: string): Promise<User> {
 // Permanently deletes the authenticated account and user-owned data.
 export async function deleteAccount(token: string, confirmation: string): Promise<void> {
     await apiClient.delete<void>("/api/v1/auth/me", token, { confirmation })
+}
+
+// Calls POST /api/v1/auth/forgot-password
+// Starts a password reset by emailing a one-time code. The response is the same
+// whether or not the email has an account, so callers must not branch on it.
+export async function requestPasswordReset(email: string): Promise<GenericMessage> {
+    return apiClient.post<GenericMessage>("/api/v1/auth/forgot-password", { email })
+}
+
+// Calls POST /api/v1/auth/reset-password
+// Completes a password reset with the emailed code + a new password. Resolves on
+// 204 success; throws ApiError with a generic message on any failure.
+export async function confirmPasswordReset(
+    email: string,
+    code: string,
+    new_password: string,
+): Promise<void> {
+    await apiClient.post<void>(
+        "/api/v1/auth/reset-password",
+        { email, code, new_password },
+    )
 }

@@ -1,28 +1,59 @@
 # Business logic for authentication.
 # All decisions about what constitutes a valid registration or login live here.
 # The router calls these functions; this layer calls the crud layer for data access.
-from datetime import date, datetime, timezone
+import secrets
+from datetime import date, datetime, timedelta, timezone
 
-from fastapi import HTTPException, status
+from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from src.core.security import create_access_token, hash_password, verify_password
+from src.core.config import settings
+from src.core.security import (
+    create_access_token,
+    email_throttle_hash,
+    hash_password,
+    verify_password,
+)
 from src.crud.account_deletion import (
+    delete_password_reset_tokens_for_user,
     delete_profile_for_user,
     delete_similarity_snapshots_for_user,
     delete_social_rows_for_user,
     delete_taste_history_for_user,
     list_ranked_song_ids_for_user,
 )
+from src.crud.password_reset import (
+    create_token,
+    delete_expired,
+    get_active_token_for_user,
+    increment_attempts,
+    invalidate_user_tokens,
+    mark_consumed,
+)
+from src.crud.password_reset_request import (
+    count_requests_since,
+    delete_requests_before,
+    most_recent_request,
+    record_request,
+)
 from src.crud.profile import get_by_username
 from src.crud.song import recompute_song_aggregates
-from src.crud.user import create_user_with_profile, get_by_email
+from src.crud.user import create_user_with_profile, get_by_email, set_password
+from src.pydantic_schemas.auth import GenericMessage
 from src.pydantic_schemas.user import RegisterResponse, Token, UserRegister, UserResponse
+from src.services.email import send_password_changed_notice, send_password_reset_code
 from src.sqlalchemy_tables.user import User
 
 AGE_GATE_VERSION = "2026-06-13-plus-v1"
 MINIMUM_AGE = 13
+
+# Identical on every path of request_password_reset so the response never leaks
+# whether an account exists for the given email.
+GENERIC_RESET_MESSAGE = "If an account exists for that email, a reset code has been sent."
+# Shared by every confirm-failure path (unknown email / no token / expired /
+# wrong code / over attempt cap) so none of them is distinguishable.
+INVALID_CODE_MESSAGE = "Invalid or expired code."
 
 
 def register_user(
@@ -141,6 +172,120 @@ def login_user(
     return Token(access_token=token)
 
 
+def request_password_reset(
+    db: Session,
+    email: str,
+    background_tasks: BackgroundTasks,
+) -> GenericMessage:
+    """
+    Start a password reset: email a one-time code if the account exists.
+
+    Returns a byte-identical GenericMessage on every path so the response never
+    reveals whether the email is registered. A per-email throttle (cooldown +
+    hourly cap) runs BEFORE the user lookup and records a row for known and
+    unknown emails alike, so flooding any specific inbox is bounded regardless
+    of whether an account exists. The email send is backgrounded so the response
+    returns at constant time.
+    """
+    now = datetime.now(timezone.utc)
+    email_hash = email_throttle_hash(email)
+    window = timedelta(minutes=settings.reset_request_window_minutes)
+    cooldown = timedelta(seconds=settings.reset_resend_cooldown_seconds)
+
+    try:
+        # Opportunistic cleanup of throttle rows that have aged out of the window,
+        # and of reset tokens that have already expired, so neither table grows unbounded.
+        delete_requests_before(db, now - window)
+        delete_expired(db, now)
+
+        # Per-email throttle — runs for known AND unknown emails.
+        recent = most_recent_request(db, email_hash)
+        within_cooldown = recent is not None and (now - recent.created_at) < cooldown
+        at_cap = (
+            count_requests_since(db, email_hash, now - window)
+            >= settings.reset_max_requests_per_window
+        )
+        if within_cooldown or at_cap:
+            db.commit()  # persist the opportunistic cleanup
+            return GenericMessage(message=GENERIC_RESET_MESSAGE)
+
+        record_request(db, email_hash)
+
+        user = get_by_email(db, email)
+        if user is not None:
+            code = f"{secrets.randbelow(1_000_000):06d}"  # cryptographically secure 6-digit code
+            invalidate_user_tokens(db, user.id, consumed_at=now)
+            create_token(
+                db,
+                user_id=user.id,
+                hashed_code=hash_password(code),
+                expires_at=now + timedelta(minutes=settings.reset_code_ttl_minutes),
+            )
+            background_tasks.add_task(send_password_reset_code, user.email, code)
+
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return GenericMessage(message=GENERIC_RESET_MESSAGE)
+
+
+def confirm_password_reset(
+    db: Session,
+    email: str,
+    code: str,
+    new_password: str,
+    background_tasks: BackgroundTasks,
+) -> None:
+    """
+    Complete a password reset: verify the code and set the new password.
+
+    Every failure path (unknown email, no active token, expired, wrong code,
+    over the attempt cap) raises the same generic 400 so none is distinguishable.
+    On success the password is changed, password_changed_at is stamped (which
+    invalidates JWTs on all other devices), the token and its siblings are
+    consumed, and a security notice is emailed. No token is issued — the client
+    returns to the Login screen.
+    """
+    now = datetime.now(timezone.utc)
+    invalid = HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=INVALID_CODE_MESSAGE,
+    )
+
+    user = get_by_email(db, email)
+    if user is None:
+        raise invalid
+    token = get_active_token_for_user(db, user.id, now)
+    if token is None or token.attempts >= settings.reset_code_max_attempts:
+        raise invalid
+
+    if not verify_password(code, token.hashed_code):
+        try:
+            increment_attempts(db, token)
+            # The final wrong attempt burns the token, so brute force can't
+            # resume against the same low-entropy code.
+            if token.attempts >= settings.reset_code_max_attempts:
+                mark_consumed(db, token, consumed_at=now)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        raise invalid
+
+    try:
+        set_password(db, user, hash_password(new_password), changed_at=now)
+        mark_consumed(db, token, consumed_at=now)
+        invalidate_user_tokens(db, user.id, consumed_at=now)  # kill any siblings
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    background_tasks.add_task(send_password_changed_notice, user.email)
+
+
 def delete_current_user(
     db: Session,
     current_user: User,
@@ -172,6 +317,10 @@ def delete_current_user(
             user_id,
         )
         delete_profile_for_user(
+            db,
+            user_id,
+        )
+        delete_password_reset_tokens_for_user(
             db,
             user_id,
         )

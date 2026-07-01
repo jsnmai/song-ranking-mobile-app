@@ -28,3 +28,10 @@ export type RegisterResponse = {
     token_type: string;
     user: User;
 }
+
+// Mirrors GenericMessage in backend/src/pydantic_schemas/auth.py
+// Returned by POST /auth/forgot-password — intentionally identical whether or not
+// the email has an account, so the response never reveals which addresses exist.
+export type GenericMessage = {
+    message: string;
+}

@@ -32,6 +32,24 @@ def get_by_id(
     ).scalar_one_or_none()
 
 
+def set_password(
+    db: Session,
+    user: User,
+    hashed_password: str,
+    changed_at: datetime,
+) -> None:
+    """
+    Update a user's password hash and stamp password_changed_at together.
+
+    Stamping the timestamp is what invalidates JWTs issued on other devices
+    before the reset (see get_current_user). Does not commit — the caller owns
+    the transaction.
+    """
+    user.hashed_password = hashed_password
+    user.password_changed_at = changed_at
+    db.flush()
+
+
 def create_user_with_profile(
     db: Session,
     email: str,

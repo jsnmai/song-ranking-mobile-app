@@ -1,11 +1,16 @@
 # HTTP layer for authentication endpoints.
 # Routers are intentionally thin: parse the request, call the service, return the result.
 # All business logic lives in src/services/auth.py.
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
 from src.core.limiter import limiter
+from src.pydantic_schemas.auth import (
+    ForgotPasswordRequest,
+    GenericMessage,
+    ResetPasswordRequest,
+)
 from src.pydantic_schemas.user import (
     AccountDeleteRequest,
     RegisterResponse,
@@ -14,7 +19,13 @@ from src.pydantic_schemas.user import (
     UserRegister,
     UserResponse,
 )
-from src.services.auth import delete_current_user, login_user, register_user
+from src.services.auth import (
+    confirm_password_reset,
+    delete_current_user,
+    login_user,
+    register_user,
+    request_password_reset,
+)
 from src.sqlalchemy_tables.user import User
 
 router = APIRouter(
@@ -62,6 +73,59 @@ def login(
         data.email,
         data.password,
     )
+
+
+@router.post(
+    "/forgot-password",
+    response_model=GenericMessage,
+)
+@limiter.limit("5/minute")
+def forgot_password(
+    request: Request,
+    data: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> GenericMessage:
+    """
+    Begin a password reset by emailing a one-time code.
+
+    Always returns the same generic message whether or not the email exists —
+    prevents account enumeration. Rate limited per IP; a per-email throttle in
+    the service bounds how often any single address can be targeted.
+    """
+    return request_password_reset(
+        db,
+        data.email,
+        background_tasks,
+    )
+
+
+@router.post(
+    "/reset-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+@limiter.limit("5/minute")
+def reset_password(
+    request: Request,
+    data: ResetPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> Response:
+    """
+    Complete a password reset with the emailed code and a new password.
+
+    On success all existing sessions are invalidated and the client returns to
+    Login to sign in with the new password. Every failure returns the same
+    generic 400 so wrong/expired/unknown cases are indistinguishable.
+    """
+    confirm_password_reset(
+        db,
+        data.email,
+        data.code,
+        data.new_password,
+        background_tasks,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get(

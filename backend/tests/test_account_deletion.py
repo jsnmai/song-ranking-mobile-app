@@ -1,6 +1,6 @@
 # Integration tests for authenticated account deletion.
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 from sqlalchemy import func, or_, select
@@ -14,6 +14,7 @@ from src.sqlalchemy_tables.comparison_session import ComparisonSession
 from src.sqlalchemy_tables.follow import Follow
 from src.sqlalchemy_tables.interaction_event import InteractionEvent
 from src.sqlalchemy_tables.like import Like
+from src.sqlalchemy_tables.password_reset_token import PasswordResetToken
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
@@ -400,6 +401,10 @@ def test_account_deletion_leaves_no_user_owned_orphans(
             low_index=0, high_index=0, decisions=[],
         ),
         AuxstrologySnapshot(user_id=deleting_id, algorithm_version="v1_cosine", status="active", payload={}),
+        PasswordResetToken(
+            user_id=deleting_id, hashed_code="x" * 60,
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=15),
+        ),
         # Canonical similarity rows place the deleted user as both user_a and user_b.
         UserSimilaritySnapshot(user_a_id=early_id, user_b_id=deleting_id, similarity_score=0.7, shared_song_count=3),
         UserSimilaritySnapshot(user_a_id=deleting_id, user_b_id=other_id, similarity_score=0.8, shared_song_count=5),
@@ -446,6 +451,7 @@ def test_account_deletion_leaves_no_user_owned_orphans(
     assert _count_user_rows(db_session, Comparison, deleting_id) == 0
     assert _count_user_rows(db_session, ComparisonSession, deleting_id) == 0
     assert _count_user_rows(db_session, AuxstrologySnapshot, deleting_id) == 0
+    assert _count_user_rows(db_session, PasswordResetToken, deleting_id) == 0
     assert _count(Follow, or_(Follow.follower_id == deleting_id, Follow.following_id == deleting_id)) == 0
     assert _count(Block, or_(Block.blocker_id == deleting_id, Block.blocked_id == deleting_id)) == 0
     assert _count(

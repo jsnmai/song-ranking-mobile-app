@@ -50,6 +50,10 @@ class User(Base):
         String(20),
         nullable=True,
     )
+    password_changed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,  # set on password reset; any JWT issued at/before this time is rejected
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

@@ -19,6 +19,49 @@ Set these on the host (see `.env.example` for details). All are required:
 
 Optional (have defaults): `JWT_ALGORITHM`, `JWT_EXPIRY_DAYS`, `STREAKS_ENABLED`.
 
+### Email / password reset (optional, but set before public launch)
+
+Password reset works with **no** email config: when the selected provider has no
+credentials the backend logs the reset code instead of sending it (fine for local
+and internal builds). The backend is `EMAIL_PROVIDER`, one of:
+
+- `console` (default): log the code, don't send.
+- `smtp`: send via SMTP (e.g. Gmail with an App Password). Free, no domain needed.
+  **Current launch choice.**
+- `resend`: send via the Resend API. Best deliverability; needs a verified domain.
+  Kept ready; flip `EMAIL_PROVIDER=resend` to switch.
+
+A provider selected without its credentials falls back to `console`, so a missing
+secret never crashes boot or leaks the code.
+
+**SMTP (Gmail) — the current setup:**
+
+| Variable        | What it is                                                                    |
+|-----------------|-------------------------------------------------------------------------------|
+| `EMAIL_PROVIDER`| `smtp`                                                                        |
+| `SMTP_USERNAME` | The Gmail address, e.g. `your-app@gmail.com`.                                  |
+| `SMTP_PASSWORD` | A Google **App Password** (16 chars). Requires 2FA: https://myaccount.google.com/apppasswords |
+| `EMAIL_FROM`    | Must be the same account, e.g. `LISTn <your-app@gmail.com>` (Gmail sends From the authed user). |
+| `SMTP_HOST` / `SMTP_PORT` | Default to `smtp.gmail.com` / `587`; usually leave unset.           |
+
+Consumer Gmail caps at ~500 emails/day (fine for early volume). Move to a domain +
+Resend before real scale.
+
+**Resend — swappable alternative (needs a domain):**
+
+| Variable         | What it is                                                                   |
+|------------------|------------------------------------------------------------------------------|
+| `EMAIL_PROVIDER` | `resend`                                                                     |
+| `RESEND_API_KEY` | Resend API key.                                                              |
+| `EMAIL_FROM`     | An address on your **verified** domain (SPF/DKIM). The sandbox sender only reaches your own Resend account. |
+
+`EMAIL_HASH_PEPPER` is optional for either provider: it overrides the per-email
+reset-throttle HMAC key, which otherwise derives from `JWT_SECRET_KEY`.
+
+Reset tunables also have defaults: `RESET_CODE_TTL_MINUTES`,
+`RESET_CODE_MAX_ATTEMPTS`, `RESET_RESEND_COOLDOWN_SECONDS`,
+`RESET_MAX_REQUESTS_PER_WINDOW`, `RESET_REQUEST_WINDOW_MINUTES`.
+
 `$PORT` is injected by the host; the container honors it (defaults to 8000).
 
 > Migrations read config via `src.core.config.settings`, so `alembic upgrade head`

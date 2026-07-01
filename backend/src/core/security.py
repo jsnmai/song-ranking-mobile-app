@@ -1,11 +1,17 @@
 # Helpers for password storage and JWT creation/verification.
 
+import hmac
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 
 import bcrypt
 from jose import jwt
 
 from src.core.config import settings
+
+# Domain-separation label so the throttle HMAC derived from jwt_secret_key can
+# never collide with the JWT signature, even though they share the same secret.
+_EMAIL_THROTTLE_DOMAIN = b"listn-email-throttle-v1"
 
 
 def hash_password(plain_pw: str) -> str:
@@ -36,12 +42,43 @@ def create_access_token(data: dict) -> str:
     key can forge tokens, so it must never be committed or logged.
     """
     payload = data.copy()
-    payload["exp"] = datetime.now(timezone.utc) + timedelta(days=settings.jwt_expiry_days)
+    now = datetime.now(timezone.utc)
+    payload["iat"] = now  # issued-at — compared against users.password_changed_at to invalidate old sessions
+    payload["exp"] = now + timedelta(days=settings.jwt_expiry_days)
     return jwt.encode(
         payload,
         settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm,
     )
+
+
+def email_throttle_hash(email: str) -> str:
+    """
+    Return a keyed HMAC-SHA256 hex digest of the normalized email.
+
+    Used to key the per-email password-reset throttle without storing the
+    plaintext address. Plain SHA-256 would be dictionary-reversible since emails
+    are low-entropy; HMAC with a server-side key makes the throttle table
+    useless to anyone who lacks the key.
+
+    The key is the optional EMAIL_HASH_PEPPER override when set, otherwise it is
+    derived from jwt_secret_key with a domain-separation label so no new
+    required secret is needed.
+    """
+    normalized = email.strip().lower()
+    if settings.email_hash_pepper:
+        key = settings.email_hash_pepper.encode()
+    else:
+        key = hmac.new(
+            settings.jwt_secret_key.encode(),
+            _EMAIL_THROTTLE_DOMAIN,
+            sha256,
+        ).digest()
+    return hmac.new(
+        key,
+        normalized.encode(),
+        sha256,
+    ).hexdigest()
 
 
 def decode_access_token(token: str) -> dict:

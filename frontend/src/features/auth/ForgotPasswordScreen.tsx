@@ -1,5 +1,8 @@
-// Sign-in screen — "Welcome back" design.
-// Clean cream canvas, large heading, pill inputs, dark pill CTA.
+// Forgot-password screen — step 1 of the in-app reset flow.
+// Collects the email, asks the backend to send a 6-digit code, then advances to
+// ResetPassword. We always advance regardless of the response: the backend never
+// reveals whether the email has an account (no enumeration), so neither does the UI.
+// Visual language mirrors LoginScreen/RegisterScreen exactly.
 import { useState } from "react"
 import {
     ActivityIndicator,
@@ -14,12 +17,13 @@ import {
 } from "react-native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { ApiError } from "../../api/client"
-import { useAuth } from "./AuthContext"
+import { requestPasswordReset } from "./apiRequests"
+import { isValidEmail } from "./RegisterScreen"
 import { AuthStackParamList } from "../../navigation/AuthNavigator"
 import { fonts } from "../../theme"
 
-type LoginNavigationProp = NativeStackNavigationProp<AuthStackParamList, "Login">
-type Props = { navigation: LoginNavigationProp }
+type ForgotPasswordNavigationProp = NativeStackNavigationProp<AuthStackParamList, "ForgotPassword">
+type Props = { navigation: ForgotPasswordNavigationProp }
 
 const BG = "#f4f1eb"
 const CARD = "#fdfbf4"
@@ -28,31 +32,34 @@ const INK_SOFT = "#3d4350"
 const INK_DIM = "#8b8f9c"
 const LINE = "rgba(17,19,28,0.10)"
 
-export default function LoginScreen({ navigation }: Props) {
+export default function ForgotPasswordScreen({ navigation }: Props) {
     const [email, setEmail] = useState("")
-    const [password, setPassword] = useState("")
-    const [showPassword, setShowPassword] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
-    const { login } = useAuth()
-
-    const handleLogin = async () => {
+    const handleSend = async () => {
         setError(null)
+        if (!email.trim() || !isValidEmail(email)) {
+            setError("Enter a valid email.")
+            return
+        }
         setIsLoading(true)
         try {
-            await login(email, password)
+            await requestPasswordReset(email.trim())
         } catch (err) {
+            // A network/server error is worth surfacing; an account-not-found is
+            // never reported (the backend returns a generic 200), so success and
+            // "no such account" are indistinguishable here by design.
             if (err instanceof ApiError) {
                 setError(err.detail)
-            } else if (err instanceof Error) {
-                setError(err.message)
-            } else {
-                setError("Something went wrong. Please try again.")
+                setIsLoading(false)
+                return
             }
-        } finally {
-            setIsLoading(false)
         }
+        setIsLoading(false)
+        // Always advance — the code (if any) is on its way and the next screen
+        // explains that without confirming the address exists.
+        navigation.navigate("ResetPassword", { email: email.trim() })
     }
 
     return (
@@ -74,7 +81,10 @@ export default function LoginScreen({ navigation }: Props) {
                 </View>
 
                 {/* Heading */}
-                <Text style={styles.heading}>Welcome{"\n"}back.</Text>
+                <Text style={styles.heading}>Reset your{"\n"}password.</Text>
+                <Text style={styles.sub}>
+                    Enter your email and we'll send you a 6-digit code to set a new password.
+                </Text>
 
                 {/* Email field */}
                 <View style={styles.fieldGroup}>
@@ -89,6 +99,7 @@ export default function LoginScreen({ navigation }: Props) {
                             autoCapitalize="none"
                             keyboardType="email-address"
                             autoCorrect={false}
+                            autoFocus
                         />
                         {email.length > 0 && (
                             <TouchableOpacity onPress={() => setEmail("")} hitSlop={8}>
@@ -98,44 +109,18 @@ export default function LoginScreen({ navigation }: Props) {
                     </View>
                 </View>
 
-                {/* Password field */}
-                <View style={styles.fieldGroup}>
-                    <Text style={styles.fieldLabel}>Password</Text>
-                    <View style={styles.fieldRow}>
-                        <TextInput
-                            style={styles.fieldInput}
-                            value={password}
-                            onChangeText={setPassword}
-                            placeholder="Your password"
-                            placeholderTextColor={INK_DIM}
-                            secureTextEntry={!showPassword}
-                        />
-                        {password.length > 0 && (
-                            <TouchableOpacity onPress={() => setPassword("")} hitSlop={8}>
-                                <Text style={styles.clearBtn}>✕</Text>
-                            </TouchableOpacity>
-                        )}
-                        <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                            <Text style={styles.showHide}>{showPassword ? "Hide" : "Show"}</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-
-                {/* Forgot password */}
-                <TouchableOpacity
-                    style={{ alignSelf: "flex-end", marginTop: 10 }}
-                    onPress={() => navigation.navigate("ForgotPassword")}
-                >
-                    <Text style={styles.forgotText}>Forgot password?</Text>
-                </TouchableOpacity>
+                {/* Non-enumerating reassurance */}
+                <Text style={styles.note}>
+                    If that email has an account, a code is on its way.
+                </Text>
 
                 {/* Error */}
                 {error !== null && <Text style={styles.error}>{error}</Text>}
 
-                {/* Sign in button */}
+                {/* Send code button */}
                 <TouchableOpacity
                     style={[styles.primaryBtn, isLoading && { opacity: 0.7 }]}
-                    onPress={handleLogin}
+                    onPress={handleSend}
                     disabled={isLoading}
                     activeOpacity={0.85}
                 >
@@ -143,37 +128,22 @@ export default function LoginScreen({ navigation }: Props) {
                         <ActivityIndicator color="#fff" />
                     ) : (
                         <>
-                            <Text style={styles.primaryBtnText}>Sign in</Text>
+                            <Text style={styles.primaryBtnText}>Send code</Text>
                             <Text style={styles.arrow}>→</Text>
                         </>
                     )}
                 </TouchableOpacity>
-
-                {/* Divider */}
-                <View style={styles.divider}>
-                    <View style={styles.dividerLine} />
-                    <Text style={styles.dividerLabel}>or</Text>
-                    <View style={styles.dividerLine} />
-                </View>
-
-                {/* Social placeholders */}
-                <View style={styles.socialBtn}>
-                    <Text style={styles.socialBtnText}>Continue with Apple</Text>
-                </View>
-                <View style={[styles.socialBtn, { marginTop: 10 }]}>
-                    <Text style={styles.socialBtnText}>Continue with Google</Text>
-                </View>
 
                 <View style={{ flex: 1, minHeight: 24 }} />
 
                 {/* Footer link */}
                 <TouchableOpacity
                     style={styles.footerLink}
-                    onPress={() => navigation.replace("Register")}
+                    onPress={() => navigation.navigate("Login")}
                 >
                     <Text style={styles.footerText}>
-                        New here?{" "}
-                        <Text style={{ color: INK, fontWeight: "700" }}>Create account</Text>
+                        Remembered it?{" "}
+                        <Text style={{ color: INK, fontWeight: "700" }}>Sign in</Text>
                     </Text>
                 </TouchableOpacity>
             </ScrollView>
@@ -268,20 +238,16 @@ const styles = StyleSheet.create({
         fontWeight: "500",
         padding: 0,
     },
-    showHide: {
-        fontSize: 12.5,
-        fontWeight: "600",
-        color: INK_SOFT,
-    },
     clearBtn: {
         fontSize: 13,
         fontWeight: "600",
         color: INK_DIM,
     },
-    forgotText: {
+    note: {
         fontSize: 12.5,
-        fontWeight: "600",
-        color: INK_SOFT,
+        color: INK_DIM,
+        marginTop: 12,
+        lineHeight: 18,
     },
     error: {
         color: "#e0492e",
@@ -311,39 +277,6 @@ const styles = StyleSheet.create({
     arrow: {
         color: "#fff",
         fontSize: 16,
-    },
-    divider: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 12,
-        marginVertical: 18,
-    },
-    dividerLine: {
-        flex: 1,
-        height: 1,
-        backgroundColor: LINE,
-    },
-    dividerLabel: {
-        fontSize: 11.5,
-        fontWeight: "500",
-        color: INK_DIM,
-    },
-    socialBtn: {
-        backgroundColor: CARD,
-        borderWidth: 1,
-        borderColor: LINE,
-        borderRadius: 999,
-        paddingVertical: 14,
-        alignItems: "center",
-        shadowColor: INK,
-        shadowOpacity: 0.04,
-        shadowRadius: 6,
-        shadowOffset: { width: 0, height: 2 },
-    },
-    socialBtnText: {
-        fontSize: 14.5,
-        fontWeight: "600",
-        color: INK,
     },
     footerLink: {
         alignItems: "center",

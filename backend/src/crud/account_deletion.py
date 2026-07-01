@@ -9,6 +9,7 @@ from src.sqlalchemy_tables.comparison_session import ComparisonSession
 from src.sqlalchemy_tables.follow import Follow
 from src.sqlalchemy_tables.like import Like
 from src.sqlalchemy_tables.notification import Notification
+from src.sqlalchemy_tables.password_reset_token import PasswordResetToken
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
@@ -117,6 +118,23 @@ def delete_social_rows_for_user(
                 Block.blocked_id == user_id,
             )
         )
+    )
+
+
+def delete_password_reset_tokens_for_user(
+    db: Session,
+    user_id: int,
+) -> None:
+    """Remove the user's password-reset tokens.
+
+    password_reset_tokens.user_id references users.id with no cascade, so these
+    rows must be deleted explicitly or the final user delete hits a foreign-key
+    violation. The per-email throttle log (password_reset_requests) is keyed by an
+    email hash, not user_id, and self-expires, so it needs no deletion here.
+    """
+    db.execute(
+        delete(PasswordResetToken)
+        .where(PasswordResetToken.user_id == user_id)
     )
 
 

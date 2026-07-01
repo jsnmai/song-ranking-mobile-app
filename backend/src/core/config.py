@@ -40,6 +40,48 @@ class Settings(BaseSettings):
     # disables the finalize hook and read surface without a code rollback.
     streaks_enabled: bool = True
 
+    # --- Password reset / transactional email -------------------------------
+    # Pluggable email backend, selected by EMAIL_PROVIDER:
+    #   "console" (default): log the message (incl. the reset code) instead of
+    #       sending, so the flow is fully testable with no external service.
+    #   "smtp": send via SMTP (e.g. Gmail with an App Password). Free, no domain
+    #       needed. Set smtp_username/smtp_password and email_from.
+    #   "resend": send via the Resend API. Best deliverability; needs a verified
+    #       sending domain. Set resend_api_key and a domain email_from.
+    # A provider selected without its credentials falls back to "console" (logs),
+    # so a missing secret never crashes boot or leaks the code in production.
+    email_provider: str = "console"
+
+    # SMTP backend (email_provider="smtp"). For Gmail the host/port defaults work;
+    # smtp_username is the full address and smtp_password is a Google App Password
+    # (requires 2FA). Gmail sends From the authenticated account, so email_from
+    # should be that same address.
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+
+    # Resend backend (email_provider="resend").
+    resend_api_key: str | None = None
+
+    # From address on outbound mail. For smtp it must be the authenticated account
+    # (e.g. "LISTn <your-app@gmail.com>"); for resend it must be an address on your
+    # verified domain. Defaults to the Resend sandbox sender.
+    email_from: str = "LISTn <onboarding@resend.dev>"
+
+    # Optional override for the per-email reset-throttle HMAC key. When unset,
+    # the key is derived from jwt_secret_key with domain separation, so no new
+    # required secret is introduced. Set EMAIL_HASH_PEPPER to rotate it
+    # independently of the JWT secret.
+    email_hash_pepper: str | None = None
+
+    # Password-reset tunables (config-driven so they can change without a deploy).
+    reset_code_ttl_minutes: int = 15
+    reset_code_max_attempts: int = 5
+    reset_resend_cooldown_seconds: int = 60  # per-email cooldown between reset emails
+    reset_max_requests_per_window: int = 5   # per-email cap of reset emails per window
+    reset_request_window_minutes: int = 60   # window the per-email cap applies over
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=False,

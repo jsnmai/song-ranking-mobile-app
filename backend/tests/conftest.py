@@ -15,6 +15,8 @@ import src.sqlalchemy_tables.follow  # noqa: F401 — registers Follow with Base
 import src.sqlalchemy_tables.interaction_event  # noqa: F401 — registers InteractionEvent with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.like  # noqa: F401 — registers Like with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.notification  # noqa: F401 — registers Notification with Base.metadata so create_all() creates the table
+import src.sqlalchemy_tables.password_reset_request  # noqa: F401 — registers PasswordResetRequest with Base.metadata so create_all() creates the table
+import src.sqlalchemy_tables.password_reset_token  # noqa: F401 — registers PasswordResetToken with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.profile  # noqa: F401 — registers Profile with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.ranking  # noqa: F401 — registers Ranking with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.rating_event  # noqa: F401 — registers RatingEvent with Base.metadata so create_all() creates the table
