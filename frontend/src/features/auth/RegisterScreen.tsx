@@ -3,7 +3,7 @@
 // so under-13 users never enter email/username/password (COPPA-conservative ordering).
 // Step 2: Create account (username / email / password / terms)
 // Nothing is submitted until both steps are complete.
-import { useState } from "react"
+import { useRef, useState } from "react"
 import {
     ActivityIndicator,
     KeyboardAvoidingView,
@@ -275,6 +275,9 @@ function StepBirthday({
     const age = computeAge(birthMonth, birthDay, birthYear)
     const ageOk = age !== null && age >= 13
 
+    const dayRef = useRef<TextInput>(null)
+    const yearRef = useRef<TextInput>(null)
+
     return (
         <ScrollView
             contentContainerStyle={styles.scroll}
@@ -294,7 +297,11 @@ function StepBirthday({
                     <TextInput
                         style={styles.dateCellInput}
                         value={birthMonth}
-                        onChangeText={(v) => setBirthMonth(digitsOnly(v, 2))}
+                        onChangeText={(v) => {
+                            const digits = digitsOnly(v, 2)
+                            setBirthMonth(digits)
+                            if (digits.length === 2) dayRef.current?.focus()
+                        }}
                         placeholder="MM"
                         placeholderTextColor={INK_DIM}
                         keyboardType="number-pad"
@@ -305,9 +312,14 @@ function StepBirthday({
                 </View>
                 <View style={styles.dateCell}>
                     <TextInput
+                        ref={dayRef}
                         style={styles.dateCellInput}
                         value={birthDay}
-                        onChangeText={(v) => setBirthDay(digitsOnly(v, 2))}
+                        onChangeText={(v) => {
+                            const digits = digitsOnly(v, 2)
+                            setBirthDay(digits)
+                            if (digits.length === 2) yearRef.current?.focus()
+                        }}
                         placeholder="DD"
                         placeholderTextColor={INK_DIM}
                         keyboardType="number-pad"
@@ -317,6 +329,7 @@ function StepBirthday({
                 </View>
                 <View style={styles.dateCell}>
                     <TextInput
+                        ref={yearRef}
                         style={styles.dateCellInput}
                         value={birthYear}
                         onChangeText={(v) => setBirthYear(digitsOnly(v, 4))}
