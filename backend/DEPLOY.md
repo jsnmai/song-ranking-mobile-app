@@ -19,6 +19,10 @@ Set these on the host (see `.env.example` for details). All are required:
 
 Optional (have defaults): `JWT_ALGORITHM`, `JWT_EXPIRY_DAYS`, `STREAKS_ENABLED`.
 
+New passwords (register + reset) are screened against Have I Been Pwned (k-anonymity,
+no API key, fail-open on outage). Toggle/tune with `PWNED_PASSWORD_CHECK_ENABLED`
+(default true) and `PWNED_PASSWORD_THRESHOLD` (default 0 = reject any breached password).
+
 ### Email / password reset (optional, but set before public launch)
 
 Password reset works with **no** email config: when the selected provider has no
@@ -31,8 +35,9 @@ and internal builds). The backend is `EMAIL_PROVIDER`, one of:
 - `resend`: send via the Resend API. Best deliverability; needs a verified domain.
   Kept ready; flip `EMAIL_PROVIDER=resend` to switch.
 
-A provider selected without its credentials falls back to `console`, so a missing
-secret never crashes boot or leaks the code.
+A real provider (smtp/resend) selected without its credentials fails closed: it warns
+and drops the message rather than logging the code, so a missing secret never leaks a
+live reset code. Only `console` logs the code, and it is dev/test-only.
 
 **SMTP (Gmail) — the current setup:**
 
