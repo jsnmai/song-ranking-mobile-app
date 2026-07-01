@@ -8,7 +8,7 @@
 // so art never pops in blank), and submitting dims the cards instead of a full-screen overlay.
 import { useEffect, useMemo, useRef, useState } from "react"
 // RNAnimated: core Animated API, only used for the spinner loop — "Animated" is reserved for Reanimated below
-import { ActivityIndicator, Animated as RNAnimated, Dimensions, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { ActivityIndicator, Animated as RNAnimated, Dimensions, Image, Linking, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import Animated, { FadeIn, FadeOut, LinearTransition, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated"
 import Svg, { Circle, Path, Defs, LinearGradient, Stop, Rect } from "react-native-svg"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
@@ -258,15 +258,20 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
         const candidate = session.candidate
         if (candidate === null) { setCandidatePreviewUrl(null); return }
         if (!token) { setCandidatePreviewUrl(candidate.song.preview_url); return }
+        const candidateSong = candidate.song
+        if (candidateSong.deezer_id == null) {
+            setCandidatePreviewUrl(candidate.song.preview_url)
+            return
+        }
+        const candidateDeezerId = candidateSong.deezer_id
 
         let isActive = true
         const authToken = token
-        const candidateSong = candidate.song
         setCandidatePreviewUrl(null)
 
         async function loadCandidatePreviewUrl() {
             try {
-                const url = await fetchPreviewUrl(candidateSong.deezer_id, authToken)
+                const url = await fetchPreviewUrl(candidateDeezerId, authToken)
                 if (isActive) setCandidatePreviewUrl(url)
             } catch {
                 if (isActive) setCandidatePreviewUrl(candidateSong.preview_url)
@@ -287,6 +292,12 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
 
     const candidate = session.candidate
     const rankings = session.current_bucket_rankings
+    const targetHasApplePreview = session.target_song.provider === "apple" && session.target_song.preview_url !== null
+    const handleOpenTargetApple = () => {
+        if (session.target_song.apple_view_url) {
+            Linking.openURL(session.target_song.apple_view_url).catch(() => {})
+        }
+    }
 
     // ── Leap-aware transition pacing ────────────────────────────────────────
     // Early head-to-heads can move the candidate half the list in one round
@@ -577,6 +588,16 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
                         </View>
                         <Text style={styles.pairTitle} numberOfLines={2}>{session.target_song.title}</Text>
                         <Text style={styles.pairArtist} numberOfLines={1}>{session.target_song.artist}</Text>
+                        {targetHasApplePreview && (
+                            <View style={styles.appleAttribution}>
+                                <Text style={styles.appleCourtesy} numberOfLines={1}>provided courtesy of iTunes</Text>
+                                {session.target_song.apple_view_url != null && (
+                                    <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleOpenTargetApple() }}>
+                                        <Text style={styles.appleLink} numberOfLines={1}>Get on Apple Music</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        )}
                     </TouchableOpacity>
 
                     {/* VS circle — centered via absolute inset */}
@@ -773,6 +794,28 @@ const styles = StyleSheet.create({
     },
     pairArtist: {
         fontFamily: fonts.mono, fontSize: 10, letterSpacing: 0.5, color: colors.inkDim, textAlign: "center",
+    },
+    appleAttribution: {
+        alignItems: "center",
+        gap: 3,
+        marginTop: 7,
+        alignSelf: "stretch",
+    },
+    appleCourtesy: {
+        fontFamily: fonts.mono,
+        fontSize: 7.5,
+        letterSpacing: 0,
+        color: colors.inkDim,
+        textTransform: "uppercase",
+        textAlign: "center",
+    },
+    appleLink: {
+        fontFamily: fonts.mono,
+        fontSize: 7.5,
+        letterSpacing: 0,
+        color: colors.accent,
+        textTransform: "uppercase",
+        textAlign: "center",
     },
     vsCircleWrap: {
         position: "absolute",

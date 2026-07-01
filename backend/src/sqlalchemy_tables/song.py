@@ -36,9 +36,9 @@ class Song(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    deezer_id: Mapped[int] = mapped_column(
+    deezer_id: Mapped[int | None] = mapped_column(
         BigInteger,
-        nullable=False,
+        nullable=True,
     )
     isrc: Mapped[str | None] = mapped_column(
         String(12),
@@ -52,9 +52,9 @@ class Song(Base):
         String(255),
         nullable=False,
     )
-    artist_deezer_id: Mapped[int] = mapped_column(
+    artist_deezer_id: Mapped[int | None] = mapped_column(
         BigInteger,
-        nullable=False,
+        nullable=True,
     )
     album: Mapped[str] = mapped_column(
         String(255),

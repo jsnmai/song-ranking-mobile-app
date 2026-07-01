@@ -55,8 +55,22 @@ def upsert_from_deezer(
     song at the same time do not create duplicates. The preview_url_expires_at
     is parsed from the preview URL's Akamai exp= token at insert time.
     """
+    if data.deezer_id is None:
+        raise ValueError("deezer_id is required for legacy Deezer upsert.")
+
     expires_at = parse_preview_url_expires_at(data.preview_url)
-    values = {**data.model_dump(), "preview_url_expires_at": expires_at}
+    values = {
+        "deezer_id": data.deezer_id,
+        "isrc": data.isrc,
+        "title": data.title,
+        "artist": data.artist,
+        "artist_deezer_id": data.artist_deezer_id,
+        "album": data.album,
+        "cover_url": data.cover_url,
+        "preview_url": data.preview_url,
+        "genre_deezer": data.genre_deezer,
+        "preview_url_expires_at": expires_at,
+    }
     statement = (
         insert(Song)
         .values(**values)
@@ -91,6 +105,29 @@ def update_preview_url(
     """Store a refreshed Deezer preview URL and its parsed expiry without committing."""
     song.preview_url = preview_url
     song.preview_url_expires_at = expires_at
+    return song
+
+
+def create_from_provider_metadata(
+    db: Session,
+    data: SongCreate,
+) -> Song:
+    """Create one durable song from non-Deezer provider metadata without committing."""
+    song = Song(
+        deezer_id=None,
+        isrc=data.isrc,
+        title=data.title,
+        artist=data.artist,
+        artist_deezer_id=None,
+        album=data.album,
+        cover_url=data.artwork_url or data.cover_url,
+        preview_url=None,
+        preview_url_expires_at=None,
+        genre_deezer=data.genre or data.genre_deezer,
+        release_year=data.release_year,
+    )
+    db.add(song)
+    db.flush()
     return song
 
 

@@ -50,6 +50,33 @@ describe("comparison API requests", () => {
         )
     })
 
+    it("does not send Apple preview URLs as durable finalize data", async () => {
+        mockPost.mockResolvedValue({ ranking: {}, rating_event: {} })
+        const appleSong: SongSearchResult = {
+            provider: "apple",
+            deezer_id: null,
+            isrc: null,
+            title: "Nights",
+            artist: "Frank Ocean",
+            artist_deezer_id: null,
+            album: "Blonde",
+            cover_url: "https://example.com/cover.jpg",
+            preview_url: "https://example.com/apple-preview.m4a",
+            apple_track_id: "1440841363",
+            storefront: "US",
+            apple_view_url: "https://music.apple.com/us/album/nights/1440841363?i=1440841363",
+            preview_available: true,
+        }
+
+        await finalizeRating({ song: appleSong, bucket: "like" }, "test-token")
+
+        expect(mockPost).toHaveBeenCalledWith(
+            "/api/v1/ratings/finalize",
+            { song: { ...appleSong, preview_url: null }, bucket: "like" },
+            "test-token",
+        )
+    })
+
     it("starts comparison sessions through the backend", async () => {
         mockPost.mockResolvedValue({ session_uuid: "abc" })
 

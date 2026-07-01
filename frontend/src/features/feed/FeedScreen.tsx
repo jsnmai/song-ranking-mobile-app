@@ -51,7 +51,7 @@ import OwnActivitySheet from "../activity/OwnActivitySheet"
 import { useAuth } from "../auth/AuthContext"
 import { blockUser } from "../profile/apiRequests"
 import { ProfileBase, ReportReason } from "../profile/types"
-import { getMyRankingByDeezerId, removeRating } from "../rankings/apiRequests"
+import { getMyRankingByDeezerId, getMyRankingBySongId, removeRating } from "../rankings/apiRequests"
 import { getFeedModules, getSongCircleRaters, listMyFeed, reportRatingEvent } from "./apiRequests"
 import { ConsensusModule, DisagreementModule, FeedEvent, MatchMomentModule, RerateRadarItem, SplitDecisionModule } from "./types"
 
@@ -488,7 +488,9 @@ export default function FeedScreen() {
         setOwnMenuEvent(null)
         try {
             // Re-rate needs the full catalog song (isrc/artist ids); the ranking carries it.
-            const ranking = await getMyRankingByDeezerId(ev.song.deezer_id, token)
+            const ranking = ev.song.deezer_id != null
+                ? await getMyRankingByDeezerId(ev.song.deezer_id, token)
+                : await getMyRankingBySongId(ev.song.id, token)
             navigation.navigate("BucketSelection", { song: ranking.song as never })
         } catch {
             navigation.navigate("BucketSelection", { song: ev.song as never })

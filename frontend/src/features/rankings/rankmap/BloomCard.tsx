@@ -69,6 +69,10 @@ export function BloomCard({
         let active = true
         setPreviewUrl(null)
         setLoadingPreview(true)
+        if (deezerId == null) {
+            setLoadingPreview(false)
+            return () => { active = false }
+        }
         fetchPreviewUrl(deezerId, token ?? "")
             .then((url) => active && setPreviewUrl(url))
             .catch(() => active && setPreviewUrl(null))

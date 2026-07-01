@@ -5,8 +5,13 @@ from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
 from src.core.limiter import limiter
-from src.pydantic_schemas.search import SongSearchResponse
+from src.pydantic_schemas.search import (
+    AppleSearchAnnotationRequest,
+    AppleSearchAnnotationResponse,
+    SongSearchResponse,
+)
 from src.services.search import search_deezer_songs
+from src.services.search_annotations import annotate_apple_search_results
 from src.sqlalchemy_tables.user import User
 
 router = APIRouter(
@@ -34,4 +39,23 @@ def search_songs(
         db,
         current_user.id,
         q,
+    )
+
+
+@router.post(
+    "/apple/annotations",
+    response_model=AppleSearchAnnotationResponse,
+)
+@limiter.limit("120/minute")
+def annotate_apple_search(
+    request: Request,
+    data: AppleSearchAnnotationRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AppleSearchAnnotationResponse:
+    """Annotate client-direct Apple search results using only LISTn-owned data."""
+    return annotate_apple_search_results(
+        db,
+        user_id=current_user.id,
+        data=data,
     )

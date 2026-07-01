@@ -41,6 +41,13 @@ export async function getMyRankingByDeezerId(
     return apiClient.get<RankingResponse>(`/api/v1/rankings/me/by-deezer/${deezerId}`, token)
 }
 
+export async function getMyRankingBySongId(
+    songId: number,
+    token: string,
+): Promise<RankingResponse> {
+    return apiClient.get<RankingResponse>(`/api/v1/rankings/me/by-song/${songId}`, token)
+}
+
 export async function removeRating(
     songId: number,
     token: string,

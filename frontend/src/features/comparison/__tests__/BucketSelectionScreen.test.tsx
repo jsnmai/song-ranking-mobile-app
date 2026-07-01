@@ -247,6 +247,67 @@ describe("BucketSelectionScreen", () => {
         expect(mockFinalizeRating).not.toHaveBeenCalled()
     })
 
+    it("uses persisted song id to avoid comparing a saved Apple song against itself", async () => {
+        const appleSong: SongSearchResult = {
+            id: 42,
+            deezer_id: null,
+            isrc: null,
+            title: "Saved Apple",
+            artist: "Frank Ocean",
+            artist_deezer_id: null,
+            album: "Blonde",
+            cover_url: "https://example.com/apple.jpg",
+            preview_url: null,
+        }
+        mockListMyRankings.mockResolvedValue({
+            rankings: [
+                {
+                    id: 9,
+                    song_id: 42,
+                    bucket: "like",
+                    position: 1,
+                    score: 9.0,
+                    created_at: "2026-01-01T00:00:00Z",
+                    updated_at: "2026-01-01T00:00:00Z",
+                    song: {
+                        ...appleSong,
+                        id: 42,
+                        genre_deezer: null,
+                        musicbrainz_id: null,
+                        genres_mb: null,
+                        release_year: null,
+                        spotify_energy: null,
+                        spotify_valence: null,
+                        spotify_tempo: null,
+                        spotify_danceability: null,
+                        metadata_enriched_at: null,
+                        spotify_enriched_at: null,
+                        global_avg_score: null,
+                        global_rating_count: 1,
+                        created_at: "2026-01-01T00:00:00Z",
+                    },
+                },
+            ],
+            next_cursor: null,
+        })
+
+        render(<BucketSelectionScreen navigation={navigation as never} route={buildRoute(appleSong) as never} />)
+
+        fireEvent.press(screen.getByTestId("bucket-like"))
+        fireEvent.press(screen.getByText("Next"))
+
+        await waitFor(() => {
+            expect(mockFinalizeRating).toHaveBeenCalledWith(
+                {
+                    song: appleSong,
+                    bucket: "like",
+                },
+                "test-token",
+            )
+        })
+        expect(mockStartComparisonSession).not.toHaveBeenCalled()
+    })
+
     it("shows API error and re-enables buckets after failure", async () => {
         mockFinalizeRating.mockRejectedValue(new ApiError(400, "Bucket unavailable", null))
 

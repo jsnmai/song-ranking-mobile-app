@@ -20,6 +20,7 @@ from src.crud.comparison import (
 from src.crud.interaction_event import create_interaction_event
 from src.crud.rating import get_user_ranking_by_song, list_user_bucket_rankings
 from src.crud.song import get_by_deezer_id, get_by_id
+from src.crud.song_provider_ref import get_song_by_provider_track
 from src.pydantic_schemas.comparison import (
     ComparisonBucketRankingItem,
     ComparisonChoiceRequest,
@@ -39,6 +40,7 @@ from src.services.rating import (
 from src.services.streak import record_rating_activity
 from src.sqlalchemy_tables.comparison_session import ComparisonSession
 from src.sqlalchemy_tables.ranking import Ranking
+from src.sqlalchemy_tables.song import Song
 
 COMPARISON_SESSION_TTL = timedelta(hours=24)
 
@@ -430,9 +432,9 @@ def _rankings_in_session_bucket(
     data: ComparisonSessionStartRequest,
 ) -> list[Ranking]:
     """Return candidate rankings, excluding the target's current ranking on rerate."""
-    existing_song = get_by_deezer_id(
+    existing_song = _existing_song_for_payload(
         db,
-        data.song.deezer_id,
+        data.song,
     )
     existing_ranking = None
     if existing_song is not None:
@@ -460,9 +462,9 @@ def _session_bucket_rankings(
 ) -> list[Ranking]:
     """Return current candidates for an existing session."""
     song_payload = SongCreate.model_validate(session.song_payload)
-    existing_song = get_by_deezer_id(
+    existing_song = _existing_song_for_payload(
         db,
-        song_payload.deezer_id,
+        song_payload,
     )
     existing_ranking = None
     if existing_song is not None:
@@ -481,6 +483,31 @@ def _session_bucket_rankings(
         )
         if existing_ranking is None or ranking.id != existing_ranking.id
     ]
+
+
+def _existing_song_for_payload(
+    db: Session,
+    song_payload: SongCreate,
+) -> Song | None:
+    """Resolve an already-durable target song for rerate exclusion."""
+    if song_payload.provider == "listn" and song_payload.id is not None:
+        return get_by_id(
+            db,
+            song_payload.id,
+        )
+    if song_payload.provider == "apple" and song_payload.apple_track_id is not None:
+        return get_song_by_provider_track(
+            db,
+            provider="apple",
+            provider_track_id=song_payload.apple_track_id,
+            storefront=song_payload.storefront or "US",
+        )
+    if song_payload.deezer_id is None:
+        return None
+    return get_by_deezer_id(
+        db,
+        song_payload.deezer_id,
+    )
 
 
 def _session_response(
