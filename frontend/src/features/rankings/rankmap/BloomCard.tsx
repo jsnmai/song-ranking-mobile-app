@@ -3,14 +3,14 @@
 // score], a close button floated top-right, and an inline 30s audio preview
 // (play/pause + progress + time). Tapping the body opens the full Song Detail.
 import { useEffect, useState } from "react"
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from "react-native"
+import { ActivityIndicator, Image, Linking, Pressable, StyleSheet, Text, View } from "react-native"
 import Animated, { FadeInDown } from "react-native-reanimated"
 import { BlurView } from "expo-blur"
 import Svg, { Path } from "react-native-svg"
 
 import { bucketColor, colors, fonts } from "../../../theme"
 import { useAudioPlayer } from "../../../hooks/useAudioPlayer"
-import { fetchPreviewUrl } from "../../songs/apiRequests"
+import { fetchPreviewUrl, fetchPreviewUrlBySongId } from "../../songs/apiRequests"
 import { bucketLabel, RankMapSong } from "./layouts"
 
 function CloseIcon() {
@@ -63,11 +63,16 @@ export function BloomCard({
     // Rated songs don't carry a usable preview_url on the row — fetch the live
     // 30s preview by deezer id, exactly like Song Detail does.
     const deezerId = s.ranking.song.deezer_id
+    const songId = s.ranking.song.id ?? s.ranking.song_id
     const [previewUrl, setPreviewUrl] = useState<string | null>(null)
     const [loadingPreview, setLoadingPreview] = useState(true)
+    const [lazyPreviewLoading, setLazyPreviewLoading] = useState(false)
+    const [appleViewUrl, setAppleViewUrl] = useState<string | null>(null)
+    const [shouldPlayAfterPreviewLoad, setShouldPlayAfterPreviewLoad] = useState(false)
     useEffect(() => {
         let active = true
         setPreviewUrl(null)
+        setAppleViewUrl(null)
         setLoadingPreview(true)
         if (deezerId == null) {
             setLoadingPreview(false)
@@ -82,7 +87,11 @@ export function BloomCard({
 
     const { isPlaying, currentTime, duration, toggle, stop } = useAudioPlayer(previewUrl)
     const hasPreview = previewUrl !== null
-    const showAudio = loadingPreview || hasPreview
+    const canFetchSavedPreview = deezerId == null
+        && songId != null
+        && s.ranking.song.preview_available === true
+        && previewUrl === null
+    const showAudio = loadingPreview || hasPreview || canFetchSavedPreview || lazyPreviewLoading
     const dur = duration && duration > 0 ? duration : 30
     const progress = duration && duration > 0 ? Math.min(1, currentTime / duration) : 0
 
@@ -91,6 +100,39 @@ export function BloomCard({
         stop()
         onOpen()
     }
+
+    const handlePreviewPress = async () => {
+        if (hasPreview) {
+            toggle()
+            return
+        }
+        if (!token || songId == null || !canFetchSavedPreview || lazyPreviewLoading) return
+        setLazyPreviewLoading(true)
+        try {
+            const response = await fetchPreviewUrlBySongId(songId, token)
+            setAppleViewUrl(response.apple_view_url)
+            if (response.preview_url !== null) {
+                setPreviewUrl(response.preview_url)
+                setShouldPlayAfterPreviewLoad(true)
+            }
+        } catch {
+            setPreviewUrl(null)
+        } finally {
+            setLazyPreviewLoading(false)
+        }
+    }
+
+    const handleOpenApple = () => {
+        if (appleViewUrl !== null) {
+            Linking.openURL(appleViewUrl).catch(() => {})
+        }
+    }
+
+    useEffect(() => {
+        if (!shouldPlayAfterPreviewLoad || previewUrl === null) return
+        setShouldPlayAfterPreviewLoad(false)
+        toggle()
+    }, [previewUrl, shouldPlayAfterPreviewLoad, toggle])
 
     return (
         <Animated.View
@@ -140,11 +182,11 @@ export function BloomCard({
                         {showAudio ? (
                             <Pressable
                                 style={styles.audioRow}
-                                onPress={hasPreview ? toggle : undefined}
-                                disabled={!hasPreview}
+                                onPress={handlePreviewPress}
+                                disabled={loadingPreview || lazyPreviewLoading}
                                 accessibilityRole="button"
                                 accessibilityLabel={
-                                    !hasPreview
+                                    loadingPreview || lazyPreviewLoading
                                         ? `Loading ${s.title} preview`
                                         : isPlaying
                                             ? `Pause ${s.title} preview`
@@ -152,7 +194,7 @@ export function BloomCard({
                                 }
                             >
                                 <View style={[styles.playBtn, { backgroundColor: c }]}>
-                                    {loadingPreview ? (
+                                    {loadingPreview || lazyPreviewLoading ? (
                                         <ActivityIndicator size="small" color="#fff" />
                                     ) : isPlaying ? (
                                         <PauseIcon />
@@ -167,6 +209,14 @@ export function BloomCard({
                                     {fmtTime(currentTime)} / {fmtTime(dur)}
                                 </Text>
                             </Pressable>
+                        ) : null}
+                        {appleViewUrl !== null && previewUrl !== null ? (
+                            <View style={styles.appleAttribution}>
+                                <Text style={styles.appleCourtesy} numberOfLines={1}>provided courtesy of iTunes</Text>
+                                <Pressable onPress={handleOpenApple}>
+                                    <Text style={styles.appleLink} numberOfLines={1}>Get on Apple Music</Text>
+                                </Pressable>
+                            </View>
                         ) : null}
                     </View>
 
@@ -254,6 +304,9 @@ const styles = StyleSheet.create({
     progressTrack: { flex: 1, height: 3, borderRadius: 2, backgroundColor: "rgba(245,238,220,0.16)", overflow: "hidden" },
     progressFill: { height: "100%", borderRadius: 2 },
     time: { fontFamily: fonts.mono, fontSize: 8.5, color: colors.cdim },
+    appleAttribution: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 },
+    appleCourtesy: { flex: 1, fontFamily: fonts.mono, fontSize: 7.5, color: colors.cdim, letterSpacing: 0.3 },
+    appleLink: { fontFamily: fonts.mono, fontSize: 7.5, color: colors.gold, fontWeight: "700" },
     scoreCol: { width: 54, alignItems: "flex-end", justifyContent: "center" },
     score: { fontFamily: fonts.display, fontSize: 38, lineHeight: 40, letterSpacing: 0 },
     distance: {

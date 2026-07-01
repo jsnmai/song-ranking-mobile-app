@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
 from src.core.limiter import limiter
-from src.pydantic_schemas.song import PreviewUrlResponse
-from src.services.song import get_or_refresh_preview_url
+from src.pydantic_schemas.song import PreviewUrlResponse, SavedSongPreviewUrlResponse
+from src.services.song import get_or_refresh_preview_url, get_preview_url_by_song_id
 from src.sqlalchemy_tables.user import User
 
 router = APIRouter(
@@ -35,3 +35,27 @@ def get_preview_url(
             detail=str(err),
         )
     return PreviewUrlResponse(preview_url=preview_url)
+
+
+@router.get(
+    "/by-id/{song_id}/preview-url",
+    response_model=SavedSongPreviewUrlResponse,
+)
+@limiter.limit("60/minute")
+def get_preview_url_by_id(
+    request: Request,
+    song_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SavedSongPreviewUrlResponse:
+    """Return a provider-neutral preview URL for a durable LISTn song."""
+    try:
+        return get_preview_url_by_song_id(
+            db,
+            song_id,
+        )
+    except ValueError as err:
+        raise HTTPException(
+            status_code=404,
+            detail=str(err),
+        )

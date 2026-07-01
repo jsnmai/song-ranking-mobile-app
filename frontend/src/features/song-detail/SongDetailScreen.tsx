@@ -32,7 +32,7 @@ import { LockIcon } from "../../components/LockIcon"
 import { getMyRankingByDeezerId, getMyRankingBySongId, listMyRankings, listMyVersusHistory, removeRating } from "../rankings/apiRequests"
 import { ComparisonHistoryReceipt } from "../rankings/types"
 import { RankingResponse } from "../comparison/types"
-import { fetchPreviewUrl } from "../songs/apiRequests"
+import { fetchPreviewUrl, fetchPreviewUrlBySongId } from "../songs/apiRequests"
 import { bookmarkSong, getBookmarkStatus, removeBookmark } from "../bookmarks/apiRequests"
 import { Bookmark } from "../bookmarks/types"
 
@@ -263,8 +263,13 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
     const [isRemoving, setIsRemoving] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+    const [previewAppleViewUrl, setPreviewAppleViewUrl] = useState<string | null>(
+        song.provider === "apple" && song.preview_url !== null ? song.apple_view_url ?? null : null,
+    )
     const [versusReceipts, setVersusReceipts] = useState<ComparisonHistoryReceipt[]>([])
-    const [isPreviewLoading, setIsPreviewLoading] = useState(true)
+    const [isPreviewLoading, setIsPreviewLoading] = useState(false)
+    const [isLazyPreviewLoading, setIsLazyPreviewLoading] = useState(false)
+    const [shouldPlayAfterPreviewLoad, setShouldPlayAfterPreviewLoad] = useState(false)
     const [bookmark, setBookmark] = useState<Bookmark | null>(null)
     const [isBookmarkStatusLoading, setIsBookmarkStatusLoading] = useState(true)
     const [isBookmarkUpdating, setIsBookmarkUpdating] = useState(false)
@@ -301,6 +306,11 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
     }, [isPlaying, duration])
 
     const accent = ranking ? bucketColor(ranking.bucket) : colors.inkDim
+    const durableSongId = song.id ?? song.song_id ?? ranking?.song_id ?? null
+    const canFetchSavedPreview = durableSongId != null
+        && song.preview_url === null
+        && song.preview_available === true
+    const canAttemptPreview = previewUrl !== null || canFetchSavedPreview
 
     const handleRateAgain = () => {
         setMenuOpen(false)
@@ -392,6 +402,35 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
         }
     }
 
+    const handlePreviewPress = async () => {
+        if (previewUrl !== null) {
+            toggleAudio()
+            return
+        }
+        if (!token || durableSongId == null || !canFetchSavedPreview || isLazyPreviewLoading) return
+        setIsLazyPreviewLoading(true)
+        setError(null)
+        try {
+            const response = await fetchPreviewUrlBySongId(
+                durableSongId,
+                token,
+            )
+            setPreviewAppleViewUrl(response.apple_view_url)
+            if (response.preview_url !== null) {
+                setPreviewUrl(response.preview_url)
+                setShouldPlayAfterPreviewLoad(true)
+            }
+        } catch (err) {
+            if (err instanceof ApiError) {
+                setError(err.detail)
+            } else {
+                setError("Could not load preview.")
+            }
+        } finally {
+            setIsLazyPreviewLoading(false)
+        }
+    }
+
     useEffect(() => {
         if (!token || ranking === null) return
         let isActive = true
@@ -448,11 +487,13 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
         setIsPreviewLoading(true)
         if (!isRated) {
             setPreviewUrl(song.preview_url)
+            setPreviewAppleViewUrl(song.provider === "apple" && song.preview_url !== null ? song.apple_view_url ?? null : null)
             setIsPreviewLoading(false)
             return () => { isActive = false }
         }
         if (song.provider === "apple" || song.deezer_id == null) {
-            setPreviewUrl(song.preview_url ?? null)
+            setPreviewUrl(song.preview_url)
+            setPreviewAppleViewUrl(song.provider === "apple" && song.preview_url !== null ? song.apple_view_url ?? null : null)
             setIsPreviewLoading(false)
             return () => { isActive = false }
         }
@@ -469,7 +510,13 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
         }
         loadPreviewUrl()
         return () => { isActive = false }
-    }, [isRated, song.deezer_id, song.preview_url, song.provider, token])
+    }, [isRated, song.apple_view_url, song.deezer_id, song.preview_url, song.provider, token])
+
+    useEffect(() => {
+        if (!shouldPlayAfterPreviewLoad || previewUrl === null) return
+        setShouldPlayAfterPreviewLoad(false)
+        toggleAudio()
+    }, [previewUrl, shouldPlayAfterPreviewLoad, toggleAudio])
 
     useEffect(() => {
         let isActive = true
@@ -499,10 +546,10 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
         return () => { isActive = false }
     }, [song.deezer_id, token])
 
-    const isApplePreview = song.provider === "apple" && previewUrl !== null
+    const isApplePreview = previewUrl !== null && previewAppleViewUrl !== null
     const handleOpenApple = () => {
-        if (song.apple_view_url) {
-            Linking.openURL(song.apple_view_url).catch(() => {})
+        if (previewAppleViewUrl) {
+            Linking.openURL(previewAppleViewUrl).catch(() => {})
         }
     }
 
@@ -576,14 +623,14 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                 {/* Audio preview + bookmark row */}
                 <View style={styles.previewRow}>
                     <View style={styles.previewPlayer}>
-                        {isPreviewLoading ? (
+                        {isPreviewLoading || isLazyPreviewLoading ? (
                             <View style={[styles.playBtn, { backgroundColor: colors.paper2 }]}>
                                 <ActivityIndicator color={colors.ink} size="small" />
                             </View>
-                        ) : previewUrl !== null ? (
+                        ) : canAttemptPreview ? (
                             <TouchableOpacity
                                 style={[styles.playBtn, { backgroundColor: colors.accent }]}
-                                onPress={toggleAudio}
+                                onPress={handlePreviewPress}
                                 accessibilityLabel={isPlaying ? "Pause Preview" : "Play Preview"}
                             >
                                 {isPlaying
@@ -618,7 +665,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                 {isApplePreview && (
                     <View style={styles.appleAttributionRow}>
                         <Text style={styles.appleCourtesy}>provided courtesy of iTunes</Text>
-                        {song.apple_view_url != null && (
+                        {previewAppleViewUrl != null && (
                             <TouchableOpacity onPress={handleOpenApple}>
                                 <Text style={styles.appleLink}>Get on Apple Music</Text>
                             </TouchableOpacity>

@@ -237,6 +237,8 @@ def test_apple_lookup_creates_song_and_provider_ref(
     assert provider_ref.storefront == "US"
     assert provider_ref.confidence == "apple_lookup"
     assert provider_ref.preview_available is True
+    assert response["ranking"]["song"]["preview_available"] is True
+    assert response["ranking"]["song"]["apple_view_url"] == "https://music.apple.com/us/album/nights/1440841363?i=1440841363"
 
 
 def test_existing_apple_provider_ref_reuses_song_without_lookup(
@@ -336,6 +338,230 @@ def test_apple_lookup_mismatched_track_falls_back_to_client_payload(
     ).scalar_one()
     assert provider_ref.provider_track_id == "555"
     assert provider_ref.confidence == "apple_client_search"
+
+
+def test_saved_apple_song_preview_by_id_returns_live_preview_without_persisting(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    """The durable by-song preview endpoint looks up Apple lazily and never stores preview_url."""
+    token = _get_token(client)
+    monkeypatch.setattr(
+        "src.services.provider_catalog.httpx.get",
+        lambda *args, **kwargs: MockAppleResponse({"results": []}),
+    )
+    finalized = _finalize(
+        client,
+        token,
+        _apple_payload(
+            apple_track_id="4242",
+            title="Saved Apple",
+        ),
+    )
+    song_id = finalized["ranking"]["song_id"]
+
+    calls = []
+
+    def mock_get(
+        url: str,
+        params: dict,
+        timeout: float,
+    ) -> MockAppleResponse:
+        calls.append((url, params, timeout))
+        return MockAppleResponse(
+            {
+                "results": [
+                    {
+                        "trackId": 4242,
+                        "trackName": "Saved Apple",
+                        "artistName": "Frank Ocean",
+                        "trackViewUrl": "https://music.apple.com/us/album/saved/4242?i=4242",
+                        "previewUrl": "https://audio-ssl.itunes.apple.com/live-preview.m4a",
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr("src.services.provider_catalog.httpx.get", mock_get)
+
+    response = client.get(
+        f"/api/v1/songs/by-id/{song_id}/preview-url",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "preview_url": "https://audio-ssl.itunes.apple.com/live-preview.m4a",
+        "apple_view_url": "https://music.apple.com/us/album/nights/1440841363?i=1440841363",
+    }
+    assert calls == [
+        (
+            "https://itunes.apple.com/lookup",
+            {"id": "4242", "country": "US"},
+            5.0,
+        )
+    ]
+    db_session.expire_all()
+    song = db_session.get(Song, song_id)
+    assert song.preview_url is None
+
+
+def test_saved_apple_song_preview_by_id_ignores_mismatched_lookup(
+    client: TestClient,
+    monkeypatch,
+):
+    """Apple lookup rows for the wrong track never produce a playable preview for the saved song."""
+    token = _get_token(client)
+    monkeypatch.setattr(
+        "src.services.provider_catalog.httpx.get",
+        lambda *args, **kwargs: MockAppleResponse({"results": []}),
+    )
+    finalized = _finalize(client, token, _apple_payload(apple_track_id="5150", title="Saved Apple"))
+
+    monkeypatch.setattr(
+        "src.services.provider_catalog.httpx.get",
+        lambda *args, **kwargs: MockAppleResponse(
+            {
+                "results": [
+                    {
+                        "trackId": 999,
+                        "trackName": "Wrong Song",
+                        "artistName": "Wrong Artist",
+                        "trackViewUrl": "https://music.apple.com/us/album/wrong/999?i=999",
+                        "previewUrl": "https://audio-ssl.itunes.apple.com/wrong-preview.m4a",
+                    }
+                ]
+            }
+        ),
+    )
+
+    response = client.get(
+        f"/api/v1/songs/by-id/{finalized['ranking']['song_id']}/preview-url",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["preview_url"] is None
+    assert response.json()["apple_view_url"] == "https://music.apple.com/us/album/nights/1440841363?i=1440841363"
+
+
+def test_saved_apple_payload_exposes_preview_available_without_live_lookup(
+    client: TestClient,
+    monkeypatch,
+):
+    """Saved Apple ranking payloads expose local preview availability without calling Apple."""
+    token = _get_token(client)
+    monkeypatch.setattr(
+        "src.services.provider_catalog.httpx.get",
+        lambda *args, **kwargs: MockAppleResponse({"results": []}),
+    )
+    finalized = _finalize(client, token, _apple_payload(apple_track_id="6161", title="Saved Apple"))
+
+    def fail_lookup(*args, **kwargs):
+        raise AssertionError("Ranking reads must not call Apple lookup.")
+
+    monkeypatch.setattr("src.services.provider_catalog.httpx.get", fail_lookup)
+
+    response = client.get(
+        f"/api/v1/rankings/me/by-song/{finalized['ranking']['song_id']}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["song"]["preview_available"] is True
+    assert response.json()["song"]["preview_url"] is None
+    assert response.json()["song"]["provider"] is None
+
+
+def test_ranking_lists_batch_saved_apple_preview_hints(
+    client: TestClient,
+    monkeypatch,
+):
+    """Ranking list surfaces load Apple preview hints once per response, not once per row."""
+    token = _get_token(client)
+    monkeypatch.setattr(
+        "src.services.provider_catalog.httpx.get",
+        lambda *args, **kwargs: MockAppleResponse({"results": []}),
+    )
+    first = _finalize(
+        client,
+        token,
+        _apple_payload(
+            apple_track_id="7171",
+            title="Apple Like",
+        ),
+    )
+    second_payload = _apple_payload(
+        apple_track_id="8181",
+        title="Apple Dislike",
+    )
+    second_payload["bucket"] = "dislike"
+    second = _finalize(client, token, second_payload)
+
+    import src.services.rating as rating_service
+
+    actual_batch_helper = rating_service.list_apple_provider_refs_for_songs
+    calls = []
+
+    def spy_batch_helper(db, song_ids):
+        calls.append(list(song_ids))
+        return actual_batch_helper(db, song_ids)
+
+    monkeypatch.setattr(
+        "src.services.rating.list_apple_provider_refs_for_songs",
+        spy_batch_helper,
+    )
+
+    response = client.get(
+        "/api/v1/rankings/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert len(calls) == 1
+    assert set(calls[0]) == {
+        first["ranking"]["song_id"],
+        second["ranking"]["song_id"],
+    }
+
+    calls.clear()
+    response = client.get(
+        "/api/v1/rankings/me/bucket/like",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert calls == [[first["ranking"]["song_id"]]]
+
+
+def test_song_without_provider_ref_or_deezer_id_returns_null_preview(
+    client: TestClient,
+    db_session: Session,
+):
+    """Provider-neutral preview lookup safely returns nulls for songs without preview providers."""
+    token = _get_token(client)
+    song = Song(
+        deezer_id=None,
+        title="Providerless",
+        artist="Artist",
+        artist_deezer_id=None,
+        album="Album",
+        cover_url="https://example.com/cover.jpg",
+    )
+    db_session.add(song)
+    db_session.commit()
+
+    response = client.get(
+        f"/api/v1/songs/by-id/{song.id}/preview-url",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "preview_url": None,
+        "apple_view_url": None,
+    }
 
 
 def test_apple_lookup_missing_required_fields_falls_back_to_client_payload(

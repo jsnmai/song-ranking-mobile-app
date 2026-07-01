@@ -381,7 +381,10 @@ def finalize_comparison_session(
         raise
 
     response = ComparisonSessionFinalizeResponse(
-        result=build_rating_finalize_response(finalized_rating),
+        result=build_rating_finalize_response(
+            db,
+            finalized_rating,
+        ),
     )
     # Best-effort, post-commit: count the comparison-finalized rating toward the
     # weekly streak. Guarded internally so it can never affect the committed rating.
@@ -538,6 +541,7 @@ def _session_response(
                 detail="Comparison session is stale.",
             )
         candidate = build_ranking_response(
+            db,
             candidate_ranking,
             candidate_song,
         )

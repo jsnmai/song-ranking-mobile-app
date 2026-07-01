@@ -4,6 +4,11 @@ type PreviewUrlResponse = {
     preview_url: string | null;
 }
 
+export type SavedSongPreviewUrlResponse = {
+    preview_url: string | null;
+    apple_view_url: string | null;
+}
+
 // The backend refreshes stale Deezer preview URLs before returning this value.
 export async function fetchPreviewUrl(deezerId: number, token: string): Promise<string | null> {
     const response = await apiClient.get<PreviewUrlResponse>(
@@ -11,4 +16,14 @@ export async function fetchPreviewUrl(deezerId: number, token: string): Promise<
         token,
     )
     return response.preview_url
+}
+
+export async function fetchPreviewUrlBySongId(
+    songId: number,
+    token: string,
+): Promise<SavedSongPreviewUrlResponse> {
+    return apiClient.get<SavedSongPreviewUrlResponse>(
+        `/api/v1/songs/by-id/${songId}/preview-url`,
+        token,
+    )
 }

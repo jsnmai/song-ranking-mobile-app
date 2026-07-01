@@ -725,7 +725,7 @@ def get_profile_bookmarks(
                 source=row.bookmark.source,
                 bookmarked_at=row.bookmark.created_at,
                 song=row.song,
-                ranking=build_ranking_response(row.ranking, row.song) if row.ranking is not None else None,
+                ranking=build_ranking_response(db, row.ranking, row.song) if row.ranking is not None else None,
             )
             for row in rows
         ],

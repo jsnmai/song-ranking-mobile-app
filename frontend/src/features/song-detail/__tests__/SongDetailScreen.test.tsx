@@ -10,6 +10,7 @@ const mockNavigate = jest.fn()
 const mockRemoveRating = jest.fn()
 const mockListMyVersusHistory = jest.fn()
 const mockFetchPreviewUrl = jest.fn()
+const mockFetchPreviewUrlBySongId = jest.fn()
 const mockGetBookmarkStatus = jest.fn()
 const mockRemoveBookmark = jest.fn()
 const mockBookmarkSong = jest.fn()
@@ -40,6 +41,7 @@ jest.mock("../../rankings/apiRequests", () => ({
 
 jest.mock("../../songs/apiRequests", () => ({
     fetchPreviewUrl: (...args: unknown[]) => mockFetchPreviewUrl(...args),
+    fetchPreviewUrlBySongId: (...args: unknown[]) => mockFetchPreviewUrlBySongId(...args),
 }))
 
 jest.mock("../../bookmarks/apiRequests", () => ({
@@ -105,6 +107,10 @@ beforeEach(() => {
     })
     mockAddNavigationListener.mockReturnValue(jest.fn())
     mockFetchPreviewUrl.mockResolvedValue("https://example.com/preview.mp3")
+    mockFetchPreviewUrlBySongId.mockResolvedValue({
+        preview_url: "https://example.com/apple-live-preview.m4a",
+        apple_view_url: "https://music.apple.com/us/album/nights/1440841363?i=1440841363",
+    })
     mockGetBookmarkStatus.mockResolvedValue({ is_bookmarked: false, bookmark: null })
     mockListMyVersusHistory.mockResolvedValue({ receipts: [] })
 })
@@ -222,6 +228,43 @@ describe("SongDetailScreen", () => {
         expect(mockCreatePlayer).toHaveBeenCalledWith("https://example.com/preview.mp3")
         expect(mockPlay).toHaveBeenCalledTimes(1)
         expect(screen.getByLabelText("Pause Preview")).toBeTruthy()
+    })
+
+    it("shows saved Apple Play from preview availability and fetches by song id only when pressed", async () => {
+        const appleRanking: RankingResponse = {
+            ...ranking,
+            song: {
+                ...ranking.song,
+                deezer_id: null,
+                provider: "apple",
+                preview_url: null,
+                preview_available: true,
+                apple_view_url: null,
+            },
+        }
+
+        render(
+            <SongDetailScreen
+                navigation={navigation as never}
+                route={{ params: { ranking: appleRanking } } as never}
+            />,
+        )
+
+        const playButton = await screen.findByLabelText("Play Preview")
+        expect(mockFetchPreviewUrlBySongId).not.toHaveBeenCalled()
+
+        await act(async () => {
+            fireEvent.press(playButton)
+        })
+
+        await waitFor(() => {
+            expect(mockFetchPreviewUrlBySongId).toHaveBeenCalledWith(42, "test-token")
+        })
+        await waitFor(() => {
+            expect(mockCreatePlayer).toHaveBeenCalledWith("https://example.com/apple-live-preview.m4a")
+        })
+        expect(screen.getByText("provided courtesy of iTunes")).toBeTruthy()
+        expect(screen.getByText("Get on Apple Music")).toBeTruthy()
     })
 
     it("stops preview audio when the screen blurs", async () => {

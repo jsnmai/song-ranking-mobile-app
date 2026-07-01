@@ -19,7 +19,7 @@ import { useAudioPlayer } from "../../hooks/useAudioPlayer"
 import { AppStackParamList } from "../../navigation/types"
 import { colors, fonts, bucketColor } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
-import { fetchPreviewUrl } from "../songs/apiRequests"
+import { fetchPreviewUrl, fetchPreviewUrlBySongId } from "../songs/apiRequests"
 import { cancelComparisonSession, chooseComparisonWinner, finalizeComparisonSession, undoComparisonChoice } from "./apiRequests"
 import { ComparisonSessionResponse } from "./types"
 
@@ -143,9 +143,21 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
     const vsRowDimStyle = useAnimatedStyle(() => ({ opacity: 1 - submitDim.value * 0.35 }))
 
     const [candidatePreviewUrl, setCandidatePreviewUrl] = useState<string | null>(null)
+    const [candidateAppleViewUrl, setCandidateAppleViewUrl] = useState<string | null>(null)
+    const [candidatePreviewLoading, setCandidatePreviewLoading] = useState(false)
+    const [candidateLazyPreviewLoading, setCandidateLazyPreviewLoading] = useState(false)
+    const [shouldPlayCandidateAfterLoad, setShouldPlayCandidateAfterLoad] = useState(false)
+    const [targetPreviewUrl, setTargetPreviewUrl] = useState<string | null>(session.target_song.preview_url)
+    const [targetAppleViewUrl, setTargetAppleViewUrl] = useState<string | null>(
+        session.target_song.provider === "apple" && session.target_song.preview_url !== null
+            ? session.target_song.apple_view_url ?? null
+            : null,
+    )
+    const [targetLazyPreviewLoading, setTargetLazyPreviewLoading] = useState(false)
+    const [shouldPlayTargetAfterLoad, setShouldPlayTargetAfterLoad] = useState(false)
     const candidateShownAtRef = useRef<number | null>(null)
     const candidatePlayer = useAudioPlayer(candidatePreviewUrl)
-    const targetPlayer = useAudioPlayer(session.target_song.preview_url)
+    const targetPlayer = useAudioPlayer(targetPreviewUrl)
 
     useEffect(() => {
         return navigation.addListener("blur", () => {
@@ -254,13 +266,83 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
         }
     }
 
+    const candidate = session.candidate
+    const targetSongId = session.target_song.id ?? session.target_song.song_id ?? null
+    const targetCanFetchSavedPreview = targetSongId != null
+        && targetPreviewUrl === null
+        && session.target_song.preview_available === true
+    const candidateSongId = candidate?.song.id ?? candidate?.song_id ?? null
+    const candidateCanFetchSavedPreview = candidateSongId != null
+        && candidatePreviewUrl === null
+        && candidate?.song.preview_available === true
+
+    const handleTargetPreviewPress = async () => {
+        if (targetPreviewUrl !== null) {
+            candidatePlayer.stop()
+            targetPlayer.toggle()
+            return
+        }
+        if (!token || targetSongId == null || !targetCanFetchSavedPreview || targetLazyPreviewLoading) return
+        setTargetLazyPreviewLoading(true)
+        try {
+            const response = await fetchPreviewUrlBySongId(targetSongId, token)
+            setTargetAppleViewUrl(response.apple_view_url)
+            if (response.preview_url !== null) {
+                setTargetPreviewUrl(response.preview_url)
+                setShouldPlayTargetAfterLoad(true)
+            }
+        } catch {
+            setTargetPreviewUrl(null)
+        } finally {
+            setTargetLazyPreviewLoading(false)
+        }
+    }
+
+    const handleCandidatePreviewPress = async () => {
+        if (candidatePreviewUrl !== null) {
+            targetPlayer.stop()
+            candidatePlayer.toggle()
+            return
+        }
+        if (!token || candidateSongId == null || !candidateCanFetchSavedPreview || candidateLazyPreviewLoading) return
+        setCandidateLazyPreviewLoading(true)
+        try {
+            const response = await fetchPreviewUrlBySongId(candidateSongId, token)
+            setCandidateAppleViewUrl(response.apple_view_url)
+            if (response.preview_url !== null) {
+                setCandidatePreviewUrl(response.preview_url)
+                setShouldPlayCandidateAfterLoad(true)
+            }
+        } catch {
+            setCandidatePreviewUrl(null)
+        } finally {
+            setCandidateLazyPreviewLoading(false)
+        }
+    }
+
     useEffect(() => {
         const candidate = session.candidate
-        if (candidate === null) { setCandidatePreviewUrl(null); return }
-        if (!token) { setCandidatePreviewUrl(candidate.song.preview_url); return }
+        if (candidate === null) {
+            setCandidatePreviewUrl(null)
+            setCandidateAppleViewUrl(null)
+            setCandidatePreviewLoading(false)
+            return
+        }
+        if (!token) {
+            setCandidatePreviewUrl(candidate.song.preview_url)
+            setCandidateAppleViewUrl(null)
+            setCandidatePreviewLoading(false)
+            return
+        }
         const candidateSong = candidate.song
         if (candidateSong.deezer_id == null) {
             setCandidatePreviewUrl(candidate.song.preview_url)
+            setCandidateAppleViewUrl(
+                candidateSong.provider === "apple" && candidateSong.preview_url !== null
+                    ? candidateSong.apple_view_url ?? null
+                    : null,
+            )
+            setCandidatePreviewLoading(false)
             return
         }
         const candidateDeezerId = candidateSong.deezer_id
@@ -268,6 +350,8 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
         let isActive = true
         const authToken = token
         setCandidatePreviewUrl(null)
+        setCandidateAppleViewUrl(null)
+        setCandidatePreviewLoading(true)
 
         async function loadCandidatePreviewUrl() {
             try {
@@ -275,11 +359,36 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
                 if (isActive) setCandidatePreviewUrl(url)
             } catch {
                 if (isActive) setCandidatePreviewUrl(candidateSong.preview_url)
+            } finally {
+                if (isActive) setCandidatePreviewLoading(false)
             }
         }
         loadCandidatePreviewUrl()
         return () => { isActive = false }
     }, [session.candidate, token])
+
+    useEffect(() => {
+        setTargetPreviewUrl(session.target_song.preview_url)
+        setTargetAppleViewUrl(
+            session.target_song.provider === "apple" && session.target_song.preview_url !== null
+                ? session.target_song.apple_view_url ?? null
+                : null,
+        )
+    }, [session.target_song])
+
+    useEffect(() => {
+        if (!shouldPlayTargetAfterLoad || targetPreviewUrl === null) return
+        setShouldPlayTargetAfterLoad(false)
+        candidatePlayer.stop()
+        targetPlayer.toggle()
+    }, [candidatePlayer, shouldPlayTargetAfterLoad, targetPlayer, targetPreviewUrl])
+
+    useEffect(() => {
+        if (!shouldPlayCandidateAfterLoad || candidatePreviewUrl === null) return
+        setShouldPlayCandidateAfterLoad(false)
+        targetPlayer.stop()
+        candidatePlayer.toggle()
+    }, [candidatePlayer, candidatePreviewUrl, shouldPlayCandidateAfterLoad, targetPlayer])
 
     useEffect(() => {
         if (session.candidate === null) { candidateShownAtRef.current = null; return }
@@ -290,12 +399,17 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
         submitDim.value = withTiming(isSubmitting ? 1 : 0, { duration: 160 })
     }, [isSubmitting, submitDim])
 
-    const candidate = session.candidate
     const rankings = session.current_bucket_rankings
-    const targetHasApplePreview = session.target_song.provider === "apple" && session.target_song.preview_url !== null
+    const targetHasApplePreview = targetPreviewUrl !== null && targetAppleViewUrl !== null
+    const candidateHasApplePreview = candidatePreviewUrl !== null && candidateAppleViewUrl !== null
     const handleOpenTargetApple = () => {
-        if (session.target_song.apple_view_url) {
-            Linking.openURL(session.target_song.apple_view_url).catch(() => {})
+        if (targetAppleViewUrl) {
+            Linking.openURL(targetAppleViewUrl).catch(() => {})
+        }
+    }
+    const handleOpenCandidateApple = () => {
+        if (candidateAppleViewUrl) {
+            Linking.openURL(candidateAppleViewUrl).catch(() => {})
         }
     }
 
@@ -574,14 +688,21 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
                                 <Text style={styles.newBadgeText}>NEW</Text>
                             </View>
                             {/* Preview button — bottom-right of art */}
-                            {session.target_song.preview_url !== null && (
+                            {(targetPreviewUrl !== null || targetCanFetchSavedPreview || targetLazyPreviewLoading) && (
                                 <View style={styles.artPlayBtnWrap}>
                                     <TouchableOpacity
                                         style={styles.artPlayBtn}
-                                        onPress={(e) => { e.stopPropagation(); candidatePlayer.stop(); targetPlayer.toggle() }}
+                                        onPress={(e) => { e.stopPropagation(); handleTargetPreviewPress() }}
                                         activeOpacity={0.8}
+                                        disabled={targetLazyPreviewLoading}
                                     >
-                                        {targetPlayer.isPlaying ? <PauseIcon color={colors.ink} /> : <PlayIcon color={colors.ink} />}
+                                        {targetLazyPreviewLoading ? (
+                                            <ActivityIndicator color={colors.ink} size="small" />
+                                        ) : targetPlayer.isPlaying ? (
+                                            <PauseIcon color={colors.ink} />
+                                        ) : (
+                                            <PlayIcon color={colors.ink} />
+                                        )}
                                     </TouchableOpacity>
                                 </View>
                             )}
@@ -591,7 +712,7 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
                         {targetHasApplePreview && (
                             <View style={styles.appleAttribution}>
                                 <Text style={styles.appleCourtesy} numberOfLines={1}>provided courtesy of iTunes</Text>
-                                {session.target_song.apple_view_url != null && (
+                                {targetAppleViewUrl != null && (
                                     <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleOpenTargetApple() }}>
                                         <Text style={styles.appleLink} numberOfLines={1}>Get on Apple Music</Text>
                                     </TouchableOpacity>
@@ -628,22 +749,39 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
                                 ) : (
                                     <View style={[styles.pairArt, { backgroundColor: colors.paper2 }]} />
                                 )}
-                                {candidatePreviewUrl !== null && (
+                                {(candidatePreviewUrl !== null || candidateCanFetchSavedPreview || candidatePreviewLoading || candidateLazyPreviewLoading) && (
                                     // Fades in when the fresh preview URL resolves instead of popping
                                     <Animated.View entering={FadeIn.duration(180)} style={styles.artPlayBtnWrap}>
                                         <TouchableOpacity
                                             accessibilityLabel="Preview candidate"
                                             style={styles.artPlayBtn}
-                                            onPress={(e) => { e.stopPropagation(); targetPlayer.stop(); candidatePlayer.toggle() }}
+                                            onPress={(e) => { e.stopPropagation(); handleCandidatePreviewPress() }}
                                             activeOpacity={0.8}
+                                            disabled={candidatePreviewLoading || candidateLazyPreviewLoading}
                                         >
-                                            {candidatePlayer.isPlaying ? <PauseIcon color={colors.ink} /> : <PlayIcon color={colors.ink} />}
+                                            {candidatePreviewLoading || candidateLazyPreviewLoading ? (
+                                                <ActivityIndicator color={colors.ink} size="small" />
+                                            ) : candidatePlayer.isPlaying ? (
+                                                <PauseIcon color={colors.ink} />
+                                            ) : (
+                                                <PlayIcon color={colors.ink} />
+                                            )}
                                         </TouchableOpacity>
                                     </Animated.View>
                                 )}
                             </View>
                             <Text style={styles.pairTitle} numberOfLines={2}>{candidate.song.title}</Text>
                             <Text style={styles.pairArtist} numberOfLines={1}>{candidate.song.artist}</Text>
+                            {candidateHasApplePreview && (
+                                <View style={styles.appleAttribution}>
+                                    <Text style={styles.appleCourtesy} numberOfLines={1}>provided courtesy of iTunes</Text>
+                                    {candidateAppleViewUrl != null && (
+                                        <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleOpenCandidateApple() }}>
+                                            <Text style={styles.appleLink} numberOfLines={1}>Get on Apple Music</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            )}
                         </Animated.View>
                     </TouchableOpacity>
                 </Animated.View>

@@ -10,6 +10,7 @@ import { ComparisonSessionResponse } from "../types"
 const mockGoBack = jest.fn()
 const mockReplace = jest.fn()
 const mockListMyRankings = jest.fn()
+const mockFetchPreviewUrlBySongId = jest.fn()
 const mockFinalizeRating = jest.fn()
 const mockStartComparisonSession = jest.fn()
 const mockAddNavigationListener = jest.fn()
@@ -35,6 +36,10 @@ jest.mock("../../auth/AuthContext", () => ({
 
 jest.mock("../../rankings/apiRequests", () => ({
     listMyRankings: (...args: unknown[]) => mockListMyRankings(...args),
+}))
+
+jest.mock("../../songs/apiRequests", () => ({
+    fetchPreviewUrlBySongId: (...args: unknown[]) => mockFetchPreviewUrlBySongId(...args),
 }))
 
 jest.mock("../apiRequests", () => ({
@@ -107,6 +112,10 @@ beforeEach(() => {
     })
     mockAddNavigationListener.mockReturnValue(jest.fn())
     mockListMyRankings.mockResolvedValue(emptyRankingsResponse)
+    mockFetchPreviewUrlBySongId.mockResolvedValue({
+        preview_url: "https://example.com/apple-live-preview.m4a",
+        apple_view_url: "https://music.apple.com/us/album/saved/42?i=42",
+    })
     mockFinalizeRating.mockResolvedValue({
         ranking: {},
         rating_event: {},
@@ -144,6 +153,41 @@ describe("BucketSelectionScreen", () => {
 
         expect(screen.queryByLabelText("Play preview")).toBeNull()
         expect(screen.queryByLabelText("Stop preview")).toBeNull()
+    })
+
+    it("uses by-song preview lazily for saved Apple songs", async () => {
+        const savedAppleSong: SongSearchResult = {
+            id: 42,
+            provider: "apple",
+            deezer_id: null,
+            isrc: null,
+            title: "Saved Apple",
+            artist: "Frank Ocean",
+            artist_deezer_id: null,
+            album: "Blonde",
+            cover_url: "https://example.com/apple.jpg",
+            preview_url: null,
+            preview_available: true,
+            apple_view_url: null,
+        }
+
+        render(<BucketSelectionScreen navigation={navigation as never} route={buildRoute(savedAppleSong) as never} />)
+
+        const playButton = screen.getByLabelText("Play preview")
+        expect(mockFetchPreviewUrlBySongId).not.toHaveBeenCalled()
+
+        await act(async () => {
+            fireEvent.press(playButton)
+        })
+
+        await waitFor(() => {
+            expect(mockFetchPreviewUrlBySongId).toHaveBeenCalledWith(42, "test-token")
+        })
+        await waitFor(() => {
+            expect(mockCreatePlayer).toHaveBeenCalledWith("https://example.com/apple-live-preview.m4a")
+        })
+        expect(screen.getByText("provided courtesy of iTunes")).toBeTruthy()
+        expect(screen.getByText("Get on Apple Music")).toBeTruthy()
     })
 
     it("empty bucket finalizes rating and replaces to ScoreReveal", async () => {

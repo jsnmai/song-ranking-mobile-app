@@ -8,6 +8,7 @@ import { ComparisonSessionResponse } from "../types"
 const mockNavigate = jest.fn()
 const mockReplace = jest.fn()
 const mockFetchPreviewUrl = jest.fn()
+const mockFetchPreviewUrlBySongId = jest.fn()
 const mockPlay = jest.fn()
 const mockCreatePlayer = jest.fn()
 const mockAddNavigationListener = jest.fn()
@@ -29,6 +30,7 @@ jest.mock("../../auth/AuthContext", () => ({
 
 jest.mock("../../songs/apiRequests", () => ({
     fetchPreviewUrl: (...args: unknown[]) => mockFetchPreviewUrl(...args),
+    fetchPreviewUrlBySongId: (...args: unknown[]) => mockFetchPreviewUrlBySongId(...args),
 }))
 
 jest.mock("../apiRequests", () => ({
@@ -118,6 +120,10 @@ beforeEach(() => {
     })
     mockAddNavigationListener.mockReturnValue(jest.fn())
     mockFetchPreviewUrl.mockResolvedValue("https://example.com/fresh-preview.mp3")
+    mockFetchPreviewUrlBySongId.mockResolvedValue({
+        preview_url: "https://example.com/apple-live-preview.m4a",
+        apple_view_url: "https://music.apple.com/us/album/saved/42?i=42",
+    })
 })
 
 afterEach(() => {
@@ -139,6 +145,48 @@ describe("ComparisonFlowScreen", () => {
 
         expect(mockCreatePlayer).toHaveBeenCalledWith("https://example.com/fresh-preview.mp3")
         expect(mockPlay).toHaveBeenCalledTimes(1)
+        act(() => {
+            rendered.unmount()
+        })
+    })
+
+    it("uses by-song preview lazily for saved Apple candidates", async () => {
+        const appleRoute = {
+            params: {
+                session: {
+                    ...session,
+                    candidate: {
+                        ...session.candidate!,
+                        song: {
+                            ...session.candidate!.song,
+                            deezer_id: null,
+                            provider: "apple",
+                            preview_url: null,
+                            preview_available: true,
+                            apple_view_url: null,
+                        },
+                    },
+                },
+            },
+        }
+
+        const rendered = render(<ComparisonFlowScreen navigation={navigation as never} route={appleRoute as never} />)
+
+        expect(mockFetchPreviewUrl).not.toHaveBeenCalled()
+        expect(mockFetchPreviewUrlBySongId).not.toHaveBeenCalled()
+
+        const previewButton = await screen.findByLabelText("Preview candidate")
+        await act(async () => {
+            fireEvent.press(previewButton, { stopPropagation: jest.fn() })
+        })
+
+        await waitFor(() => {
+            expect(mockFetchPreviewUrlBySongId).toHaveBeenCalledWith(42, "test-token")
+        })
+        await waitFor(() => {
+            expect(mockCreatePlayer).toHaveBeenCalledWith("https://example.com/apple-live-preview.m4a")
+        })
+        expect(screen.getByText("provided courtesy of iTunes")).toBeTruthy()
         act(() => {
             rendered.unmount()
         })

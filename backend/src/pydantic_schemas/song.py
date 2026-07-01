@@ -143,6 +143,13 @@ class PreviewUrlResponse(BaseModel):
     preview_url: str | None
 
 
+class SavedSongPreviewUrlResponse(BaseModel):
+    """Response shape for provider-neutral durable song preview lookup."""
+
+    preview_url: str | None
+    apple_view_url: str | None
+
+
 class SongResponse(BaseModel):
     """Response shape for a persisted song."""
 
@@ -170,6 +177,9 @@ class SongResponse(BaseModel):
     global_avg_score: float | None
     global_rating_count: int
     created_at: datetime
+    provider: str | None = None
+    apple_view_url: str | None = None
+    preview_available: bool | None = None
 
     @model_validator(mode="after")
     def hide_low_sample_global_average(self) -> "SongResponse":

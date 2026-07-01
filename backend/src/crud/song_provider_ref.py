@@ -34,6 +34,39 @@ def get_by_provider_track(
     ).scalar_one_or_none()
 
 
+def get_song_provider_ref(
+    db: Session,
+    song_id: int,
+    provider: str,
+) -> SongProviderRef | None:
+    """Return one provider reference for a durable song, or None."""
+    return db.execute(
+        select(SongProviderRef)
+        .where(SongProviderRef.song_id == song_id)
+        .where(SongProviderRef.provider == provider)
+    ).scalar_one_or_none()
+
+
+def list_apple_provider_refs_for_songs(
+    db: Session,
+    song_ids: list[int],
+) -> dict[int, SongProviderRef]:
+    """Return Apple provider refs for a batch of durable songs keyed by song_id."""
+    unique_song_ids = list(dict.fromkeys(song_ids))
+    if not unique_song_ids:
+        return {}
+
+    refs = db.execute(
+        select(SongProviderRef)
+        .where(SongProviderRef.provider == "apple")
+        .where(SongProviderRef.song_id.in_(unique_song_ids))
+    ).scalars().all()
+    return {
+        ref.song_id: ref
+        for ref in refs
+    }
+
+
 def get_song_by_provider_track(
     db: Session,
     provider: str,

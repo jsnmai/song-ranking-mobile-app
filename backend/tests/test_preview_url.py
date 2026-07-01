@@ -176,6 +176,36 @@ def test_preview_url_calls_deezer_when_expired(
     assert response.json() == {"preview_url": REFRESHED_URL}
 
 
+def test_preview_url_by_song_id_uses_legacy_deezer_refresh(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    """The provider-neutral route keeps legacy Deezer refresh behavior for Deezer songs."""
+    song = _insert_song(db_session, preview_url=EXPIRED_URL)
+    token = _get_token(client)
+
+    def mock_get(url: str, timeout: float) -> MockDeezerTrackResponse:
+        assert url == "https://api.deezer.com/track/123"
+        return MockDeezerTrackResponse(REFRESHED_URL)
+
+    monkeypatch.setattr("src.services.song.httpx.get", mock_get)
+
+    response = client.get(
+        f"/api/v1/songs/by-id/{song.id}/preview-url",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "preview_url": REFRESHED_URL,
+        "apple_view_url": None,
+    }
+    db_session.expire_all()
+    refreshed = db_session.get(Song, song.id)
+    assert refreshed.preview_url == REFRESHED_URL
+
+
 def test_preview_url_treats_null_expiry_as_expired(
     client: TestClient,
     db_session: Session,

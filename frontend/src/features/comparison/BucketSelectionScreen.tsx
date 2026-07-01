@@ -26,6 +26,7 @@ import { AppStackParamList } from "../../navigation/types"
 import { colors, fonts, bucketColor } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
 import { listMyRankings } from "../rankings/apiRequests"
+import { fetchPreviewUrlBySongId } from "../songs/apiRequests"
 import { finalizeRating, startComparisonSession } from "./apiRequests"
 import { BucketName } from "./types"
 
@@ -177,7 +178,13 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [note, setNote] = useState("")
     const [error, setError] = useState<string | null>(null)
-    const { isPlaying, currentTime, duration, toggle: toggleAudio, stop: stopAudio } = useAudioPlayer(song.preview_url)
+    const [previewUrl, setPreviewUrl] = useState<string | null>(song.preview_url)
+    const [previewAppleViewUrl, setPreviewAppleViewUrl] = useState<string | null>(
+        song.provider === "apple" && song.preview_url !== null ? song.apple_view_url ?? null : null,
+    )
+    const [isLazyPreviewLoading, setIsLazyPreviewLoading] = useState(false)
+    const [shouldPlayAfterPreviewLoad, setShouldPlayAfterPreviewLoad] = useState(false)
+    const { isPlaying, currentTime, duration, toggle: toggleAudio, stop: stopAudio } = useAudioPlayer(previewUrl)
     // Fill the ring from the actual audio clock (currentTime/duration) rather than a wall-clock
     // timer started on tap. isPlaying flips true synchronously when the play button is pressed, but
     // the audio doesn't start until the native player finishes buffering — a tap-started timer would
@@ -218,6 +225,12 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
         setError(null)
     }
 
+    const durableSongId = song.song_id ?? song.id ?? null
+    const canFetchSavedPreview = durableSongId != null
+        && previewUrl === null
+        && song.preview_available === true
+    const canAttemptPreview = previewUrl !== null || canFetchSavedPreview
+
     const handleContinue = async () => {
         if (!token || selectedBucket === null || isSubmitting) return
 
@@ -252,8 +265,41 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
     }
 
     const handleOpenApple = () => {
-        if (song.apple_view_url) {
-            Linking.openURL(song.apple_view_url).catch(() => {})
+        if (previewAppleViewUrl) {
+            Linking.openURL(previewAppleViewUrl).catch(() => {})
+        }
+    }
+
+    const handlePreviewPress = async () => {
+        if (previewUrl !== null) {
+            if (isPlaying) {
+                stopAudio()
+            } else {
+                toggleAudio()
+            }
+            return
+        }
+        if (!token || durableSongId == null || !canFetchSavedPreview || isLazyPreviewLoading) return
+        setIsLazyPreviewLoading(true)
+        setError(null)
+        try {
+            const response = await fetchPreviewUrlBySongId(
+                durableSongId,
+                token,
+            )
+            setPreviewAppleViewUrl(response.apple_view_url)
+            if (response.preview_url !== null) {
+                setPreviewUrl(response.preview_url)
+                setShouldPlayAfterPreviewLoad(true)
+            }
+        } catch (err) {
+            if (err instanceof ApiError) {
+                setError(err.detail)
+            } else {
+                setError("Could not load preview.")
+            }
+        } finally {
+            setIsLazyPreviewLoading(false)
         }
     }
 
@@ -276,6 +322,12 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
 
     const selectedColor = selectedBucket ? bucketColor(selectedBucket) : null
     const maxSheetH = screenH * 0.82
+
+    useEffect(() => {
+        if (!shouldPlayAfterPreviewLoad || previewUrl === null) return
+        setShouldPlayAfterPreviewLoad(false)
+        toggleAudio()
+    }, [previewUrl, shouldPlayAfterPreviewLoad, toggleAudio])
 
     return (
         <View style={styles.root}>
@@ -311,7 +363,7 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
                                 <Text style={styles.songTitle} numberOfLines={1}>{song.title}</Text>
                                 <Text style={styles.songArtist} numberOfLines={1}>{song.artist}</Text>
                             </View>
-                            {song.preview_url !== null && (
+                            {canAttemptPreview && (
                                 <View style={styles.playContainer}>
                                     <View style={styles.playRing}>
                                         <ProgressRing
@@ -321,22 +373,25 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
                                     </View>
                                     <TouchableOpacity
                                         style={[styles.playDot, { borderColor: "transparent" }]}
-                                        onPress={isPlaying ? stopAudio : toggleAudio}
+                                        onPress={handlePreviewPress}
                                         accessibilityRole="button"
                                         accessibilityLabel={isPlaying ? "Stop preview" : "Play preview"}
+                                        disabled={isLazyPreviewLoading}
                                     >
-                                        {isPlaying
-                                            ? <PauseIcon color={selectedColor ?? colors.inkDim} />
-                                            : <PlayIcon color={selectedColor ?? colors.inkDim} />
+                                        {isLazyPreviewLoading
+                                            ? <ActivityIndicator color={selectedColor ?? colors.inkDim} size="small" />
+                                            : isPlaying
+                                                ? <PauseIcon color={selectedColor ?? colors.inkDim} />
+                                                : <PlayIcon color={selectedColor ?? colors.inkDim} />
                                         }
                                     </TouchableOpacity>
                                 </View>
                             )}
                         </View>
-                        {song.provider === "apple" && song.preview_url !== null && (
+                        {previewUrl !== null && previewAppleViewUrl !== null && (
                             <View style={styles.appleAttributionRow}>
                                 <Text style={styles.appleCourtesy}>provided courtesy of iTunes</Text>
-                                {song.apple_view_url != null && (
+                                {previewAppleViewUrl != null && (
                                     <TouchableOpacity onPress={handleOpenApple}>
                                         <Text style={styles.appleLink}>Get on Apple Music</Text>
                                     </TouchableOpacity>

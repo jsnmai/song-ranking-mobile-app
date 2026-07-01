@@ -31,7 +31,7 @@ from src.crud.song import (
     increment_song_aggregate,
     upsert_from_deezer,
 )
-from src.crud.song_provider_ref import ensure_deezer_legacy_ref
+from src.crud.song_provider_ref import ensure_deezer_legacy_ref, list_apple_provider_refs_for_songs
 from src.pydantic_schemas.profile import ProfileReportResponse, RatingEventReportCreate
 from src.pydantic_schemas.rating import (
     RankingAnchorsResponse,
@@ -44,13 +44,14 @@ from src.pydantic_schemas.rating import (
     RatingFinalizeResponse,
     RatingRemoveResponse,
 )
-from src.pydantic_schemas.song import SongResponse
 from src.services.access import can_view_profile, can_view_taste
 from src.services.provider_catalog import resolve_song_for_finalize
+from src.services.song import build_song_response, build_song_response_from_provider_ref
 from src.services.streak import record_rating_activity
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
 from src.sqlalchemy_tables.song import Song
+from src.sqlalchemy_tables.song_provider_ref import SongProviderRef
 
 BUCKET_SCORE_RANGES = {
     "like": {
@@ -129,7 +130,10 @@ def finalize_rating(
         db.rollback()
         raise
 
-    response = build_rating_finalize_response(finalized_rating)
+    response = build_rating_finalize_response(
+        db,
+        finalized_rating,
+    )
     # Best-effort, post-commit: this counts the rating toward the weekly streak.
     # It is fully guarded internally and must never affect the committed rating.
     record_rating_activity(
@@ -254,11 +258,13 @@ def _decision_context_metadata(
 
 
 def build_rating_finalize_response(
+    db: Session,
     finalized_rating: FinalizedRatingState,
 ) -> RatingFinalizeResponse:
     """Build the public finalized-rating response shape."""
     return RatingFinalizeResponse(
         ranking=_ranking_response(
+            db,
             finalized_rating.ranking,
             finalized_rating.song,
         ),
@@ -279,11 +285,13 @@ def refresh_finalized_rating(
 
 
 def build_ranking_response(
+    db: Session,
     ranking: Ranking,
     song: Song,
 ) -> RankingResponse:
     """Build a public ranking response from a ranking row and song row."""
     return _ranking_response(
+        db,
         ranking,
         song,
     )
@@ -385,7 +393,10 @@ def get_my_ranking_by_deezer_id(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Rating not found.",
         )
-    return _ranking_with_song_response(row)
+    return _ranking_with_song_response(
+        db,
+        row,
+    )
 
 
 def get_my_ranking_by_song_id(
@@ -411,6 +422,7 @@ def get_my_ranking_by_song_id(
             detail="Rating not found.",
         )
     return _ranking_response(
+        db,
         ranking,
         song,
     )
@@ -527,9 +539,17 @@ def reorder_rankings(
         db,
         user_id,
     )
+    apple_refs = _apple_provider_refs_for_rows(
+        db,
+        refreshed_rows,
+    )
     return RankingReorderResponse(
         rankings=[
-            _ranking_with_song_response(row)
+            _ranking_with_song_response(
+                db,
+                row,
+                apple_refs,
+            )
             for row in refreshed_rows
         ],
         rating_events=[
@@ -561,10 +581,18 @@ def list_my_rankings(
     has_next_page = len(rows) > safe_limit
     page_rows = rows[:safe_limit]
     next_cursor = _build_cursor(page_rows[-1].ranking) if has_next_page and page_rows else None
+    apple_refs = _apple_provider_refs_for_rows(
+        db,
+        page_rows,
+    )
 
     return RankingListResponse(
         rankings=[
-            _ranking_with_song_response(row)
+            _ranking_with_song_response(
+                db,
+                row,
+                apple_refs,
+            )
             for row in page_rows
         ],
         next_cursor=next_cursor,
@@ -578,8 +606,19 @@ def list_my_bucket_rankings(
 ) -> RankingListResponse:
     """Return all rankings for one user in a specific bucket, ordered by position."""
     rows = list_user_bucket_rankings_with_songs(db, user_id=user_id, bucket=bucket)
+    apple_refs = _apple_provider_refs_for_rows(
+        db,
+        rows,
+    )
     return RankingListResponse(
-        rankings=[_ranking_with_song_response(row) for row in rows],
+        rankings=[
+            _ranking_with_song_response(
+                db,
+                row,
+                apple_refs,
+            )
+            for row in rows
+        ],
         next_cursor=None,
     )
 
@@ -604,11 +643,17 @@ def get_my_ranking_anchors(
         user_id,
         "dislike",
     )
+    apple_refs = _apple_provider_refs_for_rows(
+        db,
+        like_rows + okay_rows + dislike_rows,
+    )
 
     return RankingAnchorsResponse(
-        top_like=_ranking_with_song_response(like_rows[0]) if like_rows else None,
-        median_okay=_ranking_with_song_response(okay_rows[(len(okay_rows) - 1) // 2]) if okay_rows else None,
-        lowest_dislike=_ranking_with_song_response(dislike_rows[-1]) if dislike_rows else None,
+        top_like=_ranking_with_song_response(db, like_rows[0], apple_refs) if like_rows else None,
+        median_okay=_ranking_with_song_response(db, okay_rows[(len(okay_rows) - 1) // 2], apple_refs)
+        if okay_rows
+        else None,
+        lowest_dislike=_ranking_with_song_response(db, dislike_rows[-1], apple_refs) if dislike_rows else None,
     )
 
 
@@ -946,10 +991,23 @@ def _calculate_score(
 
 
 def _ranking_response(
+    db: Session,
     ranking: Ranking,
     song: Song,
+    apple_provider_refs: dict[int, SongProviderRef] | None = None,
 ) -> RankingResponse:
     """Build a ranking response with nested song metadata."""
+    if apple_provider_refs is None:
+        song_response = build_song_response(
+            db,
+            song.id,
+            song,
+        )
+    else:
+        song_response = build_song_response_from_provider_ref(
+            song,
+            apple_provider_refs.get(song.id),
+        )
     return RankingResponse(
         id=ranking.id,
         song_id=ranking.song_id,
@@ -958,17 +1016,35 @@ def _ranking_response(
         score=ranking.score,
         created_at=ranking.created_at,
         updated_at=ranking.updated_at,
-        song=SongResponse.model_validate(song),
+        song=song_response,
     )
 
 
 def _ranking_with_song_response(
+    db: Session,
     row: RankingRow,
+    apple_provider_refs: dict[int, SongProviderRef] | None = None,
 ) -> RankingResponse:
     """Build a ranking response from a repository row pair."""
     return _ranking_response(
+        db,
         row.ranking,
         row.song,
+        apple_provider_refs,
+    )
+
+
+def _apple_provider_refs_for_rows(
+    db: Session,
+    rows: list[RankingRow],
+) -> dict[int, SongProviderRef]:
+    """Preload Apple preview hints for ranking list responses in one query."""
+    return list_apple_provider_refs_for_songs(
+        db,
+        [
+            row.song.id
+            for row in rows
+        ],
     )
 
 

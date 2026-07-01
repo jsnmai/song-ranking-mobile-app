@@ -1,6 +1,6 @@
 // Tests for the immersive Rank Map screen: lens switching, star selection →
 // bloom card → Song Detail, and back navigation.
-import { fireEvent, render, screen } from "@testing-library/react-native"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native"
 
 import RankMapScreen from "../rankmap/RankMapScreen"
 import { RankingResponse } from "../../comparison/types"
@@ -36,8 +36,10 @@ jest.mock("../../../hooks/useAudioPlayer", () => ({
 
 // BloomCard fetches the live preview URL by deezer id (like Song Detail).
 const mockFetchPreviewUrl = jest.fn()
+const mockFetchPreviewUrlBySongId = jest.fn()
 jest.mock("../../songs/apiRequests", () => ({
     fetchPreviewUrl: (...args: unknown[]) => mockFetchPreviewUrl(...args),
+    fetchPreviewUrlBySongId: (...args: unknown[]) => mockFetchPreviewUrlBySongId(...args),
 }))
 
 jest.mock("../../auth/AuthContext", () => ({
@@ -97,6 +99,10 @@ beforeEach(() => {
     jest.resetAllMocks()
     mockRouteRankings = [ALPHA, BETA, GAMMA]
     mockFetchPreviewUrl.mockResolvedValue(null)
+    mockFetchPreviewUrlBySongId.mockResolvedValue({
+        preview_url: "https://example.com/apple-live-preview.m4a",
+        apple_view_url: "https://music.apple.com/us/album/saved/2?i=2",
+    })
 })
 
 describe("RankMapScreen", () => {
@@ -200,6 +206,35 @@ describe("RankMapScreen", () => {
         fireEvent.press(await screen.findByLabelText("Play Beta preview"))
 
         expect(mockToggle).toHaveBeenCalled()
+    })
+
+    it("uses by-song preview lazily for saved Apple bloom cards", async () => {
+        const savedAppleBeta: RankingResponse = {
+            ...BETA,
+            song: {
+                ...BETA.song,
+                deezer_id: null,
+                provider: "apple",
+                preview_url: null,
+                preview_available: true,
+                apple_view_url: null,
+            },
+        }
+        mockRouteRankings = [ALPHA, savedAppleBeta, GAMMA]
+
+        render(<RankMapScreen />)
+
+        fireEvent.press(screen.getByLabelText("Beta"))
+        expect(mockFetchPreviewUrl).not.toHaveBeenCalled()
+        expect(mockFetchPreviewUrlBySongId).not.toHaveBeenCalled()
+
+        await act(async () => {
+            fireEvent.press(await screen.findByLabelText("Play Beta preview"))
+        })
+
+        await waitFor(() => {
+            expect(mockFetchPreviewUrlBySongId).toHaveBeenCalledWith(2, "test-token")
+        })
     })
 
     it("goes back when the back control is pressed", () => {

@@ -51,7 +51,10 @@ def bookmark_song(
     )
     if row is None:
         raise RuntimeError("Bookmark disappeared after commit.")
-    return _bookmark_response(row)
+    return _bookmark_response(
+        db,
+        row,
+    )
 
 
 def list_my_bookmarks(
@@ -61,7 +64,10 @@ def list_my_bookmarks(
     """Return the authenticated user's Bookmarks, newest first."""
     return BookmarkListResponse(
         bookmarks=[
-            _bookmark_response(row)
+            _bookmark_response(
+                db,
+                row,
+            )
             for row in list_user_bookmarks(
                 db,
                 user_id=user_id,
@@ -84,7 +90,7 @@ def get_bookmark_status(
     )
     return BookmarkStatusResponse(
         is_bookmarked=row is not None,
-        bookmark=_bookmark_response(row) if row is not None else None,
+        bookmark=_bookmark_response(db, row) if row is not None else None,
     )
 
 
@@ -110,12 +116,15 @@ def remove_bookmark(
     )
 
 
-def _bookmark_response(row: BookmarkRow) -> BookmarkResponse:
+def _bookmark_response(
+    db: Session,
+    row: BookmarkRow,
+) -> BookmarkResponse:
     """Build one BookmarkResponse from owner-scoped joined data."""
     return BookmarkResponse(
         id=row.bookmark.id,
         source=row.bookmark.source,
         bookmarked_at=row.bookmark.created_at,
         song=row.song,
-        ranking=build_ranking_response(row.ranking, row.song) if row.ranking is not None else None,
+        ranking=build_ranking_response(db, row.ranking, row.song) if row.ranking is not None else None,
     )

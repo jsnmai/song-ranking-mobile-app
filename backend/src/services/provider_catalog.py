@@ -41,7 +41,7 @@ def resolve_song_for_finalize(
     if existing_song is not None:
         return existing_song
 
-    authoritative = _lookup_apple_song(
+    authoritative = lookup_apple_song(
         apple_track_id=apple_track_id,
         storefront=storefront,
     )
@@ -112,7 +112,7 @@ def _create_provider_ref_for_apple_song(
     )
 
 
-def _lookup_apple_song(
+def lookup_apple_song(
     apple_track_id: str,
     storefront: str,
 ) -> dict[str, object] | None:
