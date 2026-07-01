@@ -33,6 +33,19 @@ def verify_password(
     )
 
 
+# A throwaway bcrypt hash, computed once at import. dummy_verify() runs a real
+# bcrypt comparison against it to burn the same ~250ms a genuine verify costs.
+# Failure paths that would otherwise skip hashing call it so response timing can
+# never reveal whether an account (or an active reset token) exists — the account
+# non-existence "fast path" is a classic user-enumeration oracle.
+_DECOY_HASH = bcrypt.hashpw(b"decoy", bcrypt.gensalt()).decode()
+
+
+def dummy_verify() -> None:
+    """Spend one bcrypt verify's worth of time to equalize auth-failure timing."""
+    bcrypt.checkpw(b"decoy", _DECOY_HASH.encode())
+
+
 def create_access_token(data: dict) -> str:
     """
     Return a signed JWT containing the given payload plus an expiry claim.

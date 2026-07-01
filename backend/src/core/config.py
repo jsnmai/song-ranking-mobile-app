@@ -48,8 +48,10 @@ class Settings(BaseSettings):
     #       needed. Set smtp_username/smtp_password and email_from.
     #   "resend": send via the Resend API. Best deliverability; needs a verified
     #       sending domain. Set resend_api_key and a domain email_from.
-    # A provider selected without its credentials falls back to "console" (logs),
-    # so a missing secret never crashes boot or leaks the code in production.
+    # A real provider (smtp/resend) selected without its credentials does NOT
+    # fall back to logging — it fails closed (warns, drops the message) so a
+    # missing secret never leaks a live reset code into the logs. "console" is a
+    # dev/test-only backend that logs the code; never select it in production.
     email_provider: str = "console"
 
     # SMTP backend (email_provider="smtp"). For Gmail the host/port defaults work;

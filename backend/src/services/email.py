@@ -1,7 +1,10 @@
 # Transactional email with a pluggable backend selected by EMAIL_PROVIDER:
-#   "console" (default) — log the message instead of sending (dev/tests, keyless)
+#   "console" (default) — log the message instead of sending (dev/tests, keyless).
+#                         Logs the reset code, so never select this in production.
 #   "smtp"              — send via SMTP (e.g. Gmail with an App Password)
 #   "resend"            — send via the Resend REST API (over httpx)
+# A real provider selected without credentials fails closed (warns, drops the
+# message) rather than logging the code — see send_email.
 # Helpers are fired from FastAPI BackgroundTasks so the HTTP response returns
 # immediately and at constant time (no timing leak on whether mail was sent).
 # Sending is best-effort: failures are logged and swallowed so an email outage
@@ -29,11 +32,13 @@ def send_email(
     """
     Send one transactional email through the configured provider.
 
-    Dispatches on settings.email_provider. A provider whose credentials are not
-    set falls back to the console backend (logs the message, including the reset
-    code), so local dev and tests run with no external service and a misconfigured
-    production deploy degrades to logging instead of crashing. Swapping providers
-    is a one-variable change (EMAIL_PROVIDER=smtp|resend).
+    Dispatches on settings.email_provider. The "console" backend logs the full
+    message (including the reset code) so local dev and tests run with no external
+    service — it must never be selected in production. If a REAL provider (smtp /
+    resend) is selected but its credentials are missing, the send fails closed with
+    a warning and the body is NOT logged: the message text carries a live reset
+    code, so logging it would turn a misconfiguration into a credential leak.
+    Swapping providers is a one-variable change (EMAIL_PROVIDER=smtp|resend).
     """
     provider = settings.email_provider.lower()
 
@@ -41,20 +46,28 @@ def send_email(
         _send_via_resend(to, subject, html, text)
     elif provider == "smtp" and settings.smtp_username and settings.smtp_password:
         _send_via_smtp(to, subject, html, text)
+    elif provider == "console":
+        _log_console_email(to, subject, text)
     else:
-        _log_instead_of_send(provider, to, subject, text)
+        # Real provider selected but not fully configured. Fail closed and loud —
+        # never log `text` (it contains the plaintext reset code).
+        logger.warning(
+            "Email NOT sent: provider=%r is selected but missing credentials; "
+            "dropped message to %s (%s). Set the provider's credentials.",
+            provider,
+            to,
+            subject,
+        )
 
 
-def _log_instead_of_send(
-    provider: str,
+def _log_console_email(
     to: str,
     subject: str,
     text: str,
 ) -> None:
-    """Console backend and safety fallback: log the message rather than sending it."""
+    """Dev/test "console" backend: log the message (incl. reset code) instead of sending."""
     logger.info(
-        "Email send skipped (provider=%s not fully configured); would have sent to %s: %s\n%s",
-        provider,
+        "[console email] to %s: %s\n%s",
         to,
         subject,
         text,

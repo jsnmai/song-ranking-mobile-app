@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from src.core.config import settings
 from src.core.security import (
     create_access_token,
+    dummy_verify,
     email_throttle_hash,
     hash_password,
     verify_password,
@@ -212,13 +213,19 @@ def request_password_reset(
         record_request(db, email_hash)
 
         user = get_by_email(db, email)
+        # Generate + bcrypt-hash the code on BOTH the known and unknown paths. The
+        # bcrypt hash (~250ms) dominates request time, so hashing only when the
+        # account exists would make the response measurably slower for registered
+        # emails — a reliable enumeration oracle that defeats the identical
+        # GENERIC_RESET_MESSAGE. On the unknown path the hash is simply discarded.
+        code = f"{secrets.randbelow(1_000_000):06d}"  # cryptographically secure 6-digit code
+        hashed_code = hash_password(code)
         if user is not None:
-            code = f"{secrets.randbelow(1_000_000):06d}"  # cryptographically secure 6-digit code
             invalidate_user_tokens(db, user.id, consumed_at=now)
             create_token(
                 db,
                 user_id=user.id,
-                hashed_code=hash_password(code),
+                hashed_code=hashed_code,
                 expires_at=now + timedelta(minutes=settings.reset_code_ttl_minutes),
             )
             background_tasks.add_task(send_password_reset_code, user.email, code)
@@ -255,10 +262,11 @@ def confirm_password_reset(
     )
 
     user = get_by_email(db, email)
-    if user is None:
-        raise invalid
-    token = get_active_token_for_user(db, user.id, now)
+    token = get_active_token_for_user(db, user.id, now) if user is not None else None
     if token is None or token.attempts >= settings.reset_code_max_attempts:
+        # Spend the same bcrypt time the wrong-code branch below pays, so an
+        # unknown email / absent token can't be distinguished by response timing.
+        dummy_verify()
         raise invalid
 
     if not verify_password(code, token.hashed_code):
