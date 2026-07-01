@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 
 from src.crud.rating import RankingRow
 from src.crud.social_access import visible_taste_owner_predicate
-from src.sqlalchemy_tables.rating_event import RatingEvent
 from src.sqlalchemy_tables.ranking import Ranking
+from src.sqlalchemy_tables.rating_event import RatingEvent
 from src.sqlalchemy_tables.song import Song
 
 

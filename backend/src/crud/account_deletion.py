@@ -4,6 +4,7 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from src.sqlalchemy_tables.block import Block
+from src.sqlalchemy_tables.bookmark import Bookmark
 from src.sqlalchemy_tables.comparison import Comparison
 from src.sqlalchemy_tables.comparison_session import ComparisonSession
 from src.sqlalchemy_tables.follow import Follow
@@ -13,7 +14,6 @@ from src.sqlalchemy_tables.password_reset_token import PasswordResetToken
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
-from src.sqlalchemy_tables.bookmark import Bookmark
 from src.sqlalchemy_tables.user_similarity_snapshot import UserSimilaritySnapshot
 from src.sqlalchemy_tables.user_streak import UserStreak
 

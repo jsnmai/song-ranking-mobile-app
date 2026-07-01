@@ -24,7 +24,6 @@ from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.rating_event import RatingEvent
 from src.sqlalchemy_tables.song import Song
 
-
 # --- Helpers -----------------------------------------------------------------
 
 

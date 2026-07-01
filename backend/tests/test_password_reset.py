@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from src.core.config import settings
-from src.core.security import email_throttle_hash, verify_password
+from src.core.security import email_throttle_hash
 from src.sqlalchemy_tables.password_reset_request import PasswordResetRequest
 from src.sqlalchemy_tables.password_reset_token import PasswordResetToken
 from src.sqlalchemy_tables.user import User

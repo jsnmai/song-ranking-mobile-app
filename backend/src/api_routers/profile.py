@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
 from src.core.limiter import limiter
+from src.pydantic_schemas.auxstrology import AuxstrologyResponse
+from src.pydantic_schemas.bookmarks import BookmarkListResponse
 from src.pydantic_schemas.profile import (
     BlockedProfileListResponse,
     CompatibilityResponse,
@@ -30,7 +32,11 @@ from src.pydantic_schemas.profile_modules import (
     RecentRatingsResponse,
 )
 from src.pydantic_schemas.rating import RankingAnchorsResponse, RankingListResponse
-from src.pydantic_schemas.bookmarks import BookmarkListResponse
+from src.services.auxstrology import (
+    get_my_auxstrology,
+    get_user_auxstrology_by_username,
+)
+from src.services.entitlements import viewer_has_premium
 from src.services.profile import (
     block_profile,
     follow_profile,
@@ -51,19 +57,13 @@ from src.services.profile import (
     update_my_profile,
     update_my_visibility,
 )
-from src.services.entitlements import viewer_has_premium
 from src.services.profile_modules import (
     get_my_recent_ratings,
+    get_profile_activity,
     get_profile_ranking_anchors_by_username,
     get_profile_ranking_facets,
-    get_profile_activity,
     get_profile_rankings_by_username,
     get_profile_recent_ratings,
-)
-from src.pydantic_schemas.auxstrology import AuxstrologyResponse
-from src.services.auxstrology import (
-    get_my_auxstrology,
-    get_user_auxstrology_by_username,
 )
 from src.services.taste import (
     get_my_taste_profile,

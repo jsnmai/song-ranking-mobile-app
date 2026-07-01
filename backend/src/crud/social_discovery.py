@@ -5,9 +5,9 @@ from sqlalchemy import exists, select
 from sqlalchemy.orm import Session, aliased
 
 from src.crud.social_access import followed_visible_taste_owner_predicate
+from src.sqlalchemy_tables.bookmark import Bookmark
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
-from src.sqlalchemy_tables.bookmark import Bookmark
 from src.sqlalchemy_tables.song import Song
 
 

@@ -3,9 +3,8 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
-
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from src.crud.comparison_history import list_user_comparison_history
 from src.sqlalchemy_tables.comparison import Comparison

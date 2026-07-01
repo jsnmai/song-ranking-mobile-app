@@ -27,13 +27,13 @@ from scripts.seed_dev_demo import (
 from src.core.security import hash_password
 from src.crud.user import create_user_with_profile
 from src.sqlalchemy_tables.block import Block
+from src.sqlalchemy_tables.bookmark import Bookmark
 from src.sqlalchemy_tables.comparison import Comparison
 from src.sqlalchemy_tables.follow import Follow
 from src.sqlalchemy_tables.notification import Notification
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
-from src.sqlalchemy_tables.bookmark import Bookmark
 from src.sqlalchemy_tables.user import User
 from src.sqlalchemy_tables.user_similarity_snapshot import UserSimilaritySnapshot
 from tests.conftest import TEST_DATABASE_URL

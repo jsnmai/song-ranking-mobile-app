@@ -626,7 +626,7 @@ def test_recent_verdict_raters_lists_mutual_visible_members(
     """The Recent Verdict raters endpoint returns mutual + visible circle members who rate the song."""
     viewer_token = _register(client, "viewer@example.com", "viewer")
     member_token = _register(client, "member@example.com", "member")
-    stranger_token = _register(client, "stranger@example.com", "stranger")
+    _register(client, "stranger@example.com", "stranger")
     _mutual(client, viewer_token, member_token, "member")
     _follow(client, viewer_token, "stranger")  # one-way only — not in the circle
 

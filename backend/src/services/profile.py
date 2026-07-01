@@ -12,6 +12,7 @@ from src.crud.block import (
     has_block_between,
     list_blocked_profiles,
 )
+from src.crud.bookmarks import count_user_bookmarks, list_user_bookmarks
 from src.crud.follow import (
     count_followers,
     count_following,
@@ -24,8 +25,8 @@ from src.crud.follow import (
 from src.crud.profile import create_profile, get_by_user_id, get_by_username, search_by_username
 from src.crud.rating import count_user_rankings
 from src.crud.report import create_report
-from src.crud.bookmarks import count_user_bookmarks, list_user_bookmarks
 from src.crud.similarity import get_most_compatible_users, get_snapshot_for_pair
+from src.pydantic_schemas.bookmarks import BookmarkListResponse, BookmarkResponse
 from src.pydantic_schemas.profile import (
     BlockedProfileListResponse,
     CompatibilityResponse,
@@ -43,7 +44,6 @@ from src.pydantic_schemas.profile import (
     ProfileVisibilityUpdate,
     UserStats,
 )
-from src.pydantic_schemas.bookmarks import BookmarkListResponse, BookmarkResponse
 from src.services.access import can_view_profile, can_view_taste
 from src.services.access import is_plus as check_is_plus
 from src.services.notification import notify_follow
