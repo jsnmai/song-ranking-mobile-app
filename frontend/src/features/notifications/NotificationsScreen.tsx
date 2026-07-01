@@ -8,6 +8,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack"
 import { ApiError } from "../../api/client"
 import { FeedStackParamList } from "../../navigation/types"
 import { avatarColorFor, colors, fonts } from "../../theme"
+import { usePullRefresh } from "../../hooks/usePullRefresh"
 import { useAuth } from "../auth/AuthContext"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
 import { getNotifications, markNotificationsRead } from "./apiRequests"
@@ -61,6 +62,9 @@ export default function NotificationsScreen({ navigation }: Props) {
         await fetchPage(nextCursor)
         setIsLoadingMore(false)
     }
+
+    // Pull-to-refresh: re-fetch the first page (no cursor → replaces the list).
+    const { refreshing, onRefresh } = usePullRefresh(fetchPage)
 
     const openProfile = (item: NotificationItem) => {
         navigation.navigate("OtherProfile", { username: item.actor.username })
@@ -123,6 +127,8 @@ export default function NotificationsScreen({ navigation }: Props) {
                     contentContainerStyle={styles.list}
                     onEndReached={loadMore}
                     onEndReachedThreshold={0.4}
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
                     ListEmptyComponent={<Text style={styles.empty}>No notifications yet.</Text>}
                     ListFooterComponent={
                         isLoadingMore ? <ActivityIndicator color={colors.accent} style={styles.footerLoader} /> : null
@@ -148,7 +154,9 @@ const styles = StyleSheet.create({
     heading: { fontFamily: fonts.serif, color: colors.ink, fontSize: 30, lineHeight: 34 },
     loader: { marginTop: 48 },
     error: { color: colors.danger, fontSize: 14, textAlign: "center", margin: 24 },
-    list: { paddingHorizontal: 14, paddingTop: 8, paddingBottom: 32 },
+    // paddingTop gives the native pull-to-refresh wheel room to shrink back into empty space above
+    // the first row instead of grazing it on the way out.
+    list: { paddingHorizontal: 14, paddingTop: 24, paddingBottom: 32 },
     empty: { color: colors.inkSoft, fontSize: 14, textAlign: "center", marginTop: 48 },
     footerLoader: { marginVertical: 18 },
     row: {

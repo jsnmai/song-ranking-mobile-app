@@ -6,6 +6,7 @@ import {
     Image,
     Modal,
     Pressable,
+    RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
@@ -40,6 +41,7 @@ import HatchBox from "../../components/HatchBox"
 import { PulsingMeterTick } from "../../components/PulsingMeterTick"
 import { AppStackParamList, FeedStackParamList, TabParamList } from "../../navigation/types"
 import { colors, fonts, bucketColor, goldMeterShade, meterSegment, avatarColorFor } from "../../theme"
+import { usePullRefresh } from "../../hooks/usePullRefresh"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
 import ActivityLikeButton from "../activity/ActivityLikeButton"
 import RatingActivityCard from "../activity/RatingActivityCard"
@@ -361,6 +363,13 @@ export default function FeedScreen() {
         if (!nextCursor || isLoading || isLoadingMore) return
         loadFeed(nextCursor, false)
     }
+
+    // Pull-to-refresh: reload the first page of activity and the module aggregates together.
+    const refreshFeed = useCallback(
+        () => Promise.all([loadFeed(null, true), loadModules()]),
+        [loadFeed, loadModules],
+    )
+    const { refreshing, onRefresh } = usePullRefresh(refreshFeed)
 
     // Open the song behind the live Re-rate Radar card. Song Detail resolves the viewer's ranking.
     const handleRerateRadarPress = () => {
@@ -1857,6 +1866,16 @@ export default function FeedScreen() {
                 keyExtractor={(item) => item.id.toString()}
                 onEndReached={handleLoadMore}
                 onEndReachedThreshold={0.6}
+                // The list fills from the top (its header scrolls), so drop the refresh spinner below
+                // the status bar / Dynamic Island instead of letting it sit under the notch.
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        progressViewOffset={insets.top}
+                        tintColor={colors.inkDim}
+                    />
+                }
                 ListHeaderComponent={renderListHeader()}
                 ListFooterComponent={renderFooter}
                 maintainVisibleContentPosition={{ disabled: true }}
