@@ -110,14 +110,14 @@ export default function LoginScreen({ navigation }: Props) {
                             placeholderTextColor={INK_DIM}
                             secureTextEntry={!showPassword}
                         />
+                        <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                            <Text style={styles.showHide}>{showPassword ? "Hide" : "Show"}</Text>
+                        </TouchableOpacity>
                         {password.length > 0 && (
                             <TouchableOpacity onPress={() => setPassword("")} hitSlop={8}>
                                 <Text style={styles.clearBtn}>✕</Text>
                             </TouchableOpacity>
                         )}
-                        <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                            <Text style={styles.showHide}>{showPassword ? "Hide" : "Show"}</Text>
-                        </TouchableOpacity>
                     </View>
                 </View>
 
