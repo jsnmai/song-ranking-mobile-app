@@ -224,8 +224,13 @@ function PopularCard({
                                 hitSlop={{ top: 14, bottom: 14, left: 18, right: 18 }}
                             >
                                 <Text style={styles.popularViewLabel}>VIEW</Text>
-                                <Svg width={17} height={17} viewBox="0 0 24 24" fill="none" style={styles.popularViewChevron}>
-                                    <Path d="M5 12H19M12 5L19 12L12 19" stroke={colors.cream} strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" />
+                                {/* Just the arrowhead — a chevron, not a full shaft+head arrow.
+                                    Sharp (miter) tip so it reads as a crisp arrowhead, not a bubbly
+                                    icon. viewBox cropped tight so the stack stays centered. */}
+                                <Svg width={13} height={17} viewBox="6 4 12 16" fill="none" style={styles.popularViewChevron}>
+                                    {/* strokeWidth ~2.4 → renders ~2.6px, matching the Archivo Black
+                                        stem thickness of VIEW; same cream so word + arrow read as one. */}
+                                    <Path d="M9 6 L15 12 L9 18" stroke={colors.cream} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="miter" />
                                 </Svg>
                             </BouncyPressable>
                         </View>
@@ -1362,7 +1367,9 @@ const styles = StyleSheet.create({
     scroll: { flex: 1 },
     scrollContent: {
         paddingHorizontal: 14,
-        paddingTop: 8,
+        // Breathing room so the native pull-to-refresh wheel (which sits in the inset above the
+        // content) shrinks back into empty space, never grazing the first row on the way out.
+        paddingTop: 24,
         paddingBottom: 96,
     },
     spinner: { marginTop: 40 },
@@ -1624,16 +1631,21 @@ const styles = StyleSheet.create({
         paddingHorizontal: 8,
         paddingVertical: 5,
     },
-    // Archivo Black (display) so the word carries the same geometric heft as the bold arrow, and
-    // flat — no shadow — so the two read as one drawn asset rather than text-plus-icon.
+    // Archivo Black (display) so the word carries the same geometric heft as the bold arrow.
+    // lineHeight == fontSize + no font padding tightens the line box around the caps (Archivo
+    // Black otherwise leaves big descender slack). With the arrow box now cropped tight, only a
+    // hair of top offset is needed to land the visible word+arrow dead-center in the tile.
     popularViewLabel: {
         fontFamily: fonts.display,
         fontSize: 13,
+        lineHeight: 13,
+        includeFontPadding: false,
         letterSpacing: 0.5,
         color: colors.cream,
+        marginTop: -1,
     },
     popularViewChevron: {
-        marginTop: 2,
+        marginTop: 4,
     },
     coSignLockedCard: {
         backgroundColor: colors.berry,
