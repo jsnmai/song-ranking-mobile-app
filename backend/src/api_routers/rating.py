@@ -21,6 +21,7 @@ from src.services.rating import (
     finalize_rating,
     get_my_ranking_anchors,
     get_my_ranking_by_deezer_id,
+    get_my_ranking_by_song_id,
     list_my_bucket_rankings,
     list_my_rankings,
     remove_rating,
@@ -163,6 +164,25 @@ def my_ranking_by_deezer_id(
         db,
         user_id=current_user.id,
         deezer_id=deezer_id,
+    )
+
+
+@router.get(
+    "/rankings/me/by-song/{song_id}",
+    response_model=RankingResponse,
+)
+@limiter.limit("300/minute")
+def my_ranking_by_song_id(
+    request: Request,
+    song_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RankingResponse:
+    """Return the authenticated user's ranking for a durable LISTn song."""
+    return get_my_ranking_by_song_id(
+        db,
+        user_id=current_user.id,
+        song_id=song_id,
     )
 
 

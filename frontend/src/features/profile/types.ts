@@ -175,7 +175,7 @@ export type AuxstrologyResponse = {
 
 export type RecentRatingSong = {
     id: number;
-    deezer_id: number;
+    deezer_id: number | null;
     title: string;
     artist: string;
     album: string;

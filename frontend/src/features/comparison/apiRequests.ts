@@ -27,7 +27,11 @@ export async function finalizeRating(
     request: RatingFinalizeRequest,
     token: string,
 ): Promise<RatingFinalizeResponse> {
-    return apiClient.post<RatingFinalizeResponse>("/api/v1/ratings/finalize", request, token)
+    return apiClient.post<RatingFinalizeResponse>(
+        "/api/v1/ratings/finalize",
+        durableRatingRequest(request),
+        token,
+    )
 }
 
 export async function startComparisonSession(
@@ -35,6 +39,19 @@ export async function startComparisonSession(
     token: string,
 ): Promise<ComparisonSessionResponse> {
     return apiClient.post<ComparisonSessionResponse>("/api/v1/comparison-sessions", request, token)
+}
+
+function durableRatingRequest(request: RatingFinalizeRequest): RatingFinalizeRequest {
+    if (request.song.provider !== "apple") {
+        return request
+    }
+    return {
+        ...request,
+        song: {
+            ...request.song,
+            preview_url: null,
+        },
+    }
 }
 
 export async function getActiveComparisonSession(

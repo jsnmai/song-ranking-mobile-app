@@ -791,7 +791,7 @@ export default function DiscoverScreen() {
                                     const rated = song.my_bucket != null && song.my_score != null
                                     return (
                                         <TouchableOpacity
-                                            key={song.deezer_id}
+                                            key={song.apple_track_id ?? song.deezer_id ?? `${song.title}:${song.artist}`}
                                             style={[styles.resultRow, i > 0 && styles.resultRowBorder]}
                                             onPress={() => handleSongPress(song)}
                                             activeOpacity={0.75}

@@ -7,6 +7,7 @@ import {
     Image,
     KeyboardAvoidingView,
     Platform,
+    Linking,
     ScrollView,
     StyleSheet,
     Text,
@@ -250,13 +251,23 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
         }
     }
 
+    const handleOpenApple = () => {
+        if (song.apple_view_url) {
+            Linking.openURL(song.apple_view_url).catch(() => {})
+        }
+    }
+
     const bucketRequiresComparison = async (bucket: BucketName, authToken: string): Promise<boolean> => {
+        const durableSongId = song.song_id ?? song.id ?? null
         let cursor: string | undefined
         while (true) {
             const response = await listMyRankings(authToken, cursor)
-            const hasOtherSongInBucket = response.rankings.some(
-                (r) => r.bucket === bucket && r.song.deezer_id !== song.deezer_id,
-            )
+            const hasOtherSongInBucket = response.rankings.some((r) => {
+                if (r.bucket !== bucket) return false
+                if (durableSongId != null) return r.song_id !== durableSongId
+                if (song.deezer_id != null) return r.song.deezer_id !== song.deezer_id
+                return true
+            })
             if (hasOtherSongInBucket) return true
             if (response.next_cursor === null) return false
             cursor = response.next_cursor
@@ -322,6 +333,16 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
                                 </View>
                             )}
                         </View>
+                        {song.provider === "apple" && song.preview_url !== null && (
+                            <View style={styles.appleAttributionRow}>
+                                <Text style={styles.appleCourtesy}>provided courtesy of iTunes</Text>
+                                {song.apple_view_url != null && (
+                                    <TouchableOpacity onPress={handleOpenApple}>
+                                        <Text style={styles.appleLink}>Get on Apple Music</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        )}
 
                         {/* Bucket preview — fixed height so selection never shifts layout */}
                         <View style={styles.bucketPreview}>
@@ -528,6 +549,29 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.14,
         shadowRadius: 8,
         shadowOffset: { width: 0, height: 3 },
+    },
+    appleAttributionRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 10,
+        marginTop: -7,
+        marginBottom: 12,
+    },
+    appleCourtesy: {
+        fontFamily: fonts.mono,
+        fontSize: 8,
+        letterSpacing: 0,
+        color: colors.inkDim,
+        textTransform: "uppercase",
+        flexShrink: 1,
+    },
+    appleLink: {
+        fontFamily: fonts.mono,
+        fontSize: 8,
+        letterSpacing: 0,
+        color: colors.accent,
+        textTransform: "uppercase",
     },
     // ── Large bucket preview ─────────────────────────────────────────────────
     bucketPreview: {

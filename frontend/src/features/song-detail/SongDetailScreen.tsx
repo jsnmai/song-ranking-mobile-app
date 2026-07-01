@@ -11,6 +11,7 @@ import {
     Modal,
     ScrollView,
     Share,
+    Linking,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -28,7 +29,7 @@ import { colors, fonts, bucketColor } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
 import { useScoresLocked } from "../../hooks/useScoresLocked"
 import { LockIcon } from "../../components/LockIcon"
-import { getMyRankingByDeezerId, listMyRankings, listMyVersusHistory, removeRating } from "../rankings/apiRequests"
+import { getMyRankingByDeezerId, getMyRankingBySongId, listMyRankings, listMyVersusHistory, removeRating } from "../rankings/apiRequests"
 import { ComparisonHistoryReceipt } from "../rankings/types"
 import { RankingResponse } from "../comparison/types"
 import { fetchPreviewUrl } from "../songs/apiRequests"
@@ -200,7 +201,16 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
         }
         setRankingStatus("loading")
         try {
-            const resolved = await getMyRankingByDeezerId(passedSong.deezer_id, token)
+            const resolved = passedSong.song_id != null
+                ? await getMyRankingBySongId(passedSong.song_id, token)
+                : passedSong.deezer_id != null
+                    ? await getMyRankingByDeezerId(passedSong.deezer_id, token)
+                    : null
+            if (resolved === null) {
+                setResolvedRanking(null)
+                setRankingStatus("ready")
+                return
+            }
             setResolvedRanking(resolved)
             setRankingStatus("ready")
         } catch (err) {
@@ -211,7 +221,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                 setRankingStatus("error")
             }
         }
-    }, [token, passedSong.deezer_id])
+    }, [token, passedSong.deezer_id, passedSong.song_id])
 
     useEffect(() => {
         // Skip the lookup when the caller already handed us the ranking.
@@ -358,6 +368,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
 
     const handleBookmarkToggle = async () => {
         if (!token || isBookmarkUpdating) return
+        if (song.deezer_id == null) return
         setIsBookmarkUpdating(true)
         setError(null)
         try {
@@ -440,9 +451,15 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
             setIsPreviewLoading(false)
             return () => { isActive = false }
         }
+        if (song.provider === "apple" || song.deezer_id == null) {
+            setPreviewUrl(song.preview_url ?? null)
+            setIsPreviewLoading(false)
+            return () => { isActive = false }
+        }
+        const deezerId = song.deezer_id
         async function loadPreviewUrl() {
             try {
-                const url = await fetchPreviewUrl(song.deezer_id, token ?? "")
+                const url = await fetchPreviewUrl(deezerId, token ?? "")
                 if (isActive) setPreviewUrl(url)
             } catch {
                 if (isActive) setPreviewUrl(null)
@@ -452,7 +469,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
         }
         loadPreviewUrl()
         return () => { isActive = false }
-    }, [isRated, song.deezer_id, song.preview_url, token])
+    }, [isRated, song.deezer_id, song.preview_url, song.provider, token])
 
     useEffect(() => {
         let isActive = true
@@ -462,6 +479,11 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                 return
             }
             setIsBookmarkStatusLoading(true)
+            if (song.deezer_id == null) {
+                setBookmark(null)
+                setIsBookmarkStatusLoading(false)
+                return
+            }
             try {
                 const response = await getBookmarkStatus(song.deezer_id, token)
                 if (isActive) setBookmark(response.bookmark)
@@ -476,6 +498,13 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
         loadBookmarkState()
         return () => { isActive = false }
     }, [song.deezer_id, token])
+
+    const isApplePreview = song.provider === "apple" && previewUrl !== null
+    const handleOpenApple = () => {
+        if (song.apple_view_url) {
+            Linking.openURL(song.apple_view_url).catch(() => {})
+        }
+    }
 
     return (
         <View style={styles.container}>
@@ -575,15 +604,27 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                         </View>
                         <Text style={styles.previewDur}>{formatTime(currentTime)}</Text>
                     </View>
-                    <TouchableOpacity
-                        style={styles.bookmarkBtn}
-                        onPress={handleBookmarkToggle}
-                        disabled={isBookmarkStatusLoading || isBookmarkUpdating}
-                        accessibilityLabel={bookmark !== null ? "Remove Bookmark" : "Bookmark"}
-                    >
-                        <BookmarkIcon filled={bookmark !== null} />
-                    </TouchableOpacity>
+                    {song.deezer_id != null && (
+                        <TouchableOpacity
+                            style={styles.bookmarkBtn}
+                            onPress={handleBookmarkToggle}
+                            disabled={isBookmarkStatusLoading || isBookmarkUpdating}
+                            accessibilityLabel={bookmark !== null ? "Remove Bookmark" : "Bookmark"}
+                        >
+                            <BookmarkIcon filled={bookmark !== null} />
+                        </TouchableOpacity>
+                    )}
                 </View>
+                {isApplePreview && (
+                    <View style={styles.appleAttributionRow}>
+                        <Text style={styles.appleCourtesy}>provided courtesy of iTunes</Text>
+                        {song.apple_view_url != null && (
+                            <TouchableOpacity onPress={handleOpenApple}>
+                                <Text style={styles.appleLink}>Get on Apple Music</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                )}
 
                 {/* Action buttons */}
                 <View style={styles.actionRow}>
@@ -967,6 +1008,30 @@ const styles = StyleSheet.create({
         borderColor: colors.line,
         alignItems: "center",
         justifyContent: "center",
+    },
+    appleAttributionRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 10,
+        marginTop: -3,
+        marginBottom: 10,
+        paddingHorizontal: 2,
+    },
+    appleCourtesy: {
+        fontFamily: fonts.mono,
+        fontSize: 8,
+        letterSpacing: 0,
+        color: colors.inkDim,
+        textTransform: "uppercase",
+        flexShrink: 1,
+    },
+    appleLink: {
+        fontFamily: fonts.mono,
+        fontSize: 8,
+        letterSpacing: 0,
+        color: colors.accent,
+        textTransform: "uppercase",
     },
     // ── Action buttons ─────────────────────────────────────────────────
     actionRow: {

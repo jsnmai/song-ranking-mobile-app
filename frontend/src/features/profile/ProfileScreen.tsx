@@ -17,7 +17,7 @@ import { updateLikePrivacy } from "../activity/apiRequests"
 import OwnActivitySheet from "../activity/OwnActivitySheet"
 import RatingActivityCard from "../activity/RatingActivityCard"
 import { useAuth } from "../auth/AuthContext"
-import { getMyRankingByDeezerId, removeRating } from "../rankings/apiRequests"
+import { getMyRankingByDeezerId, getMyRankingBySongId, removeRating } from "../rankings/apiRequests"
 import {
     getMostCompatible, getMyAuxstrology, getMyProfile, getMyRecentRatings, getMyTasteProfile,
 } from "./apiRequests"
@@ -191,7 +191,9 @@ export default function ProfileScreen() {
         setMenuItem(null)
         try {
             // Re-rate needs the full catalog song (isrc/artist ids); the ranking carries it.
-            const ranking = await getMyRankingByDeezerId(item.song.deezer_id, token)
+            const ranking = item.song.deezer_id != null
+                ? await getMyRankingByDeezerId(item.song.deezer_id, token)
+                : await getMyRankingBySongId(item.song.id, token)
             navigation.navigate("BucketSelection", { song: ranking.song as never })
         } catch {
             navigation.navigate("BucketSelection", { song: item.song as never })

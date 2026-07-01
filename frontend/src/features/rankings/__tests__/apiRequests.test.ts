@@ -2,6 +2,7 @@
 import {
     getMyRankingAnchors,
     getMyRankingByDeezerId,
+    getMyRankingBySongId,
     listMyVersusHistory,
     listMyRankings,
     removeRating,
@@ -47,6 +48,14 @@ describe("rankings API requests", () => {
         await getMyRankingByDeezerId(123, "test-token")
 
         expect(mockGet).toHaveBeenCalledWith("/api/v1/rankings/me/by-deezer/123", "test-token")
+    })
+
+    it("gets one current ranking by LISTn song ID through the backend", async () => {
+        mockGet.mockResolvedValue({ id: 7 })
+
+        await getMyRankingBySongId(42, "test-token")
+
+        expect(mockGet).toHaveBeenCalledWith("/api/v1/rankings/me/by-song/42", "test-token")
     })
 
     it("gets current user's ranking anchors through the backend", async () => {

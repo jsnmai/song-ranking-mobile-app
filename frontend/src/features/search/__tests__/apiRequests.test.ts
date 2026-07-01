@@ -1,26 +1,80 @@
 // Tests for the search API request wrapper.
-// These verify the frontend calls LISTn's backend endpoint, not Deezer directly.
+// These verify the frontend calls Apple Search directly, then asks LISTn for annotations.
 import { searchSongs } from "../apiRequests"
 
-const mockGet = jest.fn()
+const mockPost = jest.fn()
+const mockFetch = jest.fn()
 
 jest.mock("../../../api/client", () => ({
     apiClient: {
-        get: (...args: unknown[]) => mockGet(...args),
+        post: (...args: unknown[]) => mockPost(...args),
     },
 }))
 
 beforeEach(() => {
     jest.resetAllMocks()
+    globalThis.fetch = mockFetch
 })
 
 describe("searchSongs", () => {
-    it("encodes the query and sends the auth token to the backend search endpoint", async () => {
-        mockGet.mockResolvedValue({ results: [] })
+    it("maps Apple search results and merges LISTn annotations", async () => {
+        mockFetch.mockResolvedValue({
+            ok: true,
+            json: jest.fn().mockResolvedValue({
+                results: [
+                    {
+                        trackId: 1440841363,
+                        trackName: "Nights",
+                        artistName: "Frank Ocean",
+                        collectionName: "Blonde",
+                        artworkUrl100: "https://is1-ssl.mzstatic.com/image/thumb/Music/cover/100x100bb.jpg",
+                        previewUrl: "https://audio-ssl.itunes.apple.com/apple-preview.m4a",
+                        trackViewUrl: "https://music.apple.com/us/album/nights/1440841363?i=1440841363",
+                        primaryGenreName: "R&B/Soul",
+                        trackTimeMillis: 307151,
+                        releaseDate: "2016-08-20T07:00:00Z",
+                        artistId: 442122051,
+                        collectionId: 1440840117,
+                        country: "US",
+                    },
+                ],
+            }),
+        })
+        mockPost.mockResolvedValue({
+            results: [
+                {
+                    apple_track_id: "1440841363",
+                    storefront: "US",
+                    song_id: 42,
+                    my_bucket: "like",
+                    my_score: 8.8,
+                    already_rated: true,
+                },
+            ],
+        })
 
         const response = await searchSongs("frank ocean", "test-token")
 
-        expect(response).toEqual({ results: [] })
-        expect(mockGet).toHaveBeenCalledWith("/api/v1/search/songs?q=frank%20ocean", "test-token")
+        expect(mockFetch).toHaveBeenCalledWith(
+            "https://itunes.apple.com/search?term=frank%20ocean&media=music&entity=song&country=US&limit=10",
+        )
+        expect(mockPost).toHaveBeenCalledWith(
+            "/api/v1/search/apple/annotations",
+            { results: [{ apple_track_id: "1440841363", storefront: "US" }] },
+            "test-token",
+        )
+        expect(response.results[0]).toMatchObject({
+            provider: "apple",
+            deezer_id: null,
+            apple_track_id: "1440841363",
+            title: "Nights",
+            cover_url: "https://is1-ssl.mzstatic.com/image/thumb/Music/cover/600x600bb.jpg",
+            preview_url: "https://audio-ssl.itunes.apple.com/apple-preview.m4a",
+            apple_view_url: "https://music.apple.com/us/album/nights/1440841363?i=1440841363",
+            song_id: 42,
+            my_bucket: "like",
+            my_score: 8.8,
+            preview_available: true,
+        })
     })
 })

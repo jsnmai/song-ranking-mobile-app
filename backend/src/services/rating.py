@@ -27,9 +27,11 @@ from src.crud.report import create_report, get_rating_event_for_report
 from src.crud.song import (
     adjust_song_aggregate,
     decrement_song_aggregate,
+    get_by_id,
     increment_song_aggregate,
     upsert_from_deezer,
 )
+from src.crud.song_provider_ref import ensure_deezer_legacy_ref
 from src.pydantic_schemas.profile import ProfileReportResponse, RatingEventReportCreate
 from src.pydantic_schemas.rating import (
     RankingAnchorsResponse,
@@ -44,6 +46,7 @@ from src.pydantic_schemas.rating import (
 )
 from src.pydantic_schemas.song import SongResponse
 from src.services.access import can_view_profile, can_view_taste
+from src.services.provider_catalog import resolve_song_for_finalize
 from src.services.streak import record_rating_activity
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
@@ -149,10 +152,30 @@ def persist_finalized_rating(
     Comparison-session finalization reuses this so rankings, events,
     comparisons, and session deletion can commit atomically.
     """
-    song = upsert_from_deezer(
-        db,
-        data.song,
-    )
+    if data.song.provider == "listn" and data.song.id is not None:
+        song = get_by_id(
+            db,
+            data.song.id,
+        )
+        if song is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Song not found.",
+            )
+    elif data.song.provider == "apple":
+        song = resolve_song_for_finalize(
+            db,
+            data.song,
+        )
+    else:
+        song = upsert_from_deezer(
+            db,
+            data.song,
+        )
+        ensure_deezer_legacy_ref(
+            db,
+            song,
+        )
     existing_ranking = get_user_ranking_by_song(
         db,
         user_id,
@@ -363,6 +386,34 @@ def get_my_ranking_by_deezer_id(
             detail="Rating not found.",
         )
     return _ranking_with_song_response(row)
+
+
+def get_my_ranking_by_song_id(
+    db: Session,
+    user_id: int,
+    song_id: int,
+) -> RankingResponse:
+    """Return one current ranking by durable LISTn song ID."""
+    ranking = get_user_ranking_by_song(
+        db,
+        user_id,
+        song_id,
+    )
+    if ranking is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Rating not found.",
+        )
+    song = db.get(Song, song_id)
+    if song is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Rating not found.",
+        )
+    return _ranking_response(
+        ranking,
+        song,
+    )
 
 
 def reorder_rankings(
