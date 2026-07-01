@@ -84,6 +84,12 @@ class Settings(BaseSettings):
     reset_max_requests_per_window: int = 5   # per-email cap of reset emails per window
     reset_request_window_minutes: int = 60   # window the per-email cap applies over
 
+    # Breached-password screening via Have I Been Pwned (k-anonymity: only the
+    # first 5 chars of the SHA-1 are sent). Enforced at register + reset, fail-open
+    # (a HIBP outage never blocks setting a password). Flip enabled off to disable.
+    pwned_password_check_enabled: bool = True
+    pwned_password_threshold: int = 0  # reject when breach count exceeds this (0 = reject if seen at all)
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=False,

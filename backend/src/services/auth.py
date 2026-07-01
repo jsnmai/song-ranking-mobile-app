@@ -44,6 +44,7 @@ from src.crud.user import create_user_with_profile, get_by_email, set_password
 from src.pydantic_schemas.auth import GenericMessage
 from src.pydantic_schemas.user import RegisterResponse, Token, UserRegister, UserResponse
 from src.services.email import send_no_account_notice, send_password_changed_notice, send_password_reset_code
+from src.services.pwned_passwords import is_password_pwned
 from src.sqlalchemy_tables.user import User
 
 AGE_GATE_VERSION = "2026-06-13-plus-v1"
@@ -55,6 +56,22 @@ GENERIC_RESET_MESSAGE = "If an account exists for that email, a reset code has b
 # Shared by every confirm-failure path (unknown email / no token / expired /
 # wrong code / over attempt cap) so none of them is distinguishable.
 INVALID_CODE_MESSAGE = "Invalid or expired code."
+BREACHED_PASSWORD_MESSAGE = "This password has appeared in a known data breach. Please choose a different password."
+
+
+def _reject_if_breached(password: str) -> None:
+    """
+    Reject a password found in a known data breach (HIBP screening).
+
+    Called wherever a password is set (register, reset). Fail-open: if the HIBP
+    check can't run, is_password_pwned returns False, so an outage never blocks a
+    signup or a reset.
+    """
+    if is_password_pwned(password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=BREACHED_PASSWORD_MESSAGE,
+        )
 
 
 def register_user(
@@ -90,6 +107,8 @@ def register_user(
             status_code=status.HTTP_409_CONFLICT,
             detail="Username already taken.",
         )
+
+    _reject_if_breached(data.password)
 
     hashed = hash_password(data.password)
     try:
@@ -288,6 +307,10 @@ def confirm_password_reset(
             db.rollback()
             raise
         raise invalid
+
+    # Code is valid: block a breached new password. The token is NOT consumed
+    # here, so the user can retry with the same code and a stronger password.
+    _reject_if_breached(new_password)
 
     try:
         set_password(db, user, hash_password(new_password), changed_at=now)

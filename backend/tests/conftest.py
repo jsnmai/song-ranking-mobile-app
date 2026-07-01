@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 import src.sqlalchemy_tables.auxstrology_snapshot  # noqa: F401 — registers AuxstrologySnapshot with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.block  # noqa: F401 — registers Block with Base.metadata so create_all() creates the table
+import src.sqlalchemy_tables.bookmark  # noqa: F401 — registers Bookmark with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.comparison  # noqa: F401 — registers Comparison with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.comparison_session  # noqa: F401 — registers ComparisonSession with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.follow  # noqa: F401 — registers Follow with Base.metadata so create_all() creates the table
@@ -21,7 +22,6 @@ import src.sqlalchemy_tables.profile  # noqa: F401 — registers Profile with Ba
 import src.sqlalchemy_tables.ranking  # noqa: F401 — registers Ranking with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.rating_event  # noqa: F401 — registers RatingEvent with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.report  # noqa: F401 — registers Report with Base.metadata so create_all() creates the table
-import src.sqlalchemy_tables.bookmark  # noqa: F401 — registers Bookmark with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.song  # noqa: F401 — registers Song with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.user  # noqa: F401 — registers User with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.user_similarity_snapshot  # noqa: F401 — registers UserSimilaritySnapshot with Base.metadata so create_all() creates the table
@@ -132,6 +132,21 @@ def block_musicbrainz_http(monkeypatch) -> None:
     monkeypatch.setattr(
         "src.services.musicbrainz.time.sleep",
         lambda seconds: None,
+    )
+
+
+@pytest.fixture(autouse=True)
+def neutralize_pwned_password_check(monkeypatch) -> None:
+    """
+    Treat no password as breached by default, so register/reset tests run offline
+    with any password. Tests that exercise the real behavior override
+    src.services.auth.is_password_pwned (integration) or mock
+    src.services.pwned_passwords.httpx.get (unit) in their own body — the last
+    setattr on a target wins because they share this monkeypatch instance.
+    """
+    monkeypatch.setattr(
+        "src.services.auth.is_password_pwned",
+        lambda password: False,
     )
 
 
