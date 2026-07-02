@@ -123,6 +123,7 @@ beforeEach(() => {
     mockFetchPreviewUrlBySongId.mockResolvedValue({
         preview_url: "https://example.com/apple-live-preview.m4a",
         apple_view_url: "https://music.apple.com/us/album/saved/42?i=42",
+        provider: "apple",
     })
 })
 
@@ -186,7 +187,9 @@ describe("ComparisonFlowScreen", () => {
         await waitFor(() => {
             expect(mockCreatePlayer).toHaveBeenCalledWith("https://example.com/apple-live-preview.m4a")
         })
-        expect(screen.getByText("provided courtesy of iTunes")).toBeTruthy()
+        // Attribution lives in the footer, replacing the tagline while the played preview is Apple's.
+        expect(screen.getByText("Provided courtesy of iTunes")).toBeTruthy()
+        expect(screen.queryByText("We'll find the fairest comparison.")).toBeNull()
         act(() => {
             rendered.unmount()
         })

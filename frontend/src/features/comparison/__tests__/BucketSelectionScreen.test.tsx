@@ -115,6 +115,7 @@ beforeEach(() => {
     mockFetchPreviewUrlBySongId.mockResolvedValue({
         preview_url: "https://example.com/apple-live-preview.m4a",
         apple_view_url: "https://music.apple.com/us/album/saved/42?i=42",
+        provider: "apple",
     })
     mockFinalizeRating.mockResolvedValue({
         ranking: {},
@@ -186,7 +187,7 @@ describe("BucketSelectionScreen", () => {
         await waitFor(() => {
             expect(mockCreatePlayer).toHaveBeenCalledWith("https://example.com/apple-live-preview.m4a")
         })
-        expect(screen.getByText("provided courtesy of iTunes")).toBeTruthy()
+        expect(screen.getByText("Provided courtesy of iTunes")).toBeTruthy()
         expect(screen.getByText("Get on Apple Music")).toBeTruthy()
     })
 

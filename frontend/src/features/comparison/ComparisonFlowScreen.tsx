@@ -144,6 +144,16 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
 
     const [candidatePreviewUrl, setCandidatePreviewUrl] = useState<string | null>(null)
     const [candidateAppleViewUrl, setCandidateAppleViewUrl] = useState<string | null>(null)
+    // Attribution is keyed on the preview's provider, not the store link: an Apple
+    // preview must render "Provided courtesy of iTunes" even if trackViewUrl is missing.
+    // The "unavailable" flags are set only when a lookup definitively reports no
+    // preview (not on network errors), hiding the play affordance for that song.
+    const [candidatePreviewIsApple, setCandidatePreviewIsApple] = useState(false)
+    const [candidatePreviewUnavailable, setCandidatePreviewUnavailable] = useState(false)
+    // Attribution stays hidden until the user actually starts that card's preview
+    // (then sticks for the card) — keeps the VS cards uncluttered until Apple
+    // content renders.
+    const [candidateHasPlayed, setCandidateHasPlayed] = useState(false)
     const [candidatePreviewLoading, setCandidatePreviewLoading] = useState(false)
     const [candidateLazyPreviewLoading, setCandidateLazyPreviewLoading] = useState(false)
     const [shouldPlayCandidateAfterLoad, setShouldPlayCandidateAfterLoad] = useState(false)
@@ -153,6 +163,12 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
             ? session.target_song.apple_view_url ?? null
             : null,
     )
+    const [targetPreviewIsApple, setTargetPreviewIsApple] = useState(session.target_song.provider === "apple")
+    const [targetPreviewUnavailable, setTargetPreviewUnavailable] = useState(false)
+    const [targetHasPlayed, setTargetHasPlayed] = useState(false)
+    // Which card's preview the user played last — the footer shows that side's
+    // Apple attribution in place of the tagline, keeping the VS cards clean.
+    const [lastPlayedSide, setLastPlayedSide] = useState<"target" | "candidate" | null>(null)
     const [targetLazyPreviewLoading, setTargetLazyPreviewLoading] = useState(false)
     const [shouldPlayTargetAfterLoad, setShouldPlayTargetAfterLoad] = useState(false)
     const candidateShownAtRef = useRef<number | null>(null)
@@ -271,12 +287,16 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
     const targetCanFetchSavedPreview = targetSongId != null
         && targetPreviewUrl === null
         && session.target_song.preview_available === true
+        && !targetPreviewUnavailable
     const candidateSongId = candidate?.song.id ?? candidate?.song_id ?? null
     const candidateCanFetchSavedPreview = candidateSongId != null
         && candidatePreviewUrl === null
         && candidate?.song.preview_available === true
+        && !candidatePreviewUnavailable
 
     const handleTargetPreviewPress = async () => {
+        setTargetHasPlayed(true)
+        setLastPlayedSide("target")
         if (targetPreviewUrl !== null) {
             candidatePlayer.stop()
             targetPlayer.toggle()
@@ -287,9 +307,12 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
         try {
             const response = await fetchPreviewUrlBySongId(targetSongId, token)
             setTargetAppleViewUrl(response.apple_view_url)
+            setTargetPreviewIsApple(response.provider === "apple")
             if (response.preview_url !== null) {
                 setTargetPreviewUrl(response.preview_url)
                 setShouldPlayTargetAfterLoad(true)
+            } else {
+                setTargetPreviewUnavailable(true)
             }
         } catch {
             setTargetPreviewUrl(null)
@@ -299,6 +322,8 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
     }
 
     const handleCandidatePreviewPress = async () => {
+        setCandidateHasPlayed(true)
+        setLastPlayedSide("candidate")
         if (candidatePreviewUrl !== null) {
             targetPlayer.stop()
             candidatePlayer.toggle()
@@ -309,9 +334,12 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
         try {
             const response = await fetchPreviewUrlBySongId(candidateSongId, token)
             setCandidateAppleViewUrl(response.apple_view_url)
+            setCandidatePreviewIsApple(response.provider === "apple")
             if (response.preview_url !== null) {
                 setCandidatePreviewUrl(response.preview_url)
                 setShouldPlayCandidateAfterLoad(true)
+            } else {
+                setCandidatePreviewUnavailable(true)
             }
         } catch {
             setCandidatePreviewUrl(null)
@@ -322,6 +350,10 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
 
     useEffect(() => {
         const candidate = session.candidate
+        // Each candidate carries its own preview state — reset the per-candidate flags.
+        setCandidatePreviewUnavailable(false)
+        setCandidatePreviewIsApple(candidate?.song.provider === "apple")
+        setCandidateHasPlayed(false)
         if (candidate === null) {
             setCandidatePreviewUrl(null)
             setCandidateAppleViewUrl(null)
@@ -374,6 +406,9 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
                 ? session.target_song.apple_view_url ?? null
                 : null,
         )
+        setTargetPreviewIsApple(session.target_song.provider === "apple")
+        setTargetPreviewUnavailable(false)
+        setTargetHasPlayed(false)
     }, [session.target_song])
 
     useEffect(() => {
@@ -400,8 +435,8 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
     }, [isSubmitting, submitDim])
 
     const rankings = session.current_bucket_rankings
-    const targetHasApplePreview = targetPreviewUrl !== null && targetAppleViewUrl !== null
-    const candidateHasApplePreview = candidatePreviewUrl !== null && candidateAppleViewUrl !== null
+    const targetHasApplePreview = targetPreviewUrl !== null && targetPreviewIsApple && targetHasPlayed
+    const candidateHasApplePreview = candidatePreviewUrl !== null && candidatePreviewIsApple && candidateHasPlayed
     const handleOpenTargetApple = () => {
         if (targetAppleViewUrl) {
             Linking.openURL(targetAppleViewUrl).catch(() => {})
@@ -412,6 +447,13 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
             Linking.openURL(candidateAppleViewUrl).catch(() => {})
         }
     }
+    // Footer attribution follows the side whose preview the user played last.
+    const footerAttribution =
+        lastPlayedSide === "target" && targetHasApplePreview
+            ? { viewUrl: targetAppleViewUrl, onOpen: handleOpenTargetApple }
+            : lastPlayedSide === "candidate" && candidateHasApplePreview
+                ? { viewUrl: candidateAppleViewUrl, onOpen: handleOpenCandidateApple }
+                : null
 
     // ── Leap-aware transition pacing ────────────────────────────────────────
     // Early head-to-heads can move the candidate half the list in one round
@@ -709,12 +751,12 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
                         </View>
                         <Text style={styles.pairTitle} numberOfLines={2}>{session.target_song.title}</Text>
                         <Text style={styles.pairArtist} numberOfLines={1}>{session.target_song.artist}</Text>
-                        {targetHasApplePreview && (
+                        {targetPreviewUnavailable && (
                             <View style={styles.appleAttribution}>
-                                <Text style={styles.appleCourtesy} numberOfLines={1}>provided courtesy of iTunes</Text>
+                                <Text style={styles.appleCourtesy} numberOfLines={1}>Preview unavailable</Text>
                                 {targetAppleViewUrl != null && (
                                     <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleOpenTargetApple() }}>
-                                        <Text style={styles.appleLink} numberOfLines={1}>Get on Apple Music</Text>
+                                        <Text style={styles.appleLink} numberOfLines={1}>Listen on Apple Music</Text>
                                     </TouchableOpacity>
                                 )}
                             </View>
@@ -772,12 +814,12 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
                             </View>
                             <Text style={styles.pairTitle} numberOfLines={2}>{candidate.song.title}</Text>
                             <Text style={styles.pairArtist} numberOfLines={1}>{candidate.song.artist}</Text>
-                            {candidateHasApplePreview && (
+                            {candidatePreviewUnavailable && (
                                 <View style={styles.appleAttribution}>
-                                    <Text style={styles.appleCourtesy} numberOfLines={1}>provided courtesy of iTunes</Text>
+                                    <Text style={styles.appleCourtesy} numberOfLines={1}>Preview unavailable</Text>
                                     {candidateAppleViewUrl != null && (
                                         <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleOpenCandidateApple() }}>
-                                            <Text style={styles.appleLink} numberOfLines={1}>Get on Apple Music</Text>
+                                            <Text style={styles.appleLink} numberOfLines={1}>Listen on Apple Music</Text>
                                         </TouchableOpacity>
                                     )}
                                 </View>
@@ -795,10 +837,23 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
 
             {error !== null && <Text style={styles.errorText}>{error}</Text>}
 
-            {/* ── Footer ── */}
+            {/* ── Footer — swaps to Apple attribution while a played preview is Apple's ── */}
             <View style={[styles.footer, { paddingBottom: Math.max(Platform.OS === "ios" ? 8 : 6, insets.bottom) }]}>
-                <Text style={styles.footerTagline}>We'll find the fairest comparison.</Text>
-                <Text style={styles.footerBrand}>LISTN</Text>
+                {footerAttribution !== null ? (
+                    <>
+                        <Text style={styles.footerTagline} numberOfLines={1}>Provided courtesy of iTunes</Text>
+                        {footerAttribution.viewUrl != null && (
+                            <TouchableOpacity onPress={footerAttribution.onOpen}>
+                                <Text style={styles.footerAppleLink} numberOfLines={1}>Get on Apple Music</Text>
+                            </TouchableOpacity>
+                        )}
+                    </>
+                ) : (
+                    <>
+                        <Text style={styles.footerTagline}>We'll find the fairest comparison.</Text>
+                        <Text style={styles.footerBrand}>LISTN</Text>
+                    </>
+                )}
             </View>
         </View>
     )
@@ -984,4 +1039,6 @@ const styles = StyleSheet.create({
     },
     footerTagline: { fontFamily: fonts.mono, fontSize: 11, color: colors.inkDim },
     footerBrand: { fontFamily: fonts.mono, fontSize: 10, letterSpacing: 0.4 * 10, color: colors.inkDim, fontWeight: "700" },
+    // Matches the Apple link treatment on the other preview surfaces (accent + uppercase).
+    footerAppleLink: { fontFamily: fonts.mono, fontSize: 10, letterSpacing: 0, color: colors.accent, textTransform: "uppercase", fontWeight: "700" },
 })

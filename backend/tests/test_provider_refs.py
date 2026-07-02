@@ -394,6 +394,7 @@ def test_saved_apple_song_preview_by_id_returns_live_preview_without_persisting(
     assert response.json() == {
         "preview_url": "https://audio-ssl.itunes.apple.com/live-preview.m4a",
         "apple_view_url": "https://music.apple.com/us/album/nights/1440841363?i=1440841363",
+        "provider": "apple",
     }
     assert calls == [
         (
@@ -561,6 +562,7 @@ def test_song_without_provider_ref_or_deezer_id_returns_null_preview(
     assert response.json() == {
         "preview_url": None,
         "apple_view_url": None,
+        "provider": None,
     }
 
 

@@ -68,11 +68,18 @@ export function BloomCard({
     const [loadingPreview, setLoadingPreview] = useState(true)
     const [lazyPreviewLoading, setLazyPreviewLoading] = useState(false)
     const [appleViewUrl, setAppleViewUrl] = useState<string | null>(null)
+    // Attribution is keyed on the preview's provider, not the store link: an Apple
+    // preview must render "Provided courtesy of iTunes" even if trackViewUrl is missing.
+    const [isApplePreview, setIsApplePreview] = useState(false)
+    // Set only when a lookup definitively reports no preview (not on network errors).
+    const [previewUnavailable, setPreviewUnavailable] = useState(false)
     const [shouldPlayAfterPreviewLoad, setShouldPlayAfterPreviewLoad] = useState(false)
     useEffect(() => {
         let active = true
         setPreviewUrl(null)
         setAppleViewUrl(null)
+        setIsApplePreview(false)
+        setPreviewUnavailable(false)
         setLoadingPreview(true)
         if (deezerId == null) {
             setLoadingPreview(false)
@@ -91,6 +98,7 @@ export function BloomCard({
         && songId != null
         && s.ranking.song.preview_available === true
         && previewUrl === null
+        && !previewUnavailable
     const showAudio = loadingPreview || hasPreview || canFetchSavedPreview || lazyPreviewLoading
     const dur = duration && duration > 0 ? duration : 30
     const progress = duration && duration > 0 ? Math.min(1, currentTime / duration) : 0
@@ -111,9 +119,12 @@ export function BloomCard({
         try {
             const response = await fetchPreviewUrlBySongId(songId, token)
             setAppleViewUrl(response.apple_view_url)
+            setIsApplePreview(response.provider === "apple")
             if (response.preview_url !== null) {
                 setPreviewUrl(response.preview_url)
                 setShouldPlayAfterPreviewLoad(true)
+            } else {
+                setPreviewUnavailable(true)
             }
         } catch {
             setPreviewUrl(null)
@@ -210,12 +221,18 @@ export function BloomCard({
                                 </Text>
                             </Pressable>
                         ) : null}
-                        {appleViewUrl !== null && previewUrl !== null ? (
+                        {(previewUrl !== null && isApplePreview) || previewUnavailable ? (
                             <View style={styles.appleAttribution}>
-                                <Text style={styles.appleCourtesy} numberOfLines={1}>provided courtesy of iTunes</Text>
-                                <Pressable onPress={handleOpenApple}>
-                                    <Text style={styles.appleLink} numberOfLines={1}>Get on Apple Music</Text>
-                                </Pressable>
+                                <Text style={styles.appleCourtesy} numberOfLines={1}>
+                                    {previewUnavailable ? "Preview unavailable" : "Provided courtesy of iTunes"}
+                                </Text>
+                                {appleViewUrl !== null ? (
+                                    <Pressable onPress={handleOpenApple}>
+                                        <Text style={styles.appleLink} numberOfLines={1}>
+                                            {previewUnavailable ? "Listen on Apple Music" : "Get on Apple Music"}
+                                        </Text>
+                                    </Pressable>
+                                ) : null}
                             </View>
                         ) : null}
                     </View>

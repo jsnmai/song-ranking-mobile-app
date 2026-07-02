@@ -266,6 +266,16 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
     const [previewAppleViewUrl, setPreviewAppleViewUrl] = useState<string | null>(
         song.provider === "apple" && song.preview_url !== null ? song.apple_view_url ?? null : null,
     )
+    // Attribution is keyed on the preview's provider, not the store link: an Apple
+    // preview must render "Provided courtesy of iTunes" even if trackViewUrl is missing.
+    const [previewIsApple, setPreviewIsApple] = useState(song.provider === "apple")
+    // Set only when a lookup definitively reports no preview (not on network errors),
+    // so the play affordance hides instead of inviting taps that go nowhere.
+    const [previewUnavailable, setPreviewUnavailable] = useState(false)
+    // Attribution stays hidden until the user actually starts a preview (then sticks
+    // for the session) — Apple content isn't rendered until playback, and the idle
+    // screen stays uncluttered.
+    const [hasPlayedPreview, setHasPlayedPreview] = useState(false)
     const [versusReceipts, setVersusReceipts] = useState<ComparisonHistoryReceipt[]>([])
     const [isPreviewLoading, setIsPreviewLoading] = useState(false)
     const [isLazyPreviewLoading, setIsLazyPreviewLoading] = useState(false)
@@ -310,6 +320,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
     const canFetchSavedPreview = durableSongId != null
         && song.preview_url === null
         && song.preview_available === true
+        && !previewUnavailable
     const canAttemptPreview = previewUrl !== null || canFetchSavedPreview
 
     const handleRateAgain = () => {
@@ -403,6 +414,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
     }
 
     const handlePreviewPress = async () => {
+        setHasPlayedPreview(true)
         if (previewUrl !== null) {
             toggleAudio()
             return
@@ -416,9 +428,12 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                 token,
             )
             setPreviewAppleViewUrl(response.apple_view_url)
+            setPreviewIsApple(response.provider === "apple")
             if (response.preview_url !== null) {
                 setPreviewUrl(response.preview_url)
                 setShouldPlayAfterPreviewLoad(true)
+            } else {
+                setPreviewUnavailable(true)
             }
         } catch (err) {
             if (err instanceof ApiError) {
@@ -546,7 +561,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
         return () => { isActive = false }
     }, [song.deezer_id, token])
 
-    const isApplePreview = previewUrl !== null && previewAppleViewUrl !== null
+    const isApplePreview = previewUrl !== null && previewIsApple
     const handleOpenApple = () => {
         if (previewAppleViewUrl) {
             Linking.openURL(previewAppleViewUrl).catch(() => {})
@@ -662,12 +677,16 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                         </TouchableOpacity>
                     )}
                 </View>
-                {isApplePreview && (
+                {((isApplePreview && hasPlayedPreview) || previewUnavailable) && (
                     <View style={styles.appleAttributionRow}>
-                        <Text style={styles.appleCourtesy}>provided courtesy of iTunes</Text>
+                        <Text style={styles.appleCourtesy}>
+                            {previewUnavailable ? "Preview unavailable" : "Provided courtesy of iTunes"}
+                        </Text>
                         {previewAppleViewUrl != null && (
                             <TouchableOpacity onPress={handleOpenApple}>
-                                <Text style={styles.appleLink}>Get on Apple Music</Text>
+                                <Text style={styles.appleLink}>
+                                    {previewUnavailable ? "Listen on Apple Music" : "Get on Apple Music"}
+                                </Text>
                             </TouchableOpacity>
                         )}
                     </View>

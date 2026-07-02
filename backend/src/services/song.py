@@ -97,6 +97,7 @@ def get_preview_url_by_song_id(
         return SavedSongPreviewUrlResponse(
             preview_url=preview_url,
             apple_view_url=apple_ref.url,
+            provider="apple",
         )
 
     if song.deezer_id is not None:
@@ -106,11 +107,13 @@ def get_preview_url_by_song_id(
                 song.deezer_id,
             ),
             apple_view_url=None,
+            provider="deezer",
         )
 
     return SavedSongPreviewUrlResponse(
         preview_url=None,
         apple_view_url=None,
+        provider=None,
     )
 
 

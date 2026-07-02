@@ -200,6 +200,7 @@ def test_preview_url_by_song_id_uses_legacy_deezer_refresh(
     assert response.json() == {
         "preview_url": REFRESHED_URL,
         "apple_view_url": None,
+        "provider": "deezer",
     }
     db_session.expire_all()
     refreshed = db_session.get(Song, song.id)

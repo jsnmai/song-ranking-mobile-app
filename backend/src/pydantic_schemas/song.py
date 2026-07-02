@@ -148,6 +148,10 @@ class SavedSongPreviewUrlResponse(BaseModel):
 
     preview_url: str | None
     apple_view_url: str | None
+    # Which provider the preview came from ("apple" / "deezer"), independent of
+    # apple_view_url: Apple previews must render iTunes attribution even when
+    # the store link is missing, so the client cannot infer provider from it.
+    provider: str | None
 
 
 class SongResponse(BaseModel):

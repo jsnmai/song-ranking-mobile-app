@@ -102,6 +102,7 @@ beforeEach(() => {
     mockFetchPreviewUrlBySongId.mockResolvedValue({
         preview_url: "https://example.com/apple-live-preview.m4a",
         apple_view_url: "https://music.apple.com/us/album/saved/2?i=2",
+        provider: "apple",
     })
 })
 

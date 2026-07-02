@@ -182,6 +182,14 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
     const [previewAppleViewUrl, setPreviewAppleViewUrl] = useState<string | null>(
         song.provider === "apple" && song.preview_url !== null ? song.apple_view_url ?? null : null,
     )
+    // Attribution is keyed on the preview's provider, not the store link: an Apple
+    // preview must render "Provided courtesy of iTunes" even if trackViewUrl is missing.
+    const [previewIsApple, setPreviewIsApple] = useState(song.provider === "apple")
+    // Set only when a lookup definitively reports no preview (not on network errors).
+    const [previewUnavailable, setPreviewUnavailable] = useState(false)
+    // Attribution stays hidden until the user actually starts a preview (then sticks
+    // for the session) — keeps the sheet uncluttered until Apple content renders.
+    const [hasPlayedPreview, setHasPlayedPreview] = useState(false)
     const [isLazyPreviewLoading, setIsLazyPreviewLoading] = useState(false)
     const [shouldPlayAfterPreviewLoad, setShouldPlayAfterPreviewLoad] = useState(false)
     const { isPlaying, currentTime, duration, toggle: toggleAudio, stop: stopAudio } = useAudioPlayer(previewUrl)
@@ -229,6 +237,7 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
     const canFetchSavedPreview = durableSongId != null
         && previewUrl === null
         && song.preview_available === true
+        && !previewUnavailable
     const canAttemptPreview = previewUrl !== null || canFetchSavedPreview
 
     const handleContinue = async () => {
@@ -271,6 +280,7 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
     }
 
     const handlePreviewPress = async () => {
+        setHasPlayedPreview(true)
         if (previewUrl !== null) {
             if (isPlaying) {
                 stopAudio()
@@ -288,9 +298,12 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
                 token,
             )
             setPreviewAppleViewUrl(response.apple_view_url)
+            setPreviewIsApple(response.provider === "apple")
             if (response.preview_url !== null) {
                 setPreviewUrl(response.preview_url)
                 setShouldPlayAfterPreviewLoad(true)
+            } else {
+                setPreviewUnavailable(true)
             }
         } catch (err) {
             if (err instanceof ApiError) {
@@ -388,12 +401,16 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
                                 </View>
                             )}
                         </View>
-                        {previewUrl !== null && previewAppleViewUrl !== null && (
+                        {((previewUrl !== null && previewIsApple && hasPlayedPreview) || previewUnavailable) && (
                             <View style={styles.appleAttributionRow}>
-                                <Text style={styles.appleCourtesy}>provided courtesy of iTunes</Text>
+                                <Text style={styles.appleCourtesy}>
+                                    {previewUnavailable ? "Preview unavailable" : "Provided courtesy of iTunes"}
+                                </Text>
                                 {previewAppleViewUrl != null && (
                                     <TouchableOpacity onPress={handleOpenApple}>
-                                        <Text style={styles.appleLink}>Get on Apple Music</Text>
+                                        <Text style={styles.appleLink}>
+                                            {previewUnavailable ? "Listen on Apple Music" : "Get on Apple Music"}
+                                        </Text>
                                     </TouchableOpacity>
                                 )}
                             </View>
@@ -610,6 +627,8 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "space-between",
         gap: 10,
+        // Left-align with the song details text column: art width (46) + songMini gap (12).
+        marginLeft: 58,
         marginTop: -7,
         marginBottom: 12,
     },

@@ -110,6 +110,7 @@ beforeEach(() => {
     mockFetchPreviewUrlBySongId.mockResolvedValue({
         preview_url: "https://example.com/apple-live-preview.m4a",
         apple_view_url: "https://music.apple.com/us/album/nights/1440841363?i=1440841363",
+        provider: "apple",
     })
     mockGetBookmarkStatus.mockResolvedValue({ is_bookmarked: false, bookmark: null })
     mockListMyVersusHistory.mockResolvedValue({ receipts: [] })
@@ -263,8 +264,109 @@ describe("SongDetailScreen", () => {
         await waitFor(() => {
             expect(mockCreatePlayer).toHaveBeenCalledWith("https://example.com/apple-live-preview.m4a")
         })
-        expect(screen.getByText("provided courtesy of iTunes")).toBeTruthy()
+        expect(screen.getByText("Provided courtesy of iTunes")).toBeTruthy()
         expect(screen.getByText("Get on Apple Music")).toBeTruthy()
+    })
+
+    it("keeps iTunes attribution hidden until the preview is first played", async () => {
+        const appleSearchSong = {
+            ...ranking.song,
+            deezer_id: null,
+            provider: "apple" as const,
+            preview_url: "https://example.com/apple-search-preview.m4a",
+            preview_available: true,
+            apple_view_url: "https://music.apple.com/us/album/nights/1440841363?i=1440841363",
+        }
+
+        render(
+            <SongDetailScreen
+                navigation={navigation as never}
+                route={{ params: { song: appleSearchSong } } as never}
+            />,
+        )
+
+        const playButton = await screen.findByLabelText("Play Preview")
+        // Idle screen stays uncluttered — no Apple content has rendered yet.
+        expect(screen.queryByText("Provided courtesy of iTunes")).toBeNull()
+
+        await act(async () => {
+            fireEvent.press(playButton)
+        })
+
+        expect(await screen.findByText("Provided courtesy of iTunes")).toBeTruthy()
+        expect(screen.getByText("Get on Apple Music")).toBeTruthy()
+    })
+
+    it("renders iTunes attribution even when the Apple store link is missing", async () => {
+        const appleRanking: RankingResponse = {
+            ...ranking,
+            song: {
+                ...ranking.song,
+                deezer_id: null,
+                provider: "apple",
+                preview_url: null,
+                preview_available: true,
+                apple_view_url: null,
+            },
+        }
+        mockFetchPreviewUrlBySongId.mockResolvedValue({
+            preview_url: "https://example.com/apple-live-preview.m4a",
+            apple_view_url: null,
+            provider: "apple",
+        })
+
+        render(
+            <SongDetailScreen
+                navigation={navigation as never}
+                route={{ params: { ranking: appleRanking } } as never}
+            />,
+        )
+
+        const playButton = await screen.findByLabelText("Play Preview")
+        await act(async () => {
+            fireEvent.press(playButton)
+        })
+
+        // Courtesy text is required whenever an Apple preview plays; the link is optional.
+        expect(await screen.findByText("Provided courtesy of iTunes")).toBeTruthy()
+        expect(screen.queryByText("Get on Apple Music")).toBeNull()
+    })
+
+    it("shows the preview unavailable state when the Apple lookup returns no preview", async () => {
+        const appleRanking: RankingResponse = {
+            ...ranking,
+            song: {
+                ...ranking.song,
+                deezer_id: null,
+                provider: "apple",
+                preview_url: null,
+                preview_available: true,
+                apple_view_url: null,
+            },
+        }
+        mockFetchPreviewUrlBySongId.mockResolvedValue({
+            preview_url: null,
+            apple_view_url: "https://music.apple.com/us/album/nights/1440841363?i=1440841363",
+            provider: "apple",
+        })
+
+        render(
+            <SongDetailScreen
+                navigation={navigation as never}
+                route={{ params: { ranking: appleRanking } } as never}
+            />,
+        )
+
+        const playButton = await screen.findByLabelText("Play Preview")
+        await act(async () => {
+            fireEvent.press(playButton)
+        })
+
+        expect(await screen.findByText("Preview unavailable")).toBeTruthy()
+        expect(screen.getByText("Listen on Apple Music")).toBeTruthy()
+        // The play affordance hides instead of inviting more taps that go nowhere.
+        expect(screen.queryByLabelText("Play Preview")).toBeNull()
+        expect(mockCreatePlayer).not.toHaveBeenCalled()
     })
 
     it("stops preview audio when the screen blurs", async () => {

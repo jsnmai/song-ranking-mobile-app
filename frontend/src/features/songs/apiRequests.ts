@@ -7,6 +7,9 @@ type PreviewUrlResponse = {
 export type SavedSongPreviewUrlResponse = {
     preview_url: string | null;
     apple_view_url: string | null;
+    // Provider the preview came from, independent of apple_view_url: Apple
+    // previews need iTunes attribution even when the store link is missing.
+    provider: "apple" | "deezer" | null;
 }
 
 // The backend refreshes stale Deezer preview URLs before returning this value.
