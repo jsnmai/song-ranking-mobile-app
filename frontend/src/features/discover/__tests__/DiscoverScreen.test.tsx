@@ -13,7 +13,6 @@ const mockFollowUser = jest.fn()
 const mockUnfollowUser = jest.fn()
 const mockGetMyRankingByDeezerId = jest.fn()
 const mockListCoSigns = jest.fn()
-const mockGetMostCompatible = jest.fn()
 const mockGetCircleTrending = jest.fn()
 const mockGetCircleMostRated = jest.fn()
 const mockGetPopular = jest.fn()
@@ -68,7 +67,6 @@ jest.mock("../../search/apiRequests", () => ({
 
 jest.mock("../../profile/apiRequests", () => ({
     searchProfiles: (...args: unknown[]) => mockSearchProfiles(...args),
-    getMostCompatible: (...args: unknown[]) => mockGetMostCompatible(...args),
     followUser: (...args: unknown[]) => mockFollowUser(...args),
     unfollowUser: (...args: unknown[]) => mockUnfollowUser(...args),
 }))
@@ -196,7 +194,6 @@ beforeEach(() => {
     mockSearchSongs.mockResolvedValue({ results: [song] })
     mockSearchProfiles.mockResolvedValue({ results: [profile] })
     mockListCoSigns.mockResolvedValue({ items: [] })
-    mockGetMostCompatible.mockResolvedValue({ users: [] })
     mockGetCircleTrending.mockResolvedValue({ items: [], window_days: 7 })
     mockGetCircleMostRated.mockResolvedValue({ items: [] })
     mockGetPopular.mockResolvedValue({ items: [], window: "all_time", window_days: 7 })

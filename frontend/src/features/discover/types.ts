@@ -62,6 +62,19 @@ export type CircleMostRatedResponse = {
     items: CircleMostRatedItem[];
 }
 
+// --- New release (a fresh drop from an artist already in your rankings) ---
+// Frontend-only for now: the backend feed (fresh releases across your rated
+// artists) is NOT built yet and has to be implemented separately. Until that
+// endpoint exists, DiscoverScreen renders the card's placeholder state.
+export type NewReleaseItem = {
+    song: PersistedSong;
+    released_at: string;
+}
+
+export type NewReleaseResponse = {
+    items: NewReleaseItem[];
+}
+
 // --- Popular on LISTn (global, anonymous) ---
 // "week": items are the songs the most people rated in the last window_days.
 // "all_time": the week was too thin, so items are the all-time most-rated songs instead;

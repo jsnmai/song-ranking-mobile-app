@@ -39,11 +39,12 @@ import { AppStackParamList, DiscoverStackParamList, TabParamList } from "../../n
 import { bucketColor, colors, fonts } from "../../theme"
 import { usePullRefresh } from "../../hooks/usePullRefresh"
 import { useAuth } from "../auth/AuthContext"
-import { followUser, getMostCompatible, searchProfiles, unfollowUser } from "../profile/apiRequests"
-import { MostCompatibleItem, Profile } from "../profile/types"
+import { followUser, searchProfiles, unfollowUser } from "../profile/apiRequests"
+import { Profile } from "../profile/types"
 import { searchSongs } from "../search/apiRequests"
 import { SongSearchResult } from "../search/types"
 import { getCircleMostRated, getCircleTrending, getPopular, listCoSigns } from "./apiRequests"
+import NewReleaseCard from "./NewReleaseCard"
 import SocialDiscoveryCard from "./SocialDiscoveryCard"
 import { CircleMostRatedItem, CircleTrendingItem, CoSignItem, PopularItem, PopularWindow } from "./types"
 
@@ -265,7 +266,6 @@ export default function DiscoverScreen() {
     const [coSigns, setCoSigns] = useState<CoSignItem[]>([])
     const [isDiscoveryLoading, setIsDiscoveryLoading] = useState(false)
     const [discoveryError, setDiscoveryError] = useState<string | null>(null)
-    const [topCompatUser, setTopCompatUser] = useState<MostCompatibleItem | null>(null)
     const [trending, setTrending] = useState<CircleTrendingItem[]>([])
     const [mostRated, setMostRated] = useState<CircleMostRatedItem[]>([])
     const [popular, setPopular] = useState<PopularItem[]>([])
@@ -507,16 +507,14 @@ export default function DiscoverScreen() {
         if (!token) return
         setDiscoveryError(null)
         try {
-            const [coSignResponse, compatResponse, trendingResponse, mostRatedResponse, popularResponse] =
+            const [coSignResponse, trendingResponse, mostRatedResponse, popularResponse] =
                 await Promise.all([
                     listCoSigns(token),
-                    getMostCompatible(token),
                     getCircleTrending(token),
                     getCircleMostRated(token),
                     getPopular(token),
                 ])
             setCoSigns(coSignResponse.items)
-            setTopCompatUser(compatResponse.users[0] ?? null)
             setTrending(trendingResponse.items)
             setMostRated(mostRatedResponse.items)
             setPopular(popularResponse.items)
@@ -538,15 +536,13 @@ export default function DiscoverScreen() {
             setDiscoveryError(null)
             Promise.all([
                 listCoSigns(token),
-                getMostCompatible(token),
                 getCircleTrending(token),
                 getCircleMostRated(token),
                 getPopular(token),
             ])
-                .then(([coSignResponse, compatResponse, trendingResponse, mostRatedResponse, popularResponse]) => {
+                .then(([coSignResponse, trendingResponse, mostRatedResponse, popularResponse]) => {
                     if (!isCurrentRequest) return
                     setCoSigns(coSignResponse.items)
-                    setTopCompatUser(compatResponse.users[0] ?? null)
                     setTrending(trendingResponse.items)
                     setMostRated(mostRatedResponse.items)
                     setPopular(popularResponse.items)
@@ -1030,54 +1026,12 @@ export default function DiscoverScreen() {
                                     </BouncyPressable>
                                 )}
 
-                                {/* 2-col: Compatibility (live or locked) + Most-Rated (locked) */}
+                                {/* 2-col: New Release (poster) + Most-Rated. The new-release backend
+                                    feed (fresh drops across the user's rated artists) is NOT built
+                                    yet and has to be implemented separately — until then the card
+                                    renders its coming-soon placeholder, so we pass item={null}. */}
                                 <View style={styles.twoColRow}>
-                                    <BouncyPressable style={[styles.twoColCard, styles.compatCard]}>
-                                        <View style={styles.compatPill}>
-                                            <Text style={styles.compatPillText}>Compatibility</Text>
-                                        </View>
-                                        {topCompatUser ? (
-                                            <>
-                                                <View style={styles.compatUserRow}>
-                                                    <View style={styles.compatAva}>
-                                                        <Text style={styles.compatAvaText}>
-                                                            {(topCompatUser.display_name || topCompatUser.username).charAt(0).toUpperCase()}
-                                                        </Text>
-                                                    </View>
-                                                    <Text style={styles.compatUserName} numberOfLines={1}>
-                                                        {(topCompatUser.display_name || topCompatUser.username).split(" ")[0]}
-                                                    </Text>
-                                                </View>
-                                                <View style={styles.compatScoreRow}>
-                                                    <Text style={styles.compatPct} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-                                                        {Math.round(topCompatUser.similarity_score * 100)}%
-                                                    </Text>
-                                                    <Text style={styles.compatAlignedLabel}>ALIGNED</Text>
-                                                </View>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <View style={styles.compatLockRow}>
-                                                    <View style={styles.compatLockCircle}>
-                                                        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                                                            <Path d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4"
-                                                                stroke="rgba(255,255,255,0.55)" strokeWidth={2}
-                                                                strokeLinecap="round" strokeLinejoin="round" />
-                                                        </Svg>
-                                                    </View>
-                                                    <View style={styles.compatBars}>
-                                                        <View style={[styles.compatBar, { width: "90%" }]} />
-                                                        <View style={[styles.compatBar, { width: "62%" }]} />
-                                                    </View>
-                                                </View>
-                                                <View style={styles.compatScoreRow}>
-                                                    <Text style={[styles.compatPct, styles.compatPctLocked]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>–%</Text>
-                                                    <Text style={styles.compatAlignedLabel}>ALIGNED</Text>
-                                                </View>
-                                                <Text style={styles.compatBody}>Follow friends to see your match.</Text>
-                                            </>
-                                        )}
-                                    </BouncyPressable>
+                                    <NewReleaseCard item={null} />
 
                                     {mostRated.length > 0 ? (
                                         <TouchableOpacity
@@ -1818,113 +1772,6 @@ const styles = StyleSheet.create({
         // height (the cards stretch to equal heights) spreads between sections
         // instead of pooling under the last row.
         justifyContent: "space-between",
-    },
-    compatCard: {
-        backgroundColor: colors.teal,
-    },
-    compatPill: {
-        backgroundColor: "rgba(255,255,255,0.20)",
-        borderRadius: 999,
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        alignSelf: "flex-start",
-        marginBottom: 9,
-    },
-    compatPillText: {
-        fontFamily: fonts.mono,
-        color: "#fff",
-        fontSize: 8.5,
-        letterSpacing: 1.4,
-        fontWeight: "700",
-        textTransform: "uppercase",
-    },
-    compatUserRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 7,
-        marginBottom: 6,
-    },
-    compatAva: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        backgroundColor: "rgba(255,255,255,0.30)",
-        borderWidth: 1.5,
-        borderColor: "rgba(255,255,255,0.50)",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-    },
-    compatAvaText: {
-        color: "#fff",
-        fontWeight: "700",
-        fontSize: 11,
-    },
-    compatUserName: {
-        fontFamily: fonts.display,
-        fontSize: 15,
-        color: "#fff",
-        flex: 1,
-        minWidth: 0,
-    },
-    compatScoreRow: {
-        flexDirection: "row",
-        alignItems: "flex-end",
-        gap: 6,
-    },
-    compatPct: {
-        fontFamily: fonts.display,
-        fontSize: 44,
-        color: "#fff",
-        lineHeight: 40,
-        letterSpacing: -1,
-        flex: 1,
-    },
-    // Locked placeholder "–%" matches the blank bars/lock-circle shade, not bold white.
-    compatPctLocked: {
-        color: "rgba(255,255,255,0.4)",
-    },
-    compatAlignedLabel: {
-        fontFamily: fonts.mono,
-        fontSize: 8,
-        color: "rgba(255,255,255,0.85)",
-        letterSpacing: 1.6,
-        fontWeight: "700",
-        paddingBottom: 6,
-        flexShrink: 0,
-    },
-    compatLockRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 8,
-        marginBottom: 6,
-    },
-    compatLockCircle: {
-        width: 34,
-        height: 34,
-        borderRadius: 17,
-        borderWidth: 1.5,
-        borderColor: "rgba(255,255,255,0.45)",
-        borderStyle: "dashed",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-    },
-    compatBars: {
-        flex: 1,
-        gap: 6,
-    },
-    compatBar: {
-        height: 6,
-        borderRadius: 3,
-        backgroundColor: "rgba(255,255,255,0.35)",
-    },
-    compatBody: {
-        fontFamily: fonts.mono,
-        fontSize: 9.5,
-        lineHeight: 14,
-        color: "rgba(255,255,255,0.72)",
-        marginTop: 4,
     },
     circleCard: {
         backgroundColor: colors.navy,
