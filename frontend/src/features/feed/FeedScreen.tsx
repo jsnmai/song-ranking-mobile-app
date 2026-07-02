@@ -522,6 +522,14 @@ export default function FeedScreen() {
     // resting state shown right after a confirmed pick, until the next real module fetch replaces
     // it (or removes it once the server-side cooldown is reflected).
     const [thisOrThatDisplayMode, setThisOrThatDisplayMode] = useState<"full" | "collapsed" | "cooldown">("full")
+    // Mirrors thisOrThatDisplayMode for loadModules to read without needing it as a dependency —
+    // putting the state itself in that useCallback's deps would recreate the callback every time
+    // the mode changes, which would re-fire the mount effect below (it depends on loadModules) and
+    // trigger a redundant extra fetch on every confirm/dismiss/undo/expand.
+    const thisOrThatDisplayModeRef = useRef(thisOrThatDisplayMode)
+    useEffect(() => {
+        thisOrThatDisplayModeRef.current = thisOrThatDisplayMode
+    }, [thisOrThatDisplayMode])
     // Timestamp the cooldown view counts down to (real 48h server cooldown, stamped the moment we
     // enter cooldown — close enough to server truth for this session; a fresh module fetch later
     // replaces this whole view with whatever the server actually has). Ticks once a minute.
@@ -661,14 +669,26 @@ export default function FeedScreen() {
         try {
             const modules = await getFeedModules(token)
             const nextThisOrThat = modules.this_or_that
-            setArmedThisOrThatSongId(null)
-            setThisOrThatResult(null)
-            setThisOrThatDisplayMode("full")
-            setThisOrThat(
-                _thisOrThatKey(nextThisOrThat) === hiddenThisOrThatPair.current
-                    ? null
-                    : nextThisOrThat,
-            )
+            if (nextThisOrThat !== null) {
+                // A live prompt exists — always show it fresh, even if we were mid-cooldown or
+                // collapsed from a previous pair.
+                setArmedThisOrThatSongId(null)
+                setThisOrThatResult(null)
+                setThisOrThatDisplayMode("full")
+                setThisOrThat(
+                    _thisOrThatKey(nextThisOrThat) === hiddenThisOrThatPair.current
+                        ? null
+                        : nextThisOrThat,
+                )
+            } else if (thisOrThatDisplayModeRef.current === "full") {
+                // Nothing live, and we weren't already resting in collapsed/cooldown — nothing to
+                // show. If we WERE resting (a confirm/dismiss just put the server into its real
+                // cooldown, which is exactly why this came back null), leave that view exactly as
+                // it is rather than collapsing it to nothing on the next natural refetch.
+                setArmedThisOrThatSongId(null)
+                setThisOrThatResult(null)
+                setThisOrThat(null)
+            }
             setRerateRadar(modules.rerate_radar)
             setConsensus(modules.consensus)
             setDisagreement(modules.disagreement_spotlight)
@@ -1816,7 +1836,7 @@ export default function FeedScreen() {
                                 <View style={[styles.totResultIconChip, { backgroundColor: `${tone}1a` }]}>
                                     <TuneIcon color={tone} size={13} />
                                 </View>
-                                <Text style={styles.totResultKicker}>RESULT</Text>
+                                <Text style={styles.totResultKicker} numberOfLines={1}>THIS-OR-THAT RESULT</Text>
                             </View>
                             <TouchableOpacity
                                 style={[styles.totResultUndoBtn, thisOrThatUndoing && { opacity: 0.5 }]}
@@ -1853,7 +1873,7 @@ export default function FeedScreen() {
                                     key={row.option.song.id}
                                     style={[
                                         styles.totResultSlotRow,
-                                        row.isWinner && { backgroundColor: `${tone}14`, borderColor: `${tone}55` },
+                                        row.isWinner && { backgroundColor: `${tone}12`, borderColor: `${tone}33` },
                                     ]}
                                 >
                                     <Text style={styles.totResultSlotRank}>{row.position}</Text>
@@ -4290,6 +4310,8 @@ const styles = StyleSheet.create({
         paddingTop: 15,
     },
     totResultHeaderLeft: {
+        flex: 1,
+        minWidth: 0,
         flexDirection: "row",
         alignItems: "center",
         gap: 8,
@@ -4302,9 +4324,10 @@ const styles = StyleSheet.create({
         justifyContent: "center",
     },
     totResultKicker: {
+        flexShrink: 1,
         fontFamily: fonts.monoBold,
-        fontSize: 8.5,
-        letterSpacing: 2,
+        fontSize: 8,
+        letterSpacing: 1,
         color: colors.inkDim,
     },
     totResultUndoBtn: {
@@ -4381,28 +4404,26 @@ const styles = StyleSheet.create({
         marginHorizontal: 15,
     },
     totResultSlotList: {
-        borderRadius: 12,
-        overflow: "hidden",
-        borderWidth: 1,
-        borderColor: colors.line,
         marginHorizontal: 15,
-        marginBottom: 15,
+        marginBottom: 13,
     },
+    // Each row is its own rounded, spaced-apart pill (not a shared bordered/clipped list with
+    // separator lines) — that's what lets the winner row's tinted background and border actually
+    // hug its own shape instead of sitting inside an unrelated outer rounded rect.
     totResultSlotRow: {
         flexDirection: "row",
         alignItems: "center",
         gap: 8,
         paddingVertical: 7,
         paddingHorizontal: 9,
+        marginVertical: 2,
+        borderRadius: 11,
         borderWidth: 1,
         borderColor: "transparent",
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: colors.line,
     },
     totResultSlotRank: {
-        fontFamily: fonts.serif,
-        fontStyle: "italic",
-        fontSize: 12,
+        fontFamily: fonts.display,
+        fontSize: 13,
         color: colors.inkDim,
         width: 16,
         textAlign: "center",
@@ -4424,8 +4445,8 @@ const styles = StyleSheet.create({
         gap: 5,
     },
     totResultSlotTitle: {
-        fontFamily: fonts.serif,
-        fontSize: 12.5,
+        fontFamily: fonts.display,
+        fontSize: 13,
         color: colors.ink,
         flexShrink: 1,
     },
@@ -4469,8 +4490,10 @@ const styles = StyleSheet.create({
         gap: 8,
         borderRadius: 12,
         paddingVertical: 13,
+        // Full-opacity hard offset shadow — the design's actual primary-button treatment (solid
+        // "3px 3px 0 ink", not a soft drop shadow). Same recipe as the Follow CTA / accentBtn.
         shadowColor: colors.ink,
-        shadowOpacity: 0.18,
+        shadowOpacity: 1,
         shadowRadius: 0,
         shadowOffset: { width: 3, height: 3 },
         elevation: 4,

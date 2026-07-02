@@ -91,16 +91,22 @@ jest.mock("@react-navigation/native", () => {
 
 jest.mock("@shopify/flash-list", () => {
     const React = require("react")
-    const { View } = require("react-native")
+    const { TouchableOpacity, View } = require("react-native")
 
     return {
-        FlashList: ({ data, renderItem, keyExtractor, ListHeaderComponent }: {
+        FlashList: ({ data, renderItem, keyExtractor, ListHeaderComponent, refreshControl }: {
             data: FeedEvent[];
             renderItem: ({ item }: { item: FeedEvent }) => unknown;
             keyExtractor: (item: FeedEvent) => string;
             ListHeaderComponent?: React.ReactElement | null;
+            refreshControl?: React.ReactElement<{ onRefresh?: () => void }>;
         }) => (
             <View>
+                {refreshControl && (
+                    <TouchableOpacity testID="feed-pull-to-refresh" onPress={refreshControl.props.onRefresh}>
+                        <View />
+                    </TouchableOpacity>
+                )}
                 {ListHeaderComponent ?? null}
                 {data.map((item) => (
                     <View key={keyExtractor(item)}>
@@ -857,6 +863,48 @@ describe("FeedScreen", () => {
         })
         expect(screen.getByText("Next comparison in")).toBeTruthy()
         expect(mockNavigate).not.toHaveBeenCalledWith("Rankings")
+    })
+
+    it("keeps showing the cooldown view after a refresh confirms the server is now in cooldown too", async () => {
+        // Regression test: once real server cooldown kicks in, a later fetch legitimately returns
+        // this_or_that: null. That must NOT wipe the locally-shown cooldown card back to nothing —
+        // it should stay exactly as it is until a fetch returns a genuinely new live prompt.
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 15, bookmarked_count: 0 },
+            following_count: 0,
+        }
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+        mockGetFeedModules.mockResolvedValue({ ...emptyModules, this_or_that: thisOrThatModule })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-card")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("feed-this-or-that-option-43"))
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-confirm-43")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("feed-this-or-that-confirm-43"))
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-result")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("feed-this-or-that-result-done"))
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-cooldown")).toBeTruthy()
+        })
+
+        // The server now genuinely has nothing (real cooldown active) — a pull-to-refresh fetch
+        // reflects that.
+        mockGetFeedModules.mockResolvedValue({ ...emptyModules })
+        fireEvent.press(screen.getByTestId("feed-pull-to-refresh"))
+
+        await waitFor(() => {
+            expect(mockGetFeedModules).toHaveBeenCalledTimes(2)
+        })
+        expect(screen.getByTestId("feed-this-or-that-cooldown")).toBeTruthy()
+        expect(screen.queryByTestId("feed-this-or-that-card")).toBeNull()
     })
 
     it("closes the result popup into cooldown and navigates to Rankings on View in Rankings", async () => {
