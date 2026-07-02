@@ -484,6 +484,12 @@ export default function FeedScreen() {
     const modulesGateComplete =
         (profile?.user_stats?.rated_count ?? 0) >= MODULE_UNLOCK_RATED &&
         (profile?.following_count ?? 0) >= 3
+    // This-or-That has its own, higher rated threshold so it doesn't surface in the same moment as
+    // the score reveal or the module-strip unlock above. Keep in sync with backend
+    // THIS_OR_THAT_MIN_RATED — only used to decide whether it's worth fetching modules at all below
+    // the social gate; the backend is still the source of truth for whether a prompt exists.
+    const THIS_OR_THAT_MIN_RATED = 15
+    const thisOrThatMayBeEligible = (profile?.user_stats?.rated_count ?? 0) >= THIS_OR_THAT_MIN_RATED
     // Re-pressing the Feed tab while already on the Feed home screen scrolls the
     // activity list back to the top. useScrollToTop only fires when this screen is
     // focused and is the first route in the stack, so it leaves the tab bar's
@@ -537,7 +543,7 @@ export default function FeedScreen() {
     // enough rated songs even if the social module gate is closed. The backend keeps social cards null
     // until their gate is met. A module fetch failure just leaves cards locked and never blanks Feed.
     const loadModules = useCallback(async () => {
-        if (!token || (!modulesGateComplete && !gettingStartedComplete)) {
+        if (!token || (!modulesGateComplete && !thisOrThatMayBeEligible)) {
             clearModules()
             return
         }
@@ -557,7 +563,7 @@ export default function FeedScreen() {
         } catch {
             clearModules()
         }
-    }, [token, modulesGateComplete, gettingStartedComplete, clearModules])
+    }, [token, modulesGateComplete, thisOrThatMayBeEligible, clearModules])
 
     const handleLoadMore = () => {
         if (!nextCursor || isLoading || isLoadingMore) return
@@ -1425,10 +1431,8 @@ export default function FeedScreen() {
 
     const renderThisOrThat = () => {
         if (thisOrThat === null) return null
-        const bucket = thisOrThat.bucket
-        const tone = bucketColor(bucket)
-        const bucketLabel = bucket === "alright" ? "Okay" : bucket[0].toUpperCase() + bucket.slice(1)
-        const option = (side: ThisOrThatModule["left"], label: string) => (
+        const tone = bucketColor(thisOrThat.bucket)
+        const option = (side: ThisOrThatModule["left"]) => (
             <TouchableOpacity
                 style={[styles.totOption, thisOrThatSaving && styles.totOptionDisabled]}
                 activeOpacity={0.82}
@@ -1441,11 +1445,9 @@ export default function FeedScreen() {
                 ) : (
                     <View style={[styles.totArt, { backgroundColor: colors.paper2 }]} />
                 )}
-                <View style={styles.totOptionText}>
-                    <Text style={styles.totSideLabel}>{label}</Text>
+                <View>
                     <Text style={styles.totSongTitle} numberOfLines={2}>{side.song.title}</Text>
                     <Text style={styles.totSongArtist} numberOfLines={1}>{side.song.artist}</Text>
-                    <Text style={styles.totRankLine}>#{side.position} · {side.score.toFixed(1)}</Text>
                 </View>
             </TouchableOpacity>
         )
@@ -1463,17 +1465,17 @@ export default function FeedScreen() {
                 </TouchableOpacity>
                 <View style={styles.totTopRow}>
                     <View style={[styles.totPill, { backgroundColor: tone }]}>
-                        <Text style={styles.totPillText}>This or That</Text>
+                        <Text style={styles.totPillText}>This-or-That</Text>
                     </View>
-                    <Text style={styles.totMeta}>{bucketLabel.toUpperCase()} · NEIGHBORS</Text>
+                    <Text style={styles.totMeta}>IN YOUR RANKINGS</Text>
                 </View>
                 <Text style={styles.totTitle}>Which one belongs higher?</Text>
                 <View style={styles.totOptionsRow}>
-                    {option(thisOrThat.left, "A")}
+                    {option(thisOrThat.left)}
                     <View style={styles.totVs}>
                         <Text style={styles.totVsText}>VS</Text>
                     </View>
-                    {option(thisOrThat.right, "B")}
+                    {option(thisOrThat.right)}
                 </View>
             </View>
         )
@@ -3756,16 +3758,6 @@ const styles = StyleSheet.create({
         borderRadius: 9,
         marginBottom: 8,
     },
-    totOptionText: {
-        minHeight: 74,
-    },
-    totSideLabel: {
-        fontFamily: fonts.monoBold,
-        fontSize: 8,
-        color: colors.inkDim,
-        letterSpacing: 1,
-        marginBottom: 3,
-    },
     totSongTitle: {
         fontFamily: fonts.display,
         fontSize: 13,
@@ -3778,12 +3770,6 @@ const styles = StyleSheet.create({
         lineHeight: 14,
         color: colors.inkSoft,
         marginTop: 2,
-    },
-    totRankLine: {
-        fontFamily: fonts.monoBold,
-        fontSize: 9,
-        color: colors.inkDim,
-        marginTop: 5,
     },
     totVs: {
         width: 30,

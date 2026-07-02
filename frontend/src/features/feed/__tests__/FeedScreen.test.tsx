@@ -713,7 +713,7 @@ describe("FeedScreen", () => {
     it("surfaces This-or-That above social cards and records the pick inline", async () => {
         mockCurrentProfile = {
             ...mockCurrentProfile,
-            user_stats: { rated_count: 12, bookmarked_count: 0 },
+            user_stats: { rated_count: 15, bookmarked_count: 0 },
             following_count: 0,
         }
         mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
@@ -741,7 +741,7 @@ describe("FeedScreen", () => {
     it("dismisses This-or-That from the Feed card", async () => {
         mockCurrentProfile = {
             ...mockCurrentProfile,
-            user_stats: { rated_count: 12, bookmarked_count: 0 },
+            user_stats: { rated_count: 15, bookmarked_count: 0 },
             following_count: 0,
         }
         mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
@@ -947,10 +947,11 @@ describe("FeedScreen", () => {
     })
 
     it("keeps social cards locked below the base gate while still fetching personal prompts", async () => {
-        // Rated 12 but following < 3 → social gate not met, but This-or-That is personal.
+        // Rated 15 (This-or-That's own threshold) but following < 3 → social gate not met, but
+        // This-or-That is personal and fetches anyway.
         mockCurrentProfile = {
             ...mockCurrentProfile,
-            user_stats: { rated_count: 12, bookmarked_count: 0 },
+            user_stats: { rated_count: 15, bookmarked_count: 0 },
             following_count: 1,
         }
         mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })

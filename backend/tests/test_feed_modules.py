@@ -403,8 +403,10 @@ def test_this_or_that_choice_keeps_order_when_higher_neighbor_wins(
 def test_this_or_that_dismiss_records_explicit_context_and_cools_down(
     client: TestClient,
     db_session: Session,
+    monkeypatch,
 ):
     """Dismiss is an explicit signal and suppresses the prompt for the cooldown window."""
+    monkeypatch.setattr("src.services.feed.THIS_OR_THAT_MIN_RATED", 10)
     token = _register(client, "dismiss@example.com", "dismissuser")
     user_id = _user_id(db_session, "dismissuser")
     left, right = _seed_this_or_that_rankings(db_session, user_id)
