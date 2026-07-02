@@ -35,12 +35,13 @@ import Svg, { Circle, Path, Polygon, Polyline } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
 import { ArrowLabel } from "../../components/Arrow"
+import Avatar from "../../components/Avatar"
 import BouncyPressable from "../../components/BouncyPressable"
 import EndOfListCap from "../../components/EndOfListCap"
 import HatchBox from "../../components/HatchBox"
 import { PulsingMeterTick } from "../../components/PulsingMeterTick"
 import { AppStackParamList, FeedStackParamList, TabParamList } from "../../navigation/types"
-import { colors, fonts, bucketColor, goldMeterShade, meterSegment, avatarColorFor } from "../../theme"
+import { colors, fonts, bucketColor, goldMeterShade, meterSegment, avatarColorFor, avatarColorToken } from "../../theme"
 import { usePullRefresh } from "../../hooks/usePullRefresh"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
 import ActivityLikeButton from "../activity/ActivityLikeButton"
@@ -431,6 +432,7 @@ export default function FeedScreen() {
     const insets = useSafeAreaInsets()
     const { token, profile, refreshProfile } = useAuth()
     const avatarInitial = (profile?.display_name || profile?.username || "?").charAt(0).toUpperCase()
+    const avatarColor = avatarColorToken(profile?.avatar_color, colors.ink)
     const [events, setEvents] = useState<FeedEvent[]>([])
     const [nextCursor, setNextCursor] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(false)
@@ -1790,11 +1792,11 @@ export default function FeedScreen() {
                             )}
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={styles.avatarCircle}
+                            style={styles.avatarBtn}
                             onPress={() => navigation.navigate("Profile")}
                             accessibilityLabel="Your profile"
                         >
-                            <Text style={styles.avatarLetter}>{avatarInitial}</Text>
+                            <Avatar initial={avatarInitial} color={avatarColor} size={32} />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -2087,11 +2089,11 @@ export default function FeedScreen() {
                             )}
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={styles.avatarCircle}
+                            style={styles.avatarBtn}
                             onPress={() => navigation.navigate("Profile")}
                             accessibilityLabel="Your profile"
                         >
-                            <Text style={styles.avatarLetter}>{avatarInitial}</Text>
+                            <Avatar initial={avatarInitial} color={avatarColor} size={32} />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -2274,19 +2276,8 @@ const styles = StyleSheet.create({
         lineHeight: 36,
         color: colors.ink,
     },
-    avatarCircle: {
-        width: 32,
-        height: 32,
-        borderRadius: 9,
-        backgroundColor: colors.ink,
-        alignItems: "center",
-        justifyContent: "center",
+    avatarBtn: {
         marginTop: 4,
-    },
-    avatarLetter: {
-        color: "#fff",
-        fontWeight: "700",
-        fontSize: 17,
     },
     // ── Search bar ───────────────────────────────────────────────────────
     searchBar: {

@@ -21,6 +21,7 @@ import { ApiError } from "../../api/client"
 import { AppStackParamList } from "../../navigation/types"
 import { avatarColorToken, colors, fonts } from "../../theme"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
+import Avatar from "../../components/Avatar"
 import ActivityLikeButton from "../activity/ActivityLikeButton"
 import { updateLikePrivacy } from "../activity/apiRequests"
 import OwnActivitySheet from "../activity/OwnActivitySheet"
@@ -354,12 +355,12 @@ export default function ProfileScreen() {
                 {profile ? (
                     <View style={styles.identityCard}>
                         <View style={styles.identityRow}>
-                            <View
-                                style={[styles.avatar, { backgroundColor: avatarColorToken(profile?.avatar_color, colors.ink) }]}
+                            <Avatar
+                                initial={profileInitial}
+                                color={avatarColorToken(profile?.avatar_color, colors.ink)}
+                                size={50}
                                 testID="profile-star-avatar"
-                            >
-                                <Text style={styles.avatarLetter}>{profileInitial}</Text>
-                            </View>
+                            />
                             <View style={styles.identityInfo}>
                                 <Text style={styles.displayName}>{profile.display_name}</Text>
                                 <Text style={styles.usernameRow}>
@@ -799,20 +800,6 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         gap: 13,
-    },
-    avatar: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
-        backgroundColor: colors.ink,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    avatarLetter: {
-        fontFamily: fonts.display,
-        fontSize: 21,
-        color: "#fff",
-        lineHeight: 25,
     },
     identityInfo: {
         flex: 1,
