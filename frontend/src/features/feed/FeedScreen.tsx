@@ -1214,7 +1214,7 @@ export default function FeedScreen() {
                         </View>
                         {/* Placeholder text pill next to the empty square */}
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                            <HatchBox size={28} radius={6} tone="light" />
+                            <HatchBox size={24} radius={6} tone="light" />
                             <View style={{ flex: 1 }}>
                                 <View style={[styles.skBar, { width: "62%", height: 10, backgroundColor: "rgba(255,255,255,0.3)" }]} />
                             </View>
@@ -4013,7 +4013,7 @@ const styles = StyleSheet.create({
         position: "absolute",
         left: 12,
         right: 12,
-        bottom: 30,
+        bottom: 26,
         flexDirection: "row",
         alignItems: "flex-end",
         gap: 3,
