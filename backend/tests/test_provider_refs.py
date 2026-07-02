@@ -115,6 +115,24 @@ def _finalize(
     return response.json()
 
 
+def _bookmark(
+    client: TestClient,
+    token: str,
+    payload: dict,
+) -> dict:
+    """Bookmark a provider song and return the response body."""
+    response = client.post(
+        "/api/v1/bookmarks",
+        json={
+            "song": payload["song"],
+            "source": "song_detail",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    return response.json()
+
+
 def test_provider_refs_uniqueness_and_storefront_required(db_session: Session):
     """Provider refs enforce a storefront-qualified unique provider identity."""
     song = Song(
@@ -176,6 +194,26 @@ def test_deezer_finalize_backfills_legacy_provider_ref(
         .where(SongProviderRef.storefront == "global")
     ).scalar_one()
     assert provider_ref.song_id == response["ranking"]["song_id"]
+    assert provider_ref.preview_available is True
+
+
+def test_deezer_bookmark_backfills_legacy_provider_ref(
+    client: TestClient,
+    db_session: Session,
+):
+    """Bookmark-only Deezer songs still record their legacy provider identity."""
+    token = _get_token(client)
+    response = _bookmark(client, token, _deezer_payload())
+
+    provider_ref = db_session.execute(
+        select(SongProviderRef)
+        .where(SongProviderRef.provider == "deezer_legacy")
+        .where(SongProviderRef.provider_track_id == "123")
+        .where(SongProviderRef.storefront == "global")
+    ).scalar_one()
+    assert provider_ref.song_id == response["song"]["id"]
+    assert provider_ref.provider_artist_id == "456"
+    assert provider_ref.artwork_url == "https://example.com/cover.jpg"
     assert provider_ref.preview_available is True
 
 

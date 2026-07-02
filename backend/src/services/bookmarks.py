@@ -10,6 +10,7 @@ from src.crud.bookmarks import (
     list_user_bookmarks,
 )
 from src.crud.song import upsert_from_deezer
+from src.crud.song_provider_ref import ensure_deezer_legacy_ref
 from src.pydantic_schemas.bookmarks import (
     BookmarkCreate,
     BookmarkListResponse,
@@ -32,6 +33,10 @@ def bookmark_song(
         song = upsert_from_deezer(
             db,
             data.song,
+        )
+        ensure_deezer_legacy_ref(
+            db,
+            song,
         )
         create_or_get_bookmark(
             db,
