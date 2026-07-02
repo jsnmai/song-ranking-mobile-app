@@ -208,8 +208,8 @@ function VerdictFingerCue({ size = 22 }: { size?: number }) {
 
     const fingerStyle = useAnimatedStyle(() => ({
         transform: [
-            { translateY: -1 - bob.value * 1.8 },
-            { rotateZ: `${-22 - bob.value * 0.8}deg` },
+            { translateY: -1 - bob.value * 5 },
+            { rotateZ: `${-22 - bob.value * 4}deg` },
         ],
     }))
 
@@ -247,18 +247,18 @@ function SplitSongMotion({ children }: { children: ReactNode }) {
 
     useEffect(() => {
         sway.value = withRepeat(
-            withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.quad) }),
+            withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.sin) }),
             -1,
             true,
         )
     }, [sway])
 
+    // Gentle pendulum rock, not a bounce — equal tilt left/right from center, with a slight
+    // horizontal drift in the same direction as the tilt (no vertical bounce or scale pop).
     const animatedStyle = useAnimatedStyle(() => ({
         transform: [
-            { translateX: sway.value * 6 },
-            { translateY: -Math.abs(sway.value) * 3 },
-            { rotateZ: `${sway.value * 8}deg` },
-            { scale: 1 + Math.abs(sway.value) * 0.025 },
+            { translateX: sway.value * 5 },
+            { rotateZ: `${sway.value * 16}deg` },
         ],
     }))
 
