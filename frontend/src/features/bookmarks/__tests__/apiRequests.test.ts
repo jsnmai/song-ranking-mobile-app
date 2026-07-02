@@ -1,5 +1,6 @@
 import {
     getBookmarkStatus,
+    getBookmarkStatusBySongId,
     listMyBookmarks,
     removeBookmark,
     bookmarkSong,
@@ -48,6 +49,14 @@ describe("Bookmarks API requests", () => {
         await getBookmarkStatus(123, "test-token")
 
         expect(mockGet).toHaveBeenCalledWith("/api/v1/bookmarks/by-deezer/123", "test-token")
+    })
+
+    it("gets bookmark state by LISTn song ID", async () => {
+        mockGet.mockResolvedValue({ is_bookmarked: false, bookmark: null })
+
+        await getBookmarkStatusBySongId(42, "test-token")
+
+        expect(mockGet).toHaveBeenCalledWith("/api/v1/bookmarks/by-song/42", "test-token")
     })
 
     it("bookmarks a song with its source", async () => {

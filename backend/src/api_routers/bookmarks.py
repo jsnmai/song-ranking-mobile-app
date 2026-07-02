@@ -14,6 +14,7 @@ from src.pydantic_schemas.bookmarks import (
 from src.services.bookmarks import (
     bookmark_song,
     get_bookmark_status,
+    get_bookmark_status_by_song_id,
     list_my_bookmarks,
     remove_bookmark,
 )
@@ -59,6 +60,25 @@ def bookmark_status(
         db,
         user_id=current_user.id,
         deezer_id=deezer_id,
+    )
+
+
+@router.get(
+    "/by-song/{song_id}",
+    response_model=BookmarkStatusResponse,
+)
+@limiter.limit("300/minute")
+def bookmark_status_by_song(
+    request: Request,
+    song_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BookmarkStatusResponse:
+    """Return bookmark state for one durable song, provider-neutral by LISTn song id."""
+    return get_bookmark_status_by_song_id(
+        db,
+        user_id=current_user.id,
+        song_id=song_id,
     )
 
 

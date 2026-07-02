@@ -33,7 +33,7 @@ import { getMyRankingByDeezerId, getMyRankingBySongId, listMyRankings, listMyVer
 import { ComparisonHistoryReceipt } from "../rankings/types"
 import { RankingResponse } from "../comparison/types"
 import { fetchPreviewUrl, fetchPreviewUrlBySongId } from "../songs/apiRequests"
-import { bookmarkSong, getBookmarkStatus, removeBookmark } from "../bookmarks/apiRequests"
+import { bookmarkSong, getBookmarkStatus, getBookmarkStatusBySongId, removeBookmark } from "../bookmarks/apiRequests"
 import { Bookmark } from "../bookmarks/types"
 
 type SongDetailProps = NativeStackScreenProps<AppStackParamList, "SongDetail">
@@ -317,6 +317,10 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
 
     const accent = ranking ? bucketColor(ranking.bucket) : colors.inkDim
     const durableSongId = song.id ?? song.song_id ?? ranking?.song_id ?? null
+    // Bookmarkable when the song carries any persistable identity: legacy Deezer id, Apple
+    // track id (bookmarking creates the durable song via finalize canonicalization), or an
+    // already-durable LISTn id.
+    const canBookmark = song.deezer_id != null || song.apple_track_id != null || durableSongId != null
     const canFetchSavedPreview = durableSongId != null
         && song.preview_url === null
         && song.preview_available === true
@@ -389,12 +393,18 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
 
     const handleBookmarkToggle = async () => {
         if (!token || isBookmarkUpdating) return
-        if (song.deezer_id == null) return
+        if (!canBookmark) return
         setIsBookmarkUpdating(true)
         setError(null)
         try {
             if (bookmark === null) {
-                const bm = await bookmarkSong(song, "song_detail", token)
+                // Deezer and Apple songs carry their own provider identity; a durable song
+                // without one (e.g. an Apple-originated song opened from Rankings) bookmarks
+                // by LISTn id so the backend skips provider resolution entirely.
+                const payload = song.deezer_id != null || song.apple_track_id != null
+                    ? song
+                    : { ...song, id: durableSongId as number, deezer_id: null, provider: "listn" as const }
+                const bm = await bookmarkSong(payload, "song_detail", token)
                 setBookmark(bm)
             } else {
                 await removeBookmark(bookmark.song.id, token)
@@ -541,13 +551,17 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                 return
             }
             setIsBookmarkStatusLoading(true)
-            if (song.deezer_id == null) {
+            // A song with no durable id and no deezer_id (a fresh Apple search result) cannot
+            // be bookmarked yet, so its status is trivially "not bookmarked".
+            if (song.deezer_id == null && durableSongId == null) {
                 setBookmark(null)
                 setIsBookmarkStatusLoading(false)
                 return
             }
             try {
-                const response = await getBookmarkStatus(song.deezer_id, token)
+                const response = song.deezer_id != null
+                    ? await getBookmarkStatus(song.deezer_id, token)
+                    : await getBookmarkStatusBySongId(durableSongId as number, token)
                 if (isActive) setBookmark(response.bookmark)
             } catch (err) {
                 if (isActive) {
@@ -559,7 +573,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
         }
         loadBookmarkState()
         return () => { isActive = false }
-    }, [song.deezer_id, token])
+    }, [song.deezer_id, durableSongId, token])
 
     const isApplePreview = previewUrl !== null && previewIsApple
     const handleOpenApple = () => {
@@ -666,7 +680,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                         </View>
                         <Text style={styles.previewDur}>{formatTime(currentTime)}</Text>
                     </View>
-                    {song.deezer_id != null && (
+                    {canBookmark && (
                         <TouchableOpacity
                             style={styles.bookmarkBtn}
                             onPress={handleBookmarkToggle}

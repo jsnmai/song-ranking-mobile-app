@@ -217,6 +217,110 @@ def test_deezer_bookmark_backfills_legacy_provider_ref(
     assert provider_ref.preview_available is True
 
 
+def test_apple_bookmark_creates_song_and_provider_ref(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    """Apple search results bookmark through the same canonicalization path as finalize."""
+    token = _get_token(client)
+
+    def mock_get(
+        url: str,
+        params: dict,
+        timeout: float,
+    ) -> MockAppleResponse:
+        return MockAppleResponse(
+            {
+                "results": [
+                    {
+                        "trackId": 1440841363,
+                        "trackName": "Nights",
+                        "artistName": "Frank Ocean",
+                        "collectionName": "Blonde",
+                        "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Music/cover/100x100bb.jpg",
+                        "trackViewUrl": "https://music.apple.com/us/album/nights/1440841363?i=1440841363",
+                        "previewUrl": "https://audio-ssl.itunes.apple.com/apple-preview.m4a",
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr("src.services.provider_catalog.httpx.get", mock_get)
+    response = _bookmark(client, token, _apple_payload(title="Client Title"))
+
+    song = db_session.get(Song, response["song"]["id"])
+    assert song.title == "Nights"
+    assert song.preview_url is None
+    provider_ref = db_session.execute(
+        select(SongProviderRef).where(SongProviderRef.song_id == song.id)
+    ).scalar_one()
+    assert provider_ref.provider == "apple"
+    assert provider_ref.provider_track_id == "1440841363"
+    assert provider_ref.confidence == "apple_lookup"
+
+    status_response = client.get(
+        f"/api/v1/bookmarks/by-song/{song.id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert status_response.status_code == 200
+    assert status_response.json()["is_bookmarked"] is True
+
+
+def test_bookmark_status_by_song_id_is_user_scoped(
+    client: TestClient,
+):
+    """The by-song status route reports only the current user's bookmark state."""
+    owner_token = _get_token(client)
+    response = _bookmark(client, owner_token, _deezer_payload())
+    song_id = response["song"]["id"]
+
+    other_token = _get_token(
+        client,
+        email="other@example.com",
+        username="otheruser",
+    )
+    other_status = client.get(
+        f"/api/v1/bookmarks/by-song/{song_id}",
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+    assert other_status.status_code == 200
+    assert other_status.json()["is_bookmarked"] is False
+    assert other_status.json()["bookmark"] is None
+
+
+def test_listn_bookmark_reuses_durable_song_without_provider_calls(
+    client: TestClient,
+    monkeypatch,
+):
+    """A durable song bookmarks by LISTn id alone, with no Apple or Deezer lookup."""
+    token = _get_token(client)
+    finalize_response = _finalize(client, token, _deezer_payload())
+    song_id = finalize_response["ranking"]["song_id"]
+
+    def fail_lookup(*args, **kwargs):
+        raise AssertionError("Bookmarking by LISTn id must not call a provider.")
+
+    monkeypatch.setattr("src.services.provider_catalog.httpx.get", fail_lookup)
+    response = client.post(
+        "/api/v1/bookmarks",
+        json={
+            "song": {
+                "id": song_id,
+                "provider": "listn",
+                "title": "Nights",
+                "artist": "Frank Ocean",
+                "album": "Blonde",
+                "cover_url": "https://example.com/cover.jpg",
+            },
+            "source": "song_detail",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["song"]["id"] == song_id
+
+
 def test_apple_lookup_creates_song_and_provider_ref(
     client: TestClient,
     db_session: Session,

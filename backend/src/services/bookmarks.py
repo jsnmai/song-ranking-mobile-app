@@ -1,4 +1,5 @@
 """Business logic for per-user Bookmarks."""
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from src.crud.bookmarks import (
@@ -9,7 +10,7 @@ from src.crud.bookmarks import (
     get_user_bookmark_by_song_id,
     list_user_bookmarks,
 )
-from src.crud.song import upsert_from_deezer
+from src.crud.song import get_by_id, upsert_from_deezer
 from src.crud.song_provider_ref import ensure_deezer_legacy_ref
 from src.pydantic_schemas.bookmarks import (
     BookmarkCreate,
@@ -18,9 +19,43 @@ from src.pydantic_schemas.bookmarks import (
     BookmarkResponse,
     BookmarkStatusResponse,
 )
+from src.pydantic_schemas.song import SongCreate
+from src.services.provider_catalog import resolve_song_for_finalize
 from src.services.rating import build_ranking_response
 
 BOOKMARKS_LIMIT = 100
+
+
+def _resolve_bookmark_song(
+    db: Session,
+    song_data: SongCreate,
+):
+    """Resolve the durable song for a bookmark, dispatching by provider like rating finalize."""
+    if song_data.provider == "listn" and song_data.id is not None:
+        song = get_by_id(
+            db,
+            song_data.id,
+        )
+        if song is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Song not found.",
+            )
+        return song
+    if song_data.provider == "apple":
+        return resolve_song_for_finalize(
+            db,
+            song_data,
+        )
+    song = upsert_from_deezer(
+        db,
+        song_data,
+    )
+    ensure_deezer_legacy_ref(
+        db,
+        song,
+    )
+    return song
 
 
 def bookmark_song(
@@ -30,13 +65,9 @@ def bookmark_song(
 ) -> BookmarkResponse:
     """Bookmark a song idempotently and preserve it after future rating."""
     try:
-        song = upsert_from_deezer(
+        song = _resolve_bookmark_song(
             db,
             data.song,
-        )
-        ensure_deezer_legacy_ref(
-            db,
-            song,
         )
         create_or_get_bookmark(
             db,
@@ -92,6 +123,23 @@ def get_bookmark_status(
         db,
         user_id=user_id,
         deezer_id=deezer_id,
+    )
+    return BookmarkStatusResponse(
+        is_bookmarked=row is not None,
+        bookmark=_bookmark_response(db, row) if row is not None else None,
+    )
+
+
+def get_bookmark_status_by_song_id(
+    db: Session,
+    user_id: int,
+    song_id: int,
+) -> BookmarkStatusResponse:
+    """Return whether one durable LISTn song is bookmarked by the current user."""
+    row = get_user_bookmark_by_song_id(
+        db,
+        user_id=user_id,
+        song_id=song_id,
     )
     return BookmarkStatusResponse(
         is_bookmarked=row is not None,

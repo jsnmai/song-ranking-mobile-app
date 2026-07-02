@@ -19,6 +19,13 @@ export async function getBookmarkStatus(
     return apiClient.get<BookmarkStatusResponse>(`/api/v1/bookmarks/by-deezer/${deezerId}`, token)
 }
 
+export async function getBookmarkStatusBySongId(
+    songId: number,
+    token: string,
+): Promise<BookmarkStatusResponse> {
+    return apiClient.get<BookmarkStatusResponse>(`/api/v1/bookmarks/by-song/${songId}`, token)
+}
+
 export async function bookmarkSong(
     song: SongSearchResult,
     source: BookmarkSource,

@@ -12,6 +12,7 @@ const mockListMyVersusHistory = jest.fn()
 const mockFetchPreviewUrl = jest.fn()
 const mockFetchPreviewUrlBySongId = jest.fn()
 const mockGetBookmarkStatus = jest.fn()
+const mockGetBookmarkStatusBySongId = jest.fn()
 const mockRemoveBookmark = jest.fn()
 const mockBookmarkSong = jest.fn()
 
@@ -46,6 +47,7 @@ jest.mock("../../songs/apiRequests", () => ({
 
 jest.mock("../../bookmarks/apiRequests", () => ({
     getBookmarkStatus: (...args: unknown[]) => mockGetBookmarkStatus(...args),
+    getBookmarkStatusBySongId: (...args: unknown[]) => mockGetBookmarkStatusBySongId(...args),
     removeBookmark: (...args: unknown[]) => mockRemoveBookmark(...args),
     bookmarkSong: (...args: unknown[]) => mockBookmarkSong(...args),
 }))
@@ -113,6 +115,7 @@ beforeEach(() => {
         provider: "apple",
     })
     mockGetBookmarkStatus.mockResolvedValue({ is_bookmarked: false, bookmark: null })
+    mockGetBookmarkStatusBySongId.mockResolvedValue({ is_bookmarked: false, bookmark: null })
     mockListMyVersusHistory.mockResolvedValue({ receipts: [] })
 })
 
@@ -513,5 +516,86 @@ describe("SongDetailScreen", () => {
         expect(await screen.findByText("Could not bookmark song.")).toBeTruthy()
         expect(screen.getByLabelText("Bookmark")).toBeTruthy()
         expect(screen.queryByLabelText("Remove Bookmark")).toBeNull()
+    })
+
+    it("bookmarks a fresh Apple search result without any deezer identity", async () => {
+        const appleSearchSong = {
+            ...ranking.song,
+            id: undefined,
+            song_id: undefined,
+            deezer_id: null,
+            provider: "apple" as const,
+            apple_track_id: "1440841363",
+            storefront: "US",
+        }
+        mockBookmarkSong.mockResolvedValue({
+            id: 9,
+            source: "song_detail",
+            bookmarked_at: "2026-01-01T00:00:00Z",
+            song: ranking.song,
+            ranking: null,
+        })
+
+        render(
+            <SongDetailScreen
+                navigation={navigation as never}
+                route={{ params: { song: appleSearchSong } } as never}
+            />,
+        )
+
+        // Not durable yet, so no status endpoint is called — status is trivially unbookmarked.
+        fireEvent.press(await screen.findByLabelText("Bookmark"))
+
+        await waitFor(() => {
+            expect(mockBookmarkSong).toHaveBeenCalledWith(appleSearchSong, "song_detail", "test-token")
+        })
+        expect(mockGetBookmarkStatus).not.toHaveBeenCalled()
+        expect(mockGetBookmarkStatusBySongId).not.toHaveBeenCalled()
+        expect(await screen.findByLabelText("Remove Bookmark")).toBeTruthy()
+    })
+
+    it("bookmarks a durable Apple-originated song from Rankings by LISTn id", async () => {
+        const appleRanking: RankingResponse = {
+            ...ranking,
+            song: {
+                ...ranking.song,
+                deezer_id: null,
+                provider: "apple",
+                preview_url: null,
+                preview_available: true,
+                apple_view_url: null,
+            },
+        }
+        mockBookmarkSong.mockResolvedValue({
+            id: 10,
+            source: "song_detail",
+            bookmarked_at: "2026-01-01T00:00:00Z",
+            song: appleRanking.song,
+            ranking: appleRanking,
+        })
+
+        render(
+            <SongDetailScreen
+                navigation={navigation as never}
+                route={{ params: { ranking: appleRanking } } as never}
+            />,
+        )
+
+        fireEvent.press(await screen.findByLabelText("Bookmark"))
+
+        // Status resolves through the provider-neutral by-song endpoint, and the bookmark
+        // payload downgrades to a bare LISTn identity (no apple_track_id on a persisted song).
+        await waitFor(() => {
+            expect(mockGetBookmarkStatusBySongId).toHaveBeenCalledWith(42, "test-token")
+        })
+        await waitFor(() => {
+            expect(mockBookmarkSong).toHaveBeenCalledWith(
+                { ...appleRanking.song, id: 42, deezer_id: null, provider: "listn" },
+                "song_detail",
+                "test-token",
+            )
+        })
+        expect(mockGetBookmarkStatus).not.toHaveBeenCalled()
+        expect(await screen.findByLabelText("Remove Bookmark")).toBeTruthy()
     })
 })

@@ -4,7 +4,9 @@
 // Mirrors SongSearchResult.
 export type SongSearchResult = {
     id?: number;
-    provider?: "apple" | "deezer_legacy";
+    // "listn" is the outbound payload form for songs already durable in LISTn's catalog
+    // (id set, no provider identity needed), e.g. bookmarking from a Rankings-derived song.
+    provider?: "apple" | "deezer_legacy" | "listn";
     deezer_id: number | null;
     isrc: string | null;
     title: string;
