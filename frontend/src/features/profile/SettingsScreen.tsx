@@ -243,14 +243,6 @@ export default function SettingsScreen({ navigation }: SettingsProps) {
                             <View style={[styles.editField, styles.editFieldDivider]}>
                                 <Text style={styles.editFieldLabel}>ICON COLOR</Text>
                                 <View style={styles.swatchRow}>
-                                    <TouchableOpacity
-                                        onPress={() => { setColor(null); setSavedOk(false) }}
-                                        style={[styles.defaultSwatch, color === null && styles.swatchSelected]}
-                                        accessibilityLabel="Use default icon color"
-                                        testID="edit-color-default"
-                                    >
-                                        <Text style={styles.defaultSwatchText}>AUTO</Text>
-                                    </TouchableOpacity>
                                     {AVATAR_COLOR_TOKENS.map((token) => (
                                         <TouchableOpacity
                                             key={token}
@@ -564,23 +556,6 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         flexWrap: "wrap",
         gap: 12,
-    },
-    defaultSwatch: {
-        height: 34,
-        minWidth: 58,
-        borderRadius: 17,
-        borderWidth: 2,
-        borderColor: "transparent",
-        alignItems: "center",
-        justifyContent: "center",
-        paddingHorizontal: 10,
-    },
-    defaultSwatchText: {
-        fontFamily: fonts.mono,
-        fontSize: 9,
-        color: colors.inkSoft,
-        fontWeight: "700",
-        letterSpacing: 0,
     },
     swatch: {
         width: 34,
