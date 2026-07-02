@@ -16,6 +16,7 @@ from src.crud.song_provider_ref import ensure_musicbrainz_ref
 from src.pydantic_schemas.song import SongResponse
 
 MUSICBRAINZ_RECORDING_URL = "https://musicbrainz.org/ws/2/recording/"
+MUSICBRAINZ_RELEASE_URL = "https://musicbrainz.org/ws/2/release/"
 MUSICBRAINZ_USER_AGENT = "LISTn/1.0 (contact@listn.app)"
 MUSICBRAINZ_TIMEOUT_SECONDS = 8.0
 MUSICBRAINZ_MIN_REQUEST_INTERVAL_SECONDS = 1.0
@@ -178,6 +179,34 @@ def _wait_for_musicbrainz_budget() -> None:
         time.sleep(MUSICBRAINZ_MIN_REQUEST_INTERVAL_SECONDS - elapsed)
 
     _last_musicbrainz_request_at = time.monotonic()
+
+
+def fetch_release_barcode(release_mbid: str) -> str | None:
+    """
+    Fetch one release's barcode (UPC/EAN) from MusicBrainz, or None.
+
+    Used by the New Release feed to map a MusicBrainz release to the Apple catalog via
+    UPC lookup. Best-effort and throttled like every other MusicBrainz call.
+    """
+    try:
+        _wait_for_musicbrainz_budget()
+        response = httpx.get(
+            f"{MUSICBRAINZ_RELEASE_URL}{release_mbid}",
+            params={"fmt": "json"},
+            headers={"User-Agent": MUSICBRAINZ_USER_AGENT},
+            timeout=MUSICBRAINZ_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except Exception:
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+    barcode = payload.get("barcode")
+    if isinstance(barcode, str) and barcode.strip():
+        return barcode.strip()
+    return None
 
 
 def _fetch_recording_isrc(recording_mbid: str) -> str | None:

@@ -21,6 +21,7 @@ from src.api_routers import (
     events,
     feed,
     like,
+    new_release,
     notification,
     popular,
     profile,
@@ -32,6 +33,7 @@ from src.api_routers import (
 from src.core.config import settings
 from src.core.limiter import limiter
 from src.services.musicbrainz_tasks import enrichment_sweep_loop
+from src.services.new_release import new_release_refresh_loop
 
 logger = logging.getLogger("listn.api")
 
@@ -51,20 +53,23 @@ if settings.sentry_dsn:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Own the MusicBrainz retry-sweep loop for the process lifetime.
+    Own the periodic background loops for the process lifetime.
 
-    The loop sleeps before its first pass, so lifespans that start and stop quickly
-    (tests, TestClient contexts) create and cancel the task without any MusicBrainz
+    Every loop sleeps before its first pass, so lifespans that start and stop quickly
+    (tests, TestClient contexts) create and cancel the tasks without any provider
     traffic or DB reads.
     """
-    sweep_task = None
+    background_tasks = []
     if settings.enrichment_sweep_enabled:
-        sweep_task = asyncio.create_task(enrichment_sweep_loop())
+        background_tasks.append(asyncio.create_task(enrichment_sweep_loop()))
+    if settings.new_release_feed_enabled:
+        background_tasks.append(asyncio.create_task(new_release_refresh_loop()))
     yield
-    if sweep_task is not None:
-        sweep_task.cancel()
+    for task in background_tasks:
+        task.cancel()
+    for task in background_tasks:
         try:
-            await sweep_task
+            await task
         except asyncio.CancelledError:
             pass
 
@@ -199,6 +204,10 @@ app.include_router(
 )
 app.include_router(
     events.router,
+    prefix="/api/v1",
+)
+app.include_router(
+    new_release.router,
     prefix="/api/v1",
 )
 

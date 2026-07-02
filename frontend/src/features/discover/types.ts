@@ -62,10 +62,10 @@ export type CircleMostRatedResponse = {
     items: CircleMostRatedItem[];
 }
 
-// --- New release (a fresh drop from an artist already in your rankings) ---
-// Frontend-only for now: the backend feed (fresh releases across your rated
-// artists) is NOT built yet and has to be implemented separately. Until that
-// endpoint exists, DiscoverScreen renders the card's placeholder state.
+// --- New release (a fresh drop from this week, global for every viewer) ---
+// Served by GET /api/v1/discover/new-release: the backend batches the week's fresh
+// releases (ListenBrainz -> Apple catalog) into durable songs and rotates one pick
+// per day. Empty items means no batch has landed yet; the card shows its placeholder.
 export type NewReleaseItem = {
     song: PersistedSong;
     released_at: string;

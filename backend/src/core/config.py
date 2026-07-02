@@ -99,6 +99,16 @@ class Settings(BaseSettings):
     enrichment_sweep_batch_size: int = 20
     enrichment_max_attempts: int = 5  # terminal give-up cap per song across all retries
 
+    # Global New Release feed batch (weekly, server-side, cached — never client-direct):
+    # ListenBrainz fresh releases → Apple UPC lookup → durable songs → daily-rotating pick.
+    # The loop sleeps before its first check, so tests never call providers.
+    new_release_feed_enabled: bool = True
+    new_release_refresh_days: int = 7           # batch window and staleness threshold
+    new_release_check_interval_seconds: int = 3600
+    new_release_target: int = 7                 # featured releases per batch (one per day)
+    new_release_scan_cap: int = 60              # max candidates examined per batch
+    new_release_storefront: str = "US"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=False,

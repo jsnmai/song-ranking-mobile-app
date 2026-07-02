@@ -1,12 +1,11 @@
-// NewReleaseCard — an art-forward "poster" tile for a fresh drop from an artist
-// already in the user's rankings (Bento Orbit design). Colourful by way of the
-// album art itself (full-bleed cover under a dark scrim), deliberately distinct
-// from the flat brand-colour social tiles AND the navy starry Most-rated orbit,
-// so it reads as an editorial pick rather than a friend-driven signal.
+// NewReleaseCard — an art-forward "poster" tile for one of this week's fresh drops
+// (global weekly feed, one rotating pick per day; Bento Orbit design). Colourful by
+// way of the album art itself (full-bleed cover under a dark scrim), deliberately
+// distinct from the flat brand-colour social tiles AND the navy starry Most-rated
+// orbit, so it reads as an editorial pick rather than a friend-driven signal.
 //
-// The backend feed for this card is NOT built yet (it has to be implemented
-// separately); pass item={null} to render the coming-soon placeholder state that
-// holds the slot until the endpoint exists.
+// item={null} (feed empty, e.g. before the first weekly batch lands) renders the
+// placeholder state so the 2-col row keeps its shape.
 import { useEffect } from "react"
 import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import Animated, {
@@ -70,7 +69,7 @@ export default function NewReleaseCard({
                     <View style={[styles.ghostLine, { width: "46%", opacity: 0.6 }]} />
                 </View>
                 <Text style={styles.placeholderBody}>
-                    Fresh drops from artists you rate will land here.
+                    This week's fresh drops will land here.
                 </Text>
             </View>
         )

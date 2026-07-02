@@ -17,6 +17,7 @@ import src.sqlalchemy_tables.comparison_session  # noqa: F401 — registers Comp
 import src.sqlalchemy_tables.follow  # noqa: F401 — registers Follow with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.interaction_event  # noqa: F401 — registers InteractionEvent with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.like  # noqa: F401 — registers Like with Base.metadata so create_all() creates the table
+import src.sqlalchemy_tables.new_release  # noqa: F401 — registers NewRelease with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.notification  # noqa: F401 — registers Notification with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.password_reset_request  # noqa: F401 — registers PasswordResetRequest with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.password_reset_token  # noqa: F401 — registers PasswordResetToken with Base.metadata so create_all() creates the table
@@ -118,6 +119,10 @@ def use_test_sessions_for_background_tasks(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "src.services.similarity_tasks.SessionLocal",
+        TestingSessionLocal,
+    )
+    monkeypatch.setattr(
+        "src.services.new_release.SessionLocal",
         TestingSessionLocal,
     )
 

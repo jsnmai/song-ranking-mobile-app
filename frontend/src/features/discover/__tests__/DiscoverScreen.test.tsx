@@ -16,6 +16,7 @@ const mockListCoSigns = jest.fn()
 const mockGetCircleTrending = jest.fn()
 const mockGetCircleMostRated = jest.fn()
 const mockGetPopular = jest.fn()
+const mockGetNewRelease = jest.fn()
 const mockBookmarkSong = jest.fn()
 const mockRemoveBookmark = jest.fn()
 const mockCreatePlayer = jest.fn()
@@ -80,6 +81,7 @@ jest.mock("../apiRequests", () => ({
     getCircleTrending: (...args: unknown[]) => mockGetCircleTrending(...args),
     getCircleMostRated: (...args: unknown[]) => mockGetCircleMostRated(...args),
     getPopular: (...args: unknown[]) => mockGetPopular(...args),
+    getNewRelease: (...args: unknown[]) => mockGetNewRelease(...args),
 }))
 
 jest.mock("../../bookmarks/apiRequests", () => ({
@@ -197,6 +199,7 @@ beforeEach(() => {
     mockGetCircleTrending.mockResolvedValue({ items: [], window_days: 7 })
     mockGetCircleMostRated.mockResolvedValue({ items: [] })
     mockGetPopular.mockResolvedValue({ items: [], window: "all_time", window_days: 7 })
+    mockGetNewRelease.mockResolvedValue({ items: [] })
     mockBookmarkSong.mockResolvedValue({ id: 9 })
     mockRemoveBookmark.mockResolvedValue({ song_id: 42, removed: true })
     mockCreatePlayer.mockReturnValue({
@@ -232,6 +235,26 @@ describe("DiscoverScreen", () => {
         fireEvent.press(await screen.findByLabelText("Preview Redbone"))
         fireEvent.press(await screen.findByLabelText("View Redbone"))
         expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { song: popularSong })
+    })
+
+    it("renders the New Release daily pick and wires open plus rate", async () => {
+        mockGetNewRelease.mockResolvedValue({
+            items: [{ song: popularSong, released_at: "2026-06-28" }],
+        })
+        render(<DiscoverScreen />)
+
+        expect(await screen.findByTestId("new-release-card")).toBeTruthy()
+        fireEvent.press(screen.getByLabelText("Rate Redbone"))
+        expect(mockNavigate).toHaveBeenCalledWith("BucketSelection", { song: popularSong })
+        fireEvent.press(screen.getByLabelText("Open Redbone"))
+        expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { song: popularSong })
+    })
+
+    it("keeps the New Release placeholder when the feed is empty", async () => {
+        render(<DiscoverScreen />)
+
+        expect(await screen.findByTestId("new-release-card-placeholder")).toBeTruthy()
+        expect(screen.getByText("This week's fresh drops will land here.")).toBeTruthy()
     })
 
     it("relabels Popular to all-time when the week is too thin", async () => {

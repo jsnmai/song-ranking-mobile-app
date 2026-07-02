@@ -43,10 +43,10 @@ import { followUser, searchProfiles, unfollowUser } from "../profile/apiRequests
 import { Profile } from "../profile/types"
 import { searchSongs } from "../search/apiRequests"
 import { SongSearchResult } from "../search/types"
-import { getCircleMostRated, getCircleTrending, getPopular, listCoSigns } from "./apiRequests"
+import { getCircleMostRated, getCircleTrending, getNewRelease, getPopular, listCoSigns } from "./apiRequests"
 import NewReleaseCard from "./NewReleaseCard"
 import SocialDiscoveryCard from "./SocialDiscoveryCard"
-import { CircleMostRatedItem, CircleTrendingItem, CoSignItem, PopularItem, PopularWindow } from "./types"
+import { CircleMostRatedItem, CircleTrendingItem, CoSignItem, NewReleaseItem, PopularItem, PopularWindow } from "./types"
 
 const RECENT_KEY = "discover_recent_searches"
 // Recents are kept per scope (songs vs people). Show this many at rest; the rest sit
@@ -267,6 +267,7 @@ export default function DiscoverScreen() {
     const [discoveryError, setDiscoveryError] = useState<string | null>(null)
     const [trending, setTrending] = useState<CircleTrendingItem[]>([])
     const [mostRated, setMostRated] = useState<CircleMostRatedItem[]>([])
+    const [newRelease, setNewRelease] = useState<NewReleaseItem | null>(null)
     const [popular, setPopular] = useState<PopularItem[]>([])
     const [popularWindow, setPopularWindow] = useState<PopularWindow>("week")
     // Which Popular tile is showing its "View" confirmation (null = none armed).
@@ -506,18 +507,20 @@ export default function DiscoverScreen() {
         if (!token) return
         setDiscoveryError(null)
         try {
-            const [coSignResponse, trendingResponse, mostRatedResponse, popularResponse] =
+            const [coSignResponse, trendingResponse, mostRatedResponse, popularResponse, newReleaseResponse] =
                 await Promise.all([
                     listCoSigns(token),
                     getCircleTrending(token),
                     getCircleMostRated(token),
                     getPopular(token),
+                    getNewRelease(token),
                 ])
             setCoSigns(coSignResponse.items)
             setTrending(trendingResponse.items)
             setMostRated(mostRatedResponse.items)
             setPopular(popularResponse.items)
             setPopularWindow(popularResponse.window)
+            setNewRelease(newReleaseResponse.items[0] ?? null)
         } catch (err) {
             setDiscoveryError(
                 err instanceof ApiError ? err.detail : "Social discovery is temporarily unavailable.",
@@ -538,14 +541,16 @@ export default function DiscoverScreen() {
                 getCircleTrending(token),
                 getCircleMostRated(token),
                 getPopular(token),
+                getNewRelease(token),
             ])
-                .then(([coSignResponse, trendingResponse, mostRatedResponse, popularResponse]) => {
+                .then(([coSignResponse, trendingResponse, mostRatedResponse, popularResponse, newReleaseResponse]) => {
                     if (!isCurrentRequest) return
                     setCoSigns(coSignResponse.items)
                     setTrending(trendingResponse.items)
                     setMostRated(mostRatedResponse.items)
                     setPopular(popularResponse.items)
                     setPopularWindow(popularResponse.window)
+                    setNewRelease(newReleaseResponse.items[0] ?? null)
                 })
                 .catch((err) => {
                     if (isCurrentRequest) {
@@ -1032,12 +1037,19 @@ export default function DiscoverScreen() {
                                     </BouncyPressable>
                                 )}
 
-                                {/* 2-col: New Release (poster) + Most-Rated. The new-release backend
-                                    feed (fresh drops across the user's rated artists) is NOT built
-                                    yet and has to be implemented separately — until then the card
-                                    renders its coming-soon placeholder, so we pass item={null}. */}
+                                {/* 2-col: New Release (poster) + Most-Rated. New Release is the
+                                    global weekly feed (one rotating pick per day); an empty feed
+                                    (no batch yet) renders the card's placeholder state. */}
                                 <View style={styles.twoColRow}>
-                                    <NewReleaseCard item={null} />
+                                    <NewReleaseCard
+                                        item={newRelease}
+                                        onOpen={() => {
+                                            if (newRelease) navigation.navigate("SongDetail", { song: newRelease.song })
+                                        }}
+                                        onRate={() => {
+                                            if (newRelease) navigation.navigate("BucketSelection", { song: newRelease.song })
+                                        }}
+                                    />
 
                                     {mostRated.length > 0 ? (
                                         <TouchableOpacity
