@@ -1,5 +1,6 @@
 # Pydantic schemas for the social feed.
 from datetime import datetime
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -186,12 +187,25 @@ class ThisOrThatChoiceResponse(BaseModel):
     recorded: bool
     swapped: bool
     winner_song_id: int
+    comparison_session_uuid: UUID
 
 
 class ThisOrThatDismissResponse(BaseModel):
     """Acknowledgement for dismissing the current This-or-That prompt."""
 
     dismissed: bool
+
+
+class ThisOrThatUndoRequest(BaseModel):
+    """Undo a still-recent This-or-That choice, identified by its comparison receipt."""
+
+    comparison_session_uuid: UUID
+
+
+class ThisOrThatUndoResponse(BaseModel):
+    """Acknowledgement for an undone This-or-That decision."""
+
+    undone: bool
 
 
 class FeedModulesResponse(BaseModel):

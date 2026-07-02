@@ -1,5 +1,5 @@
 // Tests for Feed screen navigation behavior.
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native"
 import { Alert, AlertButton } from "react-native"
 
 import { ApiError } from "../../../api/client"
@@ -25,6 +25,7 @@ const mockListMyFeed = jest.fn()
 const mockGetFeedModules = jest.fn()
 const mockChooseThisOrThat = jest.fn()
 const mockDismissThisOrThat = jest.fn()
+const mockUndoThisOrThat = jest.fn()
 const mockReportRatingEvent = jest.fn()
 const mockLikeActivity = jest.fn()
 const mockUnlikeActivity = jest.fn()
@@ -59,12 +60,24 @@ jest.mock("@react-navigation/native", () => {
     const actual = jest.requireActual("@react-navigation/native")
     const React = require("react")
 
+    // A stable object reference, matching real @react-navigation/native (which does not hand back
+    // a new navigation object on every render). A fresh object here would change identity on every
+    // call, which would make any effect keyed on `navigation` re-fire on every re-render. Built
+    // lazily (on first call, not at mock-factory-eval time) so it picks up `mockNavigate` after its
+    // `const` has actually initialized.
+    let stableNavigation: { navigate: typeof mockNavigate; getParent: () => { addListener: () => () => void } } | null = null
+
     return {
         ...actual,
-        useNavigation: () => ({
-            navigate: mockNavigate,
-            getParent: jest.fn(() => ({ addListener: jest.fn(() => jest.fn()) })),
-        }),
+        useNavigation: () => {
+            if (stableNavigation === null) {
+                stableNavigation = {
+                    navigate: mockNavigate,
+                    getParent: () => ({ addListener: () => () => {} }),
+                }
+            }
+            return stableNavigation
+        },
         // useScrollToTop reaches for useRoute()/tab navigator context that the bare
         // render here doesn't provide — stub it; the scroll-to-top wiring isn't under test.
         useScrollToTop: () => {},
@@ -112,6 +125,7 @@ jest.mock("../apiRequests", () => ({
     getFeedModules: (...args: unknown[]) => mockGetFeedModules(...args),
     chooseThisOrThat: (...args: unknown[]) => mockChooseThisOrThat(...args),
     dismissThisOrThat: (...args: unknown[]) => mockDismissThisOrThat(...args),
+    undoThisOrThat: (...args: unknown[]) => mockUndoThisOrThat(...args),
     getSongCircleRaters: (...args: unknown[]) => mockGetSongCircleRaters(...args),
     reportRatingEvent: (...args: unknown[]) => mockReportRatingEvent(...args),
 }))
@@ -278,8 +292,14 @@ beforeEach(() => {
     jest.resetAllMocks()
     mockCurrentProfile = { ...mockCurrentProfile, hide_like_counts: false, user_stats: null, following_count: 0 }
     mockGetFeedModules.mockResolvedValue({ ...emptyModules })
-    mockChooseThisOrThat.mockResolvedValue({ recorded: true, swapped: true, winner_song_id: 43 })
+    mockChooseThisOrThat.mockResolvedValue({
+        recorded: true,
+        swapped: true,
+        winner_song_id: 43,
+        comparison_session_uuid: "9c1f7c9e-0000-4000-8000-000000000001",
+    })
     mockDismissThisOrThat.mockResolvedValue({ dismissed: true })
+    mockUndoThisOrThat.mockResolvedValue({ undone: true })
     mockGetSongCircleRaters.mockResolvedValue({ raters: [] })
     mockRefreshProfile.mockResolvedValue(undefined)
     mockUpdateLikePrivacy.mockResolvedValue({ ...mockCurrentProfile, hide_like_counts: true })
@@ -710,7 +730,7 @@ describe("FeedScreen", () => {
         })
     })
 
-    it("surfaces This-or-That above social cards and records the pick inline", async () => {
+    it("surfaces This-or-That above social cards, arms then confirms a pick, and shows a result popup", async () => {
         mockCurrentProfile = {
             ...mockCurrentProfile,
             user_stats: { rated_count: 15, bookmarked_count: 0 },
@@ -724,21 +744,193 @@ describe("FeedScreen", () => {
         await waitFor(() => {
             expect(screen.getByTestId("feed-this-or-that-card")).toBeTruthy()
         })
-        expect(screen.getByText("Which one belongs higher?")).toBeTruthy()
+        expect(screen.getByText("FOR YOU")).toBeTruthy()
         expect(screen.getByText("Pink + White")).toBeTruthy()
+        expect(screen.queryByTestId("feed-this-or-that-confirm-43")).toBeNull()
 
+        // First tap arms the side without submitting — the Confirm pill pops in over it.
         fireEvent.press(screen.getByTestId("feed-this-or-that-option-43"))
+        expect(mockChooseThisOrThat).not.toHaveBeenCalled()
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-confirm-43")).toBeTruthy()
+        })
+        expect(screen.getByText("TAP TO CONFIRM")).toBeTruthy()
 
+        // Tapping the confirm pill submits.
+        fireEvent.press(screen.getByTestId("feed-this-or-that-confirm-43"))
         await waitFor(() => {
             expect(mockChooseThisOrThat).toHaveBeenCalledWith(42, 43, 43, "test-token")
         })
         expect(mockNavigate).not.toHaveBeenCalledWith("SongDetail", expect.anything())
+
+        // A result popup opens showing the winner and its place in the bucket; the underlying
+        // card stays mounted (inert) until the popup is dismissed.
         await waitFor(() => {
-            expect(screen.queryByTestId("feed-this-or-that-card")).toBeNull()
+            expect(screen.getByTestId("feed-this-or-that-result")).toBeTruthy()
+        })
+        const popup = within(screen.getByTestId("feed-this-or-that-result"))
+        expect(popup.getAllByText("YOUR PICK").length).toBeGreaterThan(0)
+        expect(popup.getByText("ranks above Nights")).toBeTruthy()
+        // Appears twice: the hero title and the "its place" slot row.
+        expect(popup.getAllByText("Pink + White").length).toBe(2)
+        expect(popup.getByTestId("feed-this-or-that-result-view-rankings")).toBeTruthy()
+        expect(popup.getByTestId("feed-this-or-that-result-done")).toBeTruthy()
+        expect(popup.getByTestId("feed-this-or-that-result-undo")).toBeTruthy()
+        expect(screen.getByTestId("feed-this-or-that-card")).toBeTruthy()
+    })
+
+    it("deselects an armed side on a second tap, and arms the other side when tapped instead", async () => {
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 15, bookmarked_count: 0 },
+            following_count: 0,
+        }
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+        mockGetFeedModules.mockResolvedValue({ ...emptyModules, this_or_that: thisOrThatModule })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-card")).toBeTruthy()
+        })
+
+        fireEvent.press(screen.getByTestId("feed-this-or-that-option-43"))
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-confirm-43")).toBeTruthy()
+        })
+
+        // Tapping the same (armed) side again deselects it.
+        fireEvent.press(screen.getByTestId("feed-this-or-that-option-43"))
+        await waitFor(() => {
+            expect(screen.queryByTestId("feed-this-or-that-confirm-43")).toBeNull()
+        })
+        expect(mockChooseThisOrThat).not.toHaveBeenCalled()
+
+        // Arm again, then tap the other side — it switches there instead of submitting.
+        fireEvent.press(screen.getByTestId("feed-this-or-that-option-43"))
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-confirm-43")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("feed-this-or-that-option-42"))
+        expect(mockChooseThisOrThat).not.toHaveBeenCalled()
+        await waitFor(() => {
+            expect(screen.queryByTestId("feed-this-or-that-confirm-43")).toBeNull()
+            expect(screen.getByTestId("feed-this-or-that-confirm-42")).toBeTruthy()
+        })
+
+        fireEvent.press(screen.getByTestId("feed-this-or-that-confirm-42"))
+        await waitFor(() => {
+            expect(mockChooseThisOrThat).toHaveBeenCalledWith(42, 43, 42, "test-token")
         })
     })
 
-    it("dismisses This-or-That from the Feed card", async () => {
+    it("closes the result popup into the cooldown resting state when Done is tapped", async () => {
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 15, bookmarked_count: 0 },
+            following_count: 0,
+        }
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+        mockGetFeedModules.mockResolvedValue({ ...emptyModules, this_or_that: thisOrThatModule })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-card")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("feed-this-or-that-option-43"))
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-confirm-43")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("feed-this-or-that-confirm-43"))
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-result")).toBeTruthy()
+        })
+
+        fireEvent.press(screen.getByTestId("feed-this-or-that-result-done"))
+
+        expect(screen.queryByTestId("feed-this-or-that-result")).toBeNull()
+        // The live card is replaced by the cooldown resting state, not cleared entirely.
+        expect(screen.queryByTestId("feed-this-or-that-card")).toBeNull()
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-cooldown")).toBeTruthy()
+        })
+        expect(screen.getByText("Next comparison in")).toBeTruthy()
+        expect(mockNavigate).not.toHaveBeenCalledWith("Rankings")
+    })
+
+    it("closes the result popup into cooldown and navigates to Rankings on View in Rankings", async () => {
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 15, bookmarked_count: 0 },
+            following_count: 0,
+        }
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+        mockGetFeedModules.mockResolvedValue({ ...emptyModules, this_or_that: thisOrThatModule })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-card")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("feed-this-or-that-option-43"))
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-confirm-43")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("feed-this-or-that-confirm-43"))
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-result")).toBeTruthy()
+        })
+
+        fireEvent.press(screen.getByTestId("feed-this-or-that-result-view-rankings"))
+
+        expect(screen.queryByTestId("feed-this-or-that-result")).toBeNull()
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-cooldown")).toBeTruthy()
+        })
+        expect(mockNavigate).toHaveBeenCalledWith("Rankings")
+    })
+
+    it("undoes a pick from the result popup and re-arms the same card for another try", async () => {
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 15, bookmarked_count: 0 },
+            following_count: 0,
+        }
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+        mockGetFeedModules.mockResolvedValue({ ...emptyModules, this_or_that: thisOrThatModule })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-card")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("feed-this-or-that-option-43"))
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-confirm-43")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("feed-this-or-that-confirm-43"))
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-result")).toBeTruthy()
+        })
+
+        fireEvent.press(screen.getByTestId("feed-this-or-that-result-undo"))
+
+        await waitFor(() => {
+            expect(mockUndoThisOrThat).toHaveBeenCalledWith(
+                "9c1f7c9e-0000-4000-8000-000000000001",
+                "test-token",
+            )
+        })
+        // The popup closes but the card itself stays — ready for another pick, not cleared.
+        await waitFor(() => {
+            expect(screen.queryByTestId("feed-this-or-that-result")).toBeNull()
+        })
+        expect(screen.getByTestId("feed-this-or-that-card")).toBeTruthy()
+        expect(screen.queryByTestId("feed-this-or-that-confirm-43")).toBeNull()
+    })
+
+    it("collapses This-or-That to a re-expandable teaser when dismissed, and expands back on tap", async () => {
         mockCurrentProfile = {
             ...mockCurrentProfile,
             user_stats: { rated_count: 15, bookmarked_count: 0 },
@@ -757,7 +949,19 @@ describe("FeedScreen", () => {
         await waitFor(() => {
             expect(mockDismissThisOrThat).toHaveBeenCalledWith(42, 43, "test-token")
         })
+        // Collapses to the slim teaser rather than disappearing outright.
         expect(screen.queryByTestId("feed-this-or-that-card")).toBeNull()
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-collapsed")).toBeTruthy()
+        })
+        expect(screen.getByText("Tap to compare two songs")).toBeTruthy()
+
+        fireEvent.press(screen.getByTestId("feed-this-or-that-collapsed"))
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-card")).toBeTruthy()
+        })
+        expect(screen.queryByTestId("feed-this-or-that-collapsed")).toBeNull()
     })
 
     it("falls back to the locked Re-rate Radar card when there is no qualifying re-rate", async () => {
@@ -778,6 +982,9 @@ describe("FeedScreen", () => {
         expect(screen.queryByTestId("feed-rerate-radar-55")).toBeNull()
         expect(screen.getByTestId("feed-rerate-radar-locked")).toBeTruthy()
         expect(screen.getByText("When a friend changes a score")).toBeTruthy()
+        // No This-or-That prompt this time, so its "FOR YOU" header stays off too.
+        expect(screen.queryByTestId("feed-this-or-that-card")).toBeNull()
+        expect(screen.queryByText("FOR YOU")).toBeNull()
     })
 
     it("surfaces a live Consensus card with the friend average and count, and opens the song", async () => {

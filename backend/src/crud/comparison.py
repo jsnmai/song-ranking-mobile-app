@@ -178,6 +178,27 @@ def list_compared_song_pairs(
     }
 
 
+def get_comparison_by_session_uuid(
+    db: Session,
+    user_id: int,
+    session_uuid: UUID,
+) -> Comparison | None:
+    """Return one user's comparison by its session_uuid, or None."""
+    return db.execute(
+        select(Comparison)
+        .where(Comparison.user_id == user_id)
+        .where(Comparison.session_uuid == session_uuid)
+    ).scalar_one_or_none()
+
+
+def delete_comparison(
+    db: Session,
+    comparison: Comparison,
+) -> None:
+    """Remove one comparison without committing. Caller commits."""
+    db.delete(comparison)
+
+
 def refresh_comparison_session(
     db: Session,
     session: ComparisonSession,

@@ -7,6 +7,7 @@ import {
     FeedModulesResponse,
     ThisOrThatChoiceResponse,
     ThisOrThatDismissResponse,
+    ThisOrThatUndoResponse,
 } from "./types"
 
 // Calls GET /api/v1/feed
@@ -59,6 +60,19 @@ export async function dismissThisOrThat(
             left_song_id: leftSongId,
             right_song_id: rightSongId,
         },
+        token,
+    )
+}
+
+// Calls POST /api/v1/feed/this-or-that/undo
+// Reverses a still-recent choice (undoes any swap, erases the receipt) from the result popup.
+export async function undoThisOrThat(
+    comparisonSessionUuid: string,
+    token: string,
+): Promise<ThisOrThatUndoResponse> {
+    return apiClient.post<ThisOrThatUndoResponse>(
+        "/api/v1/feed/this-or-that/undo",
+        { comparison_session_uuid: comparisonSessionUuid },
         token,
     )
 }

@@ -60,6 +60,7 @@ import {
     getSongCircleRaters,
     listMyFeed,
     reportRatingEvent,
+    undoThisOrThat,
 } from "./apiRequests"
 import {
     ConsensusModule,
@@ -113,6 +114,11 @@ const ORBIT_STARS = [
 // Re-rate Radar sparkline row height (px); the trajectory node tops are computed against it.
 const SPARK_H = 28
 
+// Matches the backend's THIS_OR_THAT_COOLDOWN (48h). Used to seed the cooldown countdown the
+// instant a pick is confirmed, client-side — close enough to server truth for the current
+// session; a later real module fetch replaces the whole view with server state regardless.
+const THIS_OR_THAT_COOLDOWN_MS = 48 * 60 * 60 * 1000
+
 const FRIEND_AVATARS = [
     { id: 1, initial: "M", color: colors.accent },
     { id: 2, initial: "T", color: colors.sky },
@@ -149,6 +155,47 @@ function CheckIcon({ color, size = 12 }: { color: string; size?: number }) {
         <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
             stroke={color} strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round">
             <Polyline points="20 6 9 17 4 12" />
+        </Svg>
+    )
+}
+
+// This-or-That mark — two sliders on a beam (the tune/adjust glyph).
+function TuneIcon({ color, size = 14 }: { color: string; size?: number }) {
+    return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+            stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <Path d="M6 3v5M6 13v8M18 3v8M18 16v5M3 11h6M15 13h6" />
+            <Circle cx={6} cy={10.5} r={2.1} fill={color} stroke="none" />
+            <Circle cx={18} cy={13.5} r={2.1} fill={color} stroke="none" />
+        </Svg>
+    )
+}
+
+function UndoIcon({ color, size = 13 }: { color: string; size?: number }) {
+    return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+            stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <Path d="M9 14 4 9l5-5" />
+            <Path d="M4 9h11a5 5 0 0 1 0 10h-3" />
+        </Svg>
+    )
+}
+
+function ChevronRightIcon({ color, size = 15 }: { color: string; size?: number }) {
+    return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+            stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+            <Path d="M9 6l6 6-6 6" />
+        </Svg>
+    )
+}
+
+function ClockIcon({ color, size = 18 }: { color: string; size?: number }) {
+    return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+            stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <Circle cx={12} cy={12} r={9} />
+            <Path d="M12 7.5V12l3 2" />
         </Svg>
     )
 }
@@ -458,7 +505,66 @@ export default function FeedScreen() {
     const [matchMoment, setMatchMoment] = useState<MatchMomentModule | null>(null)
     const [thisOrThat, setThisOrThat] = useState<ThisOrThatModule | null>(null)
     const [thisOrThatSaving, setThisOrThatSaving] = useState(false)
+    // A tap arms a side (asks for a second tap to confirm) instead of submitting immediately;
+    // tapping the other side re-arms it there instead. Cleared whenever the card resolves or a
+    // fresh module fetch swaps in different data underneath it.
+    const [armedThisOrThatSongId, setArmedThisOrThatSongId] = useState<number | null>(null)
+    // Holds the outcome (which side won, whether it swapped) so a result popup can show it — the
+    // backend already returns this; nothing was surfacing it. `thisOrThat` itself stays populated
+    // (not nulled) while this is set, so the popup can still read the pair's songs/positions;
+    // dismissing the popup (View in Rankings / Done) is what actually clears the card.
+    const [thisOrThatResult, setThisOrThatResult] = useState<
+        { winnerSongId: number; swapped: boolean; comparisonSessionUuid: string } | null
+    >(null)
+    const [thisOrThatUndoing, setThisOrThatUndoing] = useState(false)
+    // "full" is the live comparison card. "collapsed" is the slim re-expandable teaser after the X
+    // is tapped (a soft dismiss — the pair is still held locally, not cleared). "cooldown" is the
+    // resting state shown right after a confirmed pick, until the next real module fetch replaces
+    // it (or removes it once the server-side cooldown is reflected).
+    const [thisOrThatDisplayMode, setThisOrThatDisplayMode] = useState<"full" | "collapsed" | "cooldown">("full")
+    // Timestamp the cooldown view counts down to (real 48h server cooldown, stamped the moment we
+    // enter cooldown — close enough to server truth for this session; a fresh module fetch later
+    // replaces this whole view with whatever the server actually has). Ticks once a minute.
+    const [thisOrThatCooldownUntil, setThisOrThatCooldownUntil] = useState<number | null>(null)
+    const [thisOrThatCooldownNow, setThisOrThatCooldownNow] = useState(() => Date.now())
+    useEffect(() => {
+        if (thisOrThatDisplayMode !== "cooldown") return
+        const interval = setInterval(() => setThisOrThatCooldownNow(Date.now()), 60_000)
+        return () => clearInterval(interval)
+    }, [thisOrThatDisplayMode])
     const hiddenThisOrThatPair = useRef<string | null>(null)
+    // Drives the armed-side "inflate" (art scales up slightly) and the Confirm pill's pop-in.
+    const totLeftScale = useSharedValue(1)
+    const totRightScale = useSharedValue(1)
+    const totConfirmScale = useSharedValue(0)
+    useEffect(() => {
+        if (thisOrThat === null) {
+            totLeftScale.value = 1
+            totRightScale.value = 1
+            totConfirmScale.value = 0
+            return
+        }
+        const leftArmed = armedThisOrThatSongId === thisOrThat.left.song.id && thisOrThatResult === null
+        const rightArmed = armedThisOrThatSongId === thisOrThat.right.song.id && thisOrThatResult === null
+        totLeftScale.value = withTiming(leftArmed ? 1.06 : 1, { duration: 500, easing: Easing.out(Easing.cubic) })
+        totRightScale.value = withTiming(rightArmed ? 1.06 : 1, { duration: 500, easing: Easing.out(Easing.cubic) })
+        if (leftArmed || rightArmed) {
+            // Reset to 0 first so the pop replays every time the armed side changes — including
+            // switching directly from one side to the other, where the value is already at 1 and
+            // a spring toward 1 would otherwise be a no-op. Tight damping relative to stiffness
+            // keeps it snappy rather than floaty.
+            totConfirmScale.value = 0
+            totConfirmScale.value = withSpring(1, { damping: 22, stiffness: 380, mass: 0.6 })
+        } else {
+            totConfirmScale.value = withTiming(0, { duration: 150 })
+        }
+    }, [armedThisOrThatSongId, thisOrThat, thisOrThatResult])
+    const totLeftArtStyle = useAnimatedStyle(() => ({ transform: [{ scale: totLeftScale.value }] }))
+    const totRightArtStyle = useAnimatedStyle(() => ({ transform: [{ scale: totRightScale.value }] }))
+    const totConfirmAnimatedStyle = useAnimatedStyle(() => ({
+        opacity: totConfirmScale.value,
+        transform: [{ scale: 0.82 + totConfirmScale.value * 0.18 }],
+    }))
     const listRef = useRef<FlashListRef<FeedEvent>>(null)
     // Drives the "pull out then slam" emphasis pulse on the hero verdict's activity card once the
     // tap-to-scroll lands on it. A single shared value is enough — only the hero card binds to it.
@@ -533,6 +639,9 @@ export default function FeedScreen() {
 
     const clearModules = useCallback(() => {
         setThisOrThat(null)
+        setArmedThisOrThatSongId(null)
+        setThisOrThatResult(null)
+        setThisOrThatDisplayMode("full")
         setRerateRadar(null)
         setConsensus(null)
         setDisagreement(null)
@@ -552,6 +661,9 @@ export default function FeedScreen() {
         try {
             const modules = await getFeedModules(token)
             const nextThisOrThat = modules.this_or_that
+            setArmedThisOrThatSongId(null)
+            setThisOrThatResult(null)
+            setThisOrThatDisplayMode("full")
             setThisOrThat(
                 _thisOrThatKey(nextThisOrThat) === hiddenThisOrThatPair.current
                     ? null
@@ -609,31 +721,86 @@ export default function FeedScreen() {
         navigation.navigate("SongDetail", { song: matchMoment.winner })
     }
 
-    const handleThisOrThatPick = async (winnerSongId: number) => {
-        if (!token || thisOrThat === null || thisOrThatSaving) return
+    // Tapping a side arms it (or re-arms, on the other side); tapping the already-armed side again
+    // deselects it. Confirming is a separate, explicit tap on the revealed "Confirm" pill.
+    const handleThisOrThatArm = (songId: number) => {
+        if (thisOrThat === null || thisOrThatSaving || thisOrThatResult !== null) return
+        setArmedThisOrThatSongId((current) => (current === songId ? null : songId))
+    }
+
+    const handleThisOrThatConfirm = async (winnerSongId: number) => {
+        if (!token || thisOrThat === null) return
         setThisOrThatSaving(true)
         try {
-            await chooseThisOrThat(
+            const result = await chooseThisOrThat(
                 thisOrThat.left.song.id,
                 thisOrThat.right.song.id,
                 winnerSongId,
                 token,
             )
-            hiddenThisOrThatPair.current = _thisOrThatKey(thisOrThat)
-            setThisOrThat(null)
+            // Opens the result popup; `thisOrThat` is left populated so it can read the pair's
+            // songs/positions. The user closes it explicitly (View in Rankings / Done / Undo).
+            setThisOrThatResult({
+                winnerSongId,
+                swapped: result.swapped,
+                comparisonSessionUuid: result.comparison_session_uuid,
+            })
             refreshProfile()
         } catch {
+            setArmedThisOrThatSongId(null)
             Alert.alert("Could not save that pick", "Pull to refresh and try the next one.")
         } finally {
             setThisOrThatSaving(false)
         }
     }
 
+    // Closes the result popup and clears the Feed card — shared by both its buttons.
+    // Closes the result popup into the cooldown resting state — the card stays put (not cleared)
+    // until the next real module fetch reflects the server-side cooldown.
+    const closeThisOrThatResult = () => {
+        setArmedThisOrThatSongId(null)
+        setThisOrThatResult(null)
+        const now = Date.now()
+        setThisOrThatCooldownNow(now)
+        setThisOrThatCooldownUntil(now + THIS_OR_THAT_COOLDOWN_MS)
+        setThisOrThatDisplayMode("cooldown")
+    }
+
+    const handleThisOrThatResultDone = () => {
+        closeThisOrThatResult()
+    }
+
+    const handleThisOrThatViewRankings = () => {
+        closeThisOrThatResult()
+        navigation.navigate("Rankings")
+    }
+
+    // Reverses the pick server-side (undoes any swap, erases the receipt) and puts the same pair
+    // back up, live, for a fresh decision — unlike Done/View, this does NOT go to cooldown.
+    const handleThisOrThatUndo = async () => {
+        if (!token || thisOrThatResult === null || thisOrThatUndoing) return
+        setThisOrThatUndoing(true)
+        try {
+            await undoThisOrThat(thisOrThatResult.comparisonSessionUuid, token)
+            setThisOrThatResult(null)
+            setArmedThisOrThatSongId(null)
+            setThisOrThatDisplayMode("full")
+            refreshProfile()
+        } catch {
+            Alert.alert("Could not undo", "That pick can no longer be undone.")
+        } finally {
+            setThisOrThatUndoing(false)
+        }
+    }
+
+    // A soft dismiss: collapses to the slim re-expandable teaser rather than clearing the card.
+    // Still tells the server (so a genuinely fresh fetch later respects the cooldown), but the
+    // pair stays available locally in case the viewer taps back in before that happens.
     const handleThisOrThatDismiss = async () => {
-        if (!token || thisOrThat === null || thisOrThatSaving) return
+        if (!token || thisOrThat === null || thisOrThatSaving || thisOrThatResult !== null) return
         const dismissed = thisOrThat
         hiddenThisOrThatPair.current = _thisOrThatKey(dismissed)
-        setThisOrThat(null)
+        setThisOrThatDisplayMode("collapsed")
         try {
             await dismissThisOrThat(
                 dismissed.left.song.id,
@@ -643,6 +810,10 @@ export default function FeedScreen() {
         } catch {
             // Dismiss is a soft preference signal; keep Feed calm if it fails.
         }
+    }
+
+    const handleThisOrThatExpand = () => {
+        setThisOrThatDisplayMode("full")
     }
 
     const handleFindUsers = () => {
@@ -1431,55 +1602,305 @@ export default function FeedScreen() {
         )
     }
 
-    const renderThisOrThat = () => {
+    // Heads the This-or-That card, mirroring renderSocialCardsHeader's row. Only shows when there's
+    // actually a card underneath it (full, collapsed, or cooldown) — never a label over empty space.
+    const renderThisOrThatHeader = () => {
         if (thisOrThat === null) return null
-        const tone = bucketColor(thisOrThat.bucket)
-        const option = (side: ThisOrThatModule["left"]) => (
+        return (
+            <View style={[styles.sectionRow, { marginTop: 6, marginBottom: 8 }]}>
+                <Text style={styles.sectionLabel}>FOR YOU</Text>
+            </View>
+        )
+    }
+
+    // Slim re-expandable teaser shown after the X is tapped — a mini overlapped-cover stack, a
+    // reminder of what it is, and a chevron to bring the full card back.
+    const renderThisOrThatCollapsed = () => {
+        if (thisOrThat === null) return null
+        return (
             <TouchableOpacity
-                style={[styles.totOption, thisOrThatSaving && styles.totOptionDisabled]}
-                activeOpacity={0.82}
-                onPress={() => handleThisOrThatPick(side.song.id)}
-                disabled={thisOrThatSaving}
-                testID={`feed-this-or-that-option-${side.song.id}`}
+                style={styles.totCollapsed}
+                activeOpacity={0.88}
+                onPress={handleThisOrThatExpand}
+                testID="feed-this-or-that-collapsed"
             >
-                {side.song.cover_url ? (
-                    <Image style={styles.totArt} source={{ uri: side.song.cover_url }} />
-                ) : (
-                    <View style={[styles.totArt, { backgroundColor: colors.paper2 }]} />
-                )}
-                <View>
-                    <Text style={styles.totSongTitle} numberOfLines={2}>{side.song.title}</Text>
-                    <Text style={styles.totSongArtist} numberOfLines={1}>{side.song.artist}</Text>
+                <View style={styles.totCollapsedArtStack}>
+                    {thisOrThat.left.song.cover_url ? (
+                        <Image style={[styles.totCollapsedArt, styles.totCollapsedArtBack]} source={{ uri: thisOrThat.left.song.cover_url }} />
+                    ) : (
+                        <View style={[styles.totCollapsedArt, styles.totCollapsedArtBack, { backgroundColor: colors.navyHi }]} />
+                    )}
+                    {thisOrThat.right.song.cover_url ? (
+                        <Image style={[styles.totCollapsedArt, styles.totCollapsedArtFront]} source={{ uri: thisOrThat.right.song.cover_url }} />
+                    ) : (
+                        <View style={[styles.totCollapsedArt, styles.totCollapsedArtFront, { backgroundColor: colors.navyHi }]} />
+                    )}
+                </View>
+                <View style={styles.totCollapsedText}>
+                    <View style={styles.totCollapsedKickerRow}>
+                        <TuneIcon color={colors.gold} size={11} />
+                        <Text style={styles.totCollapsedKicker}>THIS-OR-THAT</Text>
+                    </View>
+                    <Text style={styles.totCollapsedBody}>Tap to compare two songs</Text>
+                </View>
+                <View style={styles.totCollapsedChevron}>
+                    <ChevronRightIcon color={colors.cream} size={14} />
                 </View>
             </TouchableOpacity>
         )
+    }
+
+    // Resting state right after a confirmed pick — same shape as the collapsed teaser (mini art
+    // stack + kicker) but not tappable, with a live "Xh Ym" countdown instead of a chevron.
+    const renderThisOrThatCooldown = () => {
+        if (thisOrThat === null) return null
+        const remainingMs = Math.max(0, (thisOrThatCooldownUntil ?? thisOrThatCooldownNow) - thisOrThatCooldownNow)
+        const remainingHours = Math.floor(remainingMs / (60 * 60 * 1000))
+        const remainingMinutes = Math.floor((remainingMs % (60 * 60 * 1000)) / (60 * 1000))
+        return (
+            <View style={styles.totCollapsed} testID="feed-this-or-that-cooldown">
+                <View style={styles.totCollapsedArtStack}>
+                    {thisOrThat.left.song.cover_url ? (
+                        <Image style={[styles.totCollapsedArt, styles.totCooldownArtRound, styles.totCollapsedArtBack]} source={{ uri: thisOrThat.left.song.cover_url }} />
+                    ) : (
+                        <View style={[styles.totCollapsedArt, styles.totCooldownArtRound, styles.totCollapsedArtBack, { backgroundColor: colors.navyHi }]} />
+                    )}
+                    {thisOrThat.right.song.cover_url ? (
+                        <Image style={[styles.totCollapsedArt, styles.totCooldownArtRound, styles.totCollapsedArtFront]} source={{ uri: thisOrThat.right.song.cover_url }} />
+                    ) : (
+                        <View style={[styles.totCollapsedArt, styles.totCooldownArtRound, styles.totCollapsedArtFront, { backgroundColor: colors.navyHi }]} />
+                    )}
+                </View>
+                <View style={styles.totCollapsedText}>
+                    <View style={styles.totCollapsedKickerRow}>
+                        <TuneIcon color={colors.gold} size={11} />
+                        <Text style={styles.totCollapsedKicker}>THIS-OR-THAT</Text>
+                    </View>
+                    <Text style={styles.totCollapsedBody}>Next comparison in</Text>
+                </View>
+                <View style={styles.totCooldownCountdown}>
+                    <ClockIcon color={colors.cdim} size={14} />
+                    <Text style={styles.totCooldownCountdownText}>
+                        {remainingHours}<Text style={styles.totCooldownCountdownUnit}>h</Text> {remainingMinutes}<Text style={styles.totCooldownCountdownUnit}>m</Text>
+                    </Text>
+                </View>
+            </View>
+        )
+    }
+
+    // Full-bleed art card: tap a side to arm it (the other dims, the art inflates slightly and a
+    // "TAP TO CONFIRM" pill pops in over it); tap the armed side again to deselect; tap the pill to
+    // submit. No rank numbers or bucket labels show on the card itself — only the pill's color
+    // teases the bucket — so nothing nudges the pick before it's made.
+    const renderThisOrThat = () => {
+        if (thisOrThat === null) return null
+        if (thisOrThatDisplayMode === "collapsed") return renderThisOrThatCollapsed()
+        if (thisOrThatDisplayMode === "cooldown") return renderThisOrThatCooldown()
+        const tone = bucketColor(thisOrThat.bucket)
+        const resolving = thisOrThatSaving || thisOrThatResult !== null
+        const option = (side: ThisOrThatModule["left"], edge: "left" | "right", artStyle: typeof totLeftArtStyle) => {
+            const isArmed = armedThisOrThatSongId === side.song.id && !resolving
+            const isDimmed = armedThisOrThatSongId !== null && !isArmed
+            return (
+                <TouchableOpacity
+                    style={styles.totHalf}
+                    activeOpacity={0.92}
+                    onPress={() => handleThisOrThatArm(side.song.id)}
+                    disabled={resolving}
+                    testID={`feed-this-or-that-option-${side.song.id}`}
+                >
+                    {side.song.cover_url ? (
+                        <Animated.Image
+                            style={[styles.totHalfArt, artStyle]}
+                            source={{ uri: side.song.cover_url }}
+                        />
+                    ) : (
+                        <Animated.View style={[styles.totHalfArt, artStyle, { backgroundColor: colors.navyHi }]} />
+                    )}
+                    <View style={styles.totHalfScrim} pointerEvents="none" />
+                    {isDimmed && <View style={styles.totHalfDim} pointerEvents="none" />}
+                    {isArmed && (
+                        <View
+                            style={[
+                                styles.totHalfArmedRing,
+                                { borderColor: tone },
+                                edge === "left" ? styles.totHalfArmedRingLeft : styles.totHalfArmedRingRight,
+                            ]}
+                            pointerEvents="none"
+                        />
+                    )}
+                    {isArmed && (
+                        <Animated.View style={[styles.totConfirmPillWrap, totConfirmAnimatedStyle]} pointerEvents="box-none">
+                            <TouchableOpacity
+                                style={styles.totConfirmPill}
+                                activeOpacity={0.85}
+                                onPress={() => handleThisOrThatConfirm(side.song.id)}
+                                testID={`feed-this-or-that-confirm-${side.song.id}`}
+                            >
+                                <CheckIcon color={tone} size={13} />
+                                <Text style={styles.totConfirmPillText}>TAP TO CONFIRM</Text>
+                            </TouchableOpacity>
+                        </Animated.View>
+                    )}
+                    <View style={[styles.totHalfCaption, isDimmed && { opacity: 0.5 }]} pointerEvents="none">
+                        <Text style={styles.totHalfTitle} numberOfLines={1}>{side.song.title}</Text>
+                        <Text style={styles.totHalfArtist} numberOfLines={1}>{side.song.artist}</Text>
+                    </View>
+                </TouchableOpacity>
+            )
+        }
 
         return (
             <View style={styles.thisOrThatCard} testID="feed-this-or-that-card">
-                <TouchableOpacity
-                    style={styles.totDismiss}
-                    onPress={handleThisOrThatDismiss}
-                    disabled={thisOrThatSaving}
-                    hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-                    testID="feed-this-or-that-dismiss"
-                >
-                    <Text style={styles.totDismissX}>✕</Text>
-                </TouchableOpacity>
-                <View style={styles.totTopRow}>
-                    <View style={[styles.totPill, { backgroundColor: tone }]}>
-                        <Text style={styles.totPillText}>This-or-That</Text>
+                <View style={styles.totRow}>
+                    {option(thisOrThat.left, "left", totLeftArtStyle)}
+                    {option(thisOrThat.right, "right", totRightArtStyle)}
+                    <View style={styles.totTopBadge} pointerEvents="none">
+                        <TuneIcon color={colors.gold} size={12} />
+                        <Text style={styles.totTopBadgeText}>THIS-OR-THAT</Text>
                     </View>
-                    <Text style={styles.totMeta}>IN YOUR RANKINGS</Text>
-                </View>
-                <Text style={styles.totTitle}>Which one belongs higher?</Text>
-                <View style={styles.totOptionsRow}>
-                    {option(thisOrThat.left)}
-                    <View style={styles.totVs}>
-                        <Text style={styles.totVsText}>VS</Text>
+                    {armedThisOrThatSongId === null && !resolving && (
+                        <TouchableOpacity
+                            style={styles.totDismiss}
+                            onPress={handleThisOrThatDismiss}
+                            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                            testID="feed-this-or-that-dismiss"
+                        >
+                            <Text style={styles.totDismissX}>✕</Text>
+                        </TouchableOpacity>
+                    )}
+                    <View
+                        style={[styles.totOrChip, (armedThisOrThatSongId !== null || resolving) && styles.totOrChipFaded]}
+                        pointerEvents="none"
+                    >
+                        <Text style={styles.totOrChipText}>or</Text>
                     </View>
-                    {option(thisOrThat.right)}
                 </View>
             </View>
+        )
+    }
+
+    // Result popup after a confirmed This-or-That pick — a compact version of Score Reveal's
+    // language (hero art + badge, its place in the bucket, View in Rankings / Done) rather than a
+    // full screen. The winner always ends up at the smaller of the pair's two positions and the
+    // loser at the larger one, whether or not a swap actually happened, so the two rows never need
+    // the `swapped` flag to order themselves — only the framing copy above them does.
+    const renderThisOrThatResultModal = () => {
+        if (thisOrThat === null || thisOrThatResult === null) return null
+        const tone = bucketColor(thisOrThat.bucket)
+        const bucketLabel = thisOrThat.bucket === "alright" ? "OKAY" : thisOrThat.bucket.toUpperCase()
+        const winner = thisOrThat.left.song.id === thisOrThatResult.winnerSongId ? thisOrThat.left : thisOrThat.right
+        const loser = winner === thisOrThat.left ? thisOrThat.right : thisOrThat.left
+        const topPosition = Math.min(thisOrThat.left.position, thisOrThat.right.position)
+        const bottomPosition = Math.max(thisOrThat.left.position, thisOrThat.right.position)
+        const rows: Array<{ option: ThisOrThatModule["left"]; position: number; isWinner: boolean }> = [
+            { option: winner, position: topPosition, isWinner: true },
+            { option: loser, position: bottomPosition, isWinner: false },
+        ]
+
+        return (
+            <Modal
+                visible
+                transparent
+                animationType="fade"
+                onRequestClose={handleThisOrThatResultDone}
+            >
+                <Pressable
+                    style={styles.totResultOverlay}
+                    onPress={handleThisOrThatResultDone}
+                    testID="feed-this-or-that-result-overlay"
+                >
+                    <Pressable style={styles.totResultCard} onPress={() => {}} testID="feed-this-or-that-result">
+                        <View style={styles.totResultHeader}>
+                            <View style={styles.totResultHeaderLeft}>
+                                <View style={[styles.totResultIconChip, { backgroundColor: `${tone}1a` }]}>
+                                    <TuneIcon color={tone} size={13} />
+                                </View>
+                                <Text style={styles.totResultKicker}>RESULT</Text>
+                            </View>
+                            <TouchableOpacity
+                                style={[styles.totResultUndoBtn, thisOrThatUndoing && { opacity: 0.5 }]}
+                                activeOpacity={0.85}
+                                onPress={handleThisOrThatUndo}
+                                disabled={thisOrThatUndoing}
+                                testID="feed-this-or-that-result-undo"
+                            >
+                                <UndoIcon color={colors.inkSoft} size={13} />
+                                <Text style={styles.totResultUndoBtnText}>UNDO</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.totResultHero}>
+                            {winner.song.cover_url ? (
+                                <Image style={[styles.totResultArt, { borderColor: tone }]} source={{ uri: winner.song.cover_url }} />
+                            ) : (
+                                <View style={[styles.totResultArt, { borderColor: tone, backgroundColor: colors.paper2 }]} />
+                            )}
+                            <View style={styles.totResultHeroText}>
+                                <View style={[styles.totResultBadge, { backgroundColor: tone }]}>
+                                    <CheckIcon color="#fff" size={11} />
+                                    <Text style={styles.totResultBadgeText}>YOUR PICK</Text>
+                                </View>
+                                <Text style={styles.totResultTitle} numberOfLines={1}>{winner.song.title}</Text>
+                                <Text style={styles.totResultArtist} numberOfLines={1}>ranks above {loser.song.title}</Text>
+                            </View>
+                        </View>
+
+                        <Text style={styles.totResultSlotKicker}>ITS PLACE IN YOUR {bucketLabel}S</Text>
+                        <View style={styles.totResultSlotList}>
+                            {rows.map((row) => (
+                                <View
+                                    key={row.option.song.id}
+                                    style={[
+                                        styles.totResultSlotRow,
+                                        row.isWinner && { backgroundColor: `${tone}14`, borderColor: `${tone}55` },
+                                    ]}
+                                >
+                                    <Text style={styles.totResultSlotRank}>{row.position}</Text>
+                                    {row.option.song.cover_url ? (
+                                        <Image style={styles.totResultSlotArt} source={{ uri: row.option.song.cover_url }} />
+                                    ) : (
+                                        <View style={[styles.totResultSlotArt, { backgroundColor: colors.paper2 }]} />
+                                    )}
+                                    <View style={styles.totResultSlotInfo}>
+                                        <View style={styles.totResultSlotTitleRow}>
+                                            <Text style={styles.totResultSlotTitle} numberOfLines={1}>{row.option.song.title}</Text>
+                                            {row.isWinner && (
+                                                <View style={[styles.totResultNewBadge, { backgroundColor: `${tone}22` }]}>
+                                                    <Text style={[styles.totResultNewBadgeText, { color: tone }]}>YOUR PICK</Text>
+                                                </View>
+                                            )}
+                                        </View>
+                                        <Text style={styles.totResultSlotArtist} numberOfLines={1}>{row.option.song.artist}</Text>
+                                    </View>
+                                    <Text style={[styles.totResultSlotScore, row.isWinner && { color: tone }]}>
+                                        {row.option.score.toFixed(1)}
+                                    </Text>
+                                </View>
+                            ))}
+                        </View>
+
+                        <View style={styles.totResultFooter}>
+                            <TouchableOpacity
+                                style={[styles.totResultViewBtn, { backgroundColor: tone }]}
+                                activeOpacity={0.88}
+                                onPress={handleThisOrThatViewRankings}
+                                testID="feed-this-or-that-result-view-rankings"
+                            >
+                                <Text style={styles.totResultViewBtnText}>View in Rankings</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.totResultDoneBtn}
+                                activeOpacity={0.88}
+                                onPress={handleThisOrThatResultDone}
+                                testID="feed-this-or-that-result-done"
+                            >
+                                <Text style={styles.totResultDoneBtnText}>Done</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         )
     }
 
@@ -1818,7 +2239,9 @@ export default function FeedScreen() {
                     data fetched. At the gate: the full-size cards go live per their own data rules. */}
                 {!modulesGateComplete && renderGettingStartedBanner()}
                 {renderFindFriends()}
+                {renderThisOrThatHeader()}
                 {renderThisOrThat()}
+                {renderThisOrThatResultModal()}
                 {/* SOCIAL CARDS heads the whole area; Recent Verdict is its first card. Recent Verdict
                     sits with the other module cards but is never gated by rated count — only by having
                     a followed verdict — so it can go live before the rest. */}
@@ -2113,7 +2536,9 @@ export default function FeedScreen() {
 
                 {!modulesGateComplete && renderGettingStartedBanner()}
                 {renderFindFriends()}
+                {renderThisOrThatHeader()}
                 {renderThisOrThat()}
+                {renderThisOrThatResultModal()}
                 {/* SOCIAL CARDS heads the whole area; Recent Verdict is its first card. Recent Verdict
                     sits with the other module cards but is never gated by rated count — only by having
                     a followed verdict — so it can go live before the rest. */}
@@ -3667,16 +4092,134 @@ const styles = StyleSheet.create({
         marginHorizontal: 14,
         marginTop: 2,
         marginBottom: 8,
-        borderRadius: 16,
-        backgroundColor: colors.paper,
-        borderWidth: 1,
-        borderColor: colors.line,
-        padding: 12,
-        position: "relative",
+        borderRadius: 20,
+        backgroundColor: colors.navy,
+        overflow: "hidden",
         shadowColor: colors.ink,
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.14,
+        shadowRadius: 20,
+        shadowOffset: { width: 0, height: 6 },
+    },
+    totRow: {
+        // iPhone 16e (390pt wide): card width 390 - 28 (margins) = 362, minus the 3px gap, split
+        // two ways → ~180pt per half. Matching that height is what actually makes each half square
+        // (168 undershot it and read as landscape-ish/wider-than-tall).
+        height: 180,
+        flexDirection: "row",
+        gap: 3,
+    },
+    totHalf: {
+        flex: 1,
+        minWidth: 0,
+        position: "relative",
+        overflow: "hidden",
+        backgroundColor: "#000",
+    },
+    totHalfArt: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: "100%",
+        height: "100%",
+    },
+    totHalfScrim: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: "rgba(10,9,14,0.5)",
+    },
+    totHalfDim: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: "rgba(8,7,11,0.55)",
+    },
+    totHalfArmedRing: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        borderWidth: 3,
+    },
+    totHalfArmedRingLeft: {
+        borderTopLeftRadius: 20,
+        borderBottomLeftRadius: 20,
+    },
+    totHalfArmedRingRight: {
+        borderTopRightRadius: 20,
+        borderBottomRightRadius: 20,
+    },
+    totConfirmPillWrap: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: "44%",
+        alignItems: "center",
+    },
+    totConfirmPill: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        backgroundColor: "#fff",
+        borderRadius: 999,
+        paddingHorizontal: 13,
+        paddingVertical: 8,
+        shadowColor: "#000",
+        shadowOpacity: 0.35,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 3 },
+    },
+    totConfirmPillText: {
+        fontFamily: fonts.monoBold,
+        fontSize: 8.5,
+        color: colors.ink,
+        letterSpacing: 1,
+    },
+    totHalfCaption: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: 0,
+        padding: 12,
+    },
+    totHalfTitle: {
+        fontFamily: fonts.display,
+        fontSize: 15,
+        color: "#fff",
+        textShadowColor: "rgba(0,0,0,0.55)",
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 6,
+    },
+    totHalfArtist: {
+        fontFamily: fonts.sans,
+        fontSize: 10.5,
+        color: "rgba(255,255,255,0.85)",
+        marginTop: 3,
+    },
+    totTopBadge: {
+        position: "absolute",
+        top: 11,
+        left: 12,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        backgroundColor: "rgba(10,9,14,0.55)",
+        borderRadius: 999,
+        paddingHorizontal: 11,
+        paddingVertical: 5,
+    },
+    totTopBadgeText: {
+        fontFamily: fonts.monoBold,
+        fontSize: 8,
+        letterSpacing: 1.4,
+        color: "#fff",
     },
     totDismiss: {
         position: "absolute",
@@ -3685,93 +4228,359 @@ const styles = StyleSheet.create({
         width: 24,
         height: 24,
         borderRadius: 12,
-        backgroundColor: colors.paper2,
+        backgroundColor: "rgba(255,255,255,0.14)",
+        borderWidth: 1,
+        borderColor: "rgba(245,238,220,0.2)",
         alignItems: "center",
         justifyContent: "center",
-        zIndex: 1,
     },
     totDismissX: {
-        color: colors.inkSoft,
+        color: colors.cream,
         fontSize: 11,
         fontWeight: "700",
     },
-    totTopRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 8,
-        paddingRight: 30,
-    },
-    totPill: {
-        borderRadius: 999,
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-    },
-    totPillText: {
-        fontFamily: fonts.monoBold,
-        fontSize: 9,
-        color: "#fff",
-        letterSpacing: 0.6,
-        textTransform: "uppercase",
-    },
-    totMeta: {
-        fontFamily: fonts.monoBold,
-        fontSize: 8.5,
-        color: colors.inkDim,
-        letterSpacing: 0.7,
-    },
-    totTitle: {
-        fontFamily: fonts.display,
-        fontSize: 18,
-        color: colors.ink,
-        marginTop: 8,
-        marginBottom: 10,
-    },
-    totOptionsRow: {
-        flexDirection: "row",
-        alignItems: "stretch",
-        gap: 8,
-    },
-    totOption: {
-        flex: 1,
-        minWidth: 0,
-        backgroundColor: colors.bg,
-        borderWidth: 1,
-        borderColor: colors.line2,
-        borderRadius: 12,
-        padding: 8,
-    },
-    totOptionDisabled: {
-        opacity: 0.55,
-    },
-    totArt: {
-        width: "100%",
-        aspectRatio: 1,
-        borderRadius: 9,
-        marginBottom: 8,
-    },
-    totSongTitle: {
-        fontFamily: fonts.display,
-        fontSize: 13,
-        lineHeight: 16,
-        color: colors.ink,
-    },
-    totSongArtist: {
-        fontFamily: fonts.mono,
-        fontSize: 10,
-        lineHeight: 14,
-        color: colors.inkSoft,
-        marginTop: 2,
-    },
-    totVs: {
-        width: 30,
+    totOrChip: {
+        position: "absolute",
+        left: "50%",
+        top: "50%",
+        marginLeft: -20,
+        marginTop: -20,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: colors.ink,
+        borderWidth: 2,
+        borderColor: colors.navyHi,
         alignItems: "center",
         justifyContent: "center",
     },
-    totVsText: {
+    totOrChipFaded: {
+        opacity: 0.35,
+    },
+    totOrChipText: {
+        fontFamily: fonts.serifItalic,
+        fontSize: 15,
+        color: "#fff",
+    },
+    // ── This or That result popup (compact Score Reveal echo) ──────────────
+    totResultOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(17,19,28,0.5)",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: 24,
+    },
+    totResultCard: {
+        width: "100%",
+        maxWidth: 360,
+        borderRadius: 22,
+        backgroundColor: colors.paper,
+        overflow: "hidden",
+        shadowColor: "#000",
+        shadowOpacity: 0.3,
+        shadowRadius: 26,
+        shadowOffset: { width: 0, height: 14 },
+        elevation: 14,
+    },
+    totResultHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        paddingHorizontal: 15,
+        paddingTop: 15,
+    },
+    totResultHeaderLeft: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+    },
+    totResultIconChip: {
+        width: 24,
+        height: 24,
+        borderRadius: 8,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    totResultKicker: {
         fontFamily: fonts.monoBold,
-        fontSize: 10,
+        fontSize: 8.5,
+        letterSpacing: 2,
         color: colors.inkDim,
-        letterSpacing: 0.8,
+    },
+    totResultUndoBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 5,
+        backgroundColor: colors.bg,
+        borderWidth: 1,
+        borderColor: colors.line,
+        borderRadius: 999,
+        paddingHorizontal: 11,
+        paddingVertical: 6,
+    },
+    totResultUndoBtnText: {
+        fontFamily: fonts.monoBold,
+        fontSize: 8.5,
+        letterSpacing: 1,
+        color: colors.inkSoft,
+    },
+    totResultHero: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 13,
+        paddingHorizontal: 15,
+        paddingTop: 13,
+        paddingBottom: 4,
+    },
+    totResultHeroText: {
+        flex: 1,
+        minWidth: 0,
+    },
+    totResultBadge: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 5,
+        alignSelf: "flex-start",
+        borderRadius: 999,
+        paddingHorizontal: 9,
+        paddingVertical: 3,
+    },
+    totResultBadgeText: {
+        fontFamily: fonts.monoBold,
+        fontSize: 8,
+        color: "#fff",
+        letterSpacing: 1,
+    },
+    totResultArt: {
+        width: 60,
+        height: 60,
+        borderRadius: 13,
+        borderWidth: 2,
+        flexShrink: 0,
+    },
+    totResultTitle: {
+        fontFamily: fonts.display,
+        fontSize: 19,
+        color: colors.ink,
+        marginTop: 5,
+    },
+    totResultArtist: {
+        fontFamily: fonts.sans,
+        fontSize: 11.5,
+        color: colors.inkDim,
+        marginTop: 2,
+    },
+    totResultSlotKicker: {
+        alignSelf: "flex-start",
+        fontFamily: fonts.monoBold,
+        fontSize: 8.5,
+        letterSpacing: 1.6,
+        color: colors.inkDim,
+        marginTop: 10,
+        marginBottom: 8,
+        marginHorizontal: 15,
+    },
+    totResultSlotList: {
+        borderRadius: 12,
+        overflow: "hidden",
+        borderWidth: 1,
+        borderColor: colors.line,
+        marginHorizontal: 15,
+        marginBottom: 15,
+    },
+    totResultSlotRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        paddingVertical: 7,
+        paddingHorizontal: 9,
+        borderWidth: 1,
+        borderColor: "transparent",
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: colors.line,
+    },
+    totResultSlotRank: {
+        fontFamily: fonts.serif,
+        fontStyle: "italic",
+        fontSize: 12,
+        color: colors.inkDim,
+        width: 16,
+        textAlign: "center",
+        flexShrink: 0,
+    },
+    totResultSlotArt: {
+        width: 32,
+        height: 32,
+        borderRadius: 7,
+        flexShrink: 0,
+    },
+    totResultSlotInfo: {
+        flex: 1,
+        minWidth: 0,
+    },
+    totResultSlotTitleRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 5,
+    },
+    totResultSlotTitle: {
+        fontFamily: fonts.serif,
+        fontSize: 12.5,
+        color: colors.ink,
+        flexShrink: 1,
+    },
+    totResultNewBadge: {
+        borderRadius: 999,
+        paddingHorizontal: 5,
+        paddingVertical: 2,
+        flexShrink: 0,
+    },
+    totResultNewBadgeText: {
+        fontFamily: fonts.monoBold,
+        fontSize: 7,
+        letterSpacing: 1,
+    },
+    totResultSlotArtist: {
+        fontFamily: fonts.sans,
+        fontSize: 10.5,
+        color: colors.inkDim,
+        marginTop: 1,
+    },
+    totResultSlotScore: {
+        fontFamily: fonts.display,
+        fontSize: 14,
+        color: colors.ink,
+        flexShrink: 0,
+    },
+    totResultFooter: {
+        flexDirection: "row",
+        gap: 10,
+        paddingHorizontal: 15,
+        paddingTop: 12,
+        paddingBottom: 15,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: colors.line,
+    },
+    totResultViewBtn: {
+        flex: 1,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        borderRadius: 12,
+        paddingVertical: 13,
+        shadowColor: colors.ink,
+        shadowOpacity: 0.18,
+        shadowRadius: 0,
+        shadowOffset: { width: 3, height: 3 },
+        elevation: 4,
+    },
+    totResultViewBtnText: {
+        fontFamily: fonts.display,
+        fontSize: 13,
+        color: "#fff",
+    },
+    totResultDoneBtn: {
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: 12,
+        paddingVertical: 13,
+        paddingHorizontal: 18,
+        backgroundColor: colors.ink,
+    },
+    totResultDoneBtnText: {
+        fontFamily: fonts.display,
+        fontSize: 13,
+        color: "#fff",
+    },
+    // ── This or That collapsed teaser (after X) ─────────────────────────────
+    totCollapsed: {
+        marginHorizontal: 14,
+        marginTop: 2,
+        marginBottom: 8,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 13,
+        backgroundColor: colors.navy,
+        borderRadius: 16,
+        padding: 12,
+        shadowColor: colors.ink,
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 3 },
+    },
+    totCollapsedArtStack: {
+        width: 48,
+        height: 32,
+        flexShrink: 0,
+    },
+    totCollapsedArt: {
+        position: "absolute",
+        top: 1,
+        width: 30,
+        height: 30,
+        borderRadius: 7,
+    },
+    totCollapsedArtBack: {
+        left: 0,
+    },
+    totCollapsedArtFront: {
+        left: 17,
+        borderWidth: 2,
+        borderColor: colors.navy,
+    },
+    totCollapsedText: {
+        flex: 1,
+        minWidth: 0,
+    },
+    totCollapsedKickerRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+    },
+    totCollapsedKicker: {
+        fontFamily: fonts.monoBold,
+        fontSize: 8,
+        letterSpacing: 1.4,
+        color: colors.cream,
+    },
+    totCollapsedBody: {
+        fontFamily: fonts.sans,
+        fontSize: 11.5,
+        color: colors.cdim,
+        marginTop: 3,
+    },
+    totCollapsedChevron: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        borderWidth: 1.5,
+        borderColor: colors.cline,
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+    },
+    // ── This or That cooldown resting state (after a confirmed pick) ────────
+    // Reuses totCollapsed's dark row shell; only the art crop and the trailing content differ.
+    totCooldownArtRound: {
+        borderRadius: 15,
+    },
+    totCooldownCountdown: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        flexShrink: 0,
+    },
+    totCooldownCountdownText: {
+        fontFamily: fonts.display,
+        fontSize: 21,
+        lineHeight: 21,
+        color: colors.cream,
+    },
+    totCooldownCountdownUnit: {
+        fontFamily: fonts.display,
+        fontSize: 13,
+        color: colors.cdim,
     },
     // ── Ghost activity rows ───────────────────────────────────────────────
     ghostCard: {

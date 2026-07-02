@@ -400,6 +400,175 @@ def test_this_or_that_choice_keeps_order_when_higher_neighbor_wins(
     assert comparison.winner_id == left.id
 
 
+def test_this_or_that_undo_reverses_swap_and_erases_the_receipt(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    """Undo puts a swapped pair back where it was and removes the choice as if it never happened."""
+    monkeypatch.setattr("src.services.feed.THIS_OR_THAT_MIN_RATED", 10)
+    token = _register(client, "undo-swap@example.com", "undoswapuser")
+    user_id = _user_id(db_session, "undoswapuser")
+    left, right = _seed_this_or_that_rankings(db_session, user_id)
+
+    choice = client.post(
+        "/api/v1/feed/this-or-that/choice",
+        json={
+            "left_song_id": left.id,
+            "right_song_id": right.id,
+            "winner_song_id": right.id,
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    session_uuid = choice.json()["comparison_session_uuid"]
+
+    response = client.post(
+        "/api/v1/feed/this-or-that/undo",
+        json={"comparison_session_uuid": session_uuid},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"undone": True}
+    left_ranking = db_session.execute(
+        select(Ranking).where(Ranking.user_id == user_id, Ranking.song_id == left.id)
+    ).scalar_one()
+    right_ranking = db_session.execute(
+        select(Ranking).where(Ranking.user_id == user_id, Ranking.song_id == right.id)
+    ).scalar_one()
+    assert left_ranking.position == 1
+    assert right_ranking.position == 2
+    assert db_session.execute(
+        select(Comparison).where(Comparison.user_id == user_id)
+    ).scalar_one_or_none() is None
+    assert db_session.execute(
+        select(InteractionEvent).where(InteractionEvent.user_id == user_id)
+    ).scalar_one_or_none() is None
+    # The pair is un-compared again, and the cooldown is cleared with the event — it can resurface.
+    assert _modules(client, token)["this_or_that"] is not None
+
+
+def test_this_or_that_undo_without_a_swap_only_erases_the_receipt(
+    client: TestClient,
+    db_session: Session,
+):
+    """Confirming the already-higher neighbor still leaves a receipt; undo removes it, no reorder."""
+    token = _register(client, "undo-noswap@example.com", "undonoswapuser")
+    user_id = _user_id(db_session, "undonoswapuser")
+    left, right = _seed_this_or_that_rankings(db_session, user_id)
+
+    choice = client.post(
+        "/api/v1/feed/this-or-that/choice",
+        json={
+            "left_song_id": left.id,
+            "right_song_id": right.id,
+            "winner_song_id": left.id,
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    session_uuid = choice.json()["comparison_session_uuid"]
+
+    response = client.post(
+        "/api/v1/feed/this-or-that/undo",
+        json={"comparison_session_uuid": session_uuid},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    left_ranking = db_session.execute(
+        select(Ranking).where(Ranking.user_id == user_id, Ranking.song_id == left.id)
+    ).scalar_one()
+    right_ranking = db_session.execute(
+        select(Ranking).where(Ranking.user_id == user_id, Ranking.song_id == right.id)
+    ).scalar_one()
+    assert left_ranking.position == 1
+    assert right_ranking.position == 2
+    assert db_session.execute(
+        select(Comparison).where(Comparison.user_id == user_id)
+    ).scalar_one_or_none() is None
+
+
+def test_this_or_that_undo_rejects_unknown_session(client: TestClient):
+    """A made-up session id has nothing to undo."""
+    token = _register(client, "undo-missing@example.com", "undomissinguser")
+
+    response = client.post(
+        "/api/v1/feed/this-or-that/undo",
+        json={"comparison_session_uuid": str(uuid.uuid4())},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_this_or_that_undo_rejects_another_users_session(
+    client: TestClient,
+    db_session: Session,
+):
+    """One account's choice can't be undone through another account's token."""
+    owner_token = _register(client, "undo-owner@example.com", "undoowneruser")
+    owner_id = _user_id(db_session, "undoowneruser")
+    left, right = _seed_this_or_that_rankings(db_session, owner_id)
+    choice = client.post(
+        "/api/v1/feed/this-or-that/choice",
+        json={
+            "left_song_id": left.id,
+            "right_song_id": right.id,
+            "winner_song_id": right.id,
+        },
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert choice.status_code == 200, choice.text
+    session_uuid = choice.json()["comparison_session_uuid"]
+    other_token = _register(client, "undo-other@example.com", "undoOtherUser")
+
+    response = client.post(
+        "/api/v1/feed/this-or-that/undo",
+        json={"comparison_session_uuid": session_uuid},
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+
+    assert response.status_code == 404
+    # The owner's data is untouched.
+    assert db_session.execute(
+        select(Comparison).where(Comparison.user_id == owner_id)
+    ).scalar_one_or_none() is not None
+
+
+def test_this_or_that_undo_rejects_after_the_window_expires(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    """A stale undo (past the recency window) is rejected rather than rewriting old history."""
+    monkeypatch.setattr("src.services.rating.THIS_OR_THAT_UNDO_WINDOW", timedelta(seconds=0))
+    token = _register(client, "undo-expired@example.com", "undoexpireduser")
+    user_id = _user_id(db_session, "undoexpireduser")
+    left, right = _seed_this_or_that_rankings(db_session, user_id)
+    choice = client.post(
+        "/api/v1/feed/this-or-that/choice",
+        json={
+            "left_song_id": left.id,
+            "right_song_id": right.id,
+            "winner_song_id": right.id,
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    session_uuid = choice.json()["comparison_session_uuid"]
+
+    response = client.post(
+        "/api/v1/feed/this-or-that/undo",
+        json={"comparison_session_uuid": session_uuid},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 409
+    # Nothing was touched — the receipt from the original choice still stands.
+    assert db_session.execute(
+        select(Comparison).where(Comparison.user_id == user_id)
+    ).scalar_one_or_none() is not None
+
+
 def test_this_or_that_dismiss_records_explicit_context_and_cools_down(
     client: TestClient,
     db_session: Session,

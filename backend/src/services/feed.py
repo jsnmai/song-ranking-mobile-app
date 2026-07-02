@@ -38,12 +38,14 @@ from src.pydantic_schemas.feed import (
     ThisOrThatDismissResponse,
     ThisOrThatModule,
     ThisOrThatOption,
+    ThisOrThatUndoRequest,
+    ThisOrThatUndoResponse,
 )
 from src.pydantic_schemas.profile import ProfileResponse
 from src.pydantic_schemas.song import SongResponse
 from src.services.circle_aggregates import CIRCLE_MIN_CONTRIBUTORS
 from src.services.like import like_states_for_events
-from src.services.rating import BUCKET_ORDER, apply_this_or_that_choice
+from src.services.rating import BUCKET_ORDER, apply_this_or_that_choice, undo_this_or_that_choice
 from src.sqlalchemy_tables.rating_event import RatingEvent
 from src.sqlalchemy_tables.song import Song
 
@@ -188,7 +190,22 @@ def choose_this_or_that(
         recorded=True,
         swapped=result.swapped,
         winner_song_id=result.winner_song_id,
+        comparison_session_uuid=result.comparison_session_uuid,
     )
+
+
+def undo_this_or_that(
+    db: Session,
+    user_id: int,
+    data: ThisOrThatUndoRequest,
+) -> ThisOrThatUndoResponse:
+    """Undo a still-recent This-or-That choice from the Feed result popup."""
+    undo_this_or_that_choice(
+        db,
+        user_id=user_id,
+        comparison_session_uuid=data.comparison_session_uuid,
+    )
+    return ThisOrThatUndoResponse(undone=True)
 
 
 def dismiss_this_or_that(

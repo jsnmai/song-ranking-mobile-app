@@ -105,10 +105,15 @@ export type ThisOrThatChoiceResponse = {
     recorded: boolean;
     swapped: boolean;
     winner_song_id: number;
+    comparison_session_uuid: string;
 }
 
 export type ThisOrThatDismissResponse = {
     dismissed: boolean;
+}
+
+export type ThisOrThatUndoResponse = {
+    undone: boolean;
 }
 
 // Bundled Feed module aggregates (GET /api/v1/feed/modules). Every module is live; a module with no

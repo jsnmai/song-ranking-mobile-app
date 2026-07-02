@@ -12,6 +12,8 @@ from src.pydantic_schemas.feed import (
     ThisOrThatChoiceResponse,
     ThisOrThatDismissRequest,
     ThisOrThatDismissResponse,
+    ThisOrThatUndoRequest,
+    ThisOrThatUndoResponse,
 )
 from src.services.feed import (
     choose_this_or_that,
@@ -19,6 +21,7 @@ from src.services.feed import (
     get_feed_modules,
     list_my_feed,
     list_song_circle_raters,
+    undo_this_or_that,
 )
 from src.sqlalchemy_tables.user import User
 
@@ -83,6 +86,25 @@ def this_or_that_choice(
 ) -> ThisOrThatChoiceResponse:
     """Record one inline personal ranking-refinement choice."""
     return choose_this_or_that(
+        db,
+        user_id=current_user.id,
+        data=data,
+    )
+
+
+@router.post(
+    "/this-or-that/undo",
+    response_model=ThisOrThatUndoResponse,
+)
+@limiter.limit("60/minute")
+def this_or_that_undo(
+    request: Request,
+    data: ThisOrThatUndoRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ThisOrThatUndoResponse:
+    """Undo a still-recent This-or-That choice from the Feed result popup."""
+    return undo_this_or_that(
         db,
         user_id=current_user.id,
         data=data,

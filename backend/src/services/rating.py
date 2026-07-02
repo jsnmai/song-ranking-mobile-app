@@ -1,14 +1,18 @@
 """Business logic for ratings, rankings, and rating events."""
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from src.crud.comparison import create_comparison
-from src.crud.interaction_event import create_interaction_event
+from src.crud.comparison import create_comparison, delete_comparison, get_comparison_by_session_uuid
+from src.crud.interaction_event import (
+    create_interaction_event,
+    delete_interaction_event,
+    get_interaction_event_by_session_uuid,
+)
 from src.crud.rating import (
     RankingRow,
     apply_ranking_state,
@@ -75,6 +79,9 @@ BUCKET_SCORE_RANGES = {
 DEFAULT_RANKING_LIMIT = 20
 MAX_RANKING_LIMIT = 50
 BUCKET_ORDER = ("like", "alright", "dislike")
+# How long the Feed result popup's Undo stays valid — generous for the popup's own lifetime, tight
+# enough that it can't be used to rewrite arbitrary old This-or-That history.
+THIS_OR_THAT_UNDO_WINDOW = timedelta(minutes=10)
 
 
 @dataclass(frozen=True)
@@ -102,6 +109,7 @@ class ThisOrThatChoiceResult:
 
     swapped: bool
     winner_song_id: int
+    comparison_session_uuid: UUID
 
 
 def finalize_rating(
@@ -214,27 +222,7 @@ def apply_this_or_that_choice(
             finalized_at=now,
         )
         if swapped:
-            bucket_rankings = list_user_bucket_rankings(
-                db,
-                user_id,
-                left.bucket,
-            )
-            old_scores_by_song_id = _score_snapshot(bucket_rankings)
-            left_index = next(index for index, ranking in enumerate(bucket_rankings) if ranking.id == left.id)
-            right_index = next(index for index, ranking in enumerate(bucket_rankings) if ranking.id == right.id)
-            bucket_rankings[left_index], bucket_rankings[right_index] = (
-                bucket_rankings[right_index],
-                bucket_rankings[left_index],
-            )
-            _recalculate_bucket(
-                bucket_rankings,
-                left.bucket,
-            )
-            _apply_score_adjustments(
-                db,
-                old_scores_by_song_id,
-                _score_snapshot(bucket_rankings),
-            )
+            _swap_adjacent_bucket_pair(db, user_id, left, right)
         create_interaction_event(
             db,
             user_id=user_id,
@@ -269,7 +257,105 @@ def apply_this_or_that_choice(
     return ThisOrThatChoiceResult(
         swapped=swapped,
         winner_song_id=winner_song_id,
+        comparison_session_uuid=comparison_session_uuid,
     )
+
+
+def _swap_adjacent_bucket_pair(
+    db: Session,
+    user_id: int,
+    first: Ranking,
+    second: Ranking,
+) -> None:
+    """Swap two adjacent same-bucket rankings and recalculate the bucket's positions/scores."""
+    bucket_rankings = list_user_bucket_rankings(
+        db,
+        user_id,
+        first.bucket,
+    )
+    old_scores_by_song_id = _score_snapshot(bucket_rankings)
+    first_index = next(index for index, ranking in enumerate(bucket_rankings) if ranking.id == first.id)
+    second_index = next(index for index, ranking in enumerate(bucket_rankings) if ranking.id == second.id)
+    bucket_rankings[first_index], bucket_rankings[second_index] = (
+        bucket_rankings[second_index],
+        bucket_rankings[first_index],
+    )
+    _recalculate_bucket(
+        bucket_rankings,
+        first.bucket,
+    )
+    _apply_score_adjustments(
+        db,
+        old_scores_by_song_id,
+        _score_snapshot(bucket_rankings),
+    )
+
+
+def undo_this_or_that_choice(
+    db: Session,
+    user_id: int,
+    comparison_session_uuid: UUID,
+) -> None:
+    """
+    Reverse one still-recent This-or-That choice: undoes the position swap (if the pick caused
+    one), then removes the comparison receipt and the interaction event as if the pick never
+    happened. Only offered from the Feed result popup right after the pick, so a short recency
+    window is enough of a guard against undoing arbitrary old history.
+    """
+    event = get_interaction_event_by_session_uuid(
+        db,
+        user_id,
+        "this_or_that_chosen",
+        str(comparison_session_uuid),
+    )
+    if event is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Nothing to undo.",
+        )
+    if datetime.now(timezone.utc) - event.created_at > THIS_OR_THAT_UNDO_WINDOW:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This pick can no longer be undone.",
+        )
+
+    comparison = get_comparison_by_session_uuid(
+        db,
+        user_id,
+        comparison_session_uuid,
+    )
+    if comparison is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Nothing to undo.",
+        )
+
+    context = event.context or {}
+    if context.get("swapped"):
+        winner_song_id = context.get("winner_song_id")
+        loser_song_id = context.get("loser_song_id")
+        winner = get_user_ranking_by_song(db, user_id, winner_song_id)
+        loser = get_user_ranking_by_song(db, user_id, loser_song_id)
+        if (
+            winner is not None
+            and loser is not None
+            and winner.bucket == loser.bucket
+            and abs(winner.position - loser.position) == 1
+        ):
+            _swap_adjacent_bucket_pair(db, user_id, winner, loser)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This pick can no longer be undone.",
+            )
+
+    try:
+        delete_comparison(db, comparison)
+        delete_interaction_event(db, event)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
 
 def persist_finalized_rating(
