@@ -838,7 +838,7 @@ describe("FeedScreen", () => {
         expect(screen.queryByTestId("feed-match-moment-locked")).toBeNull()
         expect(screen.getByText("Solo")).toBeTruthy()                // winner title
         expect(screen.getByText("over Pyramids")).toBeTruthy()       // loser title
-        expect(screen.getByText("@maya · snap pick 1.2s")).toBeTruthy()  // fast decision flourish
+        expect(screen.getByText("@maya picked")).toBeTruthy()        // actor line above the pick
 
         fireEvent.press(screen.getByTestId("feed-match-moment-88"))
         await waitFor(() => {

@@ -231,7 +231,9 @@ describe("DiscoverScreen", () => {
 
         expect(await screen.findByText("POPULAR ON LISTN · THIS WEEK")).toBeTruthy()
         expect(screen.getByText("CHILDISH GAMBINO")).toBeTruthy()
-        fireEvent.press(await screen.findByLabelText("Open Redbone"))
+        // First tap arms the tile's View confirmation; tapping VIEW navigates.
+        fireEvent.press(await screen.findByLabelText("Preview Redbone"))
+        fireEvent.press(await screen.findByLabelText("View Redbone"))
         expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { song: popularSong })
     })
 

@@ -43,7 +43,19 @@ jest.mock('react-native-reanimated', () => {
         SlideOutLeft: animationStub,
         SlideOutDown: animationStub,
         LinearTransition: animationStub,
-        Easing: { bezier: jest.fn(), linear: jest.fn(), inOut: jest.fn() },
+        // Cover the composable easing API (Easing.out(Easing.ease), etc.) — a missing
+        // member throws at render and unmounts the whole test tree (see PulseDot).
+        Easing: {
+            linear: () => 0,
+            ease: () => 0,
+            quad: () => 0,
+            cubic: () => 0,
+            exp: () => 0,
+            bezier: () => () => 0,
+            in: () => () => 0,
+            out: () => () => 0,
+            inOut: () => () => 0,
+        },
     }
 })
 
