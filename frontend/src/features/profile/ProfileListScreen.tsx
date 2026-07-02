@@ -483,28 +483,37 @@ const styles = StyleSheet.create({
         color: colors.inkDim,
         marginTop: 2,
     },
+    // Follow / Following pills mirror the Discover people-search results exactly:
+    // accent fill + hard ink offset shadow for the primary Follow action, quiet
+    // bordered pill once following.
     followBtn: {
         borderRadius: 999,
-        paddingVertical: 8,
-        paddingHorizontal: 15,
         flexShrink: 0,
     },
     followBtnFilled: {
-        backgroundColor: colors.ink,
+        backgroundColor: colors.accent,
+        paddingVertical: 8,
+        paddingHorizontal: 15,
+        shadowColor: colors.ink,
+        shadowOpacity: 1,
+        shadowRadius: 0,
+        shadowOffset: { width: 2, height: 2 },
     },
     followBtnOutline: {
         backgroundColor: colors.bg,
         borderWidth: 1.5,
         borderColor: colors.line,
+        paddingVertical: 7,
+        paddingHorizontal: 14,
     },
     followBtnFilledText: {
         fontFamily: fonts.display,
-        fontSize: 11,
+        fontSize: 11.5,
         color: "#fff",
     },
     followBtnOutlineText: {
         fontFamily: fonts.display,
-        fontSize: 11,
+        fontSize: 11.5,
         color: colors.inkSoft,
     },
 })
