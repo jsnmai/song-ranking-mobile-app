@@ -87,3 +87,7 @@ pinterest_designs/
 app designs/
 notes/
 opendesignlistn/
+
+# No markdown on GitHub for this project — docs stay local-only.
+# (Subsumes the per-file entries above; kept for clarity.)
+*.md
