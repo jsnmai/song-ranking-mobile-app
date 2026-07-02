@@ -45,6 +45,9 @@ def enrich_song_metadata(
     if song.metadata_enriched_at is not None:
         return SongResponse.model_validate(song)
 
+    if song.enrichment_status == "no_match":
+        return SongResponse.model_validate(song)
+
     try:
         recording = _find_musicbrainz_recording(
             isrc=song.isrc,

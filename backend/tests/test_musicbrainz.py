@@ -179,6 +179,7 @@ def test_musicbrainz_fuzzy_match_below_threshold_is_skipped(
 ):
     """Low-confidence fuzzy matches are not stored as authoritative metadata."""
     payload = _song_payload()
+    payload.deezer_id = 880001
     payload.isrc = None
     song_response = persist_user_touched_song(
         db_session,
@@ -223,14 +224,72 @@ def test_musicbrainz_fuzzy_match_below_threshold_is_skipped(
     assert song.enrichment_attempt_count == 1
 
 
+def test_musicbrainz_no_match_is_not_retried(
+    db_session: Session,
+    monkeypatch,
+):
+    """A prior no_match result is terminal for normal enrichment scheduling."""
+    payload = _song_payload()
+    payload.deezer_id = 880003
+    payload.isrc = None
+    song_response = persist_user_touched_song(
+        db_session,
+        payload,
+    )
+
+    monkeypatch.setattr(
+        "src.services.musicbrainz.httpx.get",
+        lambda *args, **kwargs: LowConfidenceMusicBrainzResponse(),
+    )
+    monkeypatch.setattr(
+        "src.services.musicbrainz.time.sleep",
+        lambda seconds: None,
+    )
+
+    first = enrich_song_metadata(
+        db_session,
+        song_response.id,
+    )
+    assert first is not None
+    assert first.metadata_enriched_at is None
+
+    def fail_if_called(
+        url: str,
+        params: dict,
+        headers: dict,
+        timeout: float,
+    ) -> MockMusicBrainzResponse:
+        raise AssertionError("MusicBrainz should not be called again for no_match songs.")
+
+    monkeypatch.setattr(
+        "src.services.musicbrainz.httpx.get",
+        fail_if_called,
+    )
+
+    second = enrich_song_metadata(
+        db_session,
+        song_response.id,
+    )
+
+    assert second is not None
+    assert second.metadata_enriched_at is None
+    db_session.expire_all()
+    song = db_session.get(Song, song_response.id)
+    assert song is not None
+    assert song.enrichment_status == "no_match"
+    assert song.enrichment_attempt_count == 1
+
+
 def test_musicbrainz_http_failure_writes_failed_temporary_status(
     db_session: Session,
     monkeypatch,
 ):
     """A MusicBrainz HTTP error sets enrichment_status to failed_temporary and re-raises."""
+    payload = _song_payload()
+    payload.deezer_id = 880002
     song_response = persist_user_touched_song(
         db_session,
-        _song_payload(),
+        payload,
     )
 
     monkeypatch.setattr(
@@ -319,3 +378,36 @@ def test_rating_finalize_succeeds_when_musicbrainz_raises(
     assert response.status_code == 201
     data = response.json()
     assert data["ranking"]["bucket"] == "dislike"
+
+
+def test_bookmark_schedules_musicbrainz_enrichment(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    """Bookmarking is a durable song action, so it schedules best-effort enrichment."""
+    scheduled_song_ids: list[int] = []
+
+    def record_enrichment_task(song_id: int) -> None:
+        scheduled_song_ids.append(song_id)
+
+    monkeypatch.setattr(
+        "src.api_routers.bookmarks.enrich_song_metadata_task",
+        record_enrichment_task,
+    )
+
+    token = _register_and_get_token(
+        client,
+        email="bookmark-mb@example.com",
+        username="bookmarkmb",
+    )
+    response = client.post(
+        "/api/v1/bookmarks",
+        json={
+            "song": _finalize_payload()["song"],
+            "source": "song_detail",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert scheduled_song_ids == [response.json()["song"]["id"]]

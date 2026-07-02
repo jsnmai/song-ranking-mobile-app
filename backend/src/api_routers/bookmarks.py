@@ -1,5 +1,5 @@
 """HTTP boundary for per-user Bookmarks."""
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
@@ -17,6 +17,7 @@ from src.services.bookmarks import (
     list_my_bookmarks,
     remove_bookmark,
 )
+from src.services.musicbrainz_tasks import enrich_song_metadata_task
 from src.sqlalchemy_tables.user import User
 
 router = APIRouter(
@@ -69,15 +70,21 @@ def bookmark_status(
 def bookmark_song_endpoint(
     request: Request,
     data: BookmarkCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> BookmarkResponse:
     """Bookmark one song for the authenticated user."""
-    return bookmark_song(
+    response = bookmark_song(
         db,
         user_id=current_user.id,
         data=data,
     )
+    background_tasks.add_task(
+        enrich_song_metadata_task,
+        response.song.id,
+    )
+    return response
 
 
 @router.delete(
