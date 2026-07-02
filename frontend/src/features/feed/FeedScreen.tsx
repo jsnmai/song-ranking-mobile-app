@@ -95,7 +95,7 @@ const ORBIT_STARS = [
 ] as const
 
 // Re-rate Radar sparkline row height (px); the trajectory node tops are computed against it.
-const SPARK_H = 26
+const SPARK_H = 28
 
 const FRIEND_AVATARS = [
     { id: 1, initial: "M", color: colors.accent },
@@ -179,30 +179,179 @@ function BlockIcon({ color, size = 16 }: { color: string; size?: number }) {
     )
 }
 
-// Tappable cue — a solid dot with a ring that pulses outward and fades on a loop.
-// Used on the Recent Verdict hero when there's no caption, to signal the card is live/tappable.
-function PulseDot({ color = "#fff", size = 16 }: { color?: string; size?: number }) {
-    const t = useSharedValue(0)
+// Tappable cue for the no-note Recent Verdict hero. A thin custom line hand bobs
+// gently, matching the app's drawn icon language without looking like a stock asset.
+function VerdictFingerCue({ size = 22 }: { size?: number }) {
+    const bob = useSharedValue(0)
     useEffect(() => {
-        t.value = withRepeat(withTiming(1, { duration: 1500, easing: Easing.out(Easing.ease) }), -1, false)
-    }, [t])
-    const ringStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: 0.5 + t.value * 1.7 }],
-        opacity: 0.6 * (1 - t.value),
+        bob.value = withRepeat(
+            withTiming(1, { duration: 2200, easing: Easing.inOut(Easing.sin) }),
+            -1,
+            true,
+        )
+    }, [bob])
+
+    const fingerStyle = useAnimatedStyle(() => ({
+        transform: [
+            { translateY: -1 - bob.value * 1.8 },
+            { rotateZ: `${-22 - bob.value * 0.8}deg` },
+        ],
     }))
-    const dot = Math.round(size * 0.34)
+
     return (
-        <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
-            <Animated.View
-                style={[
-                    StyleSheet.absoluteFillObject,
-                    { borderRadius: size / 2, borderWidth: 1.5, borderColor: color },
-                    ringStyle,
-                ]}
-            />
-            <View style={{ width: dot, height: dot, borderRadius: dot / 2, backgroundColor: color }} />
+        <Animated.View style={[styles.verdictFingerCue, { width: size, height: size }, fingerStyle]}>
+            <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+                <Path
+                    d="M10.2 13.4V4.9c0-.9.7-1.6 1.6-1.6s1.6.7 1.6 1.6v6.4"
+                    stroke="#fff"
+                    strokeWidth={2.15}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                />
+                <Path
+                    d="M13.4 11.3c.2-.7.8-1.2 1.5-1.2.9 0 1.6.7 1.6 1.6v.8"
+                    stroke="#fff"
+                    strokeWidth={2.15}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                />
+                <Path
+                    d="M16.5 12.5c.2-.6.8-1 1.5-1 .9 0 1.6.7 1.6 1.6v2.2c0 3.2-2.3 5.5-5.4 5.5h-1.1c-1.6 0-3.1-.7-4.1-2l-2.2-2.9c-.4-.6-.3-1.3.2-1.8.5-.4 1.2-.4 1.7.1l1.5 1.4"
+                    stroke="#fff"
+                    strokeWidth={2.15}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                />
+            </Svg>
+        </Animated.View>
+    )
+}
+
+function SplitSongMotion({ children }: { children: ReactNode }) {
+    const sway = useSharedValue(-1)
+
+    useEffect(() => {
+        sway.value = withRepeat(
+            withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.quad) }),
+            -1,
+            true,
+        )
+    }, [sway])
+
+    const animatedStyle = useAnimatedStyle(() => ({
+        transform: [
+            { translateX: sway.value * 6 },
+            { translateY: -Math.abs(sway.value) * 3 },
+            { rotateZ: `${sway.value * 8}deg` },
+            { scale: 1 + Math.abs(sway.value) * 0.025 },
+        ],
+    }))
+
+    return <Animated.View style={animatedStyle}>{children}</Animated.View>
+}
+
+function ConsensusWaveBars({
+    bars,
+    avgBarIndex,
+}: {
+    bars: number[];
+    avgBarIndex: number;
+}) {
+    const wave = useSharedValue(0)
+
+    useEffect(() => {
+        wave.value = withRepeat(
+            withTiming(1, { duration: 2200, easing: Easing.inOut(Easing.ease) }),
+            -1,
+            true,
+        )
+    }, [wave])
+
+    return (
+        <View style={styles.consWave}>
+            {bars.map((v, i) => (
+                <ConsensusWaveBar key={i} value={v} index={i} wave={wave} isPeak={i === avgBarIndex} />
+            ))}
         </View>
     )
+}
+
+function ConsensusWaveBar({
+    value,
+    index,
+    wave,
+    isPeak,
+}: {
+    value: number;
+    index: number;
+    wave: SharedValue<number>;
+    isPeak: boolean;
+}) {
+    const baseHeight = Math.max(3, value * 13)
+    const animatedStyle = useAnimatedStyle(() => {
+        const phase = wave.value * Math.PI * 2 + index * 0.62
+        const height = Math.max(3, Math.min(15, baseHeight + Math.sin(phase) * 2.2))
+        return {
+            height,
+        }
+    })
+
+    return (
+        <Animated.View
+            style={[
+                styles.consWaveBar,
+                {
+                    height: baseHeight,
+                    opacity: isPeak ? 1 : 0.4 + 0.45 * value,
+                },
+                animatedStyle,
+            ]}
+        >
+            {isPeak && <View style={styles.consWaveAvgDot} />}
+        </Animated.View>
+    )
+}
+
+function RadarRipplePoint({ top, color }: { top: number; color: string }) {
+    const ripple = useSharedValue(0)
+
+    useEffect(() => {
+        ripple.value = withRepeat(withTiming(1, { duration: 1650, easing: Easing.out(Easing.ease) }), -1, false)
+    }, [ripple])
+
+    const ringStyle = useAnimatedStyle(() => ({
+        opacity: 0.68 * (1 - ripple.value),
+        transform: [{ scale: 0.55 + ripple.value * 1.55 }],
+    }))
+
+    return (
+        <View style={[styles.rrSparkEndWrap, { top }]}>
+            <Animated.View style={[styles.rrSparkRipple, { borderColor: color }, ringStyle]} />
+            <View style={[styles.rrSparkEndDot, { backgroundColor: color, shadowColor: color }]} />
+        </View>
+    )
+}
+
+function MatchMomentGtMotion() {
+    const pulse = useSharedValue(0)
+
+    useEffect(() => {
+        pulse.value = withRepeat(
+            withSequence(
+                withTiming(1, { duration: 760, easing: Easing.out(Easing.quad) }),
+                withTiming(0, { duration: 980, easing: Easing.inOut(Easing.quad) }),
+            ),
+            -1,
+            false,
+        )
+    }, [pulse])
+
+    const animatedStyle = useAnimatedStyle(() => ({
+        opacity: 0.72 + pulse.value * 0.22,
+        transform: [{ scale: 1 + pulse.value * 0.24 }],
+    }))
+
+    return <Animated.Text style={[styles.matchMomentGt, animatedStyle]}>›</Animated.Text>
 }
 
 // Wraps a feed card so the hero verdict's card can play the "pull out, then slam" pulse after the
@@ -726,7 +875,7 @@ export default function FeedScreen() {
                                     // unquoted, with a tap glyph (the hero scrolls to this verdict's card).
                                     <View style={styles.verdictCtaRow}>
                                         <Text style={styles.verdictCtaText} numberOfLines={1}>See Rating in Feed</Text>
-                                        <PulseDot color="#fff" size={14} />
+                                        <VerdictFingerCue />
                                     </View>
                                 )}
                             </View>
@@ -775,7 +924,7 @@ export default function FeedScreen() {
                         {/* Sparkline as flex child 3/4 */}
                         <Svg width="100%" height={34} viewBox="0 0 100 34" preserveAspectRatio="none">
                             <Polyline
-                                points="4,27 32,22 54,18 76,12 96,7"
+                                points="8,27 32,22 54,18 75,12 89,7"
                                 fill="none"
                                 stroke={colors.gold}
                                 strokeOpacity="0.4"
@@ -802,14 +951,14 @@ export default function FeedScreen() {
         // The trajectory line maps each score (0–10) to a y in the sparkline viewBox, so the
         // slope and the two end nodes reflect the actual previous → new change, not a canned curve.
         const SPARK_VB = 42
-        const SPARK_PAD = 7
+        const SPARK_PAD = 11
         const scoreToY = (s: number) =>
             SPARK_PAD + (1 - Math.max(0, Math.min(10, s)) / 10) * (SPARK_VB - 2 * SPARK_PAD)
         const startY = scoreToY(r.previous_score)
         const endY = scoreToY(r.new_score)
         // Hold a flat baseline at the previous score, then bend to the new score on the right.
         // The bend's direction and steepness reflect the real change; round joins soften the elbow.
-        const sparkPoints = `4,${startY.toFixed(1)} 44,${startY.toFixed(1)} 96,${endY.toFixed(1)}`
+        const sparkPoints = `8,${startY.toFixed(1)} 44,${startY.toFixed(1)} 89,${endY.toFixed(1)}`
         // Node tops in px: the polyline (viewBox height SPARK_VB) is stretched to the SPARK_H-tall row.
         const startTop = (startY / SPARK_VB) * SPARK_H
         const endTop = (endY / SPARK_VB) * SPARK_H
@@ -851,7 +1000,7 @@ export default function FeedScreen() {
                             />
                         </Svg>
                         <View style={[styles.rrSparkStart, { top: startTop }]} />
-                        <View style={[styles.rrSparkEnd, { top: endTop }]} />
+                        <RadarRipplePoint top={endTop} color={colors.gold} />
                     </View>
                     <View style={styles.rrDeltaRow}>
                         <Text style={styles.rrPrev}>{r.previous_score.toFixed(1)}</Text>
@@ -937,23 +1086,7 @@ export default function FeedScreen() {
                         </View>
                         <View style={styles.consSpread} testID="feed-consensus-spread">
                             <Text style={styles.consSpreadEndLabel}>{c.low_score.toFixed(1)}</Text>
-                            <View style={styles.consWave}>
-                                {waveBars.map((v, i) => (
-                                    <View
-                                        key={i}
-                                        style={[
-                                            styles.consWaveBar,
-                                            {
-                                                height: Math.max(3, v * 13),
-                                                opacity: i === avgBarIndex ? 1 : 0.4 + 0.45 * v,
-                                            },
-                                        ]}
-                                    >
-                                        {/* Dot lives inside the peak bar so left:50% centers it exactly on this notch. */}
-                                        {i === avgBarIndex && <View style={styles.consWaveAvgDot} />}
-                                    </View>
-                                ))}
-                            </View>
+                            <ConsensusWaveBars bars={waveBars} avgBarIndex={avgBarIndex} />
                             <Text style={styles.consSpreadEndLabel}>{c.high_score.toFixed(1)}</Text>
                         </View>
                     </View>
@@ -1094,11 +1227,13 @@ export default function FeedScreen() {
                     </View>
                     {/* Centerpiece: the split song, circular with a white ring, title sitting just below. */}
                     <View style={styles.splitCenter}>
-                        {s.song.cover_url ? (
-                            <Image style={styles.splitArt} source={{ uri: s.song.cover_url }} />
-                        ) : (
-                            <View style={[styles.splitArt, { backgroundColor: "rgba(0,0,0,0.2)" }]} />
-                        )}
+                        <SplitSongMotion>
+                            {s.song.cover_url ? (
+                                <Image style={styles.splitArt} source={{ uri: s.song.cover_url }} />
+                            ) : (
+                                <View style={[styles.splitArt, { backgroundColor: "rgba(0,0,0,0.2)" }]} />
+                            )}
+                        </SplitSongMotion>
                         <Text style={styles.splitSong} numberOfLines={1}>‘{s.song.title}’</Text>
                     </View>
                     <View style={styles.splitRow}>
@@ -1137,7 +1272,7 @@ export default function FeedScreen() {
                                 <HatchBox size={42} radius={8} tone="light" />
                                 <View style={styles.matchMomentCheck}><CheckIcon color={colors.mint} size={10} /></View>
                             </View>
-                            <Text style={styles.matchMomentGt}>›</Text>
+                            <MatchMomentGtMotion />
                             <HatchBox size={32} radius={7} tone="light" />
                         </View>
                         {/* Caption next to the lock */}
@@ -1181,7 +1316,7 @@ export default function FeedScreen() {
                                 )}
                                 <View style={styles.matchMomentCheck}><CheckIcon color={colors.mint} size={10} /></View>
                             </View>
-                            <Text style={styles.matchMomentGt}>›</Text>
+                            <MatchMomentGtMotion />
                             {m.loser.cover_url ? (
                                 <Image style={styles.mmLoserArt} source={{ uri: m.loser.cover_url }} />
                             ) : (
@@ -2422,7 +2557,7 @@ const styles = StyleSheet.create({
     },
     rrSparkStart: {
         position: "absolute",
-        left: "4%",
+        left: "8%",
         width: 7,
         height: 7,
         borderRadius: 3.5,
@@ -2431,18 +2566,29 @@ const styles = StyleSheet.create({
         backgroundColor: colors.gold,
         opacity: 0.55,
     },
-    rrSparkEnd: {
+    rrSparkEndWrap: {
         position: "absolute",
-        left: "96%",
-        width: 11,
-        height: 11,
-        borderRadius: 5.5,
-        marginLeft: -5.5,
-        marginTop: -5.5,
-        backgroundColor: colors.gold,
-        shadowColor: colors.gold,
-        shadowOpacity: 0.8,
-        shadowRadius: 4,
+        left: "89%",
+        width: 32,
+        height: 32,
+        marginLeft: -16,
+        marginTop: -16,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    rrSparkRipple: {
+        position: "absolute",
+        width: 15,
+        height: 15,
+        borderRadius: 7.5,
+        borderWidth: 1.3,
+    },
+    rrSparkEndDot: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        shadowOpacity: 0.95,
+        shadowRadius: 5,
         shadowOffset: { width: 0, height: 0 },
     },
     rrDeltaRow: {
@@ -2773,7 +2919,7 @@ const styles = StyleSheet.create({
     verdictCtaRow: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 11,
+        gap: 6,
         marginTop: 4,
     },
     verdictCtaText: {
@@ -2782,6 +2928,15 @@ const styles = StyleSheet.create({
         color: "#fff",
         lineHeight: 19,
         includeFontPadding: false,
+    },
+    verdictFingerCue: {
+        alignItems: "center",
+        justifyContent: "center",
+        marginLeft: -1,
+        shadowColor: "#fff",
+        shadowOpacity: 0.35,
+        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 0 },
     },
     verdictFooter: {
         flexDirection: "row",
