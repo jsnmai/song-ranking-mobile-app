@@ -167,9 +167,9 @@ const styles = StyleSheet.create({
     heading: { fontFamily: fonts.serif, color: colors.ink, fontSize: 30, lineHeight: 34 },
     loader: { marginTop: 48 },
     error: { color: colors.danger, fontSize: 14, textAlign: "center", margin: 24 },
-    // paddingTop gives the native pull-to-refresh wheel room to shrink back into empty space above
-    // the first row instead of grazing it on the way out.
-    list: { paddingHorizontal: 14, paddingTop: 24, paddingBottom: 32 },
+    // Small paddingTop clearance so the native pull-to-refresh wheel doesn't graze the first
+    // row on the way out.
+    list: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 32 },
     empty: { color: colors.inkSoft, fontSize: 14, textAlign: "center", marginTop: 48 },
     footerLoader: { marginVertical: 18 },
     row: {

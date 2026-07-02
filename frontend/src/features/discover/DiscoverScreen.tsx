@@ -1333,9 +1333,9 @@ const styles = StyleSheet.create({
     scroll: { flex: 1 },
     scrollContent: {
         paddingHorizontal: 14,
-        // Breathing room so the native pull-to-refresh wheel (which sits in the inset above the
-        // content) shrinks back into empty space, never grazing the first row on the way out.
-        paddingTop: 24,
+        // Small clearance so the native pull-to-refresh wheel doesn't graze the first row on
+        // the way out.
+        paddingTop: 10,
         paddingBottom: 96,
     },
     loaderSlot: {
