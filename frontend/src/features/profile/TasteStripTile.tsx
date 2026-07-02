@@ -2,7 +2,7 @@
 // small dark popover explaining what the stat means (and how it's found). The
 // popover is rendered inline instead of as a native Modal, so neighboring taste
 // tiles remain immediately tappable while one explainer is open.
-import { ReactNode, useRef, useState } from "react"
+import { ReactNode, useEffect, useRef, useState } from "react"
 import { Dimensions, Pressable, StyleSheet, StyleProp, Text, View, ViewStyle } from "react-native"
 
 import { colors, fonts } from "../../theme"
@@ -10,13 +10,15 @@ import { colors, fonts } from "../../theme"
 // Same charcoal as the streak popover so the explainers read as one family.
 const SURFACE = "#1e2029"
 const POPOVER_WIDTH = 230
-const POPOVER_HEIGHT_ESTIMATE = 148
-const POINTER = 11
+const POPOVER_HEIGHT_ESTIMATE = 112
+const POINTER_WIDTH = 18
+const POINTER_HEIGHT = 10
 const SCREEN_MARGIN = 8
 const TILE_FALLBACK_W = 110
 const TILE_FALLBACK_H = 108
 type PopoverEdge = "start" | "center" | "end"
 type AnchorRect = { x: number; y: number; w: number; h: number }
+export type PopoverFrame = { x: number; y: number; w: number; h: number }
 
 function clamp(value: number, min: number, max: number) {
     return Math.min(Math.max(value, min), Math.max(min, max))
@@ -37,6 +39,8 @@ export default function TasteStripTile({
     open,
     onOpenChange,
     popoverEdge = "center",
+    viewportBottomInset = 0,
+    onPopoverFrameChange,
 }: {
     label: string
     // The hero value (e.g. "7" or "Top 12%"). Omit when passing a custom `children` body.
@@ -60,11 +64,17 @@ export default function TasteStripTile({
     open?: boolean
     onOpenChange?: (nextOpen: boolean) => void
     popoverEdge?: PopoverEdge
+    viewportBottomInset?: number
+    onPopoverFrameChange?: (frame: PopoverFrame | null) => void
 }) {
     const [localOpen, setLocalOpen] = useState(false)
     const [tileSize, setTileSize] = useState<{ w: number; h: number }>({
         w: TILE_FALLBACK_W,
         h: TILE_FALLBACK_H,
+    })
+    const [popoverSize, setPopoverSize] = useState<{ w: number; h: number }>({
+        w: POPOVER_WIDTH,
+        h: POPOVER_HEIGHT_ESTIMATE,
     })
     const [anchor, setAnchor] = useState<AnchorRect | null>(null)
     const anchorRef = useRef<View>(null)
@@ -75,6 +85,23 @@ export default function TasteStripTile({
         else setLocalOpen(nextOpen)
     }
 
+    const measureAnchor = (fallbackSize?: { w: number; h: number }) => {
+        if (!anchorRef.current?.measureInWindow) return
+
+        anchorRef.current.measureInWindow((x, y, w, h) => {
+            const measured = {
+                x,
+                y,
+                w: w || fallbackSize?.w || tileSize.w,
+                h: h || fallbackSize?.h || tileSize.h,
+            }
+            setAnchor(measured)
+            setTileSize((prev) => (
+                prev.w === measured.w && prev.h === measured.h ? prev : { w: measured.w, h: measured.h }
+            ))
+        })
+    }
+
     const toggle = () => {
         const nextOpen = !isOpen
         if (!nextOpen) {
@@ -83,18 +110,7 @@ export default function TasteStripTile({
         }
 
         applyOpen(true)
-        if (!anchorRef.current?.measureInWindow) return
-
-        anchorRef.current.measureInWindow((x, y, w, h) => {
-            const measured = {
-                x,
-                y,
-                w: w || tileSize.w,
-                h: h || tileSize.h,
-            }
-            setAnchor(measured)
-            setTileSize({ w: measured.w, h: measured.h })
-        })
+        measureAnchor()
     }
 
     const fallbackLeft =
@@ -105,39 +121,60 @@ export default function TasteStripTile({
                 : tileSize.w / 2 - POPOVER_WIDTH / 2
     const windowSize = Dimensions.get("window")
     const anchorCenterX = anchor ? anchor.x + anchor.w / 2 : tileSize.w / 2
-    const screenLeft = clamp(
-        anchorCenterX - POPOVER_WIDTH / 2,
-        SCREEN_MARGIN,
-        windowSize.width - POPOVER_WIDTH - SCREEN_MARGIN,
-    )
+    const targetScreenLeft = anchor
+        ? popoverEdge === "start"
+            ? anchor.x
+            : popoverEdge === "end"
+                ? anchor.x + anchor.w - POPOVER_WIDTH
+                : anchorCenterX - POPOVER_WIDTH / 2
+        : anchorCenterX - POPOVER_WIDTH / 2
+    const screenLeft = clamp(targetScreenLeft, SCREEN_MARGIN, windowSize.width - POPOVER_WIDTH - SCREEN_MARGIN)
     const popoverLeft = anchor ? screenLeft - anchor.x : fallbackLeft
-    const belowTop = anchor ? anchor.y + anchor.h + 8 : tileSize.h + 8
-    const aboveTop = anchor ? anchor.y - POPOVER_HEIGHT_ESTIMATE - 8 : -POPOVER_HEIGHT_ESTIMATE - 8
-    const fitsBelow = belowTop + POPOVER_HEIGHT_ESTIMATE <= windowSize.height - SCREEN_MARGIN
+    const popoverHeight = popoverSize.h || POPOVER_HEIGHT_ESTIMATE
+    const belowTop = anchor ? anchor.y + anchor.h + POINTER_HEIGHT : tileSize.h + POINTER_HEIGHT
+    const aboveTop = anchor ? anchor.y - popoverHeight - POINTER_HEIGHT : -popoverHeight - POINTER_HEIGHT
+    const visibleBottom = windowSize.height - viewportBottomInset
+    const fitsBelow = belowTop + popoverHeight <= visibleBottom - SCREEN_MARGIN
     const fitsAbove = aboveTop >= SCREEN_MARGIN
     const placeAbove = Boolean(anchor && !fitsBelow && fitsAbove)
     const screenTop = placeAbove
         ? aboveTop
-        : clamp(belowTop, SCREEN_MARGIN, windowSize.height - POPOVER_HEIGHT_ESTIMATE - SCREEN_MARGIN)
-    const popoverTop = anchor ? screenTop - anchor.y : tileSize.h + 8
-    const pointerLeft = Math.min(
-        Math.max(12, (anchor ? anchorCenterX - screenLeft : tileSize.w / 2 - popoverLeft) - POINTER / 2),
-        POPOVER_WIDTH - 24,
+        : clamp(belowTop, SCREEN_MARGIN, visibleBottom - popoverHeight - SCREEN_MARGIN)
+    const popoverTop = anchor ? screenTop - anchor.y : tileSize.h + POINTER_HEIGHT
+    const pointerCenter = clamp(
+        anchor ? anchorCenterX - screenLeft : tileSize.w / 2 - popoverLeft,
+        18,
+        POPOVER_WIDTH - 18,
     )
+    const pointerLeft = Math.round(pointerCenter - POINTER_WIDTH / 2)
+    const popoverReady = Boolean(anchor)
+
+    useEffect(() => {
+        if (!onPopoverFrameChange) return
+        if (!isOpen || !anchor || !popoverReady) {
+            onPopoverFrameChange(null)
+            return
+        }
+        onPopoverFrameChange({ x: screenLeft, y: screenTop, w: POPOVER_WIDTH, h: popoverHeight })
+    }, [anchor, isOpen, onPopoverFrameChange, popoverHeight, popoverReady, screenLeft, screenTop])
 
     return (
         <View
             ref={anchorRef}
             collapsable={false}
+            pointerEvents="box-none"
             onLayout={(event) => {
                 const { width, height } = event.nativeEvent.layout
+                const nextSize = { w: width || tileSize.w, h: height || tileSize.h }
                 setTileSize((prev) => (
-                    prev.w === width && prev.h === height ? prev : { w: width, h: height }
+                    prev.w === nextSize.w && prev.h === nextSize.h ? prev : nextSize
                 ))
+                requestAnimationFrame(() => measureAnchor(nextSize))
             }}
             style={[styles.tile, isOpen ? styles.tileOpen : null, style]}
         >
             <Pressable
+                onPressIn={() => measureAnchor()}
                 onPress={toggle}
                 style={styles.tileInner}
                 accessibilityRole="button"
@@ -167,7 +204,17 @@ export default function TasteStripTile({
             {isOpen ? (
                 <View
                     pointerEvents="none"
-                    style={[styles.popover, { top: popoverTop, left: popoverLeft }]}
+                    onLayout={(event) => {
+                        const { width, height } = event.nativeEvent.layout
+                        setPopoverSize((prev) => (
+                            prev.w === width && prev.h === height ? prev : { w: width, h: height }
+                        ))
+                    }}
+                    style={[
+                        styles.popover,
+                        !popoverReady ? styles.popoverHidden : null,
+                        { top: popoverTop, left: popoverLeft },
+                    ]}
                     testID={testID ? `${testID}-popover` : undefined}
                 >
                     <View
@@ -269,18 +316,28 @@ const styles = StyleSheet.create({
         elevation: 12,
         zIndex: 40,
     },
+    popoverHidden: {
+        opacity: 0,
+    },
     pointer: {
         position: "absolute",
-        width: POINTER,
-        height: POINTER,
-        backgroundColor: SURFACE,
-        transform: [{ rotate: "45deg" }],
+        width: 0,
+        height: 0,
+        backgroundColor: "transparent",
+        borderLeftWidth: POINTER_WIDTH / 2,
+        borderRightWidth: POINTER_WIDTH / 2,
+        borderLeftColor: "transparent",
+        borderRightColor: "transparent",
     },
     pointerAbove: {
-        top: -5,
+        top: -POINTER_HEIGHT,
+        borderBottomWidth: POINTER_HEIGHT,
+        borderBottomColor: SURFACE,
     },
     pointerBelow: {
-        bottom: -5,
+        bottom: -POINTER_HEIGHT,
+        borderTopWidth: POINTER_HEIGHT,
+        borderTopColor: SURFACE,
     },
     popTitle: {
         fontFamily: fonts.display,

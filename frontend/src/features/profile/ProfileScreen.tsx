@@ -1,7 +1,16 @@
 // Profile tab — own profile with identity card, To LISTn shelf, taste & activity.
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import {
-    ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View,
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    type GestureResponderEvent,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
 import { useFocusEffect, useNavigation, useScrollToTop } from "@react-navigation/native"
@@ -27,10 +36,12 @@ import {
 import EndOfListCap from "../../components/EndOfListCap"
 import MostCompatibleModule from "./MostCompatibleModule"
 import { OwnStreakChip } from "./StreakBadge"
-import TasteProfileGrid from "./TasteProfileGrid"
+import TasteProfileGrid, { type TasteProfileOpenTile } from "./TasteProfileGrid"
+import { type PopoverFrame } from "./TasteStripTile"
 import TopGenresCard from "./TopGenresCard"
 
 type ProfileNavigationProp = NativeStackNavigationProp<AppStackParamList, "MainTabs">
+const POPOVER_TOUCH_SLOP = 8
 
 // Constellation nodes + edges for the Auxstrology SVG (gold, in 80×80 viewBox)
 const CONST_NODES: [number, number][] = [
@@ -65,6 +76,7 @@ export default function ProfileScreen() {
     const { token } = useAuth()
     // Re-tapping the "You" tab while scrolled down jumps back to the top.
     const scrollRef = useRef<ScrollView>(null)
+    const tasteProfileSectionRef = useRef<View>(null)
     useScrollToTop(scrollRef)
 
     // Navigate immediately; Song Detail resolves the viewer's ranking so it offers Re-rate (not Rate).
@@ -79,10 +91,18 @@ export default function ProfileScreen() {
     const [aux, setAux] = useState<AuxstrologyResponse | null>(null)
     const [ratings, setRatings] = useState<RecentRatingItem[] | null>(null)
     const [mostCompatible, setMostCompatible] = useState<MostCompatibleItem[] | null>(null)
+    const [openTasteTile, setOpenTasteTile] = useState<TasteProfileOpenTile>(null)
+    const [tastePopoverFrame, setTastePopoverFrame] = useState<PopoverFrame | null>(null)
+    const [tasteSectionFrame, setTasteSectionFrame] = useState<PopoverFrame | null>(null)
     // Three-dots options for your own activity cards (Re-rate / Reorder / Remove / like privacy).
     const [menuItem, setMenuItem] = useState<RecentRatingItem | null>(null)
     const [hideLikeCounts, setHideLikeCounts] = useState(false)
     const [isMutatingActivity, setIsMutatingActivity] = useState(false)
+
+    const dismissTastePopover = useCallback(() => {
+        setOpenTasteTile(null)
+        setTastePopoverFrame(null)
+    }, [])
 
     const openFollowers = () => {
         if (!profile) return
@@ -130,6 +150,10 @@ export default function ProfileScreen() {
             fetchProfile()
             fetchModules()
         }, [token])
+    )
+
+    useFocusEffect(
+        useCallback(() => dismissTastePopover, [dismissTastePopover])
     )
 
     useEffect(() => {
@@ -244,6 +268,44 @@ export default function ProfileScreen() {
             params: { screen: "DiscoverHome", params: { focusSearch: true, searchMode } },
         })
 
+    const bottomChromeInset = insets.bottom + 92
+
+    const dismissTastePopoverForScreenTouch = (event: GestureResponderEvent) => {
+        if (!openTasteTile) return false
+
+        const { pageX, pageY } = event.nativeEvent
+        const isInsideBottomChrome = pageY >= Dimensions.get("window").height - bottomChromeInset
+        if (isInsideBottomChrome) return false
+
+        const isInsidePopover = tastePopoverFrame
+            ? pageX >= tastePopoverFrame.x - POPOVER_TOUCH_SLOP &&
+                pageX <= tastePopoverFrame.x + tastePopoverFrame.w + POPOVER_TOUCH_SLOP &&
+                pageY >= tastePopoverFrame.y - POPOVER_TOUCH_SLOP &&
+                pageY <= tastePopoverFrame.y + tastePopoverFrame.h + POPOVER_TOUCH_SLOP
+            : false
+        const isInsideTasteSection = tasteSectionFrame
+            ? pageX >= tasteSectionFrame.x &&
+                pageX <= tasteSectionFrame.x + tasteSectionFrame.w &&
+                pageY >= tasteSectionFrame.y &&
+                pageY <= tasteSectionFrame.y + tasteSectionFrame.h
+            : false
+
+        if (isInsidePopover) {
+            dismissTastePopover()
+            return true
+        }
+        if (isInsideTasteSection) return false
+
+        dismissTastePopover()
+        return true
+    }
+
+    const updateTasteSectionFrame = () => {
+        tasteProfileSectionRef.current?.measureInWindow((x, y, w, h) => {
+            setTasteSectionFrame({ x, y, w, h })
+        })
+    }
+
     const topGenres = taste?.overall?.genres?.slice(0, 3) ?? []
 
     return (
@@ -254,10 +316,18 @@ export default function ProfileScreen() {
             // Clear the raised center FAB by the same margin as the Feed: the cap (8) plus the
             // content view's own bottom padding (8) plus this leaves insets.bottom + 108 under the
             // last line, matching FeedScreen's listContent override below.
-            contentContainerStyle={[styles.contentContainer, { paddingBottom: insets.bottom + 92 }]}
+            contentContainerStyle={[styles.contentContainer, { paddingBottom: bottomChromeInset }]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            onStartShouldSetResponderCapture={dismissTastePopoverForScreenTouch}
         >
+            {openTasteTile ? (
+                <Pressable
+                    style={[styles.tasteDismissLayer, { bottom: bottomChromeInset }]}
+                    onPress={dismissTastePopover}
+                    testID="taste-popover-dismiss-layer"
+                />
+            ) : null}
             {/* BO Header */}
             <View style={styles.header}>
                 <View style={styles.headerTop}>
@@ -540,12 +610,24 @@ export default function ProfileScreen() {
                             </View>
                         </View>
                     ) : (
-                        <View>
+                        <View
+                            ref={tasteProfileSectionRef}
+                            collapsable={false}
+                            onLayout={updateTasteSectionFrame}
+                            style={openTasteTile ? styles.tasteProfileSectionOpen : null}
+                        >
                             <Text style={styles.stripKicker}>TASTE PROFILE</Text>
                             {tasteLoading ? (
                                 <ActivityIndicator color={colors.accent} style={styles.tasteLoader} />
                             ) : taste ? (
-                                <TasteProfileGrid taste={taste} isOwn />
+                                <TasteProfileGrid
+                                    taste={taste}
+                                    isOwn
+                                    openTile={openTasteTile}
+                                    onOpenTileChange={setOpenTasteTile}
+                                    onPopoverFrameChange={setTastePopoverFrame}
+                                    popoverViewportBottomInset={bottomChromeInset}
+                                />
                             ) : null}
                         </View>
                     )}
@@ -656,6 +738,7 @@ const styles = StyleSheet.create({
     contentContainer: {
         flexGrow: 1,
         paddingBottom: 96,
+        position: "relative",
     },
     // ── Header ────────────────────────────────────────────────────────
     header: {
@@ -972,6 +1055,15 @@ const styles = StyleSheet.create({
     // ── Taste Profile card ────────────────────────────────────────────
     tasteLoader: {
         marginVertical: 16,
+    },
+    tasteProfileSectionOpen: {
+        zIndex: 80,
+        elevation: 80,
+    },
+    tasteDismissLayer: {
+        ...StyleSheet.absoluteFillObject,
+        zIndex: 70,
+        elevation: 70,
     },
     // ── Taste Profile strip ───────────────────────────────────────────
     stripCard: {

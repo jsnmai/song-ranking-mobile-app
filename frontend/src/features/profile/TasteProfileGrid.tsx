@@ -3,12 +3,12 @@
 // (Range with genre dots, Top Artist disc, Selectivity EQ bars) over an
 // Avg Score card beside the Rating Split donut. Everything derives from one
 // TasteProfileResponse, so callers pass the response and nothing else.
-import { useState } from "react"
-import { Image, StyleSheet, Text, View } from "react-native"
+import { useCallback, useState } from "react"
+import { type GestureResponderEvent, Image, StyleSheet, Text, View } from "react-native"
 import Svg, { Circle } from "react-native-svg"
 
 import { bucketColor, colors, fonts } from "../../theme"
-import TasteStripTile from "./TasteStripTile"
+import TasteStripTile, { type PopoverFrame } from "./TasteStripTile"
 import { TasteProfileResponse } from "./types"
 
 // Genre-dot spectrum under the Range count (design kit GENRE_DOTS order).
@@ -85,7 +85,17 @@ function ScorePips({ score }: { score: number }) {
 const DONUT_SIZE = 62
 const DONUT_STROKE = 9
 const DONUT_GAP = 3
-type OpenTile = "range" | "topArtist" | "selectivity" | "avgScore" | null
+const POPOVER_TOUCH_SLOP = 8
+export type TasteProfileOpenTile = "range" | "topArtist" | "selectivity" | "avgScore" | null
+
+function pointIsInPopoverFrame(x: number, y: number, frame: PopoverFrame) {
+    return (
+        x >= frame.x - POPOVER_TOUCH_SLOP &&
+        x <= frame.x + frame.w + POPOVER_TOUCH_SLOP &&
+        y >= frame.y - POPOVER_TOUCH_SLOP &&
+        y <= frame.y + frame.h + POPOVER_TOUCH_SLOP
+    )
+}
 
 function SplitDonut({ segments, total }: { segments: [string, number, string][]; total: number }) {
     const r = (DONUT_SIZE - DONUT_STROKE) / 2
@@ -140,13 +150,34 @@ function SplitDonut({ segments, total }: { segments: [string, number, string][];
     )
 }
 
-export default function TasteProfileGrid({ taste, isOwn = false }: {
+export default function TasteProfileGrid({
+    taste,
+    isOwn = false,
+    openTile,
+    onOpenTileChange,
+    onPopoverFrameChange,
+    popoverViewportBottomInset = 0,
+}: {
     taste: TasteProfileResponse
     // Switches the popover explainer copy between second person (your own profile)
     // and third person (someone else's).
     isOwn?: boolean
+    openTile?: TasteProfileOpenTile
+    onOpenTileChange?: (nextOpenTile: TasteProfileOpenTile) => void
+    onPopoverFrameChange?: (frame: PopoverFrame | null) => void
+    popoverViewportBottomInset?: number
 }) {
-    const [openTile, setOpenTile] = useState<OpenTile>(null)
+    const [localOpenTile, setLocalOpenTile] = useState<TasteProfileOpenTile>(null)
+    const [popoverFrame, setPopoverFrame] = useState<PopoverFrame | null>(null)
+    const activeOpenTile = openTile ?? localOpenTile
+    const setOpenTileState = onOpenTileChange ?? setLocalOpenTile
+    const setActiveOpenTile = useCallback((nextOpenTile: TasteProfileOpenTile) => {
+        if (nextOpenTile === null) {
+            setPopoverFrame(null)
+            onPopoverFrameChange?.(null)
+        }
+        setOpenTileState(nextOpenTile)
+    }, [onPopoverFrameChange, setOpenTileState])
     // Range counts distinct genres, including the "Unknown" bucket (untagged songs
     // count as one group, matching Top Genres).
     const genreCount = taste.overall?.genres?.length ?? 0
@@ -194,11 +225,29 @@ export default function TasteProfileGrid({ taste, isOwn = false }: {
     ]
     const bucketTotal = buckets.reduce((sum, [, n]) => sum + n, 0)
 
+    const updatePopoverFrame = useCallback((frame: PopoverFrame | null) => {
+        setPopoverFrame(frame)
+        onPopoverFrameChange?.(frame)
+    }, [onPopoverFrameChange])
+
+    const dismissOpenTileForBackgroundTouch = (event: GestureResponderEvent) => {
+        if (!activeOpenTile) return false
+
+        const { pageX, pageY } = event.nativeEvent
+        if (popoverFrame && pointIsInPopoverFrame(pageX, pageY, popoverFrame)) {
+            setActiveOpenTile(null)
+            return true
+        }
+
+        return false
+    }
+
     return (
-        <View>
+        <View onStartShouldSetResponderCapture={dismissOpenTileForBackgroundTouch}>
             {/* Row 1 — Range / Top Artist / Selectivity */}
             <View
-                style={[styles.topRow, openTile && openTile !== "avgScore" ? styles.activeRow : null]}
+                pointerEvents="box-none"
+                style={[styles.topRow, activeOpenTile && activeOpenTile !== "avgScore" ? styles.activeRow : null]}
             >
                 <TasteStripTile
                     label="RANGE"
@@ -209,9 +258,11 @@ export default function TasteProfileGrid({ taste, isOwn = false }: {
                         "Songs we couldn't tag are grouped as one 'Unknown' genre."
                     }
                     testID="strip-range"
-                    open={openTile === "range"}
-                    onOpenChange={(nextOpen) => setOpenTile(nextOpen ? "range" : null)}
+                    open={activeOpenTile === "range"}
+                    onOpenChange={(nextOpen) => setActiveOpenTile(nextOpen ? "range" : null)}
                     popoverEdge="start"
+                    viewportBottomInset={popoverViewportBottomInset}
+                    onPopoverFrameChange={activeOpenTile === "range" ? updatePopoverFrame : undefined}
                 >
                     <Text style={styles.rangeNumber}>{genreCount}</Text>
                     <GenreDots n={genreCount} />
@@ -223,9 +274,11 @@ export default function TasteProfileGrid({ taste, isOwn = false }: {
                     statValue={topArtist && topArtist.count > 0 ? String(topArtist.count) : undefined}
                     statLabel="SONGS RATED"
                     testID="strip-top-artist"
-                    open={openTile === "topArtist"}
-                    onOpenChange={(nextOpen) => setOpenTile(nextOpen ? "topArtist" : null)}
+                    open={activeOpenTile === "topArtist"}
+                    onOpenChange={(nextOpen) => setActiveOpenTile(nextOpen ? "topArtist" : null)}
                     popoverEdge="center"
+                    viewportBottomInset={popoverViewportBottomInset}
+                    onPopoverFrameChange={activeOpenTile === "topArtist" ? updatePopoverFrame : undefined}
                     // The name rides the card's bottom slot, so its baseline lines up with the
                     // sibling captions (GENRES / TOP X% / FORMING) and the art disc gets all the
                     // leftover height to breathe in. Two lines let "Taylor Swift"-style names put
@@ -260,9 +313,11 @@ export default function TasteProfileGrid({ taste, isOwn = false }: {
                     statValue={selectivityPct === null ? undefined : selectivityText}
                     statLabel={selectivityPct === null ? undefined : "OF ALL RATERS"}
                     testID="strip-selectivity"
-                    open={openTile === "selectivity"}
-                    onOpenChange={(nextOpen) => setOpenTile(nextOpen ? "selectivity" : null)}
+                    open={activeOpenTile === "selectivity"}
+                    onOpenChange={(nextOpen) => setActiveOpenTile(nextOpen ? "selectivity" : null)}
                     popoverEdge="end"
+                    viewportBottomInset={popoverViewportBottomInset}
+                    onPopoverFrameChange={activeOpenTile === "selectivity" ? updatePopoverFrame : undefined}
                 >
                     {selectivityPct === null ? (
                         <FormingBars />
@@ -273,7 +328,10 @@ export default function TasteProfileGrid({ taste, isOwn = false }: {
             </View>
 
             {/* Row 2 — Avg Score beside the Rating Split donut */}
-            <View style={[styles.bottomRow, openTile === "avgScore" ? styles.activeRow : null]}>
+            <View
+                pointerEvents="box-none"
+                style={[styles.bottomRow, activeOpenTile === "avgScore" ? styles.activeRow : null]}
+            >
                 <TasteStripTile
                     label="AVG SCORE"
                     sublabel="OUT OF 10"
@@ -283,9 +341,11 @@ export default function TasteProfileGrid({ taste, isOwn = false }: {
                     statLabel={avg !== null ? "OUT OF 10" : undefined}
                     testID="strip-avg-score"
                     style={styles.avgTile}
-                    open={openTile === "avgScore"}
-                    onOpenChange={(nextOpen) => setOpenTile(nextOpen ? "avgScore" : null)}
+                    open={activeOpenTile === "avgScore"}
+                    onOpenChange={(nextOpen) => setActiveOpenTile(nextOpen ? "avgScore" : null)}
                     popoverEdge="start"
+                    viewportBottomInset={popoverViewportBottomInset}
+                    onPopoverFrameChange={activeOpenTile === "avgScore" ? updatePopoverFrame : undefined}
                 >
                     <Text style={styles.avgNumber}>{avg !== null ? avg.toFixed(1) : "—"}</Text>
                     <ScorePips score={avg ?? 0} />

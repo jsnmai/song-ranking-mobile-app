@@ -4,10 +4,13 @@
 // shared Taste Profile grid, Top Genres, Their Top Songs (uniform rows), and
 // Recent Ratings. Report/block live under the nav flag button; privacy states
 // are kept.
-import { Fragment, useEffect, useState } from "react"
+import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import {
     ActivityIndicator,
+    Dimensions,
+    type GestureResponderEvent,
     Image,
+    Pressable,
     ScrollView,
     StyleSheet,
     Text,
@@ -16,6 +19,7 @@ import {
     View,
 } from "react-native"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 import Svg, { Circle, Line, Path } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
@@ -43,10 +47,12 @@ import {
 } from "./types"
 import RecentRatingsModule from "./RecentRatingsModule"
 import { StreakBadge } from "./StreakBadge"
-import TasteProfileGrid from "./TasteProfileGrid"
+import TasteProfileGrid, { type TasteProfileOpenTile } from "./TasteProfileGrid"
+import { type PopoverFrame } from "./TasteStripTile"
 import TopGenresCard from "./TopGenresCard"
 
 type OtherProfileProps = NativeStackScreenProps<AppStackParamList, "OtherProfile">
+const POPOVER_TOUCH_SLOP = 8
 
 const REPORT_REASONS: readonly { value: ReportReason; label: string }[] = [
     { value: "harassment", label: "Harassment" },
@@ -139,6 +145,8 @@ function ChevronIcon() {
 export default function OtherProfileScreen({ navigation, route }: OtherProfileProps) {
     // viewerProfile feeds the "You & {name}" taste-match row (your half of the avatar pair).
     const { token, profile: viewerProfile } = useAuth()
+    const insets = useSafeAreaInsets()
+    const tasteProfileSectionRef = useRef<View>(null)
     const { username } = route.params
     const [profile, setProfile] = useState<Profile | null>(null)
     const [isLoading, setIsLoading] = useState(true)
@@ -156,11 +164,62 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
     const [reportSuccess, setReportSuccess] = useState(false)
     const [ratings, setRatings] = useState<RecentRatingItem[] | null>(null)
     const [topSongs, setTopSongs] = useState<RankingResponse[] | null>(null)
+    const [openTasteTile, setOpenTasteTile] = useState<TasteProfileOpenTile>(null)
+    const [tastePopoverFrame, setTastePopoverFrame] = useState<PopoverFrame | null>(null)
+    const [tasteSectionFrame, setTasteSectionFrame] = useState<PopoverFrame | null>(null)
+
+    const dismissTastePopover = useCallback(() => {
+        setOpenTasteTile(null)
+        setTastePopoverFrame(null)
+    }, [])
 
     const openFollowers = () => navigation.navigate("ProfileList", { username, listType: "followers" })
     const openFollowing = () => navigation.navigate("ProfileList", { username, listType: "following" })
     const openActivityLikers = (ratingEventId: number) => {
         navigation.navigate("ActivityLikers", { ratingEventId })
+    }
+
+    useEffect(() => {
+        if (typeof navigation.addListener !== "function") return undefined
+        return navigation.addListener("blur", dismissTastePopover)
+    }, [dismissTastePopover, navigation])
+
+    const bottomChromeInset = insets.bottom + 92
+
+    const dismissTastePopoverForScreenTouch = (event: GestureResponderEvent) => {
+        if (!openTasteTile) return false
+
+        const { pageX, pageY } = event.nativeEvent
+        const isInsideBottomChrome = pageY >= Dimensions.get("window").height - bottomChromeInset
+        if (isInsideBottomChrome) return false
+
+        const isInsidePopover = tastePopoverFrame
+            ? pageX >= tastePopoverFrame.x - POPOVER_TOUCH_SLOP &&
+                pageX <= tastePopoverFrame.x + tastePopoverFrame.w + POPOVER_TOUCH_SLOP &&
+                pageY >= tastePopoverFrame.y - POPOVER_TOUCH_SLOP &&
+                pageY <= tastePopoverFrame.y + tastePopoverFrame.h + POPOVER_TOUCH_SLOP
+            : false
+        const isInsideTasteSection = tasteSectionFrame
+            ? pageX >= tasteSectionFrame.x &&
+                pageX <= tasteSectionFrame.x + tasteSectionFrame.w &&
+                pageY >= tasteSectionFrame.y &&
+                pageY <= tasteSectionFrame.y + tasteSectionFrame.h
+            : false
+
+        if (isInsidePopover) {
+            dismissTastePopover()
+            return true
+        }
+        if (isInsideTasteSection) return false
+
+        dismissTastePopover()
+        return true
+    }
+
+    const updateTasteSectionFrame = () => {
+        tasteProfileSectionRef.current?.measureInWindow((x, y, w, h) => {
+            setTasteSectionFrame({ x, y, w, h })
+        })
     }
 
     const toggleFollow = async () => {
@@ -344,10 +403,18 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
     return (
         <ScrollView
             style={styles.container}
-            contentContainerStyle={styles.contentContainer}
+            contentContainerStyle={[styles.contentContainer, { paddingBottom: bottomChromeInset }]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            onStartShouldSetResponderCapture={dismissTastePopoverForScreenTouch}
         >
+            {openTasteTile ? (
+                <Pressable
+                    style={[styles.tasteDismissLayer, { bottom: bottomChromeInset }]}
+                    onPress={dismissTastePopover}
+                    testID="taste-popover-dismiss-layer"
+                />
+            ) : null}
             {/* Nav bar: back + report flag (report/block both live here) */}
             <View style={styles.navBar}>
                 <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.goBack()} accessibilityLabel="Back">
@@ -649,10 +716,21 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
 
                         {/* Taste Profile — the shared Layout H grid, mirroring the own profile */}
                         {profile.can_view_taste && taste && (
-                            <>
+                            <View
+                                ref={tasteProfileSectionRef}
+                                collapsable={false}
+                                onLayout={updateTasteSectionFrame}
+                                style={openTasteTile ? styles.tasteProfileSectionOpen : null}
+                            >
                                 {sectionLabel("TASTE PROFILE")}
-                                <TasteProfileGrid taste={taste} />
-                            </>
+                                <TasteProfileGrid
+                                    taste={taste}
+                                    openTile={openTasteTile}
+                                    onOpenTileChange={setOpenTasteTile}
+                                    onPopoverFrameChange={setTastePopoverFrame}
+                                    popoverViewportBottomInset={bottomChromeInset}
+                                />
+                            </View>
                         )}
 
                         {/* Top genres — shared card with the own-profile screen, labelled externally */}
@@ -732,6 +810,7 @@ const styles = StyleSheet.create({
     contentContainer: {
         flexGrow: 1,
         paddingBottom: 96,
+        position: "relative",
     },
     navBar: {
         paddingTop: 54,
@@ -753,6 +832,15 @@ const styles = StyleSheet.create({
     },
     body: {
         paddingHorizontal: 14,
+    },
+    tasteProfileSectionOpen: {
+        zIndex: 80,
+        elevation: 80,
+    },
+    tasteDismissLayer: {
+        ...StyleSheet.absoluteFillObject,
+        zIndex: 70,
+        elevation: 70,
     },
     loader: {
         marginVertical: 24,

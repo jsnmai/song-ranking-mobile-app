@@ -1,5 +1,5 @@
 // Tests for the taste-match ("You & them") row on OtherProfileScreen.
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native"
 
 import { ApiError } from "../../../api/client"
 import OtherProfileScreen from "../OtherProfileScreen"
@@ -7,6 +7,7 @@ import { CompatibilityResponse, Profile } from "../types"
 
 const mockGoBack = jest.fn()
 const mockNavigate = jest.fn()
+const mockAddListener = jest.fn()
 
 const mockGetProfileByUsername = jest.fn()
 const mockGetCompatibility = jest.fn()
@@ -150,6 +151,7 @@ const rankingFixture = {
 const navigationProp = {
     navigate: mockNavigate,
     goBack: mockGoBack,
+    addListener: mockAddListener,
 } as never
 
 const routeProp = {
@@ -158,6 +160,7 @@ const routeProp = {
 
 beforeEach(() => {
     jest.resetAllMocks()
+    mockAddListener.mockReturnValue(jest.fn())
     mockGetProfileByUsername.mockResolvedValue(profile)
     mockGetCompatibility.mockResolvedValue(compatNoOverlap)
     mockGetProfileRecentRatings.mockResolvedValue({ items: [] })
@@ -171,6 +174,23 @@ beforeEach(() => {
 })
 
 describe("OtherProfileScreen taste-match row", () => {
+    it("dismisses an open taste popup when the profile screen blurs", async () => {
+        render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
+
+        await screen.findByText("TASTE PROFILE")
+        fireEvent.press(screen.getByTestId("strip-range"))
+        expect(screen.getByText(/How many different genres they've rated across/)).toBeTruthy()
+
+        const blurListener = mockAddListener.mock.calls.find(([eventName]) => eventName === "blur")?.[1]
+        expect(blurListener).toEqual(expect.any(Function))
+
+        act(() => {
+            blurListener()
+        })
+
+        expect(screen.queryByText(/How many different genres they've rated across/)).toBeNull()
+    })
+
     it("shows the overlap percentage and shared-ratings meta when has_overlap is true", async () => {
         mockGetCompatibility.mockResolvedValue(compatOverlap)
 
