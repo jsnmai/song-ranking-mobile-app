@@ -3,6 +3,7 @@
 // (Range with genre dots, Top Artist disc, Selectivity EQ bars) over an
 // Avg Score card beside the Rating Split donut. Everything derives from one
 // TasteProfileResponse, so callers pass the response and nothing else.
+import { useState } from "react"
 import { Image, StyleSheet, Text, View } from "react-native"
 import Svg, { Circle } from "react-native-svg"
 
@@ -84,6 +85,7 @@ function ScorePips({ score }: { score: number }) {
 const DONUT_SIZE = 62
 const DONUT_STROKE = 9
 const DONUT_GAP = 3
+type OpenTile = "range" | "topArtist" | "selectivity" | "avgScore" | null
 
 function SplitDonut({ segments, total }: { segments: [string, number, string][]; total: number }) {
     const r = (DONUT_SIZE - DONUT_STROKE) / 2
@@ -144,6 +146,7 @@ export default function TasteProfileGrid({ taste, isOwn = false }: {
     // and third person (someone else's).
     isOwn?: boolean
 }) {
+    const [openTile, setOpenTile] = useState<OpenTile>(null)
     // Range counts distinct genres, including the "Unknown" bucket (untagged songs
     // count as one group, matching Top Genres).
     const genreCount = taste.overall?.genres?.length ?? 0
@@ -163,15 +166,27 @@ export default function TasteProfileGrid({ taste, isOwn = false }: {
         selectivityPct === null ? 0 : selectivityPct >= 50 ? selectivityPct : 100 - selectivityPct
     const selectivityText = selectivityPct === null ? "Forming" : `Top ${100 - selectivityStrength}%`
     const selectivityTitle = selectivityLabel === "GENEROSITY" ? "Generosity" : "Selectivity"
-    const selectivityDesc = isOwn
-        ? (selectivityPct === null
-            ? "How often you give a 'like' rating compared to everyone else. We'll rank you once enough other people have rated songs too."
-            : "How often you give a 'like' rating compared to everyone else. Fewer likes ranks you as more selective, more likes as more generous. 'Top X%' is where you land among all raters.")
-        : (selectivityPct === null
-            ? "How often they give a 'like' rating compared to everyone else. We'll rank them once enough other people have rated songs too."
-            : "How often they give a 'like' rating compared to everyone else. Fewer likes ranks them as more selective, more likes as more generous. 'Top X%' is where they land among all raters.")
+    const selectivityDesc = selectivityPct === null
+        ? [
+            `How often ${isOwn ? "you give" : "they give"} a 'like' rating compared to everyone else.`,
+            `We'll rank ${isOwn ? "you" : "them"} once enough other people have rated songs too.`,
+        ].join(" ")
+        : [
+            `How often ${isOwn ? "you give" : "they give"} a 'like' rating compared to everyone else.`,
+            `Fewer likes ranks ${isOwn ? "you" : "them"} as more selective, more likes as more generous.`,
+            `'Top X%' is where ${isOwn ? "you land" : "they land"} among all raters.`,
+        ].join(" ")
 
     const avg = taste.avg_score
+    const avgDescription = avg === null
+        ? [
+            `Based on every score ${isOwn ? "you've" : "they've"} given`,
+            "once the ranking map has enough songs.",
+        ].join(" ")
+        : [
+            `Based on every score ${isOwn ? "you've" : "they've"} given`,
+            "across Like, Okay, and Dislike.",
+        ].join(" ")
     const buckets: [string, number, string][] = [
         ["Like", taste.bucket_breakdown?.like ?? 0, bucketColor("like")],
         ["Okay", taste.bucket_breakdown?.okay ?? 0, bucketColor("okay")],
@@ -182,24 +197,35 @@ export default function TasteProfileGrid({ taste, isOwn = false }: {
     return (
         <View>
             {/* Row 1 — Range / Top Artist / Selectivity */}
-            <View style={styles.topRow}>
+            <View
+                style={[styles.topRow, openTile && openTile !== "avgScore" ? styles.activeRow : null]}
+            >
                 <TasteStripTile
                     label="RANGE"
                     sublabel={genreCount === 1 ? "GENRE" : "GENRES"}
                     title="Range"
-                    description={`How many different genres ${isOwn ? "you've" : "they've"} rated across. Songs we couldn't tag are grouped as one 'Unknown' genre.`}
+                    description={
+                        `How many different genres ${isOwn ? "you've" : "they've"} rated across. ` +
+                        "Songs we couldn't tag are grouped as one 'Unknown' genre."
+                    }
                     testID="strip-range"
+                    open={openTile === "range"}
+                    onOpenChange={(nextOpen) => setOpenTile(nextOpen ? "range" : null)}
+                    popoverEdge="start"
                 >
                     <Text style={styles.rangeNumber}>{genreCount}</Text>
                     <GenreDots n={genreCount} />
                 </TasteStripTile>
                 <TasteStripTile
                     label="TOP ARTIST"
-                    title="Top artist"
+                    title="Top Artist"
                     description={`The artist ${isOwn ? "you've" : "they've"} rated the most songs from.`}
                     statValue={topArtist && topArtist.count > 0 ? String(topArtist.count) : undefined}
                     statLabel="SONGS RATED"
                     testID="strip-top-artist"
+                    open={openTile === "topArtist"}
+                    onOpenChange={(nextOpen) => setOpenTile(nextOpen ? "topArtist" : null)}
+                    popoverEdge="center"
                     // The name rides the card's bottom slot, so its baseline lines up with the
                     // sibling captions (GENRES / TOP X% / FORMING) and the art disc gets all the
                     // leftover height to breathe in. Two lines let "Taylor Swift"-style names put
@@ -234,6 +260,9 @@ export default function TasteProfileGrid({ taste, isOwn = false }: {
                     statValue={selectivityPct === null ? undefined : selectivityText}
                     statLabel={selectivityPct === null ? undefined : "OF ALL RATERS"}
                     testID="strip-selectivity"
+                    open={openTile === "selectivity"}
+                    onOpenChange={(nextOpen) => setOpenTile(nextOpen ? "selectivity" : null)}
+                    popoverEdge="end"
                 >
                     {selectivityPct === null ? (
                         <FormingBars />
@@ -244,14 +273,19 @@ export default function TasteProfileGrid({ taste, isOwn = false }: {
             </View>
 
             {/* Row 2 — Avg Score beside the Rating Split donut */}
-            <View style={styles.bottomRow}>
+            <View style={[styles.bottomRow, openTile === "avgScore" ? styles.activeRow : null]}>
                 <TasteStripTile
                     label="AVG SCORE"
                     sublabel="OUT OF 10"
-                    title="Average score"
-                    description={`The average of every score ${isOwn ? "you've" : "they've"} given, across all buckets.`}
+                    title="Average Score"
+                    description={avgDescription}
+                    statValue={avg !== null ? avg.toFixed(1) : undefined}
+                    statLabel={avg !== null ? "OUT OF 10" : undefined}
                     testID="strip-avg-score"
                     style={styles.avgTile}
+                    open={openTile === "avgScore"}
+                    onOpenChange={(nextOpen) => setOpenTile(nextOpen ? "avgScore" : null)}
+                    popoverEdge="start"
                 >
                     <Text style={styles.avgNumber}>{avg !== null ? avg.toFixed(1) : "—"}</Text>
                     <ScorePips score={avg ?? 0} />
@@ -286,7 +320,11 @@ const styles = StyleSheet.create({
         gap: 9,
         marginTop: 9,
     },
-    // ── Range ─────────────────────────────────────────────────────────
+    activeRow: {
+        zIndex: 20,
+        elevation: 20,
+    },
+    // Range
     rangeNumber: {
         fontFamily: fonts.display,
         fontSize: 26,
@@ -303,7 +341,7 @@ const styles = StyleSheet.create({
         height: 9,
         borderRadius: 4.5,
     },
-    // ── Top Artist ────────────────────────────────────────────────────
+    // Top Artist
     artistDisc: {
         width: 36,
         height: 36,
@@ -340,7 +378,7 @@ const styles = StyleSheet.create({
         color: colors.inkDim,
         textAlign: "center",
     },
-    // ── Selectivity ───────────────────────────────────────────────────
+    // Selectivity
     eqBars: {
         flexDirection: "row",
         alignItems: "flex-end",
@@ -351,7 +389,7 @@ const styles = StyleSheet.create({
         width: 8,
         borderRadius: 3,
     },
-    // ── Avg Score ─────────────────────────────────────────────────────
+    // Avg Score
     // No height floor: the tile stretches to match the Rating Split card beside it.
     avgTile: {
         flex: 0.85,
@@ -372,7 +410,7 @@ const styles = StyleSheet.create({
         height: 12,
         borderRadius: 2,
     },
-    // ── Rating Split ──────────────────────────────────────────────────
+    // Rating Split
     splitCard: {
         flex: 1.15,
         backgroundColor: colors.paper,

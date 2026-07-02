@@ -1,17 +1,26 @@
 // A single Taste Profile strip tile: shows a label + value, and on tap reveals a
-// small dark popover explaining what the stat means (and how it's found). Mirrors
-// the streak popover pattern in StreakBadge — a measure-anchored Modal popover
-// with a pointer — so the two explainers feel like the same family.
+// small dark popover explaining what the stat means (and how it's found). The
+// popover is rendered inline instead of as a native Modal, so neighboring taste
+// tiles remain immediately tappable while one explainer is open.
 import { ReactNode, useRef, useState } from "react"
-import { Dimensions, Modal, Pressable, StyleSheet, StyleProp, Text, View, ViewStyle } from "react-native"
+import { Dimensions, Pressable, StyleSheet, StyleProp, Text, View, ViewStyle } from "react-native"
 
 import { colors, fonts } from "../../theme"
 
 // Same charcoal as the streak popover so the explainers read as one family.
 const SURFACE = "#1e2029"
 const POPOVER_WIDTH = 230
+const POPOVER_HEIGHT_ESTIMATE = 148
 const POINTER = 11
-const SCREEN_W = Dimensions.get("window").width
+const SCREEN_MARGIN = 8
+const TILE_FALLBACK_W = 110
+const TILE_FALLBACK_H = 108
+type PopoverEdge = "start" | "center" | "end"
+type AnchorRect = { x: number; y: number; w: number; h: number }
+
+function clamp(value: number, min: number, max: number) {
+    return Math.min(Math.max(value, min), Math.max(min, max))
+}
 
 export default function TasteStripTile({
     label,
@@ -25,6 +34,9 @@ export default function TasteStripTile({
     children,
     foot,
     style,
+    open,
+    onOpenChange,
+    popoverEdge = "center",
 }: {
     label: string
     // The hero value (e.g. "7" or "Top 12%"). Omit when passing a custom `children` body.
@@ -43,31 +55,88 @@ export default function TasteStripTile({
     foot?: ReactNode
     // Root-card override (e.g. flex weight / minHeight for the shorter Avg Score card).
     style?: StyleProp<ViewStyle>
+    // Optional controlled mode lets TasteProfileGrid keep one explainer open and switch
+    // directly when a neighboring stat is tapped.
+    open?: boolean
+    onOpenChange?: (nextOpen: boolean) => void
+    popoverEdge?: PopoverEdge
 }) {
-    const [open, setOpen] = useState(false)
-    const [anchor, setAnchor] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+    const [localOpen, setLocalOpen] = useState(false)
+    const [tileSize, setTileSize] = useState<{ w: number; h: number }>({
+        w: TILE_FALLBACK_W,
+        h: TILE_FALLBACK_H,
+    })
+    const [anchor, setAnchor] = useState<AnchorRect | null>(null)
     const anchorRef = useRef<View>(null)
+    const isOpen = open ?? localOpen
 
-    const toggle = () => {
-        if (open) {
-            setOpen(false)
-            return
-        }
-        setOpen(true)
-        // Render immediately, then refine the popover's position once the tile
-        // has been measured — so it never depends on layout to appear.
-        anchorRef.current?.measureInWindow?.((x, y, w, h) => setAnchor({ x, y, w, h }))
+    const applyOpen = (nextOpen: boolean) => {
+        if (onOpenChange) onOpenChange(nextOpen)
+        else setLocalOpen(nextOpen)
     }
 
-    // Center the popover under the tapped tile, clamped to the screen, and aim the
-    // pointer at the tile's center wherever the card ends up landing.
-    const center = anchor ? anchor.x + anchor.w / 2 : SCREEN_W / 2
-    const left = Math.min(Math.max(8, center - POPOVER_WIDTH / 2), SCREEN_W - POPOVER_WIDTH - 8)
-    const top = anchor ? anchor.y + anchor.h + 8 : 200
-    const pointerLeft = Math.min(Math.max(12, center - left - POINTER / 2), POPOVER_WIDTH - 24)
+    const toggle = () => {
+        const nextOpen = !isOpen
+        if (!nextOpen) {
+            applyOpen(false)
+            return
+        }
+
+        applyOpen(true)
+        if (!anchorRef.current?.measureInWindow) return
+
+        anchorRef.current.measureInWindow((x, y, w, h) => {
+            const measured = {
+                x,
+                y,
+                w: w || tileSize.w,
+                h: h || tileSize.h,
+            }
+            setAnchor(measured)
+            setTileSize({ w: measured.w, h: measured.h })
+        })
+    }
+
+    const fallbackLeft =
+        popoverEdge === "start"
+            ? 0
+            : popoverEdge === "end"
+                ? tileSize.w - POPOVER_WIDTH
+                : tileSize.w / 2 - POPOVER_WIDTH / 2
+    const windowSize = Dimensions.get("window")
+    const anchorCenterX = anchor ? anchor.x + anchor.w / 2 : tileSize.w / 2
+    const screenLeft = clamp(
+        anchorCenterX - POPOVER_WIDTH / 2,
+        SCREEN_MARGIN,
+        windowSize.width - POPOVER_WIDTH - SCREEN_MARGIN,
+    )
+    const popoverLeft = anchor ? screenLeft - anchor.x : fallbackLeft
+    const belowTop = anchor ? anchor.y + anchor.h + 8 : tileSize.h + 8
+    const aboveTop = anchor ? anchor.y - POPOVER_HEIGHT_ESTIMATE - 8 : -POPOVER_HEIGHT_ESTIMATE - 8
+    const fitsBelow = belowTop + POPOVER_HEIGHT_ESTIMATE <= windowSize.height - SCREEN_MARGIN
+    const fitsAbove = aboveTop >= SCREEN_MARGIN
+    const placeAbove = Boolean(anchor && !fitsBelow && fitsAbove)
+    const screenTop = placeAbove
+        ? aboveTop
+        : clamp(belowTop, SCREEN_MARGIN, windowSize.height - POPOVER_HEIGHT_ESTIMATE - SCREEN_MARGIN)
+    const popoverTop = anchor ? screenTop - anchor.y : tileSize.h + 8
+    const pointerLeft = Math.min(
+        Math.max(12, (anchor ? anchorCenterX - screenLeft : tileSize.w / 2 - popoverLeft) - POINTER / 2),
+        POPOVER_WIDTH - 24,
+    )
 
     return (
-        <View ref={anchorRef} collapsable={false} style={[styles.tile, style]}>
+        <View
+            ref={anchorRef}
+            collapsable={false}
+            onLayout={(event) => {
+                const { width, height } = event.nativeEvent.layout
+                setTileSize((prev) => (
+                    prev.w === width && prev.h === height ? prev : { w: width, h: height }
+                ))
+            }}
+            style={[styles.tile, isOpen ? styles.tileOpen : null, style]}
+        >
             <Pressable
                 onPress={toggle}
                 style={styles.tileInner}
@@ -91,28 +160,33 @@ export default function TasteStripTile({
                         </Text>
                     ) : null)}
                 </View>
-                {foot ?? (sublabel ? <Text style={styles.sublabel}>{sublabel}</Text> : <View style={styles.subSpacer} />)}
+                {foot ?? (
+                    sublabel ? <Text style={styles.sublabel}>{sublabel}</Text> : <View style={styles.subSpacer} />
+                )}
             </Pressable>
-            <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-                <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)}>
-                    {/* Swallow presses inside the popover so only the backdrop closes it. */}
-                    <Pressable
-                        style={[styles.popover, { top, left }]}
-                        onPress={() => {}}
-                        testID={testID ? `${testID}-popover` : undefined}
-                    >
-                        <View style={[styles.pointer, { left: pointerLeft }]} />
-                        <Text style={styles.popTitle}>{title}</Text>
-                        {statValue ? (
-                            <View style={styles.statRow}>
-                                <Text style={styles.statValue}>{statValue}</Text>
-                                {statLabel ? <Text style={styles.statLabel}>{statLabel}</Text> : null}
-                            </View>
-                        ) : null}
-                        <Text style={styles.popDesc}>{description}</Text>
-                    </Pressable>
-                </Pressable>
-            </Modal>
+            {isOpen ? (
+                <View
+                    pointerEvents="none"
+                    style={[styles.popover, { top: popoverTop, left: popoverLeft }]}
+                    testID={testID ? `${testID}-popover` : undefined}
+                >
+                    <View
+                        style={[
+                            styles.pointer,
+                            placeAbove ? styles.pointerBelow : styles.pointerAbove,
+                            { left: pointerLeft },
+                        ]}
+                    />
+                    <Text style={styles.popTitle}>{title}</Text>
+                    {statValue ? (
+                        <View style={styles.statRow}>
+                            <Text style={styles.statValue}>{statValue}</Text>
+                            {statLabel ? <Text style={styles.statLabel}>{statLabel}</Text> : null}
+                        </View>
+                    ) : null}
+                    <Text style={styles.popDesc}>{description}</Text>
+                </View>
+            ) : null}
         </View>
     )
 }
@@ -134,6 +208,11 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.05,
         shadowRadius: 8,
         shadowOffset: { width: 0, height: 2 },
+        position: "relative",
+    },
+    tileOpen: {
+        zIndex: 30,
+        elevation: 30,
     },
     // Label pinned top, hero centered, sublabel pinned bottom: every tile's label sits on the same
     // line and the captions align across the row, so the set reads as one tidy unit.
@@ -188,14 +267,20 @@ const styles = StyleSheet.create({
         shadowRadius: 18,
         shadowOffset: { width: 0, height: 12 },
         elevation: 12,
+        zIndex: 40,
     },
     pointer: {
         position: "absolute",
-        top: -5,
         width: POINTER,
         height: POINTER,
         backgroundColor: SURFACE,
         transform: [{ rotate: "45deg" }],
+    },
+    pointerAbove: {
+        top: -5,
+    },
+    pointerBelow: {
+        bottom: -5,
     },
     popTitle: {
         fontFamily: fonts.display,
