@@ -167,7 +167,7 @@ describe("RankMapScreen", () => {
 
         fireEvent.press(screen.getByLabelText("Zoom in"))
 
-        expect(screen.getByText("122%")).toBeTruthy()
+        expect(screen.getByText("150%")).toBeTruthy()
     })
 
     it("opens the time travel scrubber from the top-right icon", () => {

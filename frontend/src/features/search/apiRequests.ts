@@ -2,6 +2,7 @@
 // Discover calls these instead of calling apiClient directly.
 
 import { apiClient } from "../../api/client"
+import { upsizeCoverArt } from "../../utils/artwork"
 import { AppleSearchAnnotationResponse, SongSearchResponse, SongSearchResult } from "./types"
 
 const APPLE_SEARCH_URL = "https://itunes.apple.com/search"
@@ -89,7 +90,7 @@ function mapAppleSearchRow(row: AppleSearchRow): SongSearchResult | null {
     if (row.trackId == null || row.trackName == null || row.artistName == null) {
         return null
     }
-    const artworkUrl = upsizeAppleArtwork(row.artworkUrl100 ?? "")
+    const artworkUrl = upsizeCoverArt(row.artworkUrl100 ?? "")
     const releaseYear = releaseYearFromDate(row.releaseDate)
     return {
         provider: "apple",
@@ -116,9 +117,6 @@ function mapAppleSearchRow(row: AppleSearchRow): SongSearchResult | null {
     }
 }
 
-function upsizeAppleArtwork(url: string): string {
-    return url.replace("100x100bb", "600x600bb").replace("100x100", "600x600")
-}
 
 function releaseYearFromDate(value?: string): number | null {
     if (value == null || value.length < 4) {

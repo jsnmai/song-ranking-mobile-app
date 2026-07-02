@@ -78,7 +78,30 @@ const TIME_STRIP_HEIGHT = 108
 const TOP_CHROME_HEIGHT = 70
 const BOTTOM_DOCK_HEIGHT = 118
 const MIN_ZOOM = 0.58
-const MAX_ZOOM = 2.35
+const MAX_ZOOM = 3.6
+const ZOOM_BUTTON_STEP = 0.5
+// Orb size scales at this power of zoom instead of 1:1 with it (like a map pin
+// staying roughly on-screen-sized while the map underneath scales) — orbs still
+// grow when you zoom in, just a bit slower than the gaps between them do, so
+// spacing visibly loosens/tightens with zoom instead of everything just looking
+// uniformly bigger or smaller. Gravity leans on this harder (more damping) since
+// its spiral is about revealing gaps across a big spread. Genres/Nebula are
+// almost fully proportional (0.92, not 1.0) — legibility is the whole point of
+// zooming into a cluster, so growth dominates; the layout gives their orbs
+// enough baseline room (bigger base size + more declutter padding) that even
+// near-1:1 growth doesn't reintroduce overlap at max zoom.
+const GRAVITY_ZOOM_SIZE_EXPONENT = 0.45
+const CLUSTER_ZOOM_SIZE_EXPONENT = 0.92
+
+// The whole zoomable "world" is authored at this many times its logical resolution and
+// base-scaled back down by 1/RENDER_SCALE, so the live zoom transform ends up as zoom /
+// RENDER_SCALE — always ≤ 1 across the zoom range (MAX_ZOOM = RENDER_SCALE). Zooming in
+// therefore approaches a 1:1 view of a high-res canvas instead of magnifying a low-res
+// bitmap, which is what keeps orbs + album art sharp instead of pixelated. Set to 1 to
+// disable supersampling entirely (behavior collapses to the plain transform-scale map).
+// Fixed-size chrome (labels, the NO.1 badge) is drawn in a separate screen-space overlay
+// so it never rides this transform at all — see the overlay block in render.
+const RENDER_SCALE = MAX_ZOOM
 
 function clamp(value: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, value))
@@ -277,6 +300,9 @@ export default function RankMapScreen() {
     const [activeGenres, setActiveGenres] = useState<Set<string> | null>(null)
     const [pan, setPan] = useState<Point>({ x: 0, y: 0 })
     const [zoom, setZoom] = useState(1)
+    // Counter-scale applied per-lens — see the constants' comment.
+    const gravityZoomDamp = Math.pow(zoom, GRAVITY_ZOOM_SIZE_EXPONENT - 1)
+    const clusterZoomDamp = Math.pow(zoom, CLUSTER_ZOOM_SIZE_EXPONENT - 1)
     const [timeTrackWidth, setTimeTrackWidth] = useState(1)
     // When time travel is still locked, tapping the clock explains what it is + how to unlock.
     const [showTimeLockInfo, setShowTimeLockInfo] = useState(false)
@@ -306,9 +332,33 @@ export default function RankMapScreen() {
     const worldLeft = (width - worldW) / 2
     const worldTop = (stageH - worldH) / 2
 
+    // Supersampled world: same visual footprint at zoom = 1, but authored RENDER_SCALE×
+    // bigger and base-scaled back so the live scale is zoom / RENDER_SCALE (≤ 1). left/top
+    // shift so the (1/RENDER_SCALE)-scaled center lands exactly where the logical world's
+    // center did. All layout geometry below is multiplied by RENDER_SCALE to match.
+    const worldWSS = worldW * RENDER_SCALE
+    const worldHSS = worldH * RENDER_SCALE
+    const worldLeftSS = worldLeft - (worldW * (RENDER_SCALE - 1)) / 2
+    const worldTopSS = worldTop - (worldH * (RENDER_SCALE - 1)) / 2
+    // Map a supersampled world point to screen (viewport-local) space — the exact transform
+    // the world View applies — so the overlay can place fixed-size chrome over moving orbs.
+    const project = (sx: number, sy: number) => ({
+        x: worldLeftSS + worldWSS / 2 + (zoom / RENDER_SCALE) * (sx - worldWSS / 2) + pan.x,
+        y: worldTopSS + worldHSS / 2 + (zoom / RENDER_SCALE) * (sy - worldHSS / 2) + pan.y,
+    })
+
     const genreLayouts = useMemo(() => {
         if (songs.length === 0) return []
-        return constellationLayout(songs, { w: worldW, h: worldH })
+        return constellationLayout(songs, { w: worldW, h: worldH }).map((con) => ({
+            ...con,
+            ctr: { x: con.ctr.x * RENDER_SCALE, y: con.ctr.y * RENDER_SCALE },
+            nodes: con.nodes.map((n) => ({
+                ...n,
+                x: n.x * RENDER_SCALE,
+                y: n.y * RENDER_SCALE,
+                size: n.size * RENDER_SCALE,
+            })),
+        }))
     }, [songs, worldW, worldH])
     const genreNames = useMemo(() => genreLayouts.map((con) => con.genre), [genreLayouts])
     const activeGenreSet = activeGenres ?? new Set(genreNames)
@@ -404,8 +454,30 @@ export default function RankMapScreen() {
         const cx = worldW / 2
         const cy = worldH / 2
         const minR = 46
-        const maxR = Math.max(minR + 120, Math.min(worldW, worldH) / 2 - 62)
-        return { ...gravityLayout(songs, { cx, cy, minR, maxR }), cx, cy, minR, maxR }
+        const baseMaxR = Math.max(minR + 120, Math.min(worldW, worldH) / 2 - 62)
+        // gravityLayout may grow maxR beyond baseMaxR for large libraries — use its
+        // returned value (not baseMaxR) so the orbit rings match where planets land.
+        const layout = gravityLayout(songs, { cx, cy, minR, maxR: baseMaxR })
+        const s = RENDER_SCALE
+        // Uniform supersample: scale every geometric field (positions + sizes) by the
+        // same factor. Because declutter already ran in logical space, uniform scaling
+        // preserves all spacing exactly — it's just a higher-resolution copy.
+        return {
+            sun: layout.sun,
+            cx: cx * s,
+            cy: cy * s,
+            minR: minR * s,
+            maxR: layout.maxR * s,
+            planets: layout.planets.map((p) => ({
+                ...p,
+                x: p.x * s,
+                y: p.y * s,
+                r: p.r * s,
+                size: p.size * s,
+                fx: p.fx * s,
+                fy: p.fy * s,
+            })),
+        }
     }, [view, songs, worldW, worldH])
 
     const genres = useMemo(() => {
@@ -415,11 +487,18 @@ export default function RankMapScreen() {
 
     const nebula = useMemo(() => {
         if (view !== "nebula" || songs.length === 0) return null
+        const s = RENDER_SCALE
         return nebulaLayout(songs, {
             w: worldW,
             h: worldH,
             colors: { like: colors.like, sky: colors.sky, plum: colors.plum },
-        })
+        }).map((c) => ({
+            ...c,
+            cx: c.cx * s,
+            cy: c.cy * s,
+            blob: c.blob * s,
+            nodes: c.nodes.map((n) => ({ ...n, x: n.x * s, y: n.y * s, size: n.size * s })),
+        }))
     }, [view, songs, worldW, worldH])
 
     const toggleBucket = (bucket: BucketName) => {
@@ -487,7 +566,7 @@ export default function RankMapScreen() {
 
     return (
         <View style={styles.root}>
-            <Cosmos width={width} height={height} seed={`rank-map-${view}`} />
+            <Cosmos width={width} height={height} seed={`rank-map-${view}`} zoom={zoom} pan={pan} />
 
             <View style={[styles.viewport, { top: stageTop, height: stageH }]} {...panResponder.panHandlers}>
                 {songs.length === 0 && (
@@ -502,14 +581,14 @@ export default function RankMapScreen() {
                     style={[
                         styles.world,
                         {
-                            left: worldLeft,
-                            top: worldTop,
-                            width: worldW,
-                            height: worldH,
+                            left: worldLeftSS,
+                            top: worldTopSS,
+                            width: worldWSS,
+                            height: worldHSS,
                             transform: [
                                 { translateX: pan.x },
                                 { translateY: pan.y },
-                                { scale: zoom },
+                                { scale: zoom / RENDER_SCALE },
                             ],
                         },
                     ]}
@@ -520,6 +599,7 @@ export default function RankMapScreen() {
                             <OrbitRings
                                 cx={gravity.cx}
                                 cy={gravity.cy}
+                                scale={RENDER_SCALE}
                                 radii={[
                                     gravity.minR,
                                     gravity.minR + (gravity.maxR - gravity.minR) * 0.36,
@@ -540,18 +620,25 @@ export default function RankMapScreen() {
                                     fromY={p.fy}
                                     delay={p.delay}
                                     ring={p.rank <= 3}
+                                    glowRadius={12 * RENDER_SCALE}
                                     targetOpacity={opacityOf(p.s)}
                                     onPress={pressOf(p.s)}
                                     label={p.s.title}
+                                    zoomDamp={gravityZoomDamp}
+                                    renderScale={RENDER_SCALE}
                                 />
                             ))}
                             <Sun
                                 x={gravity.cx}
                                 y={gravity.cy}
+                                size={74 * RENDER_SCALE}
                                 cover={gravity.sun.cover}
                                 bucket={gravity.sun.bucket}
                                 onPress={pressOf(gravity.sun)}
                                 targetOpacity={opacityOf(gravity.sun)}
+                                zoomDamp={gravityZoomDamp}
+                                renderScale={RENDER_SCALE}
+                                hideBadge
                             />
                         </>
                     )}
@@ -569,8 +656,8 @@ export default function RankMapScreen() {
                                             y2={sg.y2}
                                             stroke={sg.color}
                                             strokeOpacity={0.4}
-                                            strokeWidth={1}
-                                            strokeDasharray="4 4"
+                                            strokeWidth={1 * RENDER_SCALE}
+                                            strokeDasharray={`${4 * RENDER_SCALE} ${4 * RENDER_SCALE}`}
                                         />
                                     ) : null
                                 ))}
@@ -588,29 +675,15 @@ export default function RankMapScreen() {
                                         fromX={con.ctr.x - n.x}
                                         fromY={con.ctr.y - n.y}
                                         delay={i * 28}
-                                        glowRadius={8}
+                                        glowRadius={8 * RENDER_SCALE}
                                         targetOpacity={opacityOf(n.s, n.bright)}
                                         onPress={pressOf(n.s)}
                                         label={n.s.title}
+                                        zoomDamp={clusterZoomDamp}
+                                        renderScale={RENDER_SCALE}
                                     />
                                 )),
                             )}
-                            {genres.cl.map((con) => (
-                                activeGenreSet.has(con.genre) ? (
-                                    <View
-                                        key={con.genre}
-                                        pointerEvents="none"
-                                        style={[styles.clusterLabel, { left: con.ctr.x - 70, top: con.ctr.y - 70 }]}
-                                    >
-                                        <Text style={styles.clusterTitle} numberOfLines={1}>
-                                            {con.genre}
-                                        </Text>
-                                        <Text style={[styles.clusterCount, { color: con.color }]}>
-                                            {con.nodes.length} STARS
-                                        </Text>
-                                    </View>
-                                ) : null
-                            ))}
                         </>
                     )}
 
@@ -664,28 +737,70 @@ export default function RankMapScreen() {
                                         fromX={c.cx - n.x}
                                         fromY={c.cy - n.y}
                                         delay={i * 22}
+                                        glowRadius={12 * RENDER_SCALE}
                                         targetOpacity={opacityOf(n.s)}
                                         onPress={pressOf(n.s)}
                                         label={n.s.title}
+                                        zoomDamp={clusterZoomDamp}
+                                        renderScale={RENDER_SCALE}
                                     />
                                 )),
                             )}
-                            {nebula.map((c) => (
-                                activeBuckets.has(c.key) ? (
-                                    <View
-                                        key={c.key}
-                                        pointerEvents="none"
-                                        style={[styles.cloudLabel, { left: c.cx - 72, top: c.cy - 26 }]}
-                                    >
-                                        <Text style={styles.cloudPercent}>{Math.round(c.share * 100)}%</Text>
-                                        <Text style={[styles.cloudSub, { color: c.color }]}>
-                                            {bucketLabel(c.key).toUpperCase()} · {c.list.length}
-                                        </Text>
-                                    </View>
-                                ) : null
-                            ))}
                         </>
                     )}
+                </View>
+
+                {/* Screen-space chrome overlay — fixed-size labels + the NO.1 badge, drawn
+                    OUTSIDE the zoomed world so they never ride its scale transform (which
+                    bitmap-stretches text). Positions are projected through the same transform
+                    so they track the moving orbs while staying crisp and constant size. */}
+                <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                    {genres &&
+                        genres.cl.map((con) => {
+                            if (!activeGenreSet.has(con.genre)) return null
+                            const p = project(con.ctr.x, con.ctr.y - 70 * RENDER_SCALE)
+                            return (
+                                <View
+                                    key={con.genre}
+                                    style={[styles.clusterLabel, { left: p.x - 70, top: p.y }]}
+                                >
+                                    <Text style={styles.clusterTitle} numberOfLines={1}>
+                                        {con.genre}
+                                    </Text>
+                                    <Text style={[styles.clusterCount, { color: con.color }]}>
+                                        {con.nodes.length} STARS
+                                    </Text>
+                                </View>
+                            )
+                        })}
+
+                    {nebula &&
+                        nebula.map((c) => {
+                            if (!activeBuckets.has(c.key)) return null
+                            const p = project(c.cx, c.cy - 26 * RENDER_SCALE)
+                            return (
+                                <View key={c.key} style={[styles.cloudLabel, { left: p.x - 72, top: p.y }]}>
+                                    <Text style={styles.cloudPercent}>{Math.round(c.share * 100)}%</Text>
+                                    <Text style={[styles.cloudSub, { color: c.color }]}>
+                                        {bucketLabel(c.key).toUpperCase()} · {c.list.length}
+                                    </Text>
+                                </View>
+                            )
+                        })}
+
+                    {gravity && (() => {
+                        const c = project(gravity.cx, gravity.cy)
+                        // Sun's on-screen radius: authored radius 37×RS, times the world's net
+                        // scale (zoom/RS), times the sun's own damp — sit the badge just above it.
+                        const sunRadius = 37 * RENDER_SCALE * (zoom / RENDER_SCALE) * gravityZoomDamp
+                        return (
+                            <View style={[styles.sunBadgeWrap, { left: c.x - 60, top: c.y - sunRadius - 16 }]}>
+                                <View style={styles.sunBadge}>
+                                    <Text style={styles.sunBadgeText}>★ NO.1</Text>
+                                </View>
+                            </View>
+                        )
+                    })()}
                 </View>
             </View>
 
@@ -734,11 +849,11 @@ export default function RankMapScreen() {
             </ScrollView>
 
             <View style={[styles.controls, { top: stageTop + 46 }]}>
-                <ZoomButton label="+" accessibilityLabel="Zoom in" onPress={() => updateZoom(zoomRef.current + 0.22)} />
+                <ZoomButton label="+" accessibilityLabel="Zoom in" onPress={() => updateZoom(zoomRef.current + ZOOM_BUTTON_STEP)} />
                 <ZoomButton
                     label="−"
                     accessibilityLabel="Zoom out"
-                    onPress={() => updateZoom(zoomRef.current - 0.22)}
+                    onPress={() => updateZoom(zoomRef.current - ZOOM_BUTTON_STEP)}
                 />
                 <ZoomButton accessibilityLabel="Reset map" onPress={resetMap} active={!isDefaultView}>
                     <ResetIcon active={!isDefaultView} />
@@ -1107,6 +1222,9 @@ const styles = StyleSheet.create({
     cloudLabel: { position: "absolute", width: 144, alignItems: "center" },
     cloudPercent: { fontFamily: fonts.serif, fontSize: 22, color: colors.cream },
     cloudSub: { fontFamily: fonts.mono, fontSize: 8, letterSpacing: 1.1, marginTop: 2 },
+    sunBadgeWrap: { position: "absolute", width: 120, alignItems: "center" },
+    sunBadge: { backgroundColor: colors.gold, borderRadius: 999, paddingHorizontal: 6, paddingVertical: 2 },
+    sunBadgeText: { fontFamily: fonts.mono, fontSize: 7.5, fontWeight: "700", letterSpacing: 1, color: colors.navy },
 
     timeStrip: {
         position: "absolute",

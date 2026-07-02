@@ -8,6 +8,7 @@
 // seeded jitter inside genre/nebula clusters so members don't stack.
 import { BucketName, RankingResponse } from "../../comparison/types"
 import { bucketColor, colors } from "../../../theme"
+import { upsizeCoverArt } from "../../../utils/artwork"
 
 export type RankView = "gravity" | "genres" | "nebula"
 export type TimeGranularity = "week" | "month"
@@ -34,6 +35,65 @@ export function rng(seed: string): () => number {
         s = (s * 1664525 + 1013904223) >>> 0
         return (s & 0x7fffffff) / 0x7fffffff
     }
+}
+
+// Nudges apart any two circles closer than the sum of their radii (+ pad), over
+// a few relaxation passes. This is what makes zooming feel "naturally dynamic":
+// positions are computed once in world space and the map only ever scales/pans
+// that world, so real overlap at any zoom level has to be resolved here, not by
+// the camera. Mark an item `locked` to let others move around it without it
+// moving itself (e.g. the sun, or a genre's dead-center anchor).
+//
+// Uses a uniform spatial grid (cell size ≈ 2× the largest radius) so each item
+// only checks its own cell and its 8 neighbors instead of every other item —
+// O(n) per pass instead of O(n²), which is what keeps a few hundred songs fast.
+type Circle = { x: number; y: number; r: number; locked?: boolean }
+function declutter<T extends Circle>(items: T[], iterations = 6, pad = 3): T[] {
+    if (items.length < 2) return items
+    const maxR = items.reduce((m, c) => Math.max(m, c.r), 0)
+    const cellSize = Math.max(maxR * 2 + pad, 1)
+    const cellKey = (x: number, y: number) => `${Math.floor(x / cellSize)},${Math.floor(y / cellSize)}`
+
+    for (let pass = 0; pass < iterations; pass++) {
+        let moved = false
+        const grid = new Map<string, number[]>()
+        items.forEach((c, idx) => {
+            const key = cellKey(c.x, c.y)
+            const bucket = grid.get(key)
+            if (bucket) bucket.push(idx)
+            else grid.set(key, [idx])
+        })
+
+        for (let i = 0; i < items.length; i++) {
+            const a = items[i]
+            const cx = Math.floor(a.x / cellSize)
+            const cy = Math.floor(a.y / cellSize)
+            for (let gx = cx - 1; gx <= cx + 1; gx++) {
+                for (let gy = cy - 1; gy <= cy + 1; gy++) {
+                    const bucket = grid.get(`${gx},${gy}`)
+                    if (!bucket) continue
+                    for (const j of bucket) {
+                        if (j <= i) continue // each pair checked once, from the lower index
+                        const b = items[j]
+                        const dx = b.x - a.x
+                        const dy = b.y - a.y
+                        const dist = Math.sqrt(dx * dx + dy * dy)
+                        const minDist = a.r + b.r + pad
+                        if (dist < minDist) {
+                            moved = true
+                            const push = (minDist - (dist || 0.01)) / 2
+                            const ux = dist ? dx / dist : 1
+                            const uy = dist ? dy / dist : 0
+                            if (!a.locked) { a.x -= ux * push; a.y -= uy * push }
+                            if (!b.locked) { b.x += ux * push; b.y += uy * push }
+                        }
+                    }
+                }
+            }
+        }
+        if (!moved) break
+    }
+    return items
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -69,7 +129,10 @@ export function enrichRankings(rankings: RankingResponse[]): RankMapSong[] {
             ranking: r,
             title: r.song.title,
             artist: r.song.artist,
-            cover: r.song.cover_url || null,
+            // Some ingestion paths (Apple lookup vs. legacy Deezer vs. dev/demo seed data)
+            // store cover_url at whatever small default the source hands back — upsize
+            // defensively here so the map's zoomed-in album art has real pixels to work with.
+            cover: r.song.cover_url ? upsizeCoverArt(r.song.cover_url) : null,
             bucket: r.bucket,
             score: r.score,
             pos: rankById.get(r.song_id) ?? 0,
@@ -141,7 +204,12 @@ export function countBy(songs: RankMapSong[]): BucketCounts {
 }
 
 // GRAVITY — golden-angle spiral; radius = (1 − score/10), so a loved song is
-// pulled toward the sun and a lukewarm one drifts to the cold rim.
+// pulled toward the sun and a lukewarm one drifts to the cold rim. Score has to
+// stay the thing that decides radius, so crowding can't be fixed by moving
+// songs to a "free" spot the way genres/nebula can — instead the whole spiral
+// grows with library size (more songs → more radial room, same idea as the
+// nebula cloud sizing below) and a final declutter pass nudges apart whatever
+// still overlaps among near-identical scores, beeswarm-plot style.
 export type Planet = {
     s: RankMapSong
     x: number
@@ -154,21 +222,38 @@ export type Planet = {
     delay: number   // staggered entrance delay (ms) — inner planets settle first
     rank: number
 }
-export type GravityLayout = { sun: RankMapSong; planets: Planet[] }
+export type GravityLayout = { sun: RankMapSong; planets: Planet[]; maxR: number }
 
 const GA = Math.PI * (3 - Math.sqrt(5)) // golden angle
+const SUN_RADIUS = 37 // half of Planet.tsx's <Sun size={74}> default — keep in sync
 
 export function gravityLayout(
     songs: RankMapSong[],
     opts: { cx: number; cy: number; minR: number; maxR: number },
 ): GravityLayout {
-    const { cx, cy, minR, maxR } = opts
+    const { cx, cy, minR } = opts
     const sorted = [...songs].sort((a, b) => b.score - a.score || a.pos - b.pos)
     const sun = sorted[0]
     const rest = sorted.slice(1)
+
+    // Annulus area needed to seat `rest.length` average-size planets with real
+    // breathing room (×3.2 slack), solved back to a radius — same sqrt(count)
+    // scaling law as the nebula blob, so big libraries get a bigger spiral
+    // instead of the same fixed ring getting ever more crowded.
+    const avgOrbR = (23 + 40) / 4
+    const dynMaxR = Math.sqrt(minR * minR + rest.length * avgOrbR * avgOrbR * 3.2)
+    const maxR = Math.max(opts.maxR, dynMaxR)
+
+    const n = rest.length
     const planets: Planet[] = rest.map((s, i) => {
         const norm = 1 - s.score / 10 // 0 (loved) → 1 (cold)
-        const r = minR + (maxR - minR) * norm
+        // Break score ties with a small rank-based nudge, sorted-index order (so it
+        // never fights the score gradient) — without it, many songs sharing a score
+        // would all compute the exact same radius and dump the entire crowding
+        // problem on the declutter pass below. i/n is unique per song, so this
+        // alone guarantees no two songs ever start at the same radius.
+        const tie = (i / Math.max(n - 1, 1)) * 0.35
+        const r = minR + (maxR - minR) * Math.min(norm + tie, 1)
         const a = i * GA - Math.PI / 2
         const x = cx + Math.cos(a) * r
         const y = cy + Math.sin(a) * r
@@ -186,17 +271,35 @@ export function gravityLayout(
             rank: s.pos,
         }
     })
-    return { sun, planets }
+
+    const circles = [
+        { x: cx, y: cy, r: SUN_RADIUS, locked: true },
+        ...planets.map((p) => ({ x: p.x, y: p.y, r: p.size / 2 })),
+    ]
+    declutter(circles, 60, 4)
+    planets.forEach((p, i) => {
+        const c = circles[i + 1]
+        p.x = c.x
+        p.y = c.y
+        p.fx = cx - p.x
+        p.fy = cy - p.y
+    })
+
+    return { sun, planets, maxR }
 }
 
 // GENRES — every distinct genre becomes its own constellation (no cap, no
-// rollup); members jitter around a center and connect in a ring. Brightness
-// encodes score. Centers spiral outward — golden-angle, same spacing rule as
-// the gravity spiral — from the world's middle (where pan={0,0}/zoom=1 lands,
-// see stageTop/worldLeft in RankMapScreen), so your most-charted genre sits
-// dead center and rarer ones radiate out from there. UNKNOWN_GENRE is excluded
-// from that center slot even when it's the largest group — it's a data gap,
-// not a taste signal, so it shouldn't read as "the genre that defines you".
+// rollup); members spiral around a center (Fermat/Vogel spiral — same
+// even-density, no-overlap math a sunflower's seeds use) and connect in a
+// ring. Brightness encodes score. Cluster centers spiral outward from the
+// world's middle (where pan={0,0}/zoom=1 lands, see stageTop/worldLeft in
+// RankMapScreen) — golden-angle, same as the gravity spiral — but each
+// cluster's own "footprint" (how far its members reach out) grows with its
+// song count, and a declutter pass keeps busier constellations from bleeding
+// into their neighbors instead of using fixed-size slots. UNKNOWN_GENRE is
+// excluded from the center slot even when it's the largest group — it's a
+// data gap, not a taste signal, so it shouldn't read as "the genre that
+// defines you".
 export type ConNode = { s: RankMapSong; x: number; y: number; size: number; bright: number }
 export type Constellation = {
     genre: string
@@ -204,6 +307,8 @@ export type Constellation = {
     nodes: ConNode[]
     color: string
 }
+
+const NODE_SPACING = 28 // px between successive rings of a cluster's member spiral
 
 export function constellationLayout(
     songs: RankMapSong[],
@@ -222,28 +327,46 @@ export function constellationLayout(
     }
     const cx = w / 2
     const cy = h / 2
-    const spacing = Math.min(w, h) * 0.16
+    const initialSpacing = 70
+    // How far out a cluster's own member spiral reaches, given its size — the
+    // radius two neighboring clusters need between their centers to not overlap.
+    const footprint = (count: number) => 66 + NODE_SPACING * Math.sqrt(Math.max(count - 1, 0))
 
-    const out: Constellation[] = []
-    ordered.forEach(([genre, list], gi) => {
-        const r = spacing * Math.sqrt(gi)
+    type Placed = { genre: string; list: RankMapSong[]; x: number; y: number; r: number; locked?: boolean }
+    const placed: Placed[] = ordered.map(([genre, list], gi) => {
+        const r = initialSpacing * Math.sqrt(gi)
         const a = gi * GA
-        const ctr = gi === 0 ? { x: cx, y: cy } : { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r }
+        return {
+            genre,
+            list,
+            x: gi === 0 ? cx : cx + Math.cos(a) * r,
+            y: gi === 0 ? cy : cy + Math.sin(a) * r,
+            r: footprint(list.length),
+            locked: gi === 0, // the dead-center genre anchors; everyone else moves around it
+        }
+    })
+    declutter(placed, 16, 8)
+
+    return placed.map(({ genre, list, x, y }) => {
+        const ctr = { x, y }
         const rr = rng("con" + genre)
-        const nodes: ConNode[] = list.map((s, i) => {
-            const ang = (i / list.length) * Math.PI * 2 + rr() * 1.2
-            const rad = 18 + rr() * 46 + (list.length > 3 ? 10 : 0)
+        const nodeCircles = list.map((s, i) => {
+            const rad = i === 0 ? 0 : NODE_SPACING * Math.sqrt(i)
+            const ang = i * GA + rr() * 0.3
+            const size = 17 + (s.score / 10) * 13
             return {
                 s,
                 x: ctr.x + Math.cos(ang) * rad,
                 y: ctr.y + Math.sin(ang) * rad,
-                size: 11 + (s.score / 10) * 9,
+                size,
                 bright: 0.35 + (s.score / 10) * 0.65,
+                r: size / 2,
             }
         })
-        out.push({ genre, ctr, nodes, color: bucketColor(nodes[0].s.bucket) })
+        declutter(nodeCircles, 6, 6)
+        const nodes: ConNode[] = nodeCircles.map(({ s, x, y, size, bright }) => ({ s, x, y, size, bright }))
+        return { genre, ctr, nodes, color: bucketColor(list[0].bucket) }
     })
-    return out
 }
 
 // Connect each constellation's members into a ring of segments.
@@ -269,7 +392,13 @@ export function constellationSegments(cl: Constellation[]): ConSeg[] {
     return segs
 }
 
-// NEBULA — three bucket clouds; cloud radius ∝ √count; stars scatter inside.
+// NEBULA — three bucket clouds; cloud (glow) radius ∝ √count, capped so the
+// three don't visually crowd each other. The actual star positions are a
+// Fermat/Vogel spiral scaled to the bucket's real size — uncapped, so a very
+// lopsided library (e.g. 300 likes, 4 dislikes) still gets non-overlapping
+// stars even once the "like" cloud's glow has hit its cap — and a single
+// declutter pass runs across all three clouds together so an oversized one
+// can't bleed its stars into a neighboring cloud's territory.
 export type NebulaCloud = {
     key: BucketName
     color: string
@@ -280,6 +409,8 @@ export type NebulaCloud = {
     blob: number
     nodes: { s: RankMapSong; x: number; y: number; size: number }[]
 }
+
+const NEBULA_NODE_SPACING = 26
 
 export function nebulaLayout(
     songs: RankMapSong[],
@@ -296,18 +427,28 @@ export function nebulaLayout(
     const total = songs.length || 1
     const maxBlob = Math.min(w, h) * 0.29
     const minBlob = Math.min(w, h) * 0.16
-    return defs.map((d) => {
+
+    const allNodes: { s: RankMapSong; x: number; y: number; size: number; r: number }[] = []
+    const clouds = defs.map((d) => {
         const list = by[d.key]
         const rr = rng("neb" + d.key)
         const share = list.length / total
         const blob = clamp(minBlob + Math.sqrt(Math.max(list.length, 1)) * 15, minBlob, maxBlob)
-        const nodes = list.map((s) => {
-            const ang = rr() * Math.PI * 2
-            const rad = (0.18 + rr() * 0.72) * blob * 0.58
-            return { s, x: d.cx + Math.cos(ang) * rad, y: d.cy + Math.sin(ang) * rad, size: 13 + (s.score / 10) * 9 }
+        const nodes = list.map((s, i) => {
+            const rad = i === 0 ? 0 : NEBULA_NODE_SPACING * Math.sqrt(i)
+            const ang = i * GA + rr() * 0.3
+            const size = 19 + (s.score / 10) * 13
+            return { s, x: d.cx + Math.cos(ang) * rad, y: d.cy + Math.sin(ang) * rad, size, r: size / 2 }
         })
+        allNodes.push(...nodes)
         return { ...d, list, share, blob, nodes }
     })
+    declutter(allNodes, 10, 6)
+
+    return clouds.map((c) => ({
+        ...c,
+        nodes: c.nodes.map(({ s, x, y, size }) => ({ s, x, y, size })),
+    }))
 }
 
 function clamp(value: number, min: number, max: number): number {
