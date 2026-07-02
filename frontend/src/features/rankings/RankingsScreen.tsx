@@ -679,18 +679,6 @@ export default function RankingsScreen() {
                         <Text style={styles.kicker}>{rankings.length} SONGS · CALIBRATED</Text>
                         <Text style={styles.heading}>Rankings</Text>
                     </View>
-                    <View style={styles.headerActions}>
-                        <TouchableOpacity
-                            style={styles.iconBtn}
-                            onPress={() => navigation.navigate("Discover", { screen: "DiscoverHome", params: { focusSearch: true } })}
-                        >
-                            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none"
-                                stroke={colors.ink} strokeWidth={2} strokeLinecap="round">
-                                <Circle cx={11} cy={11} r={7} />
-                                <Path d="m20 20-3.4-3.4" />
-                            </Svg>
-                        </TouchableOpacity>
-                    </View>
                 </View>
 
                 {/* "Build your rank map" card */}
@@ -807,26 +795,6 @@ const styles = StyleSheet.create({
         // lineHeight must clear the font's descender or the tail of the "g" in
         // "Rankings" clips; 29 (< fontSize) was cutting it off.
         lineHeight: 36,
-        color: colors.ink,
-    },
-    headerActions: {
-        flexDirection: "row",
-        gap: 8,
-        marginTop: 4,
-        alignItems: "center",
-    },
-    iconBtn: {
-        width: 32,
-        height: 32,
-        borderRadius: 9,
-        backgroundColor: colors.paper,
-        borderWidth: 1,
-        borderColor: colors.line,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    iconBtnText: {
-        fontSize: 16,
         color: colors.ink,
     },
     // ── Rank map (dark navy cosmic surface) ───────────────────────────
