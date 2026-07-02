@@ -49,17 +49,20 @@ function NewReleasePulseDot() {
 
 export default function NewReleaseCard({
     item,
+    width,
     onOpen,
     onRate,
 }: {
     item: NewReleaseItem | null
+    // Pinned width so the two-col row splits dead-centre with the Most-rated card.
+    width?: number
     onOpen?: () => void
     onRate?: () => void
 }) {
     if (!item) {
         // Coming-soon placeholder — same poster mood, ghost content.
         return (
-            <View style={[styles.card, styles.placeholderCard]} testID="new-release-card-placeholder">
+            <View style={[styles.card, width != null ? { width } : { flex: 1 }, styles.placeholderCard]} testID="new-release-card-placeholder">
                 <View style={styles.flagRow}>
                     <View style={styles.flagDot} />
                     <Text style={styles.flagText}>NEW RELEASE</Text>
@@ -77,7 +80,7 @@ export default function NewReleaseCard({
 
     return (
         <TouchableOpacity
-            style={styles.card}
+            style={[styles.card, width != null ? { width } : { flex: 1 }]}
             activeOpacity={0.85}
             onPress={onOpen}
             accessibilityLabel={`Open ${item.song.title}`}
@@ -118,7 +121,9 @@ export default function NewReleaseCard({
 
 const styles = StyleSheet.create({
     card: {
-        flex: 1,
+        // Width comes from the caller (pinned to match the Most-rated card); flex:1 is only a
+        // fallback when no width is passed. Keeping `flex` out of the base style avoids a
+        // shorthand-vs-width precedence conflict in Yoga.
         borderRadius: 16,
         minHeight: 150,
         overflow: "hidden",

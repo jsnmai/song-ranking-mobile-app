@@ -244,6 +244,46 @@ function PopularCard({
     )
 }
 
+// Fixed scatter of faint stars behind the navy Most-rated card, so its background reads as a
+// night sky rather than a flat dark fill. Positions/sizes are constant (the field shouldn't
+// twinkle-shift between renders); a couple render in gold to echo the card's accent.
+const MOST_RATED_STARS: { left: `${number}%`; top: `${number}%`; size: number; opacity: number; gold?: boolean }[] = [
+    { left: "8%", top: "18%", size: 2, opacity: 0.5 },
+    { left: "19%", top: "60%", size: 1.5, opacity: 0.32 },
+    { left: "15%", top: "85%", size: 2.5, opacity: 0.45, gold: true },
+    { left: "33%", top: "28%", size: 1.5, opacity: 0.3 },
+    { left: "45%", top: "74%", size: 2, opacity: 0.4 },
+    { left: "52%", top: "44%", size: 1.5, opacity: 0.26 },
+    { left: "58%", top: "20%", size: 1.5, opacity: 0.34 },
+    { left: "68%", top: "56%", size: 2.5, opacity: 0.5 },
+    { left: "77%", top: "84%", size: 1.5, opacity: 0.3 },
+    { left: "85%", top: "32%", size: 2, opacity: 0.44 },
+    { left: "90%", top: "68%", size: 1.5, opacity: 0.34, gold: true },
+    { left: "40%", top: "90%", size: 1.5, opacity: 0.28 },
+]
+
+function MostRatedStars() {
+    return (
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            {MOST_RATED_STARS.map((s, i) => (
+                <View
+                    key={i}
+                    style={{
+                        position: "absolute",
+                        left: s.left,
+                        top: s.top,
+                        width: s.size,
+                        height: s.size,
+                        borderRadius: s.size / 2,
+                        backgroundColor: s.gold ? colors.gold : "#fff",
+                        opacity: s.opacity,
+                    }}
+                />
+            ))}
+        </View>
+    )
+}
+
 export default function DiscoverScreen() {
     const route = useRoute<DiscoverRouteProp>()
     const navigation = useNavigation<DiscoverNavigationProp>()
@@ -276,6 +316,10 @@ export default function DiscoverScreen() {
     // 10px gaps), so the scroller rests flush with both screen edges while still bouncing.
     const { width: windowWidth } = useWindowDimensions()
     const popularTileSize = (windowWidth - 28 - 30) / 4
+    // Pin both two-col cards (New Release + Most-rated) to an identical width so the split
+    // lands dead-centre. flex:1 alone let the Most-rated card's fixed-width count row bias it
+    // wider. 28 = scroll padding (14×2), 8 = the twoColRow gap.
+    const twoColCardWidth = (windowWidth - 28 - 8) / 2
 
     // Latest search params mirrored into refs so the on-focus refresh can read them
     // without re-subscribing (and re-firing) on every keystroke.
@@ -1043,6 +1087,7 @@ export default function DiscoverScreen() {
                                 <View style={styles.twoColRow}>
                                     <NewReleaseCard
                                         item={newRelease}
+                                        width={twoColCardWidth}
                                         onOpen={() => {
                                             if (newRelease) navigation.navigate("SongDetail", { song: newRelease.song })
                                         }}
@@ -1053,11 +1098,12 @@ export default function DiscoverScreen() {
 
                                     {mostRated.length > 0 ? (
                                         <TouchableOpacity
-                                            style={[styles.twoColCard, styles.circleCard]}
+                                            style={[styles.twoColCard, styles.circleCard, { width: twoColCardWidth }]}
                                             activeOpacity={0.85}
                                             onPress={() => navigation.navigate("SongDetail", { song: mostRated[0].song })}
                                             accessibilityLabel={`Open ${mostRated[0].song.title}`}
                                         >
+                                            <MostRatedStars />
                                             <View style={styles.circlePill}>
                                                 <Text style={styles.circlePillText}>Most-rated</Text>
                                             </View>
@@ -1080,7 +1126,8 @@ export default function DiscoverScreen() {
                                             </View>
                                         </TouchableOpacity>
                                     ) : (
-                                        <BouncyPressable style={[styles.twoColCard, styles.circleCard]}>
+                                        <BouncyPressable style={[styles.twoColCard, styles.circleCard, { width: twoColCardWidth }]}>
+                                            <MostRatedStars />
                                             <View style={styles.circlePill}>
                                                 <Text style={styles.circlePillText}>Most-rated</Text>
                                             </View>
@@ -1772,7 +1819,6 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     twoColCard: {
-        flex: 1,
         borderRadius: 16,
         paddingHorizontal: 11,
         paddingTop: 11,
