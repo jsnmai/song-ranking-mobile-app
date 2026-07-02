@@ -112,7 +112,7 @@ const ORBIT_STARS = [
 ] as const
 
 // Re-rate Radar sparkline row height (px); the trajectory node tops are computed against it.
-const SPARK_H = 20
+const SPARK_H = 24
 
 // Matches the backend's THIS_OR_THAT_COOLDOWN (24h). Used to seed the cooldown countdown the
 // instant a pick is confirmed, client-side — close enough to server truth for the current
@@ -1203,7 +1203,7 @@ export default function FeedScreen() {
     const renderRerateRadar = () => {
         if (rerateRadar === null) {
             return (
-                <BouncyPressable style={[styles.fullCell, { height: 150, backgroundColor: colors.navy }]} testID="feed-rerate-radar-locked">
+                <BouncyPressable style={[styles.fullCell, { height: 138, backgroundColor: colors.navy }]} testID="feed-rerate-radar-locked">
                     <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
                         <View style={styles.fullCellTop}>
                             <View style={styles.goldPill}><Text style={styles.goldPillText}>Re-rate radar</Text></View>
@@ -1249,7 +1249,7 @@ export default function FeedScreen() {
         // The trajectory line maps each score (0–10) to a y in the sparkline viewBox, so the
         // slope and the two end nodes reflect the actual previous → new change, not a canned curve.
         const SPARK_VB = 42
-        const SPARK_PAD = 11
+        const SPARK_PAD = 6
         const scoreToY = (s: number) =>
             SPARK_PAD + (1 - Math.max(0, Math.min(10, s)) / 10) * (SPARK_VB - 2 * SPARK_PAD)
         const startY = scoreToY(r.previous_score)
@@ -1262,19 +1262,19 @@ export default function FeedScreen() {
         const endTop = (endY / SPARK_VB) * SPARK_H
         return (
             <TouchableOpacity
-                style={[styles.fullCell, { height: 150, backgroundColor: colors.navy }]}
+                style={[styles.fullCell, { height: 138, backgroundColor: colors.navy }]}
                 activeOpacity={0.9}
                 onPress={handleRerateRadarPress}
                 testID={`feed-rerate-radar-${r.rating_event_id}`}
             >
                 <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
                     {/* minHeight matches Match Moment's actor avatar so both cards' pills line up. */}
-                    <View style={[styles.fullCellTop, { minHeight: 26, backgroundColor: "red" }]}>
+                    <View style={[styles.fullCellTop, { minHeight: 22 }]}>
                         <View style={styles.goldPill}><Text style={styles.goldPillText}>Re-rate radar</Text></View>
                     </View>
                     {/* Standalone flex child so space-between gives the handle equal room above and below. */}
-                    <Text style={[styles.rrUser, { backgroundColor: "blue" }]} numberOfLines={1}>@{r.actor_profile.username}</Text>
-                    <View style={[styles.rrBody, { backgroundColor: "green" }]}>
+                    <Text style={styles.rrUser} numberOfLines={1}>@{r.actor_profile.username}</Text>
+                    <View style={styles.rrBody}>
                         {r.song.cover_url ? (
                             <Image style={styles.rrArt} source={{ uri: r.song.cover_url }} />
                         ) : (
@@ -1286,7 +1286,7 @@ export default function FeedScreen() {
                         </View>
                     </View>
                     {/* Trajectory: gold line rising/falling between a dim start node and a glowing end node. */}
-                    <View style={[styles.rrSpark, { backgroundColor: "purple" }]}>
+                    <View style={styles.rrSpark}>
                         <Svg width="100%" height="100%" viewBox="0 0 100 42" preserveAspectRatio="none">
                             <Polyline
                                 points={sparkPoints}
@@ -1300,7 +1300,7 @@ export default function FeedScreen() {
                         <View style={[styles.rrSparkStart, { top: startTop }]} />
                         <RadarRipplePoint top={endTop} color={colors.gold} />
                     </View>
-                    <View style={[styles.rrDeltaRow, { backgroundColor: "orange" }]}>
+                    <View style={styles.rrDeltaRow}>
                         <Text style={styles.rrPrev}>{r.previous_score.toFixed(1)}</Text>
                         <Text style={styles.rrNew}>{r.new_score.toFixed(1)}</Text>
                         <View style={[styles.rrDeltaChip, { backgroundColor: `${deltaColor}26` }]}>
@@ -1555,7 +1555,7 @@ export default function FeedScreen() {
     const renderMatchMoment = () => {
         if (matchMoment === null) {
             return (
-                <BouncyPressable style={[styles.fullCell, { height: 150, backgroundColor: colors.mint }]} testID="feed-match-moment-locked">
+                <BouncyPressable style={[styles.fullCell, { height: 138, backgroundColor: colors.mint }]} testID="feed-match-moment-locked">
                     <View style={styles.matchMomentBlob} />
                     <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
                         <View style={styles.fullCellTop}>
@@ -1589,7 +1589,7 @@ export default function FeedScreen() {
         const aInitial = (m.actor_profile.display_name || m.actor_profile.username || "?").charAt(0).toUpperCase()
         return (
             <TouchableOpacity
-                style={[styles.fullCell, { height: 150, backgroundColor: colors.mint }]}
+                style={[styles.fullCell, { height: 138, backgroundColor: colors.mint }]}
                 activeOpacity={0.9}
                 onPress={handleMatchMomentPress}
                 testID={`feed-match-moment-${m.winner.id}`}
@@ -1597,7 +1597,7 @@ export default function FeedScreen() {
                 <View style={styles.matchMomentBlob} />
                 <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
                     {/* minHeight reserves the avatar's height so the pill lines up with the Re-rate card's pill. */}
-                    <View style={[styles.fullCellTop, { minHeight: 26 }]}>
+                    <View style={[styles.fullCellTop, { minHeight: 22 }]}>
                         <View style={styles.lightPill}><Text style={styles.lightPillText}>Match moment</Text></View>
                         {/* Actor avatar, top right */}
                         <View style={[styles.mmActorAvatar, { backgroundColor: aColor }]}>
@@ -3141,7 +3141,7 @@ const styles = StyleSheet.create({
         color: "rgba(241,236,221,0.85)",
         // Extra vertical margin (on top of the even space-between gaps) gives the handle more
         // breathing room above and below without touching the symmetric top/bottom card padding.
-        marginVertical: 3,
+        marginVertical: 1,
     },
     rrBody: {
         flexDirection: "row",
@@ -3156,7 +3156,7 @@ const styles = StyleSheet.create({
     rrSong: {
         fontFamily: fonts.display,
         fontSize: 12,
-        lineHeight: 14,
+        lineHeight: 13,
         color: colors.cream,
     },
     rrArtist: {
@@ -3164,7 +3164,7 @@ const styles = StyleSheet.create({
         fontSize: 7.5,
         letterSpacing: 0.5,
         color: "rgba(241,236,221,0.6)",
-        marginTop: 3,
+        marginTop: 2,
     },
     rrSpark: {
         position: "relative",
@@ -3173,37 +3173,37 @@ const styles = StyleSheet.create({
     rrSparkStart: {
         position: "absolute",
         left: "8%",
-        width: 7,
-        height: 7,
-        borderRadius: 3.5,
-        marginLeft: -3.5,
-        marginTop: -3.5,
+        width: 5,
+        height: 5,
+        borderRadius: 2.5,
+        marginLeft: -2.5,
+        marginTop: -2.5,
         backgroundColor: colors.gold,
         opacity: 0.55,
     },
     rrSparkEndWrap: {
         position: "absolute",
         left: "89%",
-        width: 32,
-        height: 32,
-        marginLeft: -16,
-        marginTop: -16,
+        width: 22,
+        height: 22,
+        marginLeft: -11,
+        marginTop: -11,
         alignItems: "center",
         justifyContent: "center",
     },
     rrSparkRipple: {
         position: "absolute",
-        width: 15,
-        height: 15,
-        borderRadius: 7.5,
-        borderWidth: 1.3,
+        width: 11,
+        height: 11,
+        borderRadius: 5.5,
+        borderWidth: 1,
     },
     rrSparkEndDot: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
         shadowOpacity: 0.95,
-        shadowRadius: 5,
+        shadowRadius: 4,
         shadowOffset: { width: 0, height: 0 },
     },
     rrDeltaRow: {
@@ -3212,16 +3212,22 @@ const styles = StyleSheet.create({
         // same digit baseline (flex-end floats the big one high because it has more descent space).
         alignItems: "baseline",
         gap: 8,
+        // Digits have no descenders, so the descent space baseline alignment reserves below them
+        // (for a hypothetical "g" or "y") sits empty — pull the row down to cancel it out, so the
+        // gap below the numbers reads the same as the gap above the pill.
+        marginBottom: -5,
     },
     rrPrev: {
         fontFamily: fonts.display,
         fontSize: 15,
+        lineHeight: 16,
         color: colors.cdim,
         textDecorationLine: "line-through",
     },
     rrNew: {
         fontFamily: fonts.display,
         fontSize: 26,
+        lineHeight: 26,
         letterSpacing: -0.4,
         color: colors.gold,
     },
@@ -3778,9 +3784,9 @@ const styles = StyleSheet.create({
     },
     // Match Moment (live) — actor avatar (top right) + real covers in the winner/loser slots + titles.
     mmActorAvatar: {
-        width: 26,
-        height: 26,
-        borderRadius: 13,
+        width: 22,
+        height: 22,
+        borderRadius: 11,
         alignItems: "center",
         justifyContent: "center",
         flexShrink: 0,
@@ -3788,14 +3794,14 @@ const styles = StyleSheet.create({
         borderColor: "rgba(255,255,255,0.6)",
     },
     mmWinnerArt: {
-        width: 42,
-        height: 42,
+        width: 36,
+        height: 36,
         borderRadius: 8,
         flexShrink: 0,
     },
     mmLoserArt: {
-        width: 32,
-        height: 32,
+        width: 28,
+        height: 28,
         borderRadius: 7,
         opacity: 0.7,
         flexShrink: 0,
