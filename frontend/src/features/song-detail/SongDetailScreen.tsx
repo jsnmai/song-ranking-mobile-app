@@ -315,7 +315,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
         return () => { animRef.current?.stop() }
     }, [isPlaying, duration])
 
-    const accent = ranking ? bucketColor(ranking.bucket) : colors.inkDim
+    const accent = ranking ? bucketColor(ranking.bucket) : colors.accent
     const durableSongId = song.id ?? song.song_id ?? ranking?.song_id ?? null
     // Bookmarkable when the song carries any persistable identity: legacy Deezer id, Apple
     // track id (bookmarking creates the durable song via finalize canonicalization), or an
@@ -658,7 +658,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                             </View>
                         ) : canAttemptPreview ? (
                             <TouchableOpacity
-                                style={[styles.playBtn, { backgroundColor: colors.accent }]}
+                                style={[styles.playBtn, { backgroundColor: accent }]}
                                 onPress={handlePreviewPress}
                                 accessibilityLabel={isPlaying ? "Pause Preview" : "Play Preview"}
                             >
@@ -674,7 +674,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                         )}
                         <View style={styles.progressTrack}>
                             <Animated.View style={[styles.progressFill, {
-                                backgroundColor: colors.accent,
+                                backgroundColor: accent,
                                 width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ["0%", "100%"] }),
                             }]} />
                         </View>
@@ -708,7 +708,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
 
                 {/* Action buttons */}
                 <View style={styles.actionRow}>
-                    <TouchableOpacity style={styles.accentBtn} onPress={handleRateAgain}>
+                    <TouchableOpacity style={[styles.accentBtn, { backgroundColor: accent }]} onPress={handleRateAgain}>
                         <Text style={styles.accentBtnText}>
                             {ranking === null ? "Rate Song" : "Re-rate"}
                         </Text>
@@ -780,7 +780,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                         <View style={styles.sdSectionRow}>
                             <Text style={styles.sdSectionLabel}>VERSUS HISTORY</Text>
                             <TouchableOpacity onPress={() => navigation.navigate("VersusHistory")}>
-                                <ArrowLabel text="ALL" direction="up-right" color={colors.accent} textStyle={styles.sdSectionRight} />
+                                <ArrowLabel text="ALL" direction="up-right" color={accent} textStyle={[styles.sdSectionRight, { color: accent }]} />
                             </TouchableOpacity>
                         </View>
                         {versusReceipts.length === 0 ? (
@@ -804,7 +804,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                                     >
                                         <View style={styles.versusCovers}>
                                             <TouchableOpacity
-                                                style={styles.versusWinnerCover}
+                                                style={[styles.versusWinnerCover, { borderColor: r.bucket ? bucketColor(r.bucket) : colors.accent }]}
                                                 onPress={() => handleVersusSongPress(r.winner_song_id)}
                                                 activeOpacity={0.8}
                                                 accessibilityLabel={`Open ${r.winner_title}`}
@@ -1123,7 +1123,6 @@ const styles = StyleSheet.create({
         flex: 1,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: colors.accent,
         borderRadius: 13,
         paddingVertical: 13,
         // Hard offset shadow — the design's primary-button treatment (same as the Follow CTA). The 9px
@@ -1383,7 +1382,6 @@ const styles = StyleSheet.create({
     sdSectionRight: {
         fontFamily: fonts.mono,
         fontSize: 9,
-        color: colors.accent,
         fontWeight: "700",
         letterSpacing: 0.5,
     },
@@ -1450,7 +1448,6 @@ const styles = StyleSheet.create({
         borderRadius: 6,
         overflow: "hidden",
         borderWidth: 2,
-        borderColor: colors.accent,
     },
     versusLoserCover: {
         borderRadius: 6,
