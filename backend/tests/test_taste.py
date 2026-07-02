@@ -33,6 +33,7 @@ def _rate(
     bucket: str,
     genre_deezer: str | None = None,
     title: str = "Test Song",
+    cover_url: str = "https://example.com/cover.jpg",
 ) -> None:
     """Finalize one rating into an empty bucket — no comparison required."""
     client.post(
@@ -45,7 +46,7 @@ def _rate(
                 "artist": artist,
                 "artist_deezer_id": 1,
                 "album": "Test Album",
-                "cover_url": "https://example.com/cover.jpg",
+                "cover_url": cover_url,
                 "preview_url": None,
                 "genre_deezer": genre_deezer,
             },
@@ -194,6 +195,26 @@ def test_taste_top_artists(client: TestClient) -> None:
     assert artists[0]["count"] == 2
     assert artists[1]["name"] == "Kendrick Lamar"
     assert artists[1]["count"] == 1
+
+
+def test_taste_top_artist_cover_is_highest_scored_song(client: TestClient) -> None:
+    """The artist's representative cover comes from the user's highest-scored song by them."""
+    token, _ = _register(client, "artistcover@example.com", "artistcoveruser")
+    # Rated into different buckets, so the "like" song carries the higher score.
+    _rate(
+        client, token, deezer_id=1, artist="Frank Ocean", bucket="alright",
+        cover_url="https://example.com/lower.jpg",
+    )
+    _rate(
+        client, token, deezer_id=2, artist="Frank Ocean", bucket="like",
+        cover_url="https://example.com/higher.jpg",
+    )
+
+    response = _get_taste(client, token)
+
+    artists = response.json()["overall"]["top_artists"]
+    assert artists[0]["name"] == "Frank Ocean"
+    assert artists[0]["cover_url"] == "https://example.com/higher.jpg"
 
 
 def test_other_user_public_taste_profile(client: TestClient) -> None:

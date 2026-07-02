@@ -1,4 +1,4 @@
-// Tests for the compatibility card on OtherProfileScreen.
+// Tests for the taste-match ("You & them") row on OtherProfileScreen.
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native"
 
 import { ApiError } from "../../../api/client"
@@ -170,16 +170,17 @@ beforeEach(() => {
     })
 })
 
-describe("OtherProfileScreen compatibility card", () => {
-    it("shows score and shared-ratings meta when has_overlap is true", async () => {
+describe("OtherProfileScreen taste-match row", () => {
+    it("shows the overlap percentage and shared-ratings meta when has_overlap is true", async () => {
         mockGetCompatibility.mockResolvedValue(compatOverlap)
 
         render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
 
         await waitFor(() => {
             expect(screen.getByText("78%")).toBeTruthy()
-            expect(screen.getByText("ALIGNED")).toBeTruthy()
-            expect(screen.getByText(/FROM 9 SHARED RATINGS/)).toBeTruthy()
+            expect(screen.getByText("OVERLAP")).toBeTruthy()
+            expect(screen.getByText("You & Maya")).toBeTruthy()
+            expect(screen.getByText(/9 SONGS YOU'VE BOTH RATED/)).toBeTruthy()
         })
     })
 
@@ -189,9 +190,11 @@ describe("OtherProfileScreen compatibility card", () => {
         await waitFor(() => {
             expect(screen.getByText(/Not enough overlap yet/)).toBeTruthy()
         })
+        // No percentage column without overlap.
+        expect(screen.queryByText("OVERLAP")).toBeNull()
     })
 
-    it("does not render a compat card when the compatibility request returns 404", async () => {
+    it("does not render a taste-match row when the compatibility request returns 404", async () => {
         mockGetCompatibility.mockRejectedValue(new ApiError(404, "Profile not found.", null))
 
         render(<OtherProfileScreen navigation={navigationProp} route={routeProp} />)
@@ -200,8 +203,8 @@ describe("OtherProfileScreen compatibility card", () => {
             // Profile should still render
             expect(screen.getByText("Maya")).toBeTruthy()
         })
-        // Neither compat phrase should appear
-        expect(screen.queryByText(/% match/)).toBeNull()
+        // Neither taste-match phrase should appear
+        expect(screen.queryByText(/You & Maya/)).toBeNull()
         expect(screen.queryByText(/Not enough overlap/)).toBeNull()
     })
 
@@ -217,7 +220,7 @@ describe("OtherProfileScreen compatibility card", () => {
         })
     })
 
-    it("renders top songs and genres sections alongside the compat tile", async () => {
+    it("renders taste profile, top songs, and genres sections alongside the taste-match row", async () => {
         mockGetCompatibility.mockResolvedValue(compatOverlap)
         mockGetUserTasteProfile.mockResolvedValue(tasteFixture)
         mockGetProfileRankings.mockResolvedValue({ rankings: [rankingFixture], next_cursor: null })
@@ -226,9 +229,12 @@ describe("OtherProfileScreen compatibility card", () => {
 
         await waitFor(() => {
             expect(screen.getByText("78%")).toBeTruthy()
+            expect(screen.getByText("TASTE PROFILE")).toBeTruthy()
             expect(screen.getByText("THEIR TOP SONGS")).toBeTruthy()
             expect(screen.getByText("TOP GENRES")).toBeTruthy()
             expect(screen.getByText("TOP ARTIST")).toBeTruthy()
+            expect(screen.getByText("RATING SPLIT")).toBeTruthy()
+            expect(screen.getByText("AVG SCORE")).toBeTruthy()
         })
     })
 

@@ -3,7 +3,7 @@
 // the streak popover pattern in StreakBadge — a measure-anchored Modal popover
 // with a pointer — so the two explainers feel like the same family.
 import { ReactNode, useRef, useState } from "react"
-import { Dimensions, Modal, Pressable, StyleSheet, Text, View } from "react-native"
+import { Dimensions, Modal, Pressable, StyleSheet, StyleProp, Text, View, ViewStyle } from "react-native"
 
 import { colors, fonts } from "../../theme"
 
@@ -24,6 +24,7 @@ export default function TasteStripTile({
     testID,
     children,
     foot,
+    style,
 }: {
     label: string
     // The hero value (e.g. "7" or "Top 12%"). Omit when passing a custom `children` body.
@@ -36,10 +37,12 @@ export default function TasteStripTile({
     statValue?: string
     statLabel?: string
     testID?: string
-    // Custom hero body in the top group (e.g. the Top Artist disc, or the forming icon).
+    // Custom hero body in the centered zone (e.g. the Top Artist disc, or the forming icon).
     children?: ReactNode
-    // Custom bottom element (e.g. the Top Artist name) — overrides the plain `sublabel`.
+    // Custom bottom element — overrides the plain `sublabel`.
     foot?: ReactNode
+    // Root-card override (e.g. flex weight / minHeight for the shorter Avg Score card).
+    style?: StyleProp<ViewStyle>
 }) {
     const [open, setOpen] = useState(false)
     const [anchor, setAnchor] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
@@ -64,7 +67,7 @@ export default function TasteStripTile({
     const pointerLeft = Math.min(Math.max(12, center - left - POINTER / 2), POPOVER_WIDTH - 24)
 
     return (
-        <View ref={anchorRef} collapsable={false} style={styles.tile}>
+        <View ref={anchorRef} collapsable={false} style={[styles.tile, style]}>
             <Pressable
                 onPress={toggle}
                 style={styles.tileInner}
@@ -72,24 +75,21 @@ export default function TasteStripTile({
                 accessibilityLabel={`${title}. ${description}`}
                 testID={testID}
             >
-                {/* Label + hero pinned to the top, sublabel to the bottom (space-between), so every
-                    tile's label starts at the same line and the captions align across the row. */}
-                <View style={styles.top}>
-                    <Text style={styles.label}>{label}</Text>
-                    {/* Fixed-height, centered zone so every tile's hero (number, disc, bars) sits on the
-                        same line regardless of its intrinsic height. */}
-                    <View style={styles.heroZone}>
-                        {children ?? (value !== undefined ? (
-                            <Text
-                                style={styles.value}
-                                numberOfLines={1}
-                                adjustsFontSizeToFit
-                                minimumFontScale={0.55}
-                            >
-                                {value}
-                            </Text>
-                        ) : null)}
-                    </View>
+                {/* Label pinned to the top, hero centered in the leftover height, caption pinned to
+                    the bottom — the Bento Orbit DCard column, so labels and captions align across a
+                    row of tiles whatever each hero's intrinsic height is. */}
+                <Text style={styles.label}>{label}</Text>
+                <View style={styles.heroZone}>
+                    {children ?? (value !== undefined ? (
+                        <Text
+                            style={styles.value}
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                            minimumFontScale={0.55}
+                        >
+                            {value}
+                        </Text>
+                    ) : null)}
                 </View>
                 {foot ?? (sublabel ? <Text style={styles.sublabel}>{sublabel}</Text> : <View style={styles.subSpacer} />)}
             </Pressable>
@@ -118,45 +118,44 @@ export default function TasteStripTile({
 }
 
 const styles = StyleSheet.create({
-    // Each tile is its own bordered/shadowed card (matches the other-profile Top Artist tile), so a
-    // row of them reads as the same visual family across both profile screens.
+    // Each tile is its own bordered/shadowed card (the design's DCard), so a row of them reads as
+    // the same visual family across both profile screens. No height floor: tiles in a flex row
+    // stretch to their tallest sibling, so content sizes the row and no card reserves dead air.
     tile: {
         flex: 1,
-        minHeight: 100,
         backgroundColor: colors.paper,
         borderWidth: 1,
         borderColor: colors.line,
-        borderRadius: 14,
-        paddingVertical: 12,
+        borderRadius: 16,
+        paddingTop: 14,
+        paddingBottom: 13,
         paddingHorizontal: 10,
         shadowColor: colors.ink,
         shadowOpacity: 0.05,
         shadowRadius: 8,
         shadowOffset: { width: 0, height: 2 },
     },
-    // Label+hero pinned top, sublabel pinned bottom: every tile's label sits on the same line and the
-    // captions align across the row, so the set reads as one tidy unit instead of floating mid-card.
+    // Label pinned top, hero centered, sublabel pinned bottom: every tile's label sits on the same
+    // line and the captions align across the row, so the set reads as one tidy unit.
     tileInner: {
         flex: 1,
         alignItems: "center",
         justifyContent: "space-between",
     },
-    top: {
-        alignItems: "center",
-    },
     heroZone: {
-        height: 40,
+        flex: 1,
         alignItems: "center",
         justifyContent: "center",
+        gap: 6,
+        paddingVertical: 2,
     },
     label: {
         fontFamily: fonts.mono,
-        fontSize: 7.5,
-        letterSpacing: 1,
+        fontSize: 8.5,
+        letterSpacing: 1.3,
         color: colors.accent,
         fontWeight: "700",
         textAlign: "center",
-        marginBottom: 8,
     },
     value: {
         fontFamily: fonts.display,
@@ -167,8 +166,8 @@ const styles = StyleSheet.create({
     },
     sublabel: {
         fontFamily: fonts.mono,
-        fontSize: 7.5,
-        letterSpacing: 0.7,
+        fontSize: 8,
+        letterSpacing: 1,
         fontWeight: "700",
         color: colors.inkDim,
         textAlign: "center",

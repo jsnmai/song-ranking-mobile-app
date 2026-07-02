@@ -113,6 +113,9 @@ export type TasteGenreItem = {
 export type TasteArtistItem = {
     name: string;
     count: number;
+    // Representative art: the cover of this user's highest-scored song by the
+    // artist (there is no artist-image source). Optional so older fixtures stay valid.
+    cover_url?: string | null;
 }
 
 // Mirrors TasteSection in backend/src/pydantic_schemas/profile.py

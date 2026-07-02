@@ -290,6 +290,9 @@ class TasteArtistItem(BaseModel):
 
     name: str
     count: int
+    # Representative art for an artist disc: the cover of the user's
+    # highest-scored song by this artist (there is no artist-image source).
+    cover_url: str | None = None
 
 
 class TasteSection(BaseModel):

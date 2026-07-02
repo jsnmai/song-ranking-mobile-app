@@ -139,7 +139,7 @@ def _build_section(
     genres = [_resolve_genre(r.genres_mb, r.genre_deezer) for r in rows]
     return TasteSection(
         genres=_compute_genres(genres, total_rated),
-        top_artists=_compute_top_artists([r.artist for r in rows]),
+        top_artists=_compute_top_artists(rows),
     )
 
 
@@ -152,7 +152,7 @@ def _build_bucket_section(rows: list[TasteRow]) -> TasteBucketSection:
         avg_score=avg_score,
         count=count,
         genres=_compute_genres(genres, count),
-        top_artists=_compute_top_artists([r.artist for r in rows]),
+        top_artists=_compute_top_artists(rows),
     )
 
 
@@ -205,11 +205,28 @@ def _compute_genres(
     return items
 
 
-def _compute_top_artists(artists: list[str]) -> list[TasteArtistItem]:
-    """Return the top artists by song count, capped at _TOP_ARTIST_LIMIT."""
-    if not artists:
+def _compute_top_artists(rows: list[TasteRow]) -> list[TasteArtistItem]:
+    """Return the top artists by song count, capped at _TOP_ARTIST_LIMIT.
+
+    Each artist carries a representative cover_url — the art from the user's
+    highest-scored song by that artist that has art — so clients can render an
+    artist disc without a dedicated artist-image source.
+    """
+    if not rows:
         return []
+    counts = Counter(r.artist for r in rows)
+    best_cover: dict[str, tuple[float, str]] = {}
+    for row in rows:
+        if not row.cover_url:
+            continue
+        current = best_cover.get(row.artist)
+        if current is None or row.score > current[0]:
+            best_cover[row.artist] = (row.score, row.cover_url)
     return [
-        TasteArtistItem(name=name, count=count)
-        for name, count in Counter(artists).most_common(_TOP_ARTIST_LIMIT)
+        TasteArtistItem(
+            name=name,
+            count=count,
+            cover_url=best_cover[name][1] if name in best_cover else None,
+        )
+        for name, count in counts.most_common(_TOP_ARTIST_LIMIT)
     ]

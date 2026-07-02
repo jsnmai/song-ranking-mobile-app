@@ -27,7 +27,7 @@ import {
 import EndOfListCap from "../../components/EndOfListCap"
 import MostCompatibleModule from "./MostCompatibleModule"
 import { OwnStreakChip } from "./StreakBadge"
-import TasteStripTile from "./TasteStripTile"
+import TasteProfileGrid from "./TasteProfileGrid"
 import TopGenresCard from "./TopGenresCard"
 
 type ProfileNavigationProp = NativeStackNavigationProp<AppStackParamList, "MainTabs">
@@ -58,23 +58,6 @@ const STAR_DOTS = [
     r: i % 3 === 0 ? 1 : 0.6,
     op: 0.2 + (i % 4) * 0.08,
 }))
-
-// A small rainbow spectrum under the Range count — a visual stand-in for "variety of genres" so the
-// tile reads as a spread, not a lone number. Ordered as a spectrum (warm → cool).
-const RANGE_COLORS = [colors.accent, colors.butter, colors.mint, colors.sky, colors.plum]
-
-// "Forming" indicator for Selectivity: gold bars climbing upward — the stat is accumulating as more
-// ratings come in across the app, so it reads as "building, arrives on its own", not a lock (which
-// would imply you have to do something, the way the pre-10-ratings skeleton does).
-function FormingBars() {
-    return (
-        <View style={styles.formingBars}>
-            {[0.35, 0.55, 0.78, 1].map((op, i) => (
-                <View key={i} style={[styles.formingBar, { height: 11 + i * 6, opacity: op }]} />
-            ))}
-        </View>
-    )
-}
 
 export default function ProfileScreen() {
     const navigation = useNavigation<ProfileNavigationProp>()
@@ -262,45 +245,6 @@ export default function ProfileScreen() {
         })
 
     const topGenres = taste?.overall?.genres?.slice(0, 3) ?? []
-
-    // Taste Profile strip stats. Range counts distinct genres, including the
-    // "Unknown" bucket (untagged songs count as one group, matching Top Genres);
-    // Top Artist is the most-rated artist. Both come straight from the taste
-    // response — no extra fetch.
-    const genreCount = taste?.overall?.genres?.length ?? 0
-    const topArtist = taste?.overall?.top_artists?.[0]?.name ?? null
-    const topArtistCount = taste?.overall?.top_artists?.[0]?.count ?? 0
-    // Selectivity "warms up": the percentile is null/forming until there are
-    // enough peers to rank against. The backend percentile is how harsh you are
-    // (share of raters more generous than you), so we flip it to a positive
-    // "Top X%" on whichever side you lean — SELECTIVITY when you give few likes,
-    // GENEROSITY when you give many — so the tile never reads as negative.
-    const harshness = taste?.harshness ?? null
-    const selectivityPct = harshness?.status === "ready" ? harshness.percentile : null
-    const selectivityLabel =
-        selectivityPct === null || selectivityPct >= 50 ? "SELECTIVITY" : "GENEROSITY"
-    const selectivityText =
-        selectivityPct === null
-            ? "Forming"
-            : selectivityPct >= 50
-                ? `Top ${100 - selectivityPct}%`
-                : `Top ${selectivityPct}%`
-    const selectivityTitle = selectivityLabel === "GENEROSITY" ? "Generosity" : "Selectivity"
-    const selectivityDesc =
-        selectivityPct === null
-            ? "How often you give a 'like' rating compared to everyone else. We'll rank you once enough other people have rated songs too."
-            : "How often you give a 'like' rating compared to everyone else. Fewer likes ranks you as more selective, more likes as more generous. 'Top X%' is where you land among all raters."
-    // Caption under the value: labels the hourglass while forming, gives percentile context once ready.
-    const selectivitySublabel = selectivityPct === null ? "FORMING" : "OF ALL RATERS"
-
-    // Bucket bars are scaled to the largest bucket, so the biggest is always a
-    // full bar (a new user with one Like shows a full Like bar, the rest empty).
-    const bucketMax = Math.max(
-        1,
-        taste?.bucket_breakdown?.like ?? 0,
-        taste?.bucket_breakdown?.okay ?? 0,
-        taste?.bucket_breakdown?.dislike ?? 0,
-    )
 
     return (
         <>
@@ -600,95 +544,24 @@ export default function ProfileScreen() {
                             <Text style={styles.stripKicker}>TASTE PROFILE</Text>
                             {tasteLoading ? (
                                 <ActivityIndicator color={colors.accent} style={styles.tasteLoader} />
-                            ) : (
-                                <View style={styles.tasteTileGrid}>
-                                    <TasteStripTile
-                                        label="RANGE"
-                                        sublabel={genreCount === 1 ? "GENRE" : "GENRES"}
-                                        title="Range"
-                                        description="How many different genres you've rated across. Songs we couldn't tag are grouped as one 'Unknown' genre."
-                                        testID="strip-range"
-                                    >
-                                        <Text style={styles.rangeNumber}>{genreCount}</Text>
-                                        <View style={styles.rangeSpectrum}>
-                                            {Array.from({ length: Math.max(1, Math.min(genreCount, 5)) }).map((_, i) => (
-                                                <View key={i} style={[styles.rangeSeg, { backgroundColor: RANGE_COLORS[i % RANGE_COLORS.length] }]} />
-                                            ))}
-                                        </View>
-                                    </TasteStripTile>
-                                    <TasteStripTile
-                                        label="TOP ARTIST"
-                                        title="Top artist"
-                                        description="The artist you've rated the most songs from."
-                                        statValue={topArtistCount > 0 ? String(topArtistCount) : undefined}
-                                        statLabel="SONGS RATED"
-                                        testID="strip-top-artist"
-                                        foot={topArtist ? <Text style={styles.artistName} numberOfLines={1}>{topArtist}</Text> : undefined}
-                                    >
-                                        {topArtist ? (
-                                            <View style={styles.artistDisc}>
-                                                <Text style={styles.artistDiscLetter}>{topArtist.charAt(0).toUpperCase()}</Text>
-                                            </View>
-                                        ) : (
-                                            <Text style={styles.artistEmpty}>Not enough ratings yet</Text>
-                                        )}
-                                    </TasteStripTile>
-                                    <TasteStripTile
-                                        label={selectivityLabel}
-                                        value={selectivityPct === null ? undefined : selectivityText}
-                                        sublabel={selectivitySublabel}
-                                        title={selectivityTitle}
-                                        description={selectivityDesc}
-                                        testID="strip-selectivity"
-                                    >
-                                        {selectivityPct === null ? <FormingBars /> : undefined}
-                                    </TasteStripTile>
-                                </View>
-                            )}
+                            ) : taste ? (
+                                <TasteProfileGrid taste={taste} isOwn />
+                            ) : null}
                         </View>
                     )}
 
-                    {/* Top genres (full users only) — shared card with the other-profile screen. The
-                        title sits inside the card here (like YOUR BUCKETS); the other-profile screen
-                        labels it externally instead. */}
+                    {/* Top genres (full users only) — shared card with the other-profile screen,
+                        labelled externally like every other section (Bento Orbit Layout H). */}
                     {!isNew && (
-                        <TopGenresCard
-                            title="TOP GENRES"
-                            genres={topGenres}
-                            loading={tasteLoading}
-                            emptyText="Rate more songs to see your top genres."
-                        />
-                    )}
-
-                    {/* Your Buckets */}
-                    <View style={styles.twoColRow}>
-                        <View style={styles.twoColCard}>
-                            <Text style={styles.twoColKicker}>YOUR BUCKETS</Text>
-                            {([
-                                ["Like", taste?.bucket_breakdown?.like ?? 0, colors.mint],
-                                ["Okay", taste?.bucket_breakdown?.okay ?? 0, colors.butter],
-                                ["Dislike", taste?.bucket_breakdown?.dislike ?? 0, colors.accent],
-                            ] as [string, number, string][]).map(([label, count, color]) => {
-                                const pct = (count / bucketMax) * 100
-                                return (
-                                    <View key={label} style={styles.bucketRow}>
-                                        <Text style={styles.bucketLabel} numberOfLines={1}>{label}</Text>
-                                        <View style={styles.bucketBarTrack}>
-                                            {pct > 0 && (
-                                                <View
-                                                    style={[
-                                                        styles.bucketBar,
-                                                        { width: `${pct}%`, backgroundColor: color },
-                                                    ]}
-                                                />
-                                            )}
-                                        </View>
-                                        <Text style={styles.bucketCount}>{count}</Text>
-                                    </View>
-                                )
-                            })}
+                        <View>
+                            <Text style={styles.stripKicker}>TOP GENRES</Text>
+                            <TopGenresCard
+                                genres={topGenres}
+                                loading={tasteLoading}
+                                emptyText="Rate more songs to see your top genres."
+                            />
                         </View>
-                    </View>
+                    )}
 
                     {/* Compatibility */}
                     <MostCompatibleModule
@@ -1100,67 +973,6 @@ const styles = StyleSheet.create({
     tasteLoader: {
         marginVertical: 16,
     },
-    // ── Taste Profile tiles (3-up card grid that mirrors the other-profile tiles) ──
-    tasteTileGrid: {
-        flexDirection: "row",
-        gap: 8,
-    },
-    // Top Artist tile body: a navy disc with the artist's initial, name + song count below.
-    artistDisc: {
-        width: 34,
-        height: 34,
-        borderRadius: 17,
-        backgroundColor: colors.navy,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    artistDiscLetter: {
-        fontFamily: fonts.display,
-        fontSize: 15,
-        color: colors.cream,
-    },
-    artistName: {
-        fontFamily: fonts.display,
-        fontSize: 13,
-        lineHeight: 15,
-        color: colors.ink,
-        textAlign: "center",
-    },
-    artistEmpty: {
-        fontSize: 11,
-        color: colors.inkDim,
-        textAlign: "center",
-    },
-    // Range hero: the genre count above a small multi-color spectrum bar.
-    rangeNumber: {
-        fontFamily: fonts.display,
-        fontSize: 25,
-        lineHeight: 27,
-        letterSpacing: -0.5,
-        color: colors.ink,
-    },
-    rangeSpectrum: {
-        flexDirection: "row",
-        gap: 2,
-        marginTop: 5,
-    },
-    rangeSeg: {
-        width: 7,
-        height: 5,
-        borderRadius: 2.5,
-    },
-    // Forming indicator: gold bars climbing upward (sized to match the other tiles' heroes).
-    formingBars: {
-        flexDirection: "row",
-        alignItems: "flex-end",
-        gap: 3.5,
-        height: 29,
-    },
-    formingBar: {
-        width: 5,
-        borderRadius: 2.5,
-        backgroundColor: colors.gold,
-    },
     // ── Taste Profile strip ───────────────────────────────────────────
     stripCard: {
         backgroundColor: colors.paper,
@@ -1215,67 +1027,6 @@ const styles = StyleSheet.create({
         letterSpacing: 1,
         color: colors.inkDim,
         fontWeight: "700",
-    },
-    stripValue: {
-        fontFamily: fonts.display,
-        fontSize: 14,
-        letterSpacing: -0.2,
-        color: colors.ink,
-    },
-    // ── 2-col grid ────────────────────────────────────────────────────
-    twoColRow: {
-        flexDirection: "row",
-        gap: 10,
-    },
-    twoColCard: {
-        flex: 1,
-        backgroundColor: colors.paper,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: colors.line,
-        padding: 12,
-    },
-    // Kicker matches the Compatibility module's COMPATIBILITY title (mono 9 / 1.8) so the two
-    // stacked stat cards read as one family.
-    twoColKicker: {
-        fontFamily: fonts.mono,
-        fontSize: 9,
-        letterSpacing: 1.8,
-        color: colors.inkDim,
-        fontWeight: "700",
-        marginBottom: 10,
-    },
-    bucketRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 9,
-        marginBottom: 8,
-    },
-    // Label + count mirror the Compatibility row (display 13, ink) so both bar cards look consistent.
-    bucketLabel: {
-        fontFamily: fonts.display,
-        fontSize: 13,
-        color: colors.ink,
-        // Fixed width so every bar starts at the same x; fits "Dislike" in the display face.
-        width: 64,
-    },
-    bucketBarTrack: {
-        flex: 1,
-        height: 7,
-        backgroundColor: colors.bg,
-        borderRadius: 4,
-        overflow: "hidden",
-    },
-    bucketBar: {
-        height: 7,
-        borderRadius: 4,
-    },
-    bucketCount: {
-        fontFamily: fonts.display,
-        fontSize: 13,
-        color: colors.ink,
-        width: 34,
-        textAlign: "right",
     },
     // ── Your Activity cards ───────────────────────────────────────────
     activityKicker: {

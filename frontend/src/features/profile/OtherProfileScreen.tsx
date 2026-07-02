@@ -1,8 +1,9 @@
 // OtherProfile — another user's profile per the Bento Orbit design: identity card
 // mirroring the You profile (no inline buttons), Follow + To LISTn side by side,
-// Compatibility + Top Artist tiles, Their Top Songs (uniform rows), Top Genres,
-// their Auxstrology signature, and Recent Ratings. Report/block live under the
-// nav flag button; privacy states are kept.
+// the "You & them" taste-match overlap row, their Auxstrology signature, the
+// shared Taste Profile grid, Top Genres, Their Top Songs (uniform rows), and
+// Recent Ratings. Report/block live under the nav flag button; privacy states
+// are kept.
 import { Fragment, useEffect, useState } from "react"
 import {
     ActivityIndicator,
@@ -42,6 +43,7 @@ import {
 } from "./types"
 import RecentRatingsModule from "./RecentRatingsModule"
 import { StreakBadge } from "./StreakBadge"
+import TasteProfileGrid from "./TasteProfileGrid"
 import TopGenresCard from "./TopGenresCard"
 
 type OtherProfileProps = NativeStackScreenProps<AppStackParamList, "OtherProfile">
@@ -135,7 +137,8 @@ function ChevronIcon() {
 }
 
 export default function OtherProfileScreen({ navigation, route }: OtherProfileProps) {
-    const { token } = useAuth()
+    // viewerProfile feeds the "You & {name}" taste-match row (your half of the avatar pair).
+    const { token, profile: viewerProfile } = useAuth()
     const { username } = route.params
     const [profile, setProfile] = useState<Profile | null>(null)
     const [isLoading, setIsLoading] = useState(true)
@@ -319,10 +322,11 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
     // this viewer can see the profile's taste and there is an active streak.
     const streakWeeks = profile?.user_stats?.current_streak ?? 0
 
-    const topArtist = taste && taste.overall.top_artists.length > 0
-        ? taste.overall.top_artists[0]
-        : null
     const topGenres = taste ? taste.overall.genres.slice(0, 3) : []
+    const firstName = profile ? (profile.display_name || profile.username).split(" ")[0] : ""
+    const viewerInitial = (viewerProfile?.display_name || viewerProfile?.username || "You")
+        .charAt(0)
+        .toUpperCase()
 
     const auxActive = aux !== null && aux.status === "active" && aux.sign !== null
 
@@ -549,104 +553,47 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
                             </View>
                         )}
 
-                        {/* Compatibility + Top Artist tiles */}
+                        {/* Taste match — pairwise "You & them" overlap row (avatars, shared-rating
+                            count, and the overlap percentage), per the Bento Orbit design. */}
                         {profile.can_view_taste && !compatLoading && compatibility && (
-                            <View style={styles.tileGrid}>
-                                <View style={styles.compatTile} testID="compatibility-card">
-                                    <View style={styles.compatPill}>
-                                        <Text style={styles.compatPillText}>Compatibility</Text>
+                            <View style={styles.overlapRow} testID="compatibility-card">
+                                <View style={styles.overlapAvatars}>
+                                    <View
+                                        style={[
+                                            styles.overlapAva,
+                                            { backgroundColor: avatarColorToken(viewerProfile?.avatar_color, colors.ink) },
+                                        ]}
+                                    >
+                                        <Text style={styles.overlapAvaLetter}>{viewerInitial}</Text>
                                     </View>
-                                    {compatibility.has_overlap ? (
-                                        <>
-                                            <View style={styles.compatPctRow}>
-                                                <Text
-                                                    style={styles.compatPct}
-                                                    numberOfLines={1}
-                                                    adjustsFontSizeToFit
-                                                >
-                                                    {Math.round(compatibility.similarity_score! * 100)}%
-                                                </Text>
-                                                <Text style={styles.compatAligned} numberOfLines={1}>ALIGNED</Text>
-                                            </View>
-                                            <View style={{ flex: 1 }} />
-                                            <Text style={styles.compatMeta}>
-                                                FROM {compatibility.shared_song_count} SHARED RATINGS
-                                            </Text>
-                                        </>
-                                    ) : (
-                                        <Text style={styles.compatMuted}>{compatibility.explanation}</Text>
-                                    )}
+                                    <View
+                                        style={[
+                                            styles.overlapAva,
+                                            styles.overlapAvaTheirs,
+                                            { backgroundColor: avatarColorToken(profile.avatar_color, avatarColor(profile.username)) },
+                                        ]}
+                                    >
+                                        <Text style={styles.overlapAvaLetter}>{profileInitial}</Text>
+                                    </View>
                                 </View>
-                                <View style={styles.artistTile}>
-                                    <Text style={styles.artistTileLabel}>TOP ARTIST</Text>
-                                    {topArtist ? (
-                                        <>
-                                            <View style={styles.artistRow}>
-                                                <View style={styles.artistDisc}>
-                                                    <Text style={styles.artistDiscLetter}>
-                                                        {topArtist.name.charAt(0).toUpperCase()}
-                                                    </Text>
-                                                </View>
-                                                <View style={{ flex: 1, minWidth: 0 }}>
-                                                    <Text style={styles.artistName} numberOfLines={1}>{topArtist.name}</Text>
-                                                    <Text style={styles.artistCount}>
-                                                        {topArtist.count} {topArtist.count === 1 ? "SONG" : "SONGS"}
-                                                    </Text>
-                                                </View>
-                                            </View>
-                                            <View style={{ flex: 1 }} />
-                                            {taste && (
-                                                <Text style={styles.artistMeta}>OF {taste.total_rated} SONGS RATED</Text>
-                                            )}
-                                        </>
-                                    ) : (
-                                        <Text style={styles.artistEmpty}>Not enough ratings yet</Text>
-                                    )}
+                                <View style={styles.overlapText}>
+                                    <Text style={styles.overlapTitle} numberOfLines={1}>
+                                        You & {firstName}
+                                    </Text>
+                                    <Text style={styles.overlapMeta} numberOfLines={2}>
+                                        {compatibility.has_overlap
+                                            ? `${compatibility.shared_song_count} SONGS YOU'VE BOTH RATED`
+                                            : compatibility.explanation}
+                                    </Text>
                                 </View>
-                            </View>
-                        )}
-
-                        {/* Their top songs — three uniform rows, no emphasis */}
-                        {profile.can_view_taste && topSongs !== null && topSongs.length > 0 && (
-                            <>
-                                {sectionLabel("THEIR TOP SONGS", {
-                                    label: "VIEW ALL",
-                                    onPress: () => navigation.navigate("UserRankings", { username }),
-                                })}
-                                <View style={styles.topSongsCard}>
-                                    {topSongs.map((ranking, i) => (
-                                        <TouchableOpacity
-                                            key={ranking.song.id}
-                                            style={[styles.songRow, i > 0 && styles.songRowBorder]}
-                                            onPress={() => navigation.navigate("SongDetail", { ranking })}
-                                            activeOpacity={0.75}
-                                        >
-                                            <Text style={styles.songRank}>{i + 1}</Text>
-                                            <View style={styles.songCover}>
-                                                {ranking.song.cover_url ? (
-                                                    <Image source={{ uri: ranking.song.cover_url }} style={styles.coverImg} />
-                                                ) : null}
-                                            </View>
-                                            <View style={{ flex: 1, minWidth: 0 }}>
-                                                <Text style={styles.songTitle} numberOfLines={1}>{ranking.song.title}</Text>
-                                                <Text style={styles.songArtist} numberOfLines={1}>
-                                                    {ranking.song.artist.toUpperCase()}
-                                                </Text>
-                                            </View>
-                                            <Text style={[styles.songScore, { color: bucketColor(ranking.bucket) }]}>
-                                                {ranking.score.toFixed(1)}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            </>
-                        )}
-
-                        {/* Top genres — shared card with the own-profile screen; the title sits inside
-                            the card to match the own-profile treatment. */}
-                        {profile.can_view_taste && topGenres.length > 0 && (
-                            <View style={styles.genresSection}>
-                                <TopGenresCard title="TOP GENRES" genres={topGenres} />
+                                {compatibility.has_overlap && compatibility.similarity_score !== null && (
+                                    <View style={styles.overlapPctCol}>
+                                        <Text style={styles.overlapPct}>
+                                            {Math.round(compatibility.similarity_score * 100)}%
+                                        </Text>
+                                        <Text style={styles.overlapPctLabel}>OVERLAP</Text>
+                                    </View>
+                                )}
                             </View>
                         )}
 
@@ -698,6 +645,58 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
                                     </Svg>
                                 </View>
                             </View>
+                        )}
+
+                        {/* Taste Profile — the shared Layout H grid, mirroring the own profile */}
+                        {profile.can_view_taste && taste && (
+                            <>
+                                {sectionLabel("TASTE PROFILE")}
+                                <TasteProfileGrid taste={taste} />
+                            </>
+                        )}
+
+                        {/* Top genres — shared card with the own-profile screen, labelled externally */}
+                        {profile.can_view_taste && topGenres.length > 0 && (
+                            <>
+                                {sectionLabel("TOP GENRES")}
+                                <TopGenresCard genres={topGenres} />
+                            </>
+                        )}
+
+                        {/* Their top songs — three uniform rows, no emphasis */}
+                        {profile.can_view_taste && topSongs !== null && topSongs.length > 0 && (
+                            <>
+                                {sectionLabel("THEIR TOP SONGS", {
+                                    label: "VIEW ALL",
+                                    onPress: () => navigation.navigate("UserRankings", { username }),
+                                })}
+                                <View style={styles.topSongsCard}>
+                                    {topSongs.map((ranking, i) => (
+                                        <TouchableOpacity
+                                            key={ranking.song.id}
+                                            style={[styles.songRow, i > 0 && styles.songRowBorder]}
+                                            onPress={() => navigation.navigate("SongDetail", { ranking })}
+                                            activeOpacity={0.75}
+                                        >
+                                            <Text style={styles.songRank}>{i + 1}</Text>
+                                            <View style={styles.songCover}>
+                                                {ranking.song.cover_url ? (
+                                                    <Image source={{ uri: ranking.song.cover_url }} style={styles.coverImg} />
+                                                ) : null}
+                                            </View>
+                                            <View style={{ flex: 1, minWidth: 0 }}>
+                                                <Text style={styles.songTitle} numberOfLines={1}>{ranking.song.title}</Text>
+                                                <Text style={styles.songArtist} numberOfLines={1}>
+                                                    {ranking.song.artist.toUpperCase()}
+                                                </Text>
+                                            </View>
+                                            <Text style={[styles.songScore, { color: bucketColor(ranking.bucket) }]}>
+                                                {ranking.score.toFixed(1)}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </>
                         )}
 
                         {/* Recent ratings — their freshest written takes */}
@@ -941,132 +940,76 @@ const styles = StyleSheet.create({
         marginTop: 6,
         textAlign: "center",
     },
-    // ── Tiles grid ───────────────────────────────────────────────────
-    tileGrid: {
+    // ── Taste match ("You & them") overlap row ───────────────────────
+    overlapRow: {
         flexDirection: "row",
-        gap: 10,
+        alignItems: "center",
+        gap: 11,
         marginTop: 10,
-    },
-    compatTile: {
-        flex: 1,
-        backgroundColor: colors.teal,
-        borderRadius: 14,
         paddingVertical: 11,
-        paddingHorizontal: 12,
-    },
-    compatPill: {
-        backgroundColor: "rgba(255,255,255,0.22)",
-        borderRadius: 999,
-        paddingVertical: 3,
-        paddingHorizontal: 8,
-        alignSelf: "flex-start",
-    },
-    compatPillText: {
-        fontFamily: fonts.mono,
-        fontSize: 8.5,
-        letterSpacing: 0.8,
-        fontWeight: "700",
-        color: "#fff",
-        textTransform: "uppercase",
-    },
-    compatPctRow: {
-        flexDirection: "row",
-        alignItems: "flex-end",
-        gap: 6,
-        marginTop: 9,
-    },
-    compatPct: {
-        fontFamily: fonts.display,
-        fontSize: 38,
-        lineHeight: 34,
-        color: "#fff",
-        flexShrink: 1,
-    },
-    compatAligned: {
-        fontFamily: fonts.mono,
-        fontSize: 7.5,
-        letterSpacing: 1,
-        color: "rgba(255,255,255,0.9)",
-        paddingBottom: 4,
-        flexShrink: 0,
-    },
-    compatMeta: {
-        fontFamily: fonts.mono,
-        fontSize: 7,
-        letterSpacing: 0.7,
-        color: "rgba(255,255,255,0.85)",
-        marginTop: 10,
-    },
-    compatMuted: {
-        fontSize: 11,
-        lineHeight: 15,
-        color: "rgba(255,255,255,0.92)",
-        marginTop: 9,
-    },
-    artistTile: {
-        flex: 1,
+        paddingHorizontal: 13,
         backgroundColor: colors.paper,
         borderWidth: 1,
         borderColor: colors.line,
         borderRadius: 14,
-        paddingVertical: 11,
-        paddingHorizontal: 12,
-        shadowColor: colors.ink,
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 2 },
     },
-    artistTileLabel: {
-        fontFamily: fonts.mono,
-        fontSize: 7.5,
-        letterSpacing: 1,
-        fontWeight: "700",
-        color: colors.accent,
-    },
-    artistRow: {
+    overlapAvatars: {
         flexDirection: "row",
-        alignItems: "center",
-        gap: 10,
-        marginTop: 9,
-    },
-    artistDisc: {
-        width: 46,
-        height: 46,
-        borderRadius: 23,
-        backgroundColor: colors.navy,
-        alignItems: "center",
-        justifyContent: "center",
         flexShrink: 0,
     },
-    artistDiscLetter: {
+    overlapAva: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        alignItems: "center",
+        justifyContent: "center",
+        // The paper ring separating the two overlapped avatars.
+        borderWidth: 2,
+        borderColor: colors.paper,
+    },
+    overlapAvaTheirs: {
+        marginLeft: -8,
+    },
+    overlapAvaLetter: {
         fontFamily: fonts.display,
-        fontSize: 18,
-        color: colors.cream,
-    },
-    artistName: {
-        fontFamily: fonts.display,
-        fontSize: 14,
-        lineHeight: 16,
-        color: colors.ink,
-    },
-    artistCount: {
-        fontFamily: fonts.mono,
-        fontSize: 7.5,
-        letterSpacing: 0.6,
-        color: colors.inkDim,
-        marginTop: 4,
-    },
-    artistMeta: {
-        fontFamily: fonts.mono,
-        fontSize: 7,
-        letterSpacing: 0.7,
-        color: colors.inkDim,
-        marginTop: 10,
-    },
-    artistEmpty: {
         fontSize: 11,
-        color: colors.inkDim,
-        marginTop: 9,
+        color: "#fff",
+    },
+    overlapText: {
+        flex: 1,
+        minWidth: 0,
+    },
+    overlapTitle: {
+        fontFamily: fonts.display,
+        fontSize: 13.5,
+        color: colors.ink,
+        lineHeight: 16,
+    },
+    overlapMeta: {
+        fontFamily: fonts.mono,
+        fontSize: 8,
+        letterSpacing: 0.3,
+        color: colors.inkSoft,
+        marginTop: 3,
+    },
+    overlapPctCol: {
+        alignItems: "flex-end",
+        flexShrink: 0,
+        marginRight: 2,
+    },
+    overlapPct: {
+        fontFamily: fonts.display,
+        fontSize: 17,
+        lineHeight: 19,
+        color: colors.mint,
+    },
+    overlapPctLabel: {
+        fontFamily: fonts.mono,
+        fontSize: 6.5,
+        letterSpacing: 1,
+        fontWeight: "700",
+        color: colors.mint,
+        marginTop: 1,
     },
     // ── Section labels ───────────────────────────────────────────────
     sectionLabelRow: {
@@ -1083,11 +1026,6 @@ const styles = StyleSheet.create({
         letterSpacing: 1.6,
         fontWeight: "700",
         color: colors.inkDim,
-    },
-    // The genre card carries its title internally (matching the own-profile screen), so it stands in
-    // for a section on its own — give it the same top gap the sectionLabel rows provide.
-    genresSection: {
-        marginTop: 13,
     },
     sectionLabelLink: {
         fontFamily: fonts.mono,

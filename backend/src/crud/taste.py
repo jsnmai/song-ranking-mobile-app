@@ -17,6 +17,7 @@ class TasteRow:
     genres_mb: list[str] | None
     genre_deezer: str | None
     artist: str
+    cover_url: str | None = None
 
 
 def get_taste_rows(
@@ -31,6 +32,7 @@ def get_taste_rows(
             Song.genres_mb,
             Song.genre_deezer,
             Song.artist,
+            Song.cover_url,
         )
         .join(Song, Song.id == Ranking.song_id)
         .where(Ranking.user_id == user_id)
@@ -42,6 +44,7 @@ def get_taste_rows(
             genres_mb=row.genres_mb,
             genre_deezer=row.genre_deezer,
             artist=row.artist,
+            cover_url=row.cover_url,
         )
         for row in results
     ]
