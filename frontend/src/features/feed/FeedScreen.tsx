@@ -31,7 +31,7 @@ import { FlashList, FlashListRef } from "@shopify/flash-list"
 import { CompositeNavigationProp, useFocusEffect, useNavigation, useScrollToTop } from "@react-navigation/native"
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
-import Svg, { Circle, Ellipse, Path, Polygon, Polyline } from "react-native-svg"
+import Svg, { Circle, Path, Polygon, Polyline } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
 import { ArrowLabel } from "../../components/Arrow"
@@ -352,6 +352,32 @@ function MatchMomentGtMotion() {
     }))
 
     return <Animated.Text style={[styles.matchMomentGt, animatedStyle]}>›</Animated.Text>
+}
+
+function DisagreementSpotlightOrb() {
+    const progress = useSharedValue(0)
+
+    useEffect(() => {
+        progress.value = withRepeat(withTiming(1, { duration: 14000, easing: Easing.linear }), -1, false)
+    }, [progress])
+
+    const orbStyle = useAnimatedStyle(() => ({
+        opacity: 0.38 + Math.sin(progress.value * Math.PI * 2 + 0.7) * 0.08,
+        transform: (() => {
+            const phase = progress.value * Math.PI * 2
+            return [
+                { translateX: 165 + Math.cos(phase) * 158 + Math.sin(phase * 2) * 18 },
+                { translateY: 34 + Math.sin(phase) * 48 },
+                { scale: 1.02 + Math.sin(phase + 1.4) * 0.18 },
+            ]
+        })(),
+    }))
+
+    return (
+        <Animated.View pointerEvents="none" style={[styles.disagreeOrb, orbStyle]}>
+            <View style={styles.disagreeOrbCore} />
+        </Animated.View>
+    )
 }
 
 // Wraps a feed card so the hero verdict's card can play the "pull out, then slam" pulse after the
@@ -1142,6 +1168,7 @@ export default function FeedScreen() {
                 onPress={handleDisagreementPress}
                 testID={`feed-disagreement-${d.song.id}`}
             >
+                <DisagreementSpotlightOrb />
                 <View style={styles.fullCellTop}>
                     <View style={styles.butterPill}><Text style={styles.butterPillText}>Disagreement spotlight</Text></View>
                     <Text style={styles.disagreeApart}>{apart.toFixed(1)} APART</Text>
@@ -3218,6 +3245,26 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.05,
         shadowRadius: 8,
         shadowOffset: { width: 0, height: 2 },
+        overflow: "hidden",
+    },
+    disagreeOrb: {
+        position: "absolute",
+        left: -52,
+        top: -46,
+        width: 104,
+        height: 104,
+        borderRadius: 52,
+        backgroundColor: "rgba(245,184,64,0.10)",
+        shadowColor: colors.gold,
+        shadowOpacity: 0.5,
+        shadowRadius: 28,
+        shadowOffset: { width: 0, height: 0 },
+    },
+    disagreeOrbCore: {
+        flex: 1,
+        borderRadius: 52,
+        borderWidth: 1,
+        borderColor: "rgba(245,184,64,0.14)",
     },
     disagreeLockedTitle: {
         fontFamily: fonts.display,
