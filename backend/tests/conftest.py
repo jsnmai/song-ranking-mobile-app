@@ -52,11 +52,14 @@ TestingSessionLocal = sessionmaker(
 )
 def create_tables() -> None:
     """
-    Create all tables once at the start of the test session, drop them at the end.
+    Recreate all tables once at the start of the test session, drop them at the end.
 
     session scope means this runs once for the entire pytest run, not once per test,
     which avoids the overhead of recreating the schema for every test function.
+    Dropping first makes the suite resilient after interrupted or failed local runs
+    that leave the isolated test database half-cleaned.
     """
+    Base.metadata.drop_all(test_engine)
     Base.metadata.create_all(test_engine)
     yield
     Base.metadata.drop_all(test_engine)
@@ -90,6 +93,25 @@ def reset_rate_limiter() -> None:
     """
     limiter._storage.reset()
     yield
+
+
+@pytest.fixture(autouse=True)
+def use_test_sessions_for_background_tasks(monkeypatch) -> None:
+    """
+    Keep endpoint-scheduled background tasks inside the isolated test database.
+
+    Request handlers use the get_db dependency override below, but background
+    task modules open their own SessionLocal by design. In tests those task
+    sessions must point at listn_test, not the developer database.
+    """
+    monkeypatch.setattr(
+        "src.services.musicbrainz_tasks.SessionLocal",
+        TestingSessionLocal,
+    )
+    monkeypatch.setattr(
+        "src.services.similarity_tasks.SessionLocal",
+        TestingSessionLocal,
+    )
 
 
 @pytest.fixture
