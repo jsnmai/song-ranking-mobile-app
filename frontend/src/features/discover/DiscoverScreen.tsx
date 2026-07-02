@@ -249,7 +249,6 @@ export default function DiscoverScreen() {
     const navigation = useNavigation<DiscoverNavigationProp>()
     const { token, profile } = useAuth()
     const insets = useSafeAreaInsets()
-    const avatarInitial = (profile?.display_name || profile?.username || "?").charAt(0).toUpperCase()
     const searchRef = useRef<TextInput>(null)
     const [searchFocused, setSearchFocused] = useState(false)
     const [searchMode, setSearchMode] = useState<"songs" | "users">(route.params?.searchMode ?? "songs")
@@ -615,13 +614,6 @@ export default function DiscoverScreen() {
                     <Text style={styles.kicker}>BROWSE</Text>
                     <Text style={styles.heading}>Discover</Text>
                 </View>
-                <TouchableOpacity
-                    style={styles.avatarCircle}
-                    onPress={() => navigation.navigate("Profile")}
-                    accessibilityLabel="Your profile"
-                >
-                    <Text style={styles.avatarLetter}>{avatarInitial}</Text>
-                </TouchableOpacity>
             </View>
 
             {/* Search area */}
@@ -1162,20 +1154,6 @@ const styles = StyleSheet.create({
         // all screen titles); 29 (< fontSize) clipped descenders like "g".
         lineHeight: 36,
         color: colors.ink,
-    },
-    avatarCircle: {
-        width: 32,
-        height: 32,
-        borderRadius: 9,
-        backgroundColor: colors.ink,
-        alignItems: "center",
-        justifyContent: "center",
-        marginTop: 4,
-    },
-    avatarLetter: {
-        color: "#fff",
-        fontWeight: "700",
-        fontSize: 17,
     },
     // ── Search area ────────────────────────────────────────────────────
     searchArea: {

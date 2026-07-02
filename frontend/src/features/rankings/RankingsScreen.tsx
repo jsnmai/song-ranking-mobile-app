@@ -111,7 +111,7 @@ function DriftLayer({ children }: { children: ReactNode }) {
 
 export default function RankingsScreen() {
     const navigation = useNavigation<RankingsNavigation>()
-    const { token, profile } = useAuth()
+    const { token } = useAuth()
     const insets = useSafeAreaInsets()
     // Re-tapping the Rankings tab while scrolled down jumps back to the top. One ref
     // covers whichever scroller is mounted — the FlashList when rated, the ScrollView
@@ -121,7 +121,6 @@ export default function RankingsScreen() {
     useScrollToTop(scrollRef)
     // Hide the viewer's own scores + positions until they've rated 10 songs.
     const scoresLocked = useScoresLocked()
-    const avatarInitial = (profile?.display_name || profile?.username || "?").charAt(0).toUpperCase()
     const [rankings, setRankings] = useState<RankingResponse[]>([])
     const [anchors, setAnchors] = useState<RankingAnchorsResponse>(EMPTY_ANCHORS)
     const [versusReceipts, setVersusReceipts] = useState<ComparisonHistoryReceipt[]>([])
@@ -495,15 +494,6 @@ export default function RankingsScreen() {
                     <Text style={styles.kicker}>{rankings.length} SONGS · CALIBRATED</Text>
                     <Text style={styles.heading}>Rankings</Text>
                 </View>
-                <View style={styles.headerActions}>
-                    <TouchableOpacity
-                        style={styles.avatarCircle}
-                        onPress={() => navigation.navigate("Profile")}
-                        accessibilityLabel="Your profile"
-                    >
-                        <Text style={styles.avatarLetter}>{avatarInitial}</Text>
-                    </TouchableOpacity>
-                </View>
             </View>
 
             {/* Rank map unlocks at 10 songs; build card shown until then */}
@@ -700,13 +690,6 @@ export default function RankingsScreen() {
                                 <Path d="m20 20-3.4-3.4" />
                             </Svg>
                         </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.avatarCircle}
-                            onPress={() => navigation.navigate("Profile")}
-                            accessibilityLabel="Your profile"
-                        >
-                            <Text style={styles.avatarLetter}>{avatarInitial}</Text>
-                        </TouchableOpacity>
                     </View>
                 </View>
 
@@ -831,19 +814,6 @@ const styles = StyleSheet.create({
         gap: 8,
         marginTop: 4,
         alignItems: "center",
-    },
-    avatarCircle: {
-        width: 32,
-        height: 32,
-        borderRadius: 9,
-        backgroundColor: colors.ink,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    avatarLetter: {
-        color: "#fff",
-        fontWeight: "700",
-        fontSize: 17,
     },
     iconBtn: {
         width: 32,
