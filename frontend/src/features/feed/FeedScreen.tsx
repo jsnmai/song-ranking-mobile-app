@@ -681,14 +681,25 @@ export default function FeedScreen() {
                         : nextThisOrThat,
                 )
             } else if (thisOrThatDisplayModeRef.current === "full") {
-                // Nothing live, and we weren't already resting in collapsed/cooldown — nothing to
-                // show. If we WERE resting (a confirm/dismiss just put the server into its real
-                // cooldown, which is exactly why this came back null), leave that view exactly as
-                // it is rather than collapsing it to nothing on the next natural refetch.
+                // Nothing live, and we weren't already resting in collapsed/cooldown locally.
                 setArmedThisOrThatSongId(null)
                 setThisOrThatResult(null)
                 setThisOrThat(null)
+                if (modules.this_or_that_cooldown_until !== null) {
+                    // The server knows why: a pick or dismiss (this session or a prior one — e.g.
+                    // this is a fresh app load) put it in cooldown. Show that resting card instead
+                    // of nothing, using the server's own cooldown end time.
+                    setThisOrThatCooldownNow(Date.now())
+                    setThisOrThatCooldownUntil(new Date(modules.this_or_that_cooldown_until).getTime())
+                    setThisOrThatDisplayMode("cooldown")
+                } else {
+                    // Genuinely nothing — never eligible, or no candidate pairs left.
+                    setThisOrThatDisplayMode("full")
+                }
             }
+            // else: already resting in collapsed/cooldown from something that happened THIS
+            // session — leave it exactly as it is rather than collapsing it to nothing on the next
+            // natural refetch.
             setRerateRadar(modules.rerate_radar)
             setConsensus(modules.consensus)
             setDisagreement(modules.disagreement_spotlight)
@@ -1257,12 +1268,12 @@ export default function FeedScreen() {
             >
                 <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
                     {/* minHeight matches Match Moment's actor avatar so both cards' pills line up. */}
-                    <View style={[styles.fullCellTop, { minHeight: 26 }]}>
+                    <View style={[styles.fullCellTop, { minHeight: 26, backgroundColor: "red" }]}>
                         <View style={styles.goldPill}><Text style={styles.goldPillText}>Re-rate radar</Text></View>
                     </View>
                     {/* Standalone flex child so space-between gives the handle equal room above and below. */}
-                    <Text style={styles.rrUser} numberOfLines={1}>@{r.actor_profile.username}</Text>
-                    <View style={styles.rrBody}>
+                    <Text style={[styles.rrUser, { backgroundColor: "blue" }]} numberOfLines={1}>@{r.actor_profile.username}</Text>
+                    <View style={[styles.rrBody, { backgroundColor: "green" }]}>
                         {r.song.cover_url ? (
                             <Image style={styles.rrArt} source={{ uri: r.song.cover_url }} />
                         ) : (
@@ -1274,7 +1285,7 @@ export default function FeedScreen() {
                         </View>
                     </View>
                     {/* Trajectory: gold line rising/falling between a dim start node and a glowing end node. */}
-                    <View style={styles.rrSpark}>
+                    <View style={[styles.rrSpark, { backgroundColor: "purple" }]}>
                         <Svg width="100%" height="100%" viewBox="0 0 100 42" preserveAspectRatio="none">
                             <Polyline
                                 points={sparkPoints}
@@ -1288,7 +1299,7 @@ export default function FeedScreen() {
                         <View style={[styles.rrSparkStart, { top: startTop }]} />
                         <RadarRipplePoint top={endTop} color={colors.gold} />
                     </View>
-                    <View style={styles.rrDeltaRow}>
+                    <View style={[styles.rrDeltaRow, { backgroundColor: "orange" }]}>
                         <Text style={styles.rrPrev}>{r.previous_score.toFixed(1)}</Text>
                         <Text style={styles.rrNew}>{r.new_score.toFixed(1)}</Text>
                         <View style={[styles.rrDeltaChip, { backgroundColor: `${deltaColor}26` }]}>
@@ -1625,7 +1636,10 @@ export default function FeedScreen() {
     // Heads the This-or-That card, mirroring renderSocialCardsHeader's row. Only shows when there's
     // actually a card underneath it (full, collapsed, or cooldown) — never a label over empty space.
     const renderThisOrThatHeader = () => {
-        if (thisOrThat === null) return null
+        // Cooldown can render without `thisOrThat` (e.g. a fresh app load mid-cooldown, where the
+        // server only sends the cooldown timer, not the original pair) — so this can't just check
+        // `thisOrThat !== null` the way the other module headers do.
+        if (thisOrThat === null && thisOrThatDisplayMode !== "cooldown") return null
         return (
             <View style={[styles.sectionRow, { marginTop: 6, marginBottom: 8 }]}>
                 <Text style={styles.sectionLabel}>FOR YOU</Text>
@@ -1670,27 +1684,35 @@ export default function FeedScreen() {
         )
     }
 
-    // Resting state right after a confirmed pick — same shape as the collapsed teaser (mini art
-    // stack + kicker) but not tappable, with a live "Xh Ym" countdown instead of a chevron.
+    // Resting state right after a confirmed pick, OR after a fresh app load lands mid-cooldown (no
+    // local memory of the actual pair — the server only sends the cooldown timer then). Same shape
+    // as the collapsed teaser (mini art stack + kicker) but not tappable, with a live "Xh Ym"
+    // countdown instead of a chevron. Falls back to a plain icon where the art stack would go when
+    // there's no pair data to show.
     const renderThisOrThatCooldown = () => {
-        if (thisOrThat === null) return null
         const remainingMs = Math.max(0, (thisOrThatCooldownUntil ?? thisOrThatCooldownNow) - thisOrThatCooldownNow)
         const remainingHours = Math.floor(remainingMs / (60 * 60 * 1000))
         const remainingMinutes = Math.floor((remainingMs % (60 * 60 * 1000)) / (60 * 1000))
         return (
-            <View style={styles.totCollapsed} testID="feed-this-or-that-cooldown">
-                <View style={styles.totCollapsedArtStack}>
-                    {thisOrThat.left.song.cover_url ? (
-                        <Image style={[styles.totCollapsedArt, styles.totCooldownArtRound, styles.totCollapsedArtBack]} source={{ uri: thisOrThat.left.song.cover_url }} />
-                    ) : (
-                        <View style={[styles.totCollapsedArt, styles.totCooldownArtRound, styles.totCollapsedArtBack, { backgroundColor: colors.navyHi }]} />
-                    )}
-                    {thisOrThat.right.song.cover_url ? (
-                        <Image style={[styles.totCollapsedArt, styles.totCooldownArtRound, styles.totCollapsedArtFront]} source={{ uri: thisOrThat.right.song.cover_url }} />
-                    ) : (
-                        <View style={[styles.totCollapsedArt, styles.totCooldownArtRound, styles.totCollapsedArtFront, { backgroundColor: colors.navyHi }]} />
-                    )}
-                </View>
+            <BouncyPressable style={styles.totCollapsed} testID="feed-this-or-that-cooldown">
+                {thisOrThat !== null ? (
+                    <View style={styles.totCollapsedArtStack}>
+                        {thisOrThat.left.song.cover_url ? (
+                            <Image style={[styles.totCollapsedArt, styles.totCooldownArtRound, styles.totCollapsedArtBack]} source={{ uri: thisOrThat.left.song.cover_url }} />
+                        ) : (
+                            <View style={[styles.totCollapsedArt, styles.totCooldownArtRound, styles.totCollapsedArtBack, { backgroundColor: colors.navyHi }]} />
+                        )}
+                        {thisOrThat.right.song.cover_url ? (
+                            <Image style={[styles.totCollapsedArt, styles.totCooldownArtRound, styles.totCollapsedArtFront]} source={{ uri: thisOrThat.right.song.cover_url }} />
+                        ) : (
+                            <View style={[styles.totCollapsedArt, styles.totCooldownArtRound, styles.totCollapsedArtFront, { backgroundColor: colors.navyHi }]} />
+                        )}
+                    </View>
+                ) : (
+                    <View style={styles.totCooldownIconFallback}>
+                        <TuneIcon color={colors.gold} size={16} />
+                    </View>
+                )}
                 <View style={styles.totCollapsedText}>
                     <View style={styles.totCollapsedKickerRow}>
                         <TuneIcon color={colors.gold} size={11} />
@@ -1704,7 +1726,7 @@ export default function FeedScreen() {
                         {remainingHours}<Text style={styles.totCooldownCountdownUnit}>h</Text> {remainingMinutes}<Text style={styles.totCooldownCountdownUnit}>m</Text>
                     </Text>
                 </View>
-            </View>
+            </BouncyPressable>
         )
     }
 
@@ -1713,9 +1735,11 @@ export default function FeedScreen() {
     // submit. No rank numbers or bucket labels show on the card itself — only the pill's color
     // teases the bucket — so nothing nudges the pick before it's made.
     const renderThisOrThat = () => {
+        // Cooldown can render even without `thisOrThat` (see renderThisOrThatCooldown) — check it
+        // first. Collapsed and the full card both need the actual pair, so they still bail below.
+        if (thisOrThatDisplayMode === "cooldown") return renderThisOrThatCooldown()
         if (thisOrThat === null) return null
         if (thisOrThatDisplayMode === "collapsed") return renderThisOrThatCollapsed()
-        if (thisOrThatDisplayMode === "cooldown") return renderThisOrThatCooldown()
         const tone = bucketColor(thisOrThat.bucket)
         const resolving = thisOrThatSaving || thisOrThatResult !== null
         const option = (side: ThisOrThatModule["left"], edge: "left" | "right", artStyle: typeof totLeftArtStyle) => {
@@ -4535,6 +4559,17 @@ const styles = StyleSheet.create({
     totCollapsedArtStack: {
         width: 48,
         height: 32,
+        flexShrink: 0,
+    },
+    // Stands in for the art stack on the cooldown card when there's no local pair data to show
+    // (e.g. a fresh app load landed mid-cooldown).
+    totCooldownIconFallback: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: colors.navyHi,
+        alignItems: "center",
+        justifyContent: "center",
         flexShrink: 0,
     },
     totCollapsedArt: {

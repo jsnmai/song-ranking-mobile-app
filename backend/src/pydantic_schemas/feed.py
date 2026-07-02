@@ -218,6 +218,12 @@ class FeedModulesResponse(BaseModel):
     """
 
     this_or_that: ThisOrThatModule | None = None
+    # Set only when this_or_that is null specifically because of the post-action cooldown (not
+    # "under the rated threshold" or "no candidate pairs") — lets the Feed render the right resting
+    # card (collapsed vs. cooldown-with-countdown) even on a fresh app load, with no client memory
+    # of which action just happened.
+    this_or_that_cooldown_until: datetime | None = None
+    this_or_that_cooldown_reason: str | None = None
     rerate_radar: RerateRadarItem | None = None
     consensus: ConsensusModule | None = None
     disagreement_spotlight: DisagreementModule | None = None

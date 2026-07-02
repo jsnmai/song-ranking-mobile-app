@@ -120,6 +120,11 @@ export type ThisOrThatUndoResponse = {
 // data is null (its card stays locked). Mirrors backend/src/pydantic_schemas/feed.py::FeedModulesResponse.
 export type FeedModulesResponse = {
     this_or_that: ThisOrThatModule | null;
+    // Set only when this_or_that is null specifically because of the post-action cooldown — lets
+    // the Feed show the right resting card even on a fresh app load, with no memory of which
+    // action (a pick or a dismiss) just happened.
+    this_or_that_cooldown_until: string | null;
+    this_or_that_cooldown_reason: "chosen" | "dismissed" | null;
     rerate_radar: RerateRadarItem | null;
     consensus: ConsensusModule | null;
     disagreement_spotlight: DisagreementModule | null;

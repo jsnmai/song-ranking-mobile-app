@@ -216,6 +216,8 @@ const ranking: RankingResponse = {
 
 const emptyModules = {
     this_or_that: null,
+    this_or_that_cooldown_until: null,
+    this_or_that_cooldown_reason: null,
     rerate_radar: null,
     consensus: null,
     disagreement_spotlight: null,
@@ -905,6 +907,35 @@ describe("FeedScreen", () => {
         })
         expect(screen.getByTestId("feed-this-or-that-cooldown")).toBeTruthy()
         expect(screen.queryByTestId("feed-this-or-that-card")).toBeNull()
+    })
+
+    it("shows the cooldown resting card on a fresh app load that lands mid-cooldown, with no local pair data", async () => {
+        // Regression test for the exact bug report: confirm/dismiss on one app session, then a
+        // full app reload (a brand new component mount, no in-memory session state at all) during
+        // the 48h cooldown. The server has no `this_or_that` to send (still null), but now also
+        // reports *why* via this_or_that_cooldown_until/reason — the Feed must render the cooldown
+        // card from that alone, not just leave the area blank.
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 15, bookmarked_count: 0 },
+            following_count: 0,
+        }
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+        mockGetFeedModules.mockResolvedValue({
+            ...emptyModules,
+            this_or_that_cooldown_until: "2026-07-04T20:17:00Z",
+            this_or_that_cooldown_reason: "chosen",
+        })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-cooldown")).toBeTruthy()
+        })
+        expect(screen.getByText("FOR YOU")).toBeTruthy()
+        expect(screen.getByText("Next comparison in")).toBeTruthy()
+        expect(screen.queryByTestId("feed-this-or-that-card")).toBeNull()
+        expect(screen.queryByTestId("feed-this-or-that-collapsed")).toBeNull()
     })
 
     it("closes the result popup into cooldown and navigates to Rankings on View in Rankings", async () => {

@@ -1,4 +1,5 @@
 # Business logic for the social feed.
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
@@ -19,7 +20,7 @@ from src.crud.circle_aggregates import (
 from src.crud.comparison import list_compared_song_pairs
 from src.crud.feed import FeedEventRow, latest_rerate_from_followed, list_feed_events
 from src.crud.follow import count_following
-from src.crud.interaction_event import create_interaction_event, latest_interaction_event_at
+from src.crud.interaction_event import create_interaction_event, latest_interaction_event
 from src.crud.rating import RankingRow, count_user_rankings, list_user_bucket_rankings_with_songs
 from src.pydantic_schemas.feed import (
     CircleRatersResponse,
@@ -109,6 +110,22 @@ THIS_OR_THAT_COOLDOWN = timedelta(hours=48)
 THIS_OR_THAT_EVENTS = ("this_or_that_chosen", "this_or_that_dismissed")
 
 
+@dataclass(frozen=True)
+class ThisOrThatState:
+    """
+    What the Feed should show for This-or-That, and why.
+
+    `cooldown_until`/`cooldown_reason` are set whenever `module` is None specifically because of the
+    post-action cooldown (not simply "under the rated threshold" or "no candidate pairs") — the Feed
+    needs this to render the right resting card (collapsed vs. cooldown-with-countdown) even after a
+    fresh app load, when there's no client-side memory of which action just happened.
+    """
+
+    module: "ThisOrThatModule | None"
+    cooldown_until: datetime | None = None
+    cooldown_reason: str | None = None
+
+
 def list_song_circle_raters(
     db: Session,
     viewer_id: int,
@@ -144,13 +161,19 @@ def get_feed_modules(
     locked). Each aggregate rides the shared social-access predicates, so the whole module strip honors
     the same taste-visibility/block/deleted-user rules as the feed.
     """
-    this_or_that = _this_or_that_module(db, user_id)
+    this_or_that_state = _this_or_that_module(db, user_id)
     if not _module_gate_met(db, user_id):
         # Base social gate not met — personal refinement can still show, but skip social module queries.
-        return FeedModulesResponse(this_or_that=this_or_that)
+        return FeedModulesResponse(
+            this_or_that=this_or_that_state.module,
+            this_or_that_cooldown_until=this_or_that_state.cooldown_until,
+            this_or_that_cooldown_reason=this_or_that_state.cooldown_reason,
+        )
     rerate_row = latest_rerate_from_followed(db, user_id)
     return FeedModulesResponse(
-        this_or_that=this_or_that,
+        this_or_that=this_or_that_state.module,
+        this_or_that_cooldown_until=this_or_that_state.cooldown_until,
+        this_or_that_cooldown_reason=this_or_that_state.cooldown_reason,
         rerate_radar=_rerate_radar_item(rerate_row) if rerate_row is not None else None,
         consensus=_consensus_module(db, user_id),
         disagreement_spotlight=_disagreement_module(db, user_id),
@@ -281,20 +304,23 @@ def _this_or_that_pair_context(
 def _this_or_that_module(
     db: Session,
     user_id: int,
-) -> ThisOrThatModule | None:
+) -> ThisOrThatState:
     """Pick one adjacent same-bucket pair that can refine the viewer's current Rankings."""
     if count_user_rankings(db, user_id) < THIS_OR_THAT_MIN_RATED:
-        return None
-    latest_prompt_action = latest_interaction_event_at(
+        return ThisOrThatState(module=None)
+    latest_prompt_action = latest_interaction_event(
         db,
         user_id,
         THIS_OR_THAT_EVENTS,
     )
-    if (
-        latest_prompt_action is not None
-        and datetime.now(timezone.utc) - latest_prompt_action < THIS_OR_THAT_COOLDOWN
-    ):
-        return None
+    if latest_prompt_action is not None:
+        cooldown_until = latest_prompt_action.created_at + THIS_OR_THAT_COOLDOWN
+        if datetime.now(timezone.utc) < cooldown_until:
+            return ThisOrThatState(
+                module=None,
+                cooldown_until=cooldown_until,
+                cooldown_reason=latest_prompt_action.event_type.removeprefix("this_or_that_"),
+            )
 
     bucket_rows = {
         bucket: list_user_bucket_rankings_with_songs(
@@ -326,13 +352,15 @@ def _this_or_that_module(
             updated_at = max(left.ranking.updated_at, right.ranking.updated_at)
             candidates.append((updated_at, bucket_index, left.ranking.position, left, right))
     if not candidates:
-        return None
+        return ThisOrThatState(module=None)
 
     _, _, _, left, right = min(candidates, key=lambda entry: (entry[0], entry[1], entry[2]))
-    return ThisOrThatModule(
-        left=_this_or_that_option(left),
-        right=_this_or_that_option(right),
-        bucket=left.ranking.bucket,
+    return ThisOrThatState(
+        module=ThisOrThatModule(
+            left=_this_or_that_option(left),
+            right=_this_or_that_option(right),
+            bucket=left.ranking.bucket,
+        )
     )
 
 

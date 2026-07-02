@@ -252,6 +252,8 @@ def test_feed_modules_empty_returns_null_modules(client: TestClient):
     body = _modules(client, token)
 
     assert body["this_or_that"] is None
+    assert body["this_or_that_cooldown_until"] is None
+    assert body["this_or_that_cooldown_reason"] is None
     assert body["rerate_radar"] is None
     assert body["consensus"] is None
     assert body["disagreement_spotlight"] is None
@@ -599,7 +601,39 @@ def test_this_or_that_dismiss_records_explicit_context_and_cools_down(
     assert event.context["left_song_id"] == left.id
     assert event.context["right_song_id"] == right.id
     assert event.context["rank_distance"] == 1
-    assert _modules(client, token)["this_or_that"] is None
+    modules = _modules(client, token)
+    assert modules["this_or_that"] is None
+    # The Feed needs to know *why* it's null to render the right resting card on a fresh load.
+    assert modules["this_or_that_cooldown_reason"] == "dismissed"
+    assert modules["this_or_that_cooldown_until"] is not None
+
+
+def test_this_or_that_cooldown_reason_is_chosen_after_a_confirmed_pick(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    """A confirmed pick reports cooldown_reason: chosen, distinct from a dismiss."""
+    monkeypatch.setattr("src.services.feed.THIS_OR_THAT_MIN_RATED", 10)
+    token = _register(client, "chosen-cooldown@example.com", "chosencooldownuser")
+    user_id = _user_id(db_session, "chosencooldownuser")
+    left, right = _seed_this_or_that_rankings(db_session, user_id)
+
+    response = client.post(
+        "/api/v1/feed/this-or-that/choice",
+        json={
+            "left_song_id": left.id,
+            "right_song_id": right.id,
+            "winner_song_id": right.id,
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+
+    modules = _modules(client, token)
+    assert modules["this_or_that"] is None
+    assert modules["this_or_that_cooldown_reason"] == "chosen"
+    assert modules["this_or_that_cooldown_until"] is not None
 
 
 def test_feed_modules_gate_opens_when_met(client: TestClient, monkeypatch):
