@@ -7,7 +7,15 @@
 // The backend feed for this card is NOT built yet (it has to be implemented
 // separately); pass item={null} to render the coming-soon placeholder state that
 // holds the slot until the endpoint exists.
+import { useEffect } from "react"
 import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import Animated, {
+    Easing,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withTiming,
+} from "react-native-reanimated"
 
 import { colors, fonts } from "../../theme"
 import { NewReleaseItem } from "./types"
@@ -16,6 +24,29 @@ import { NewReleaseItem } from "./types"
 const SCRIM = "rgba(12,9,16,0.32)"
 const SCRIM_HEAVY = "rgba(12,9,16,0.82)"
 const PLACEHOLDER_BG = "#221826"
+
+function NewReleasePulseDot() {
+    const pulse = useSharedValue(0)
+
+    useEffect(() => {
+        pulse.value = withRepeat(withTiming(1, { duration: 1500, easing: Easing.out(Easing.ease) }), -1, false)
+    }, [pulse])
+
+    const ringStyle = useAnimatedStyle(() => ({
+        opacity: 0.52 * (1 - pulse.value),
+        transform: [{ scale: 0.58 + pulse.value * 1.45 }],
+    }))
+    const coreStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: 0.94 + pulse.value * 0.1 }],
+    }))
+
+    return (
+        <View style={styles.flagDotWrap}>
+            <Animated.View style={[styles.flagDotRing, ringStyle]} />
+            <Animated.View style={[styles.flagDot, coreStyle]} />
+        </View>
+    )
+}
 
 export default function NewReleaseCard({
     item,
@@ -63,7 +94,7 @@ export default function NewReleaseCard({
             <View style={styles.bottomScrim} />
             <View style={styles.inner}>
                 <View style={styles.flagRow}>
-                    <View style={styles.flagDot} />
+                    <NewReleasePulseDot />
                     <Text style={styles.flagText}>NEW RELEASE</Text>
                 </View>
                 <View>
@@ -106,6 +137,20 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         gap: 7,
+    },
+    flagDotWrap: {
+        width: 16,
+        height: 16,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    flagDotRing: {
+        position: "absolute",
+        width: 14,
+        height: 14,
+        borderRadius: 7,
+        borderWidth: 1.4,
+        borderColor: colors.accent,
     },
     flagDot: {
         width: 9,
