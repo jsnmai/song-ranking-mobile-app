@@ -692,11 +692,13 @@ export default function DiscoverScreen() {
                 contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 92 }]}
                 keyboardShouldPersistTaps="handled"
                 refreshControl={
-                    <RefreshControl
-                        refreshing={refreshing}
-                        onRefresh={onRefresh}
-                        tintColor={colors.inkDim}
-                    />
+                    searchFocused ? undefined : (
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={onRefresh}
+                            tintColor={colors.inkDim}
+                        />
+                    )
                 }
             >
                 {searchFocused ? (
