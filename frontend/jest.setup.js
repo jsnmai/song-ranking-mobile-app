@@ -62,3 +62,24 @@ jest.mock('expo-sharing', () => ({
     isAvailableAsync: jest.fn(() => Promise.resolve(true)),
     shareAsync: jest.fn(() => Promise.resolve()),
 }))
+
+// Default safe-area context so components that call useSafeAreaInsets (e.g.
+// BackToTopButton) render in tests without an explicit <SafeAreaProvider>.
+// The library's bundled jest/mock does not export the hooks in this version, so
+// provide a minimal manual mock: passthrough provider/view + zero insets.
+jest.mock('react-native-safe-area-context', () => {
+    const React = require('react')
+    const { View } = require('react-native')
+    const insets = { top: 0, right: 0, bottom: 0, left: 0 }
+    const frame = { x: 0, y: 0, width: 390, height: 844 }
+    const Passthrough = ({ children }) => React.createElement(React.Fragment, null, children)
+    return {
+        SafeAreaProvider: Passthrough,
+        SafeAreaView: View,
+        SafeAreaConsumer: ({ children }) => children(insets),
+        SafeAreaInsetsContext: { Consumer: ({ children }) => children(insets), Provider: Passthrough },
+        useSafeAreaInsets: () => insets,
+        useSafeAreaFrame: () => frame,
+        initialWindowMetrics: { insets, frame },
+    }
+})
