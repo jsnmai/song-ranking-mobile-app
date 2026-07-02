@@ -99,7 +99,10 @@ docker run --rm -p 8000:8000 \
 
 Production start command (baked into the image entrypoint, no need to set it on
 the host): `alembic upgrade head` then
-`uvicorn main:app --host 0.0.0.0 --port $PORT`.
+`uvicorn main:app --host 0.0.0.0 --port $PORT --proxy-headers
+--forwarded-allow-ips "${FORWARDED_ALLOW_IPS:-*}"`. The forwarded-IP trust makes
+the per-IP rate limiter see real client IPs behind Railway's proxy instead of
+one shared proxy IP; it is safe because the container is not directly reachable.
 
 ## Railway setup (one-time, manual)
 
