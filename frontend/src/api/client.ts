@@ -24,6 +24,8 @@ type RequestOptions = { // What options are allowed when calling request()
 type UnauthorizedHandler = () => void | Promise<void>
 
 let unauthorizedHandler: UnauthorizedHandler | null = null
+let handledUnauthorizedToken: string | null = null
+let unauthorizedHandlerPromise: Promise<void> | null = null
 
 export class ApiError extends Error {
     status: number
@@ -41,6 +43,24 @@ export class ApiError extends Error {
 
 export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): void {
     unauthorizedHandler = handler
+    handledUnauthorizedToken = null
+    unauthorizedHandlerPromise = null
+}
+
+async function runUnauthorizedHandler(token: string): Promise<void> {
+    if (!unauthorizedHandler) return
+    if (handledUnauthorizedToken === token) {
+        if (unauthorizedHandlerPromise) {
+            await unauthorizedHandlerPromise
+        }
+        return
+    }
+
+    handledUnauthorizedToken = token
+    unauthorizedHandlerPromise = Promise.resolve(unauthorizedHandler()).finally(() => {
+        unauthorizedHandlerPromise = null
+    })
+    await unauthorizedHandlerPromise
 }
 
 async function request<ResponseType>(requestMethod: string, path: string, requestOptions: RequestOptions={}): Promise<ResponseType> {
@@ -71,8 +91,8 @@ async function request<ResponseType>(requestMethod: string, path: string, reques
     if (!response.ok) {                 // fetch only throws on network failure, not on 4xx/5xx responses — check ok manually
         const requestId = response.headers.get("X-Request-ID") ?? data.request_id ?? null
         const detail = errorDetailToString(data.detail)
-        if (response.status === 401 && requestOptions.token && unauthorizedHandler) {
-            await unauthorizedHandler()
+        if (response.status === 401 && requestOptions.token) {
+            await runUnauthorizedHandler(requestOptions.token)
         }
         throw new ApiError(
             response.status,

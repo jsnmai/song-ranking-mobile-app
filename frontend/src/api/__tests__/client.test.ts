@@ -44,6 +44,26 @@ describe("apiClient", () => {
         expect(unauthorizedHandler).not.toHaveBeenCalled()
     })
 
+    it("runs the unauthorized handler once for repeated 401s from the same token", async () => {
+        const unauthorizedHandler = jest.fn()
+        setUnauthorizedHandler(unauthorizedHandler)
+        mockFetch.mockResolvedValue({
+            ok: false,
+            status: 401,
+            headers: {
+                get: () => null,
+            },
+            json: async () => ({ detail: "Could not validate credentials." }),
+        })
+
+        await Promise.allSettled([
+            apiClient.get("/api/v1/notifications/unread-count", "expired-token"),
+            apiClient.get("/api/v1/feed", "expired-token"),
+        ])
+
+        expect(unauthorizedHandler).toHaveBeenCalledTimes(1)
+    })
+
     it("normalizes FastAPI validation errors before screens render them", async () => {
         mockFetch.mockResolvedValue({
             ok: false,
