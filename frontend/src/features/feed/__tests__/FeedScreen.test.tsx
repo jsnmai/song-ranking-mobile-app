@@ -912,7 +912,7 @@ describe("FeedScreen", () => {
     it("shows the cooldown resting card on a fresh app load that lands mid-cooldown, with no local pair data", async () => {
         // Regression test for the exact bug report: confirm/dismiss on one app session, then a
         // full app reload (a brand new component mount, no in-memory session state at all) during
-        // the 48h cooldown. The server has no `this_or_that` to send (still null), but now also
+        // the 24h cooldown. The server has no `this_or_that` to send (still null), but now also
         // reports *why* via this_or_that_cooldown_until/reason — the Feed must render the cooldown
         // card from that alone, not just leave the area blank.
         mockCurrentProfile = {

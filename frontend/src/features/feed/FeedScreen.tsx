@@ -112,12 +112,12 @@ const ORBIT_STARS = [
 ] as const
 
 // Re-rate Radar sparkline row height (px); the trajectory node tops are computed against it.
-const SPARK_H = 28
+const SPARK_H = 20
 
-// Matches the backend's THIS_OR_THAT_COOLDOWN (48h). Used to seed the cooldown countdown the
+// Matches the backend's THIS_OR_THAT_COOLDOWN (24h). Used to seed the cooldown countdown the
 // instant a pick is confirmed, client-side — close enough to server truth for the current
 // session; a later real module fetch replaces the whole view with server state regardless.
-const THIS_OR_THAT_COOLDOWN_MS = 48 * 60 * 60 * 1000
+const THIS_OR_THAT_COOLDOWN_MS = 24 * 60 * 60 * 1000
 
 const FRIEND_AVATARS = [
     { id: 1, initial: "M", color: colors.accent },
@@ -530,14 +530,15 @@ export default function FeedScreen() {
     useEffect(() => {
         thisOrThatDisplayModeRef.current = thisOrThatDisplayMode
     }, [thisOrThatDisplayMode])
-    // Timestamp the cooldown view counts down to (real 48h server cooldown, stamped the moment we
+    // Timestamp the cooldown view counts down to (real 24h server cooldown, stamped the moment we
     // enter cooldown — close enough to server truth for this session; a fresh module fetch later
-    // replaces this whole view with whatever the server actually has). Ticks once a minute.
+    // replaces this whole view with whatever the server actually has). Ticks once a second so the
+    // seconds digit in the countdown actually moves.
     const [thisOrThatCooldownUntil, setThisOrThatCooldownUntil] = useState<number | null>(null)
     const [thisOrThatCooldownNow, setThisOrThatCooldownNow] = useState(() => Date.now())
     useEffect(() => {
         if (thisOrThatDisplayMode !== "cooldown") return
-        const interval = setInterval(() => setThisOrThatCooldownNow(Date.now()), 60_000)
+        const interval = setInterval(() => setThisOrThatCooldownNow(Date.now()), 1000)
         return () => clearInterval(interval)
     }, [thisOrThatDisplayMode])
     const hiddenThisOrThatPair = useRef<string | null>(null)
@@ -1693,6 +1694,7 @@ export default function FeedScreen() {
         const remainingMs = Math.max(0, (thisOrThatCooldownUntil ?? thisOrThatCooldownNow) - thisOrThatCooldownNow)
         const remainingHours = Math.floor(remainingMs / (60 * 60 * 1000))
         const remainingMinutes = Math.floor((remainingMs % (60 * 60 * 1000)) / (60 * 1000))
+        const remainingSeconds = Math.floor((remainingMs % (60 * 1000)) / 1000)
         return (
             <BouncyPressable style={styles.totCollapsed} testID="feed-this-or-that-cooldown">
                 {thisOrThat !== null ? (
@@ -1718,12 +1720,12 @@ export default function FeedScreen() {
                         <TuneIcon color={colors.gold} size={11} />
                         <Text style={styles.totCollapsedKicker}>THIS-OR-THAT</Text>
                     </View>
-                    <Text style={styles.totCollapsedBody}>Next comparison in</Text>
+                    <Text style={styles.totCollapsedBody} numberOfLines={1}>Next comparison in</Text>
                 </View>
                 <View style={styles.totCooldownCountdown}>
                     <ClockIcon color={colors.cdim} size={14} />
-                    <Text style={styles.totCooldownCountdownText}>
-                        {remainingHours}<Text style={styles.totCooldownCountdownUnit}>h</Text> {remainingMinutes}<Text style={styles.totCooldownCountdownUnit}>m</Text>
+                    <Text style={styles.totCooldownCountdownText} numberOfLines={1}>
+                        {remainingHours}<Text style={styles.totCooldownCountdownUnit}>h</Text> {remainingMinutes}<Text style={styles.totCooldownCountdownUnit}>m</Text> {remainingSeconds}<Text style={styles.totCooldownCountdownUnit}>s</Text>
                     </Text>
                 </View>
             </BouncyPressable>
@@ -3139,7 +3141,7 @@ const styles = StyleSheet.create({
         color: "rgba(241,236,221,0.85)",
         // Extra vertical margin (on top of the even space-between gaps) gives the handle more
         // breathing room above and below without touching the symmetric top/bottom card padding.
-        marginVertical: 6,
+        marginVertical: 3,
     },
     rrBody: {
         flexDirection: "row",
@@ -3147,8 +3149,8 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     rrArt: {
-        width: 28,
-        height: 28,
+        width: 24,
+        height: 24,
         borderRadius: 6,
     },
     rrSong: {
@@ -3978,10 +3980,16 @@ const styles = StyleSheet.create({
     },
     miniTile: {
         flex: 1,
-        height: 82,
+        height: 92,
         borderRadius: 14,
         overflow: "hidden",
     },
+    // Icon row pinned to the top padding, text block pinned to the bottom padding
+    // (space-between) — the taller tile height above gives both enough room that
+    // this reads as a true symmetric 12/12 gap instead of the text crowding the
+    // bottom edge. Keeping the icon row pinned at a fixed offset (rather than
+    // vertically centering the whole block) also lets the background decorations
+    // (consensusBars, versusDecoration) line up against a known, stable position.
     miniTileInner: {
         flex: 1,
         padding: 12,
@@ -4005,7 +4013,7 @@ const styles = StyleSheet.create({
         position: "absolute",
         left: 12,
         right: 12,
-        bottom: 22,
+        bottom: 30,
         flexDirection: "row",
         alignItems: "flex-end",
         gap: 3,
@@ -4016,18 +4024,19 @@ const styles = StyleSheet.create({
         opacity: 0.12,
         borderRadius: 1,
     },
-    // Match Moment (compact tile) — head-to-head versus decoration
+    // Match Moment (compact tile) — head-to-head versus decoration. Anchored to the
+    // same 12/36 top band as miniTileTop's lock circle (not centered across the
+    // whole tile) so the hatch boxes and ">" sit level with the lock icon.
     versusDecoration: {
         position: "absolute",
-        top: 0,
+        top: 12,
         left: 0,
         right: 0,
-        bottom: 0,
+        height: 36,
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
         gap: 7,
-        paddingBottom: 26,
     },
     // ── Find friends card ─────────────────────────────────────────────────
     findFriendsCard: {
@@ -4626,7 +4635,7 @@ const styles = StyleSheet.create({
     totCooldownCountdown: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 6,
+        gap: 5,
         flexShrink: 0,
     },
     totCooldownCountdownText: {

@@ -106,7 +106,7 @@ MATCH_MOMENT_CANDIDATE_LIMIT = 50
 # FeedScreen's gettingStartedComplete) so this doesn't surface in the same moment as those other
 # unlocks — and so there's a real backlog of ranked songs before we ask for refinement.
 THIS_OR_THAT_MIN_RATED = 15
-THIS_OR_THAT_COOLDOWN = timedelta(hours=48)
+THIS_OR_THAT_COOLDOWN = timedelta(hours=24)
 THIS_OR_THAT_EVENTS = ("this_or_that_chosen", "this_or_that_dismissed")
 
 
