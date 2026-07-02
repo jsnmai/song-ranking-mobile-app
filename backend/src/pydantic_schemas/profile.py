@@ -23,15 +23,54 @@ class ProfileSetup(BaseModel):
     @classmethod
     def username_valid_chars(cls, value: str) -> str:
         """Reject usernames that contain anything other than letters, numbers, or underscores."""
-        if not re.match(r"^[a-zA-Z0-9_]+$", value):
-            raise ValueError("Username may only contain letters, numbers, and underscores.")
-        return value.lower()  # store and compare as lowercase
+        return normalize_username(value)
 
     @field_validator("display_name")
     @classmethod
     def display_name_strip(cls, value: str) -> str:
         """Strip leading and trailing whitespace from the display name."""
         return value.strip()
+
+
+# Usernames that would collide with app routes, trusted support identities, or
+# future public profile URLs are never user-claimable.
+RESERVED_USERNAMES = {
+    "admin",
+    "administrator",
+    "api",
+    "auth",
+    "help",
+    "legal",
+    "listn",
+    "listnapp",
+    "me",
+    "moderation",
+    "moderator",
+    "null",
+    "official",
+    "privacy",
+    "profile",
+    "root",
+    "search",
+    "security",
+    "settings",
+    "setup",
+    "staff",
+    "support",
+    "system",
+    "terms",
+    "undefined",
+}
+
+
+def normalize_username(value: str) -> str:
+    """Normalize and validate a public username before it can be stored."""
+    if not re.match(r"^[a-zA-Z0-9_]+$", value):
+        raise ValueError("Username may only contain letters, numbers, and underscores.")
+    normalized = value.lower()
+    if normalized in RESERVED_USERNAMES:
+        raise ValueError("That username is reserved.")
+    return normalized
 
 
 # Avatar colors are chosen from a fixed palette of design tokens (mirrored in the
@@ -82,9 +121,7 @@ class ProfileEdit(BaseModel):
         """Reject usernames that contain anything other than letters, numbers, or underscores."""
         if value is None:
             return None
-        if not re.match(r"^[a-zA-Z0-9_]+$", value):
-            raise ValueError("Username may only contain letters, numbers, and underscores.")
-        return value.lower()  # store and compare as lowercase
+        return normalize_username(value)
 
     @field_validator("display_name")
     @classmethod

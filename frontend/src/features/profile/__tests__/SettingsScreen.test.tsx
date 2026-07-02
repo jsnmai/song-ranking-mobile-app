@@ -209,6 +209,22 @@ describe("SettingsScreen", () => {
         })
     })
 
+    it("can reset a chosen icon color back to automatic", async () => {
+        mockGetMyProfile.mockResolvedValueOnce({ ...profile, avatar_color: "mint" })
+        render(<SettingsScreen navigation={navigationProp} route={{} as never} />)
+
+        await waitFor(() => expect(screen.getByTestId("edit-color-default")).toBeTruthy())
+        fireEvent.press(screen.getByTestId("edit-color-default"))
+        fireEvent.press(screen.getByTestId("edit-save"))
+
+        await waitFor(() => {
+            expect(mockUpdateMyProfile).toHaveBeenCalledWith(
+                { avatar_color: null },
+                "test-token",
+            )
+        })
+    })
+
     it("blocks save and shows a hint for an invalid username", async () => {
         render(<SettingsScreen navigation={navigationProp} route={{} as never} />)
 

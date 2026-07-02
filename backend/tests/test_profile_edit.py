@@ -62,6 +62,28 @@ def test_edit_username_lowercased_and_persisted(client: TestClient):
     assert me.json()["username"] == "newhandle"
 
 
+def test_register_rejects_reserved_username(client: TestClient):
+    """Registration cannot claim route-like or trusted system usernames."""
+    response = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": "reserved@example.com",
+            "password": "password123",
+            "birthdate": "2000-01-01",
+            "display_name": "Reserved",
+            "username": "Support",
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_edit_rejects_reserved_username(client: TestClient):
+    """Profile edits cannot move a user onto a reserved username."""
+    token = _register(client, "reserved-edit@example.com", "reservededit")
+    response = _patch(client, token, {"username": "me"})
+    assert response.status_code == 422
+
+
 def test_edit_avatar_color(client: TestClient):
     """A valid palette token is saved and returned."""
     token = _register(client, "d@example.com", "ddd")
@@ -76,6 +98,19 @@ def test_edit_avatar_color_ink(client: TestClient):
     response = _patch(client, token, {"avatar_color": "ink"})
     assert response.status_code == 200
     assert response.json()["avatar_color"] == "ink"
+
+
+def test_edit_avatar_color_can_reset_to_default(client: TestClient):
+    """Submitting explicit null clears a chosen avatar color back to the deterministic default."""
+    token = _register(client, "avatar-reset@example.com", "avatarreset")
+    response = _patch(client, token, {"avatar_color": "mint"})
+    assert response.status_code == 200
+    assert response.json()["avatar_color"] == "mint"
+
+    response = _patch(client, token, {"avatar_color": None})
+
+    assert response.status_code == 200
+    assert response.json()["avatar_color"] is None
 
 
 def test_edit_rejects_unknown_color(client: TestClient):
@@ -136,3 +171,15 @@ def test_edit_empty_body_keeps_profile_unchanged(client: TestClient):
     assert body["display_name"] == "Jjj"
     assert body["username"] == "jjj"
     assert body["avatar_color"] is None
+
+
+def test_edit_profile_is_rate_limited(client: TestClient):
+    """Profile edits are bounded so username/profile write attempts cannot be hammered."""
+    token = _register(client, "rate-profile@example.com", "rateprofile")
+
+    last_response = None
+    for index in range(31):
+        last_response = _patch(client, token, {"display_name": f"Rate {index}"})
+
+    assert last_response is not None
+    assert last_response.status_code == 429

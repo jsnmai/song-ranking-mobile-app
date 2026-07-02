@@ -80,7 +80,7 @@ export type ProfileSetupRequest = {
 export type ProfileEditRequest = {
     display_name?: string;
     username?: string;
-    avatar_color?: AvatarColor;
+    avatar_color?: AvatarColor | null;
     timezone?: string;
 }
 

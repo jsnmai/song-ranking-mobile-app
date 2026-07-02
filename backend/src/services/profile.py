@@ -373,7 +373,7 @@ def update_my_profile(
         profile.username = data.username
     if data.display_name is not None:
         profile.display_name = data.display_name
-    if data.avatar_color is not None:
+    if "avatar_color" in data.model_fields_set:
         profile.avatar_color = data.avatar_color
     if data.timezone is not None:
         profile.timezone = data.timezone

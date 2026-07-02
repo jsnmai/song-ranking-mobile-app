@@ -1,8 +1,9 @@
 # Pydantic schemas define the shapes of request bodies and response payloads.
-import re
 from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+from src.pydantic_schemas.profile import normalize_username
 
 
 class UserLogin(BaseModel):
@@ -41,9 +42,7 @@ class UserRegister(BaseModel):
     @classmethod
     def username_valid_chars(cls, value: str) -> str:
         """Reject usernames with anything other than letters, numbers, or underscores."""
-        if not re.match(r"^[a-zA-Z0-9_]+$", value):
-            raise ValueError("Username may only contain letters, numbers, and underscores.")
-        return value.lower()
+        return normalize_username(value)
 
     @field_validator("display_name")
     @classmethod

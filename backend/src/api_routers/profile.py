@@ -96,8 +96,10 @@ def profile_me(
     "/me",
     response_model=ProfileSummaryResponse,
 )
+@limiter.limit("30/minute")
 def profile_edit(
     data: ProfileEdit,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ProfileSummaryResponse:
