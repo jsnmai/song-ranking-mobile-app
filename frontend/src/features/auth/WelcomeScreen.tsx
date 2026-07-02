@@ -24,12 +24,12 @@ import Animated, {
     withTiming,
 } from "react-native-reanimated"
 import { useFocusEffect } from "@react-navigation/native"
-import { NativeStackNavigationProp } from "@react-navigation/native-stack"
+import { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack"
 import { AuthStackParamList } from "../../navigation/AuthNavigator"
 import { fonts } from "../../theme"
 
 type WelcomeNavigationProp = NativeStackNavigationProp<AuthStackParamList, "Welcome">
-type Props = { navigation: WelcomeNavigationProp }
+type Props = NativeStackScreenProps<AuthStackParamList, "Welcome">
 
 // Auth-screen palette (cream canvas)
 const BG = "#f4f1eb"
@@ -235,8 +235,9 @@ const STEPS: Step[] = [
     },
 ]
 
-export default function WelcomeScreen({ navigation }: Props) {
-    const [step, setStep] = useState(0)
+export default function WelcomeScreen({ navigation, route }: Props) {
+    const initialStep = route.params?.initialStep ?? 0
+    const [step, setStep] = useState(initialStep)
     const { width } = useWindowDimensions()
     const isLast = step === N - 1
 
@@ -252,7 +253,10 @@ export default function WelcomeScreen({ navigation }: Props) {
     }
 
     // Continuous animated position: 0 = step 0, 1 = step 1, 2 = step 2
-    const animPos = useSharedValue(0)
+    // Starts in step with `step` above — otherwise the slide strip and CTA
+    // cross-fade (both driven by animPos) would open on step 0 while the text
+    // and dots (driven by `step`) show the initial step.
+    const animPos = useSharedValue(initialStep)
     const startPos = useSharedValue(0)
     const startStep = useSharedValue(0)
 

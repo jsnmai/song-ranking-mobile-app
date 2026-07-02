@@ -33,6 +33,10 @@ type AuthContextType = {
     deleteAccount: (confirmation: string) => Promise<void>;
     logout: () => Promise<void>;
     refreshProfile: () => Promise<void>;
+    // True once this device has ever completed login/register — lets the Welcome
+    // screen skip straight to the Create account/Sign in step after a logout,
+    // instead of replaying the intro carousel like a brand-new device would see.
+    hasOnboarded: boolean;
 }
 // Create the actual context box. Starts empty: (null)
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -49,6 +53,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const [profile, setProfile] = useState<Profile | null>(null)
     const [token, setToken] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(true)
+    const [hasOnboarded, setHasOnboarded] = useState(false)
+
+    const markOnboarded = async () => {
+        await SecureStore.setItemAsync(KEYS.HAS_ONBOARDED, "true")
+        setHasOnboarded(true)
+    }
 
     const tryFetchProfile = async (jwt: string) => {
         try {
@@ -81,6 +91,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setToken(tokenResponse.access_token)
         setUser(currentUser)
         await tryFetchProfile(tokenResponse.access_token)
+        await markOnboarded()
     }
 
     const register = async (
@@ -96,6 +107,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         await SecureStore.setItemAsync(KEYS.JWT_TOKEN, response.access_token)
         setToken(response.access_token)
         setUser(response.user)
+        await markOnboarded()
     }
 
     const logout = async () => {
@@ -120,6 +132,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     const checkStoredToken = async () => {
         try {
+            const onboarded = await SecureStore.getItemAsync(KEYS.HAS_ONBOARDED)
+            if (onboarded) setHasOnboarded(true)
+
             const token = await SecureStore.getItemAsync(KEYS.JWT_TOKEN)
             // NO token: means user has never logged in or previously logged out
             if (!token) {
@@ -153,7 +168,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }, []) 
 
     return (
-        <AuthContext.Provider value={{ user, profile, token, isLoading, login, register, deleteAccount, logout, refreshProfile }}>
+        <AuthContext.Provider value={{ user, profile, token, isLoading, login, register, deleteAccount, logout, refreshProfile, hasOnboarded }}>
             {children}
         </AuthContext.Provider>
     )
