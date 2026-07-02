@@ -42,13 +42,17 @@ function titleCase(s: string): string {
     return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
+// Missing-genre fallback — kept as a named constant so constellationLayout can
+// recognize it and keep it out of the world's dead-center slot (see below).
+export const UNKNOWN_GENRE = "Unknown"
+
 // Derive a single genre label from the song's enrichment fields.
 function songGenre(r: RankingResponse): string {
     const deezer = r.song.genre_deezer?.trim()
     if (deezer) return deezer
     const mb = r.song.genres_mb?.find((g) => g && g.trim())
     if (mb) return titleCase(mb.trim())
-    return "Other"
+    return UNKNOWN_GENRE
 }
 
 // ── enrich: rankings → RankMapSong[] with genre, score-rank and sortable date ─
@@ -185,10 +189,14 @@ export function gravityLayout(
     return { sun, planets }
 }
 
-// GENRES — the biggest genres become named constellations; members jitter
-// around a center and connect in a ring. Brightness encodes score. Beyond what
-// we can legibly chart, the long tail collapses into one "Other" constellation
-// so no song disappears from this lens.
+// GENRES — every distinct genre becomes its own constellation (no cap, no
+// rollup); members jitter around a center and connect in a ring. Brightness
+// encodes score. Centers spiral outward — golden-angle, same spacing rule as
+// the gravity spiral — from the world's middle (where pan={0,0}/zoom=1 lands,
+// see stageTop/worldLeft in RankMapScreen), so your most-charted genre sits
+// dead center and rarer ones radiate out from there. UNKNOWN_GENRE is excluded
+// from that center slot even when it's the largest group — it's a data gap,
+// not a taste signal, so it shouldn't read as "the genre that defines you".
 export type ConNode = { s: RankMapSong; x: number; y: number; size: number; bright: number }
 export type Constellation = {
     genre: string
@@ -196,18 +204,6 @@ export type Constellation = {
     nodes: ConNode[]
     color: string
 }
-
-// Center slots as fractions of the world; the first four match the original
-// layout so small libraries look unchanged. Cap = number of slots.
-const GENRE_CENTERS = [
-    { x: 0.3, y: 0.28 },
-    { x: 0.72, y: 0.4 },
-    { x: 0.4, y: 0.7 },
-    { x: 0.78, y: 0.74 },
-    { x: 0.2, y: 0.52 },
-    { x: 0.6, y: 0.16 },
-]
-export const OTHER_GENRE = "Other"
 
 export function constellationLayout(
     songs: RankMapSong[],
@@ -219,22 +215,20 @@ export function constellationLayout(
         ;(groups[s.genre] = groups[s.genre] || []).push(s)
     })
     const ordered = Object.entries(groups).sort((a, b) => b[1].length - a[1].length)
-    const cap = GENRE_CENTERS.length
-
-    // Each charted genre gets its own constellation; once there are more genres
-    // than slots, everything past the top (cap − 1) rolls into "Other".
-    const display: [string, RankMapSong[]][] =
-        ordered.length <= cap
-            ? ordered
-            : [
-                ...ordered.slice(0, cap - 1),
-                [OTHER_GENRE, ordered.slice(cap - 1).flatMap(([, list]) => list)],
-            ]
+    // Bump Unknown out of the dead-center slot — swap it with the next entry so a real
+    // genre still takes the center whenever one exists (only true if it's the only group).
+    if (ordered.length > 1 && ordered[0][0] === UNKNOWN_GENRE) {
+        ;[ordered[0], ordered[1]] = [ordered[1], ordered[0]]
+    }
+    const cx = w / 2
+    const cy = h / 2
+    const spacing = Math.min(w, h) * 0.16
 
     const out: Constellation[] = []
-    display.forEach(([genre, list], gi) => {
-        const slot = GENRE_CENTERS[gi]
-        const ctr = { x: w * slot.x, y: h * slot.y }
+    ordered.forEach(([genre, list], gi) => {
+        const r = spacing * Math.sqrt(gi)
+        const a = gi * GA
+        const ctr = gi === 0 ? { x: cx, y: cy } : { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r }
         const rr = rng("con" + genre)
         const nodes: ConNode[] = list.map((s, i) => {
             const ang = (i / list.length) * Math.PI * 2 + rr() * 1.2
@@ -247,7 +241,7 @@ export function constellationLayout(
                 bright: 0.35 + (s.score / 10) * 0.65,
             }
         })
-        out.push({ genre, ctr, nodes, color: genre === OTHER_GENRE ? colors.cdim : bucketColor(nodes[0].s.bucket) })
+        out.push({ genre, ctr, nodes, color: bucketColor(nodes[0].s.bucket) })
     })
     return out
 }

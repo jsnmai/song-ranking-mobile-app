@@ -136,19 +136,28 @@ describe("RankMapScreen", () => {
         expect(screen.getByLabelText("Filter Okay").props.accessibilityState).toEqual({ selected: true })
     })
 
-    it("rolls genres beyond the chart cap into an 'Other' filter", () => {
-        // 8 distinct genres > the 6 constellation slots, so the tail collapses.
+    it("shows every distinct genre as its own filter, with no cap or rollup", () => {
+        // 8 distinct genres — there's no slot limit anymore, so all 8 get their own pill.
         const genres = ["Pop", "Rock", "Jazz", "Hip-Hop", "Metal", "Folk", "Soul", "Funk"]
         mockRouteRankings = genres.map((g, i) => withGenre(mk(i + 1, `Song ${i}`, 9 - i * 0.5, "like"), g))
         render(<RankMapScreen />)
 
         fireEvent.press(screen.getByLabelText("Genres view"))
 
-        // Top genres keep their own pill; the rest fold into one "Other" pill so
-        // no song vanishes from the lens.
+        genres.forEach((g) => expect(screen.getByLabelText(`Filter ${g}`)).toBeTruthy())
+        expect(screen.queryByLabelText("Filter Other")).toBeNull()
+    })
+
+    it("labels songs with no genre metadata as their own 'Unknown' filter", () => {
+        const named = withGenre(mk(1, "Song 1", 9, "like"), "Pop")
+        const unenriched = withGenre(mk(2, "Song 2", 5, "like"), "")
+        mockRouteRankings = [named, unenriched]
+        render(<RankMapScreen />)
+
+        fireEvent.press(screen.getByLabelText("Genres view"))
+
         expect(screen.getByLabelText("Filter Pop")).toBeTruthy()
-        expect(screen.getByLabelText("Filter Other")).toBeTruthy()
-        expect(screen.queryByLabelText("Filter Funk")).toBeNull()
+        expect(screen.getByLabelText("Filter Unknown")).toBeTruthy()
     })
 
     it("zooms the map with the floating controls", () => {

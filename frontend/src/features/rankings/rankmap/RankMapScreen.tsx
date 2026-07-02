@@ -312,14 +312,6 @@ export default function RankMapScreen() {
     }, [songs, worldW, worldH])
     const genreNames = useMemo(() => genreLayouts.map((con) => con.genre), [genreLayouts])
     const activeGenreSet = activeGenres ?? new Set(genreNames)
-    // A song's filter key is the constellation it landed in (its genre, or
-    // "Other" when its genre rolled into the tail) — never its raw genre, so the
-    // "Other" pill toggles the long-tail songs and nothing falls through.
-    const genreOfSong = useMemo(() => {
-        const m = new Map<number, string>()
-        genreLayouts.forEach((con) => con.nodes.forEach((n) => m.set(n.s.id, con.genre)))
-        return m
-    }, [genreLayouts])
 
     const updatePan = (next: Point) => {
         panRef.current = next
@@ -452,7 +444,7 @@ export default function RankMapScreen() {
     const visible = (s: RankMapSong) => {
         const eraIdx = currentEra.indexBySongId.get(s.id) ?? 0
         const passesTime = view !== "gravity" || !timeMode || eraIdx <= effEra
-        if (view === "genres") return passesTime && activeGenreSet.has(genreOfSong.get(s.id) ?? s.genre)
+        if (view === "genres") return passesTime && activeGenreSet.has(s.genre)
         return passesTime && activeBuckets.has(s.bucket)
     }
     const opacityOf = (s: RankMapSong, base = 1) => (visible(s) ? base : 0.12)
@@ -972,7 +964,7 @@ const styles = StyleSheet.create({
         minHeight: 36,
         flexDirection: "row",
         alignItems: "center",
-        justifyContent: "space-between",
+        justifyContent: "center",
         gap: 10,
         paddingHorizontal: 4,
         paddingTop: 7,
@@ -984,6 +976,7 @@ const styles = StyleSheet.create({
         fontSize: 7.5,
         letterSpacing: 0.55,
         color: colors.cdim,
+        textAlign: "center",
     },
     timeTravelTop: {
         position: "absolute",
