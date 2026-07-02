@@ -87,9 +87,34 @@ export type MatchMomentModule = {
     created_at: string;
 }
 
+export type ThisOrThatOption = {
+    ranking_id: number;
+    song: PersistedSong;
+    bucket: Bucket;
+    position: number;
+    score: number;
+}
+
+export type ThisOrThatModule = {
+    left: ThisOrThatOption;
+    right: ThisOrThatOption;
+    bucket: Bucket;
+}
+
+export type ThisOrThatChoiceResponse = {
+    recorded: boolean;
+    swapped: boolean;
+    winner_song_id: number;
+}
+
+export type ThisOrThatDismissResponse = {
+    dismissed: boolean;
+}
+
 // Bundled Feed module aggregates (GET /api/v1/feed/modules). Every module is live; a module with no
 // data is null (its card stays locked). Mirrors backend/src/pydantic_schemas/feed.py::FeedModulesResponse.
 export type FeedModulesResponse = {
+    this_or_that: ThisOrThatModule | null;
     rerate_radar: RerateRadarItem | null;
     consensus: ConsensusModule | null;
     disagreement_spotlight: DisagreementModule | null;

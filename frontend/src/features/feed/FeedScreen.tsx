@@ -52,8 +52,23 @@ import { useAuth } from "../auth/AuthContext"
 import { blockUser } from "../profile/apiRequests"
 import { ProfileBase, ReportReason } from "../profile/types"
 import { getMyRankingByDeezerId, getMyRankingBySongId, removeRating } from "../rankings/apiRequests"
-import { getFeedModules, getSongCircleRaters, listMyFeed, reportRatingEvent } from "./apiRequests"
-import { ConsensusModule, DisagreementModule, FeedEvent, MatchMomentModule, RerateRadarItem, SplitDecisionModule } from "./types"
+import {
+    chooseThisOrThat,
+    dismissThisOrThat,
+    getFeedModules,
+    getSongCircleRaters,
+    listMyFeed,
+    reportRatingEvent,
+} from "./apiRequests"
+import {
+    ConsensusModule,
+    DisagreementModule,
+    FeedEvent,
+    MatchMomentModule,
+    RerateRadarItem,
+    SplitDecisionModule,
+    ThisOrThatModule,
+} from "./types"
 
 type FeedNavigation = CompositeNavigationProp<
     NativeStackNavigationProp<FeedStackParamList, "FeedHome">,
@@ -439,6 +454,9 @@ export default function FeedScreen() {
     const [disagreement, setDisagreement] = useState<DisagreementModule | null>(null)
     const [splitDecision, setSplitDecision] = useState<SplitDecisionModule | null>(null)
     const [matchMoment, setMatchMoment] = useState<MatchMomentModule | null>(null)
+    const [thisOrThat, setThisOrThat] = useState<ThisOrThatModule | null>(null)
+    const [thisOrThatSaving, setThisOrThatSaving] = useState(false)
+    const hiddenThisOrThatPair = useRef<string | null>(null)
     const listRef = useRef<FlashListRef<FeedEvent>>(null)
     // Drives the "pull out then slam" emphasis pulse on the hero verdict's activity card once the
     // tap-to-scroll lands on it. A single shared value is enough — only the hero card binds to it.
@@ -506,6 +524,7 @@ export default function FeedScreen() {
     }, [token])
 
     const clearModules = useCallback(() => {
+        setThisOrThat(null)
         setRerateRadar(null)
         setConsensus(null)
         setDisagreement(null)
@@ -514,16 +533,22 @@ export default function FeedScreen() {
     }, [])
 
     // Feed module aggregates ride their own bundled endpoint, refreshed alongside the feed.
-    // Below the base gate we clear state and DON'T fetch — no live module data before the gate is met,
-    // and no stale data lingering if the profile drops back under the gate. A module fetch failure just
-    // leaves cards on their locked state and never blanks the feed.
+    // The personal This-or-That prompt is not friend-gated, so we still fetch once the user has
+    // enough rated songs even if the social module gate is closed. The backend keeps social cards null
+    // until their gate is met. A module fetch failure just leaves cards locked and never blanks Feed.
     const loadModules = useCallback(async () => {
-        if (!token || !modulesGateComplete) {
+        if (!token || (!modulesGateComplete && !gettingStartedComplete)) {
             clearModules()
             return
         }
         try {
             const modules = await getFeedModules(token)
+            const nextThisOrThat = modules.this_or_that
+            setThisOrThat(
+                _thisOrThatKey(nextThisOrThat) === hiddenThisOrThatPair.current
+                    ? null
+                    : nextThisOrThat,
+            )
             setRerateRadar(modules.rerate_radar)
             setConsensus(modules.consensus)
             setDisagreement(modules.disagreement_spotlight)
@@ -532,7 +557,7 @@ export default function FeedScreen() {
         } catch {
             clearModules()
         }
-    }, [token, modulesGateComplete, clearModules])
+    }, [token, modulesGateComplete, gettingStartedComplete, clearModules])
 
     const handleLoadMore = () => {
         if (!nextCursor || isLoading || isLoadingMore) return
@@ -574,6 +599,42 @@ export default function FeedScreen() {
     const handleMatchMomentPress = () => {
         if (matchMoment === null) return
         navigation.navigate("SongDetail", { song: matchMoment.winner })
+    }
+
+    const handleThisOrThatPick = async (winnerSongId: number) => {
+        if (!token || thisOrThat === null || thisOrThatSaving) return
+        setThisOrThatSaving(true)
+        try {
+            await chooseThisOrThat(
+                thisOrThat.left.song.id,
+                thisOrThat.right.song.id,
+                winnerSongId,
+                token,
+            )
+            hiddenThisOrThatPair.current = _thisOrThatKey(thisOrThat)
+            setThisOrThat(null)
+            refreshProfile()
+        } catch {
+            Alert.alert("Could not save that pick", "Pull to refresh and try the next one.")
+        } finally {
+            setThisOrThatSaving(false)
+        }
+    }
+
+    const handleThisOrThatDismiss = async () => {
+        if (!token || thisOrThat === null || thisOrThatSaving) return
+        const dismissed = thisOrThat
+        hiddenThisOrThatPair.current = _thisOrThatKey(dismissed)
+        setThisOrThat(null)
+        try {
+            await dismissThisOrThat(
+                dismissed.left.song.id,
+                dismissed.right.song.id,
+                token,
+            )
+        } catch {
+            // Dismiss is a soft preference signal; keep Feed calm if it fails.
+        }
     }
 
     const handleFindUsers = () => {
@@ -1362,6 +1423,62 @@ export default function FeedScreen() {
         )
     }
 
+    const renderThisOrThat = () => {
+        if (thisOrThat === null) return null
+        const bucket = thisOrThat.bucket
+        const tone = bucketColor(bucket)
+        const bucketLabel = bucket === "alright" ? "Okay" : bucket[0].toUpperCase() + bucket.slice(1)
+        const option = (side: ThisOrThatModule["left"], label: string) => (
+            <TouchableOpacity
+                style={[styles.totOption, thisOrThatSaving && styles.totOptionDisabled]}
+                activeOpacity={0.82}
+                onPress={() => handleThisOrThatPick(side.song.id)}
+                disabled={thisOrThatSaving}
+                testID={`feed-this-or-that-option-${side.song.id}`}
+            >
+                {side.song.cover_url ? (
+                    <Image style={styles.totArt} source={{ uri: side.song.cover_url }} />
+                ) : (
+                    <View style={[styles.totArt, { backgroundColor: colors.paper2 }]} />
+                )}
+                <View style={styles.totOptionText}>
+                    <Text style={styles.totSideLabel}>{label}</Text>
+                    <Text style={styles.totSongTitle} numberOfLines={2}>{side.song.title}</Text>
+                    <Text style={styles.totSongArtist} numberOfLines={1}>{side.song.artist}</Text>
+                    <Text style={styles.totRankLine}>#{side.position} · {side.score.toFixed(1)}</Text>
+                </View>
+            </TouchableOpacity>
+        )
+
+        return (
+            <View style={styles.thisOrThatCard} testID="feed-this-or-that-card">
+                <TouchableOpacity
+                    style={styles.totDismiss}
+                    onPress={handleThisOrThatDismiss}
+                    disabled={thisOrThatSaving}
+                    hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                    testID="feed-this-or-that-dismiss"
+                >
+                    <Text style={styles.totDismissX}>✕</Text>
+                </TouchableOpacity>
+                <View style={styles.totTopRow}>
+                    <View style={[styles.totPill, { backgroundColor: tone }]}>
+                        <Text style={styles.totPillText}>This or That</Text>
+                    </View>
+                    <Text style={styles.totMeta}>{bucketLabel.toUpperCase()} · NEIGHBORS</Text>
+                </View>
+                <Text style={styles.totTitle}>Which one belongs higher?</Text>
+                <View style={styles.totOptionsRow}>
+                    {option(thisOrThat.left, "A")}
+                    <View style={styles.totVs}>
+                        <Text style={styles.totVsText}>VS</Text>
+                    </View>
+                    {option(thisOrThat.right, "B")}
+                </View>
+            </View>
+        )
+    }
+
     // Heads the whole social-cards area (Recent Verdict + the module grid). Rendered above
     // renderRecentVerdict() so it stays above Recent Verdict whether the verdict is the live hero,
     // the locked teaser, or the compact locked row — in every gate state.
@@ -1697,6 +1814,7 @@ export default function FeedScreen() {
                     data fetched. At the gate: the full-size cards go live per their own data rules. */}
                 {!modulesGateComplete && renderGettingStartedBanner()}
                 {renderFindFriends()}
+                {renderThisOrThat()}
                 {/* SOCIAL CARDS heads the whole area; Recent Verdict is its first card. Recent Verdict
                     sits with the other module cards but is never gated by rated count — only by having
                     a followed verdict — so it can go live before the rest. */}
@@ -1991,6 +2109,7 @@ export default function FeedScreen() {
 
                 {!modulesGateComplete && renderGettingStartedBanner()}
                 {renderFindFriends()}
+                {renderThisOrThat()}
                 {/* SOCIAL CARDS heads the whole area; Recent Verdict is its first card. Recent Verdict
                     sits with the other module cards but is never gated by rated count — only by having
                     a followed verdict — so it can go live before the rest. */}
@@ -2068,6 +2187,11 @@ function _eventLabel(eventType: FeedEvent["event_type"]): string {
     if (eventType === "rerated") return "RERATED"
     if (eventType === "reordered") return "RERANKED"
     return "RATED"
+}
+
+function _thisOrThatKey(module: ThisOrThatModule | null): string | null {
+    if (module === null) return null
+    return `${module.left.song.id}:${module.right.song.id}`
 }
 
 
@@ -3544,6 +3668,133 @@ const styles = StyleSheet.create({
         fontFamily: fonts.display,
         fontSize: 12.5,
         color: "#fff",
+    },
+    // ── This or That refinement ───────────────────────────────────────────
+    thisOrThatCard: {
+        marginHorizontal: 14,
+        marginTop: 2,
+        marginBottom: 8,
+        borderRadius: 16,
+        backgroundColor: colors.paper,
+        borderWidth: 1,
+        borderColor: colors.line,
+        padding: 12,
+        position: "relative",
+        shadowColor: colors.ink,
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
+    },
+    totDismiss: {
+        position: "absolute",
+        top: 10,
+        right: 10,
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: colors.paper2,
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1,
+    },
+    totDismissX: {
+        color: colors.inkSoft,
+        fontSize: 11,
+        fontWeight: "700",
+    },
+    totTopRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        paddingRight: 30,
+    },
+    totPill: {
+        borderRadius: 999,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+    },
+    totPillText: {
+        fontFamily: fonts.monoBold,
+        fontSize: 9,
+        color: "#fff",
+        letterSpacing: 0.6,
+        textTransform: "uppercase",
+    },
+    totMeta: {
+        fontFamily: fonts.monoBold,
+        fontSize: 8.5,
+        color: colors.inkDim,
+        letterSpacing: 0.7,
+    },
+    totTitle: {
+        fontFamily: fonts.display,
+        fontSize: 18,
+        color: colors.ink,
+        marginTop: 8,
+        marginBottom: 10,
+    },
+    totOptionsRow: {
+        flexDirection: "row",
+        alignItems: "stretch",
+        gap: 8,
+    },
+    totOption: {
+        flex: 1,
+        minWidth: 0,
+        backgroundColor: colors.bg,
+        borderWidth: 1,
+        borderColor: colors.line2,
+        borderRadius: 12,
+        padding: 8,
+    },
+    totOptionDisabled: {
+        opacity: 0.55,
+    },
+    totArt: {
+        width: "100%",
+        aspectRatio: 1,
+        borderRadius: 9,
+        marginBottom: 8,
+    },
+    totOptionText: {
+        minHeight: 74,
+    },
+    totSideLabel: {
+        fontFamily: fonts.monoBold,
+        fontSize: 8,
+        color: colors.inkDim,
+        letterSpacing: 1,
+        marginBottom: 3,
+    },
+    totSongTitle: {
+        fontFamily: fonts.display,
+        fontSize: 13,
+        lineHeight: 16,
+        color: colors.ink,
+    },
+    totSongArtist: {
+        fontFamily: fonts.mono,
+        fontSize: 10,
+        lineHeight: 14,
+        color: colors.inkSoft,
+        marginTop: 2,
+    },
+    totRankLine: {
+        fontFamily: fonts.monoBold,
+        fontSize: 9,
+        color: colors.inkDim,
+        marginTop: 5,
+    },
+    totVs: {
+        width: 30,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    totVsText: {
+        fontFamily: fonts.monoBold,
+        fontSize: 10,
+        color: colors.inkDim,
+        letterSpacing: 0.8,
     },
     // ── Ghost activity rows ───────────────────────────────────────────────
     ghostCard: {

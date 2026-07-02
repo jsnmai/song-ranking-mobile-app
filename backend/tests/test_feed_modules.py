@@ -15,7 +15,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.sqlalchemy_tables.comparison import Comparison
+from src.sqlalchemy_tables.interaction_event import InteractionEvent
 from src.sqlalchemy_tables.profile import Profile
+from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.song import Song
 
 
@@ -138,6 +140,76 @@ def _modules(
     return response.json()
 
 
+def _user_id(
+    db_session: Session,
+    username: str,
+) -> int:
+    """Return a registered user's id by username."""
+    return db_session.execute(
+        select(Profile.user_id).where(Profile.username == username)
+    ).scalar_one()
+
+
+def _seed_ranked_song(
+    db_session: Session,
+    user_id: int,
+    deezer_id: int,
+    title: str,
+    bucket: str,
+    position: int,
+    score: float,
+) -> Song:
+    """Seed a current ranking directly for module tests that need many rated songs."""
+    song = Song(
+        deezer_id=deezer_id,
+        isrc=None,
+        title=title,
+        artist="Seed Artist",
+        artist_deezer_id=deezer_id,
+        album="Seed Album",
+        cover_url="https://example.com/cover.jpg",
+        preview_url=None,
+        genre_deezer=None,
+        global_rating_sum=score,
+        global_avg_score=score,
+        global_rating_count=1,
+    )
+    db_session.add(song)
+    db_session.flush()
+    db_session.add(
+        Ranking(
+            user_id=user_id,
+            song_id=song.id,
+            bucket=bucket,
+            position=position,
+            score=score,
+        )
+    )
+    db_session.flush()
+    return song
+
+
+def _seed_this_or_that_rankings(
+    db_session: Session,
+    user_id: int,
+) -> tuple[Song, Song]:
+    """Seed ten ratings with one direct-neighbor pair in Like."""
+    left = _seed_ranked_song(db_session, user_id, 9_101, "Higher Neighbor", "like", 1, 10.0)
+    right = _seed_ranked_song(db_session, user_id, 9_102, "Lower Neighbor", "like", 2, 7.5)
+    for index in range(3, 11):
+        _seed_ranked_song(
+            db_session,
+            user_id,
+            9_100 + index,
+            f"Other {index}",
+            "alright" if index < 7 else "dislike",
+            index - 2 if index < 7 else index - 6,
+            6.0 if index < 7 else 2.0,
+        )
+    db_session.commit()
+    return left, right
+
+
 def _mutual_follow(
     client: TestClient,
     viewer_token: str,
@@ -179,6 +251,7 @@ def test_feed_modules_empty_returns_null_modules(client: TestClient):
 
     body = _modules(client, token)
 
+    assert body["this_or_that"] is None
     assert body["rerate_radar"] is None
     assert body["consensus"] is None
     assert body["disagreement_spotlight"] is None
@@ -199,6 +272,7 @@ def test_feed_modules_gate_blocks_below_rated(client: TestClient, monkeypatch):
     # following = 3, but the viewer has rated 0 (< 10) → gate blocks everything.
 
     body = _modules(client, viewer)
+    assert body["this_or_that"] is None
     assert body["rerate_radar"] is None
     assert body["consensus"] is None
     assert body["disagreement_spotlight"] is None
@@ -218,6 +292,143 @@ def test_feed_modules_gate_blocks_below_following(client: TestClient, monkeypatc
 
     assert _modules(client, viewer)["split_decision"] is None
     assert _modules(client, viewer)["consensus"] is None
+
+
+def test_this_or_that_surfaces_adjacent_pair_without_social_gate(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    """Personal refinement can appear before the friend-gated social modules unlock."""
+    monkeypatch.setattr("src.services.feed.MODULE_GATE_MIN_RATED", 5)
+    monkeypatch.setattr("src.services.feed.MODULE_GATE_MIN_FOLLOWING", 3)
+    monkeypatch.setattr("src.services.feed.THIS_OR_THAT_MIN_RATED", 10)
+    token = _register(client, "tot@example.com", "totuser")
+    user_id = _user_id(db_session, "totuser")
+    left, right = _seed_this_or_that_rankings(db_session, user_id)
+
+    body = _modules(client, token)
+
+    prompt = body["this_or_that"]
+    assert prompt is not None
+    assert prompt["bucket"] == "like"
+    assert prompt["left"]["song"]["id"] == left.id
+    assert prompt["right"]["song"]["id"] == right.id
+    assert prompt["left"]["position"] == 1
+    assert prompt["right"]["position"] == 2
+    assert body["rerate_radar"] is None
+
+
+def test_this_or_that_choice_swaps_when_lower_neighbor_wins(
+    client: TestClient,
+    db_session: Session,
+):
+    """Choosing the lower-ranked neighbor writes a comparison receipt and swaps the pair."""
+    token = _register(client, "swap@example.com", "swapuser")
+    user_id = _user_id(db_session, "swapuser")
+    left, right = _seed_this_or_that_rankings(db_session, user_id)
+
+    response = client.post(
+        "/api/v1/feed/this-or-that/choice",
+        json={
+            "left_song_id": left.id,
+            "right_song_id": right.id,
+            "winner_song_id": right.id,
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["swapped"] is True
+    comparison = db_session.execute(
+        select(Comparison).where(Comparison.user_id == user_id)
+    ).scalar_one()
+    assert comparison.song_a_id == left.id
+    assert comparison.song_b_id == right.id
+    assert comparison.winner_id == right.id
+    assert comparison.decision_duration_ms is None
+    winner_ranking = db_session.execute(
+        select(Ranking).where(Ranking.user_id == user_id, Ranking.song_id == right.id)
+    ).scalar_one()
+    loser_ranking = db_session.execute(
+        select(Ranking).where(Ranking.user_id == user_id, Ranking.song_id == left.id)
+    ).scalar_one()
+    assert winner_ranking.position == 1
+    assert loser_ranking.position == 2
+    event = db_session.execute(
+        select(InteractionEvent).where(InteractionEvent.user_id == user_id)
+    ).scalar_one()
+    assert event.event_type == "this_or_that_chosen"
+    assert event.context["prompt_type"] == "direct_neighbor"
+    assert event.context["rank_distance"] == 1
+    assert event.context["score_gap"] == 2.5
+    assert event.context["swapped"] is True
+
+
+def test_this_or_that_choice_keeps_order_when_higher_neighbor_wins(
+    client: TestClient,
+    db_session: Session,
+):
+    """Confirming the higher-ranked neighbor records the comparison without mutating order."""
+    token = _register(client, "confirm@example.com", "confirmuser")
+    user_id = _user_id(db_session, "confirmuser")
+    left, right = _seed_this_or_that_rankings(db_session, user_id)
+
+    response = client.post(
+        "/api/v1/feed/this-or-that/choice",
+        json={
+            "left_song_id": left.id,
+            "right_song_id": right.id,
+            "winner_song_id": left.id,
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["swapped"] is False
+    left_ranking = db_session.execute(
+        select(Ranking).where(Ranking.user_id == user_id, Ranking.song_id == left.id)
+    ).scalar_one()
+    right_ranking = db_session.execute(
+        select(Ranking).where(Ranking.user_id == user_id, Ranking.song_id == right.id)
+    ).scalar_one()
+    assert left_ranking.position == 1
+    assert right_ranking.position == 2
+    comparison = db_session.execute(
+        select(Comparison).where(Comparison.user_id == user_id)
+    ).scalar_one()
+    assert comparison.winner_id == left.id
+
+
+def test_this_or_that_dismiss_records_explicit_context_and_cools_down(
+    client: TestClient,
+    db_session: Session,
+):
+    """Dismiss is an explicit signal and suppresses the prompt for the cooldown window."""
+    token = _register(client, "dismiss@example.com", "dismissuser")
+    user_id = _user_id(db_session, "dismissuser")
+    left, right = _seed_this_or_that_rankings(db_session, user_id)
+    assert _modules(client, token)["this_or_that"] is not None
+
+    response = client.post(
+        "/api/v1/feed/this-or-that/dismiss",
+        json={
+            "left_song_id": left.id,
+            "right_song_id": right.id,
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"dismissed": True}
+    event = db_session.execute(
+        select(InteractionEvent).where(InteractionEvent.user_id == user_id)
+    ).scalar_one()
+    assert event.event_type == "this_or_that_dismissed"
+    assert event.context["left_song_id"] == left.id
+    assert event.context["right_song_id"] == right.id
+    assert event.context["rank_distance"] == 1
+    assert _modules(client, token)["this_or_that"] is None
 
 
 def test_feed_modules_gate_opens_when_met(client: TestClient, monkeypatch):

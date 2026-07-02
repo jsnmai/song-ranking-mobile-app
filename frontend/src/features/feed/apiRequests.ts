@@ -1,7 +1,13 @@
 // API functions for the Feed tab.
 import { apiClient } from "../../api/client"
 import { ProfileReportRequest, ProfileReportResponse } from "../profile/types"
-import { CircleRatersResponse, FeedListResponse, FeedModulesResponse } from "./types"
+import {
+    CircleRatersResponse,
+    FeedListResponse,
+    FeedModulesResponse,
+    ThisOrThatChoiceResponse,
+    ThisOrThatDismissResponse,
+} from "./types"
 
 // Calls GET /api/v1/feed
 // The backend reads rating_events from users the current user follows.
@@ -19,6 +25,42 @@ export async function getFeedModules(
     token: string,
 ): Promise<FeedModulesResponse> {
     return apiClient.get<FeedModulesResponse>("/api/v1/feed/modules", token)
+}
+
+// Calls POST /api/v1/feed/this-or-that/choice
+// Records one inline personal ranking-refinement decision.
+export async function chooseThisOrThat(
+    leftSongId: number,
+    rightSongId: number,
+    winnerSongId: number,
+    token: string,
+): Promise<ThisOrThatChoiceResponse> {
+    return apiClient.post<ThisOrThatChoiceResponse>(
+        "/api/v1/feed/this-or-that/choice",
+        {
+            left_song_id: leftSongId,
+            right_song_id: rightSongId,
+            winner_song_id: winnerSongId,
+        },
+        token,
+    )
+}
+
+// Calls POST /api/v1/feed/this-or-that/dismiss
+// Records an explicit "not now" on the visible refinement prompt.
+export async function dismissThisOrThat(
+    leftSongId: number,
+    rightSongId: number,
+    token: string,
+): Promise<ThisOrThatDismissResponse> {
+    return apiClient.post<ThisOrThatDismissResponse>(
+        "/api/v1/feed/this-or-that/dismiss",
+        {
+            left_song_id: leftSongId,
+            right_song_id: rightSongId,
+        },
+        token,
+    )
 }
 
 // Calls GET /api/v1/feed/songs/{songId}/circle-raters

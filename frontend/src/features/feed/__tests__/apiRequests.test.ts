@@ -1,5 +1,5 @@
 // Tests for the feed API request wrapper.
-import { listMyFeed, reportRatingEvent } from "../apiRequests"
+import { chooseThisOrThat, dismissThisOrThat, listMyFeed, reportRatingEvent } from "../apiRequests"
 
 const mockGet = jest.fn()
 const mockPost = jest.fn()
@@ -54,6 +54,37 @@ describe("feed API requests", () => {
                 target_type: "rating_note",
                 reason: "spam",
                 details: "Repeated spam.",
+            },
+            "test-token",
+        )
+    })
+
+    it("records a This-or-That choice", async () => {
+        mockPost.mockResolvedValue({ recorded: true, swapped: true, winner_song_id: 43 })
+
+        await chooseThisOrThat(42, 43, 43, "test-token")
+
+        expect(mockPost).toHaveBeenCalledWith(
+            "/api/v1/feed/this-or-that/choice",
+            {
+                left_song_id: 42,
+                right_song_id: 43,
+                winner_song_id: 43,
+            },
+            "test-token",
+        )
+    })
+
+    it("dismisses a This-or-That prompt", async () => {
+        mockPost.mockResolvedValue({ dismissed: true })
+
+        await dismissThisOrThat(42, 43, "test-token")
+
+        expect(mockPost).toHaveBeenCalledWith(
+            "/api/v1/feed/this-or-that/dismiss",
+            {
+                left_song_id: 42,
+                right_song_id: 43,
             },
             "test-token",
         )

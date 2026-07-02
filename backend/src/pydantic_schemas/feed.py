@@ -1,7 +1,7 @@
 # Pydantic schemas for the social feed.
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.pydantic_schemas.profile import ProfileResponse
 from src.pydantic_schemas.rating import BucketName, RatingEventType
@@ -139,6 +139,61 @@ class MatchMomentModule(BaseModel):
     created_at: datetime
 
 
+class ThisOrThatOption(BaseModel):
+    """One already-rated song in a personal ranking-refinement prompt."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    ranking_id: int
+    song: SongResponse
+    bucket: BucketName
+    position: int
+    score: float
+
+
+class ThisOrThatModule(BaseModel):
+    """Inline Feed prompt asking the viewer to refine two adjacent ranked songs."""
+
+    left: ThisOrThatOption
+    right: ThisOrThatOption
+    bucket: BucketName
+
+
+class ThisOrThatChoiceRequest(BaseModel):
+    """Submit one inline This-or-That decision from the Feed."""
+
+    left_song_id: int = Field(ge=1)
+    right_song_id: int = Field(ge=1)
+    winner_song_id: int = Field(ge=1)
+
+
+class ThisOrThatDismissRequest(BaseModel):
+    """Dismiss the visible This-or-That prompt, including the pair when available."""
+
+    left_song_id: int | None = Field(
+        default=None,
+        ge=1,
+    )
+    right_song_id: int | None = Field(
+        default=None,
+        ge=1,
+    )
+
+
+class ThisOrThatChoiceResponse(BaseModel):
+    """Acknowledgement for a recorded This-or-That decision."""
+
+    recorded: bool
+    swapped: bool
+    winner_song_id: int
+
+
+class ThisOrThatDismissResponse(BaseModel):
+    """Acknowledgement for dismissing the current This-or-That prompt."""
+
+    dismissed: bool
+
+
 class FeedModulesResponse(BaseModel):
     """Bundled Feed module aggregates served behind the shared social-access privacy layer.
 
@@ -148,6 +203,7 @@ class FeedModulesResponse(BaseModel):
     short-circuit to an empty response, and so any individual module with no data stays locked.
     """
 
+    this_or_that: ThisOrThatModule | None = None
     rerate_radar: RerateRadarItem | None = None
     consensus: ConsensusModule | None = None
     disagreement_spotlight: DisagreementModule | None = None

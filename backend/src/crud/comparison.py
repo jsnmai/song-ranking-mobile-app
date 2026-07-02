@@ -2,7 +2,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from src.sqlalchemy_tables.comparison import Comparison
@@ -149,6 +149,33 @@ def create_comparison(
     db.add(comparison)
     db.flush()
     return comparison
+
+
+def list_compared_song_pairs(
+    db: Session,
+    user_id: int,
+    song_ids: list[int],
+) -> set[frozenset[int]]:
+    """Return unordered song pairs the user has already explicitly compared."""
+    if not song_ids:
+        return set()
+    rows = db.execute(
+        select(
+            Comparison.song_a_id,
+            Comparison.song_b_id,
+        )
+        .where(Comparison.user_id == user_id)
+        .where(
+            or_(
+                Comparison.song_a_id.in_(song_ids),
+                Comparison.song_b_id.in_(song_ids),
+            )
+        )
+    ).all()
+    return {
+        frozenset((row[0], row[1]))
+        for row in rows
+    }
 
 
 def refresh_comparison_session(

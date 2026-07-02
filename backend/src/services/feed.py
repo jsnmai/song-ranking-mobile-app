@@ -1,5 +1,5 @@
 # Business logic for the social feed.
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -16,9 +16,11 @@ from src.crud.circle_aggregates import (
     split_decision_candidates,
     viewer_rated_artist_ids,
 )
+from src.crud.comparison import list_compared_song_pairs
 from src.crud.feed import FeedEventRow, latest_rerate_from_followed, list_feed_events
 from src.crud.follow import count_following
-from src.crud.rating import count_user_rankings
+from src.crud.interaction_event import create_interaction_event, latest_interaction_event_at
+from src.crud.rating import RankingRow, count_user_rankings, list_user_bucket_rankings_with_songs
 from src.pydantic_schemas.feed import (
     CircleRatersResponse,
     ConsensusModule,
@@ -30,11 +32,18 @@ from src.pydantic_schemas.feed import (
     RerateRadarItem,
     SplitDecisionModule,
     SplitPerson,
+    ThisOrThatChoiceRequest,
+    ThisOrThatChoiceResponse,
+    ThisOrThatDismissRequest,
+    ThisOrThatDismissResponse,
+    ThisOrThatModule,
+    ThisOrThatOption,
 )
 from src.pydantic_schemas.profile import ProfileResponse
 from src.pydantic_schemas.song import SongResponse
 from src.services.circle_aggregates import CIRCLE_MIN_CONTRIBUTORS
 from src.services.like import like_states_for_events
+from src.services.rating import BUCKET_ORDER, apply_this_or_that_choice
 from src.sqlalchemy_tables.rating_event import RatingEvent
 from src.sqlalchemy_tables.song import Song
 
@@ -89,6 +98,11 @@ SPLIT_CANDIDATE_LIMIT = 50
 # SQL, newest first), so the most recent valid pick is never truncated out before the service picks it.
 MATCH_MOMENT_CANDIDATE_LIMIT = 50
 
+# ── This or That (personal ranking refinement) ───────────────────────────────
+THIS_OR_THAT_MIN_RATED = 10
+THIS_OR_THAT_COOLDOWN = timedelta(hours=48)
+THIS_OR_THAT_EVENTS = ("this_or_that_chosen", "this_or_that_dismissed")
+
 
 def list_song_circle_raters(
     db: Session,
@@ -125,11 +139,13 @@ def get_feed_modules(
     locked). Each aggregate rides the shared social-access predicates, so the whole module strip honors
     the same taste-visibility/block/deleted-user rules as the feed.
     """
+    this_or_that = _this_or_that_module(db, user_id)
     if not _module_gate_met(db, user_id):
-        # Base gate not met — return an all-null response and skip every (expensive) module query.
-        return FeedModulesResponse()
+        # Base social gate not met — personal refinement can still show, but skip social module queries.
+        return FeedModulesResponse(this_or_that=this_or_that)
     rerate_row = latest_rerate_from_followed(db, user_id)
     return FeedModulesResponse(
+        this_or_that=this_or_that,
         rerate_radar=_rerate_radar_item(rerate_row) if rerate_row is not None else None,
         consensus=_consensus_module(db, user_id),
         disagreement_spotlight=_disagreement_module(db, user_id),
@@ -150,6 +166,167 @@ def _module_gate_met(
     if count_user_rankings(db, user_id) < MODULE_GATE_MIN_RATED:
         return False
     return count_following(db, user_id) >= MODULE_GATE_MIN_FOLLOWING
+
+
+def choose_this_or_that(
+    db: Session,
+    user_id: int,
+    data: ThisOrThatChoiceRequest,
+) -> ThisOrThatChoiceResponse:
+    """Submit one inline Feed refinement choice."""
+    result = apply_this_or_that_choice(
+        db,
+        user_id=user_id,
+        left_song_id=data.left_song_id,
+        right_song_id=data.right_song_id,
+        winner_song_id=data.winner_song_id,
+    )
+    return ThisOrThatChoiceResponse(
+        recorded=True,
+        swapped=result.swapped,
+        winner_song_id=result.winner_song_id,
+    )
+
+
+def dismiss_this_or_that(
+    db: Session,
+    user_id: int,
+    data: ThisOrThatDismissRequest,
+) -> ThisOrThatDismissResponse:
+    """Dismiss the current personal refinement prompt for the cooldown window."""
+    context = _this_or_that_pair_context(
+        db,
+        user_id,
+        data.left_song_id,
+        data.right_song_id,
+    )
+    try:
+        create_interaction_event(
+            db,
+            user_id=user_id,
+            event_type="this_or_that_dismissed",
+            source="feed",
+            context=context,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return ThisOrThatDismissResponse(dismissed=True)
+
+
+def _this_or_that_pair_context(
+    db: Session,
+    user_id: int,
+    left_song_id: int | None,
+    right_song_id: int | None,
+) -> dict[str, object] | None:
+    """Build explicit prompt context for a dismiss without making dismiss fragile."""
+    if left_song_id is None or right_song_id is None:
+        return None
+    context: dict[str, object] = {
+        "prompt_type": "direct_neighbor",
+        "left_song_id": left_song_id,
+        "right_song_id": right_song_id,
+    }
+    left = None
+    right = None
+    for bucket in BUCKET_ORDER:
+        rows = list_user_bucket_rankings_with_songs(
+            db,
+            user_id=user_id,
+            bucket=bucket,
+        )
+        for row in rows:
+            if row.ranking.song_id == left_song_id:
+                left = row.ranking
+            elif row.ranking.song_id == right_song_id:
+                right = row.ranking
+    if left is None or right is None or left.bucket != right.bucket:
+        return context
+    context.update(
+        {
+            "bucket": left.bucket,
+            "left_position": left.position,
+            "right_position": right.position,
+            "left_score": left.score,
+            "right_score": right.score,
+            "rank_distance": abs(left.position - right.position),
+            "score_gap": round(abs(left.score - right.score), 4),
+        }
+    )
+    return context
+
+
+def _this_or_that_module(
+    db: Session,
+    user_id: int,
+) -> ThisOrThatModule | None:
+    """Pick one adjacent same-bucket pair that can refine the viewer's current Rankings."""
+    if count_user_rankings(db, user_id) < THIS_OR_THAT_MIN_RATED:
+        return None
+    latest_prompt_action = latest_interaction_event_at(
+        db,
+        user_id,
+        THIS_OR_THAT_EVENTS,
+    )
+    if (
+        latest_prompt_action is not None
+        and datetime.now(timezone.utc) - latest_prompt_action < THIS_OR_THAT_COOLDOWN
+    ):
+        return None
+
+    bucket_rows = {
+        bucket: list_user_bucket_rankings_with_songs(
+            db,
+            user_id=user_id,
+            bucket=bucket,
+        )
+        for bucket in BUCKET_ORDER
+    }
+    song_ids = [
+        row.ranking.song_id
+        for rows in bucket_rows.values()
+        for row in rows
+    ]
+    compared_pairs = list_compared_song_pairs(
+        db,
+        user_id,
+        song_ids,
+    )
+    candidates: list[tuple[datetime, int, int, RankingRow, RankingRow]] = []
+    for bucket_index, bucket in enumerate(BUCKET_ORDER):
+        rows = bucket_rows[bucket]
+        for index in range(len(rows) - 1):
+            left = rows[index]
+            right = rows[index + 1]
+            pair_key = frozenset((left.ranking.song_id, right.ranking.song_id))
+            if pair_key in compared_pairs:
+                continue
+            updated_at = max(left.ranking.updated_at, right.ranking.updated_at)
+            candidates.append((updated_at, bucket_index, left.ranking.position, left, right))
+    if not candidates:
+        return None
+
+    _, _, _, left, right = min(candidates, key=lambda entry: (entry[0], entry[1], entry[2]))
+    return ThisOrThatModule(
+        left=_this_or_that_option(left),
+        right=_this_or_that_option(right),
+        bucket=left.ranking.bucket,
+    )
+
+
+def _this_or_that_option(
+    row: RankingRow,
+) -> ThisOrThatOption:
+    """Build one side of the This-or-That prompt."""
+    return ThisOrThatOption(
+        ranking_id=row.ranking.id,
+        song=SongResponse.model_validate(row.song),
+        bucket=row.ranking.bucket,
+        position=row.ranking.position,
+        score=row.ranking.score,
+    )
 
 
 def _disagreement_module(

@@ -6,7 +6,15 @@ import { ApiError } from "../../../api/client"
 import { RankingResponse } from "../../comparison/types"
 import { Profile } from "../../profile/types"
 import FeedScreen from "../FeedScreen"
-import { ConsensusModule, DisagreementModule, FeedEvent, MatchMomentModule, RerateRadarItem, SplitDecisionModule } from "../types"
+import {
+    ConsensusModule,
+    DisagreementModule,
+    FeedEvent,
+    MatchMomentModule,
+    RerateRadarItem,
+    SplitDecisionModule,
+    ThisOrThatModule,
+} from "../types"
 
 jest.mock("react-native-safe-area-context", () => ({
     useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
@@ -15,6 +23,8 @@ jest.mock("react-native-safe-area-context", () => ({
 const mockNavigate = jest.fn()
 const mockListMyFeed = jest.fn()
 const mockGetFeedModules = jest.fn()
+const mockChooseThisOrThat = jest.fn()
+const mockDismissThisOrThat = jest.fn()
 const mockReportRatingEvent = jest.fn()
 const mockLikeActivity = jest.fn()
 const mockUnlikeActivity = jest.fn()
@@ -100,6 +110,8 @@ jest.mock("../../auth/AuthContext", () => ({
 jest.mock("../apiRequests", () => ({
     listMyFeed: (...args: unknown[]) => mockListMyFeed(...args),
     getFeedModules: (...args: unknown[]) => mockGetFeedModules(...args),
+    chooseThisOrThat: (...args: unknown[]) => mockChooseThisOrThat(...args),
+    dismissThisOrThat: (...args: unknown[]) => mockDismissThisOrThat(...args),
     getSongCircleRaters: (...args: unknown[]) => mockGetSongCircleRaters(...args),
     reportRatingEvent: (...args: unknown[]) => mockReportRatingEvent(...args),
 }))
@@ -183,6 +195,7 @@ const ranking: RankingResponse = {
 }
 
 const emptyModules = {
+    this_or_that: null,
     rerate_radar: null,
     consensus: null,
     disagreement_spotlight: null,
@@ -238,6 +251,26 @@ const matchMomentModule: MatchMomentModule = {
     created_at: "2026-01-01T00:00:00Z",
 }
 
+const neighborSong = { ...song, id: 43, deezer_id: 124, title: "Pink + White" }
+
+const thisOrThatModule: ThisOrThatModule = {
+    bucket: "like",
+    left: {
+        ranking_id: 91,
+        song,
+        bucket: "like",
+        position: 1,
+        score: 10,
+    },
+    right: {
+        ranking_id: 92,
+        song: neighborSong,
+        bucket: "like",
+        position: 2,
+        score: 7.5,
+    },
+}
+
 // A profile that clears the base module gate (rated >= 10 AND following >= 3).
 const gatedProfile = { user_stats: { rated_count: 12, bookmarked_count: 0 }, following_count: 3 }
 
@@ -245,6 +278,8 @@ beforeEach(() => {
     jest.resetAllMocks()
     mockCurrentProfile = { ...mockCurrentProfile, hide_like_counts: false, user_stats: null, following_count: 0 }
     mockGetFeedModules.mockResolvedValue({ ...emptyModules })
+    mockChooseThisOrThat.mockResolvedValue({ recorded: true, swapped: true, winner_song_id: 43 })
+    mockDismissThisOrThat.mockResolvedValue({ dismissed: true })
     mockGetSongCircleRaters.mockResolvedValue({ raters: [] })
     mockRefreshProfile.mockResolvedValue(undefined)
     mockUpdateLikePrivacy.mockResolvedValue({ ...mockCurrentProfile, hide_like_counts: true })
@@ -675,6 +710,56 @@ describe("FeedScreen", () => {
         })
     })
 
+    it("surfaces This-or-That above social cards and records the pick inline", async () => {
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 12, bookmarked_count: 0 },
+            following_count: 0,
+        }
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+        mockGetFeedModules.mockResolvedValue({ ...emptyModules, this_or_that: thisOrThatModule })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-card")).toBeTruthy()
+        })
+        expect(screen.getByText("Which one belongs higher?")).toBeTruthy()
+        expect(screen.getByText("Pink + White")).toBeTruthy()
+
+        fireEvent.press(screen.getByTestId("feed-this-or-that-option-43"))
+
+        await waitFor(() => {
+            expect(mockChooseThisOrThat).toHaveBeenCalledWith(42, 43, 43, "test-token")
+        })
+        expect(mockNavigate).not.toHaveBeenCalledWith("SongDetail", expect.anything())
+        await waitFor(() => {
+            expect(screen.queryByTestId("feed-this-or-that-card")).toBeNull()
+        })
+    })
+
+    it("dismisses This-or-That from the Feed card", async () => {
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 12, bookmarked_count: 0 },
+            following_count: 0,
+        }
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+        mockGetFeedModules.mockResolvedValue({ ...emptyModules, this_or_that: thisOrThatModule })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-card")).toBeTruthy()
+        })
+        fireEvent.press(screen.getByTestId("feed-this-or-that-dismiss"))
+
+        await waitFor(() => {
+            expect(mockDismissThisOrThat).toHaveBeenCalledWith(42, 43, "test-token")
+        })
+        expect(screen.queryByTestId("feed-this-or-that-card")).toBeNull()
+    })
+
     it("falls back to the locked Re-rate Radar card when there is no qualifying re-rate", async () => {
         mockCurrentProfile = {
             ...mockCurrentProfile,
@@ -861,8 +946,8 @@ describe("FeedScreen", () => {
         expect(screen.getByText("Head-to-head picks from people you follow")).toBeTruthy()
     })
 
-    it("keeps the module strip locked and does not fetch modules below the base gate", async () => {
-        // Rated 12 but following < 3 → base gate not met: cards locked, no module fetch, banner explains.
+    it("keeps social cards locked below the base gate while still fetching personal prompts", async () => {
+        // Rated 12 but following < 3 → social gate not met, but This-or-That is personal.
         mockCurrentProfile = {
             ...mockCurrentProfile,
             user_stats: { rated_count: 12, bookmarked_count: 0 },
@@ -875,12 +960,11 @@ describe("FeedScreen", () => {
         await waitFor(() => {
             expect(screen.getByTestId("feed-song-9")).toBeTruthy()
         })
-        // Below the gate the compact "SOCIAL CARDS" teaser grid shows (not the full cards), the
-        // banner explains how to unlock, and we never hit the modules endpoint.
+        // Below the social gate the compact "SOCIAL CARDS" teaser grid shows (not the full cards).
         expect(screen.getByText("SOCIAL CARDS")).toBeTruthy()
         expect(screen.queryByTestId("feed-split-locked")).toBeNull()
         expect(screen.getByText("Rate 5 songs and follow 3 people to unlock the Feed modules below.")).toBeTruthy()
-        expect(mockGetFeedModules).not.toHaveBeenCalled()
+        expect(mockGetFeedModules).toHaveBeenCalledWith("test-token")
     })
 
     it("still reveals the viewer's own scores below the base gate (score reveal is rated-only)", async () => {

@@ -2,11 +2,13 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from src.crud.comparison import create_comparison
+from src.crud.interaction_event import create_interaction_event
 from src.crud.rating import (
     RankingRow,
     apply_ranking_state,
@@ -94,6 +96,14 @@ class RankingPlacementState:
     new_scores_by_song_id: dict[int, float]
 
 
+@dataclass(frozen=True)
+class ThisOrThatChoiceResult:
+    """Result of one explicit Feed refinement choice."""
+
+    swapped: bool
+    winner_song_id: int
+
+
 def finalize_rating(
     db: Session,
     user_id: int,
@@ -141,6 +151,125 @@ def finalize_rating(
         user_id,
     )
     return response
+
+
+def apply_this_or_that_choice(
+    db: Session,
+    user_id: int,
+    left_song_id: int,
+    right_song_id: int,
+    winner_song_id: int,
+) -> ThisOrThatChoiceResult:
+    """Record an explicit adjacent-song preference and update Rankings when it changes order."""
+    if winner_song_id not in {left_song_id, right_song_id}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Winner must be one of the two songs.",
+        )
+    if left_song_id == right_song_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Pick two different songs.",
+        )
+
+    left = get_user_ranking_by_song(
+        db,
+        user_id,
+        left_song_id,
+    )
+    right = get_user_ranking_by_song(
+        db,
+        user_id,
+        right_song_id,
+    )
+    if left is None or right is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Both songs must be in your rankings.",
+        )
+    if left.bucket != right.bucket or abs(left.position - right.position) != 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This prompt is no longer current.",
+        )
+
+    comparison_session_uuid = uuid4()
+    now = datetime.now(timezone.utc)
+    winner = left if winner_song_id == left.song_id else right
+    loser = right if winner_song_id == left.song_id else left
+    swapped = winner.position > loser.position
+
+    try:
+        create_comparison(
+            db,
+            session_uuid=comparison_session_uuid,
+            user_id=user_id,
+            song_a_id=left_song_id,
+            song_b_id=right_song_id,
+            winner_id=winner_song_id,
+            bucket=left.bucket,
+            comparison_index_in_session=1,
+            decision_duration_ms=None,
+            created_at=now,
+            finalized_at=now,
+        )
+        if swapped:
+            bucket_rankings = list_user_bucket_rankings(
+                db,
+                user_id,
+                left.bucket,
+            )
+            old_scores_by_song_id = _score_snapshot(bucket_rankings)
+            left_index = next(index for index, ranking in enumerate(bucket_rankings) if ranking.id == left.id)
+            right_index = next(index for index, ranking in enumerate(bucket_rankings) if ranking.id == right.id)
+            bucket_rankings[left_index], bucket_rankings[right_index] = (
+                bucket_rankings[right_index],
+                bucket_rankings[left_index],
+            )
+            _recalculate_bucket(
+                bucket_rankings,
+                left.bucket,
+            )
+            _apply_score_adjustments(
+                db,
+                old_scores_by_song_id,
+                _score_snapshot(bucket_rankings),
+            )
+        create_interaction_event(
+            db,
+            user_id=user_id,
+            event_type="this_or_that_chosen",
+            song_id=winner_song_id,
+            source="feed",
+            context={
+                "prompt_type": "direct_neighbor",
+                "left_song_id": left_song_id,
+                "right_song_id": right_song_id,
+                "winner_song_id": winner_song_id,
+                "loser_song_id": loser.song_id,
+                "bucket": left.bucket,
+                "left_position": left.position,
+                "right_position": right.position,
+                "left_score": left.score,
+                "right_score": right.score,
+                "rank_distance": abs(left.position - right.position),
+                "score_gap": round(abs(left.score - right.score), 4),
+                "swapped": swapped,
+                "comparison_session_uuid": str(comparison_session_uuid),
+            },
+        )
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise
+
+    return ThisOrThatChoiceResult(
+        swapped=swapped,
+        winner_song_id=winner_song_id,
+    )
 
 
 def persist_finalized_rating(

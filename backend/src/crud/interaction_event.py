@@ -1,6 +1,8 @@
-"""Database writes for interaction_events."""
+"""Database access for interaction_events."""
+from datetime import datetime
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.sqlalchemy_tables.interaction_event import InteractionEvent
@@ -27,3 +29,18 @@ def create_interaction_event(
     db.add(event)
     db.flush()
     return event
+
+
+def latest_interaction_event_at(
+    db: Session,
+    user_id: int,
+    event_types: tuple[str, ...],
+) -> datetime | None:
+    """Return the newest matching interaction timestamp for one user."""
+    return db.execute(
+        select(InteractionEvent.created_at)
+        .where(InteractionEvent.user_id == user_id)
+        .where(InteractionEvent.event_type.in_(event_types))
+        .order_by(InteractionEvent.created_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
