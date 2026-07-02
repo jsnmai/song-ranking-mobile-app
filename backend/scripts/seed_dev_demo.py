@@ -159,7 +159,10 @@ def assert_safe_database_url(database_url: str) -> None:
         raise SeedAbortedError(
             f"Refusing to seed: database host {host!r} is not in allowlist {sorted(ALLOWED_DB_HOSTS)}.",
         )
-    if db_name not in ALLOWED_DB_NAMES:
+    # listn_test-prefixed names cover LISTN_TEST_DATABASE_URL overrides (concurrent local
+    # test sessions each get their own database, e.g. listn_test_s2); still dev-only, and
+    # the host allowlist plus production denylist above continue to apply.
+    if db_name not in ALLOWED_DB_NAMES and not db_name.startswith("listn_test"):
         raise SeedAbortedError(
             f"Refusing to seed: database name {db_name!r} is not in allowlist {sorted(ALLOWED_DB_NAMES)}.",
         )

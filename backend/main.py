@@ -1,6 +1,8 @@
 """Application entry point."""
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from contextlib import asynccontextmanager
 from uuid import uuid4
 
 import sentry_sdk
@@ -29,6 +31,7 @@ from src.api_routers import (
 )
 from src.core.config import settings
 from src.core.limiter import limiter
+from src.services.musicbrainz_tasks import enrichment_sweep_loop
 
 logger = logging.getLogger("listn.api")
 
@@ -45,7 +48,31 @@ if settings.sentry_dsn:
         traces_sample_rate=0.1,
     )
 
-app = FastAPI(title="LISTn API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Own the MusicBrainz retry-sweep loop for the process lifetime.
+
+    The loop sleeps before its first pass, so lifespans that start and stop quickly
+    (tests, TestClient contexts) create and cancel the task without any MusicBrainz
+    traffic or DB reads.
+    """
+    sweep_task = None
+    if settings.enrichment_sweep_enabled:
+        sweep_task = asyncio.create_task(enrichment_sweep_loop())
+    yield
+    if sweep_task is not None:
+        sweep_task.cancel()
+        try:
+            await sweep_task
+        except asyncio.CancelledError:
+            pass
+
+
+app = FastAPI(
+    title="LISTn API",
+    lifespan=lifespan,
+)
 
 # CORS (Cross-Origin Resource Sharing) middlware lets browsers make cross-origin requests to this API.
 # Without it, browsers block requests from one origin e.g. localhost:8081 to a 

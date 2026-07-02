@@ -3,7 +3,7 @@
 import re
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -290,15 +290,58 @@ def update_musicbrainz_metadata(
     genres_mb: list[str],
     release_year: int | None,
     enriched_at: datetime,
+    isrc: str | None = None,
+    artist_mbid: str | None = None,
+    release_group_mbid: str | None = None,
+    track_position: int | None = None,
+    track_count: int | None = None,
 ) -> Song:
     """Apply MusicBrainz enrichment results to a song without committing."""
     song.musicbrainz_id = musicbrainz_id
     song.genres_mb = genres_mb
     song.release_year = release_year
+    # ISRC is only backfilled, never overwritten: a provider-supplied ISRC (legacy Deezer)
+    # is authoritative for that catalog row, while the MusicBrainz one is a harvested match.
+    if song.isrc is None and isrc is not None:
+        song.isrc = isrc
+    song.artist_mbid = artist_mbid
+    song.release_group_mbid = release_group_mbid
+    song.track_position = track_position
+    song.track_count = track_count
     song.metadata_enriched_at = enriched_at
     song.enrichment_status = "enriched"
     song.enrichment_attempt_count = (song.enrichment_attempt_count or 0) + 1
     return song
+
+
+def list_enrichment_retry_candidates(
+    db: Session,
+    limit: int,
+    max_attempts: int,
+) -> list[Song]:
+    """
+    Return songs still waiting on MusicBrainz enrichment, least-attempted first.
+
+    "pending" and "failed_temporary" are retryable; "no_match" and "enriched" are terminal.
+    NULL status is included defensively for pre-status rows, guarded by the enriched_at check.
+    """
+    statement = (
+        select(Song)
+        .where(Song.metadata_enriched_at.is_(None))
+        .where(
+            or_(
+                Song.enrichment_status.in_(["pending", "failed_temporary"]),
+                Song.enrichment_status.is_(None),
+            )
+        )
+        .where(Song.enrichment_attempt_count < max_attempts)
+        .order_by(
+            Song.enrichment_attempt_count.asc(),
+            Song.id.asc(),
+        )
+        .limit(limit)
+    )
+    return list(db.execute(statement).scalars())
 
 
 def mark_song_enrichment_no_match(

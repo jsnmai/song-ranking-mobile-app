@@ -119,6 +119,38 @@ def create_provider_ref(
     return provider_ref
 
 
+def ensure_musicbrainz_ref(
+    db: Session,
+    song: Song,
+    recording_mbid: str,
+    artist_mbid: str | None,
+    release_group_mbid: str | None,
+    confidence: str,
+) -> None:
+    """Stage a MusicBrainz provider ref for an enriched song, idempotently."""
+    statement = (
+        insert(SongProviderRef)
+        .values(
+            song_id=song.id,
+            provider="musicbrainz",
+            provider_track_id=recording_mbid,
+            provider_artist_id=artist_mbid,
+            provider_album_id=release_group_mbid,
+            storefront="global",
+            url=None,
+            artwork_url=None,
+            preview_available=None,
+            confidence=confidence,
+            matched_at=datetime.now(timezone.utc),
+        )
+        .on_conflict_do_nothing(
+            constraint="uq_song_provider_refs_provider_track_storefront",
+        )
+    )
+    db.execute(statement)
+    db.flush()
+
+
 def ensure_deezer_legacy_ref(
     db: Session,
     song: Song,

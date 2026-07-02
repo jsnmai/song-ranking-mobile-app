@@ -84,6 +84,25 @@ class Song(Base):
         Integer,
         nullable=True,
     )
+    # MusicBrainz identity harvest (Slice 3): cross-user/cross-provider song identity.
+    # artist_mbid + release_group_mbid also feed future album features; track position/count
+    # come from the matched release and ground album-completion math later.
+    artist_mbid: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+    )
+    release_group_mbid: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+    )
+    track_position: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+    track_count: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
     spotify_energy: Mapped[float | None] = mapped_column(
         Float,
         nullable=True,

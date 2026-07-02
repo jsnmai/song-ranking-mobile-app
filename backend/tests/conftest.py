@@ -1,6 +1,8 @@
 # Shared pytest fixtures for all backend tests.
 # Sets up a dedicated test database, creates schema once per session,
 # and tears down rows between tests to keep each test isolated.
+import os
+
 import httpx
 import pytest
 from fastapi.testclient import TestClient
@@ -36,7 +38,13 @@ from src.db.base import Base
 
 # Isolated test database — never touches the development database.
 # Create it once before running tests: createdb listn_test
-TEST_DATABASE_URL = "postgresql+psycopg2://postgres:postgres@localhost:5432/listn_test"
+# Override with LISTN_TEST_DATABASE_URL to give concurrent local sessions (e.g. two agent
+# terminals) their own database: parallel suites sharing one database drop each other's
+# tables at session start and produce hundreds of false failures.
+TEST_DATABASE_URL = (
+    os.environ.get("LISTN_TEST_DATABASE_URL")
+    or "postgresql+psycopg2://postgres:postgres@localhost:5432/listn_test"
+)
 
 test_engine = create_engine(TEST_DATABASE_URL)
 TestingSessionLocal = sessionmaker(

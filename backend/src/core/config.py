@@ -90,6 +90,15 @@ class Settings(BaseSettings):
     pwned_password_check_enabled: bool = True
     pwned_password_threshold: int = 0  # reject when breach count exceeds this (0 = reject if seen at all)
 
+    # MusicBrainz enrichment retry sweep: an in-process asyncio loop (single worker;
+    # a queue was rejected by decision) that re-attempts songs stuck in "pending" or
+    # "failed_temporary". The loop sleeps BEFORE its first pass, so short-lived
+    # processes (tests, TestClient lifespans) never generate MusicBrainz traffic.
+    enrichment_sweep_enabled: bool = True
+    enrichment_sweep_interval_seconds: int = 600
+    enrichment_sweep_batch_size: int = 20
+    enrichment_max_attempts: int = 5  # terminal give-up cap per song across all retries
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=False,
