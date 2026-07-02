@@ -691,11 +691,21 @@ export default function DiscoverScreen() {
                 style={styles.scroll}
                 contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 92 }]}
                 keyboardShouldPersistTaps="handled"
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.inkDim} />}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor={colors.inkDim}
+                    />
+                }
             >
                 {searchFocused ? (
                     <>
-                        {isLoading && <ActivityIndicator color={colors.accent} style={styles.spinner} />}
+                        {isLoading && (
+                            <View style={styles.loaderSlot}>
+                                <ActivityIndicator color={colors.accent} />
+                            </View>
+                        )}
 
                         {!isLoading && error !== null && (
                             <Text style={styles.errorText}>{error}</Text>
@@ -883,7 +893,9 @@ export default function DiscoverScreen() {
                 ) : (
                     <>
                         {isDiscoveryLoading && (
-                            <ActivityIndicator color={colors.accent} style={styles.spinner} />
+                            <View style={styles.loaderSlot}>
+                                <ActivityIndicator color={colors.accent} />
+                            </View>
                         )}
                         {!isDiscoveryLoading && discoveryError && (
                             <Text style={styles.errorText}>{discoveryError}</Text>
@@ -892,7 +904,7 @@ export default function DiscoverScreen() {
                             <>
                                 {/* Popular on LISTn — global, always visible. Label adapts: a real
                                     "this week" chart when the window has signal, else all-time backfill. */}
-                                <View style={styles.discoverSectionRow}>
+                                <View style={[styles.discoverSectionRow, styles.firstDiscoverSectionRow]}>
                                     <Text style={styles.discoverSectionLabel}>
                                         {popularWindow === "week" ? "POPULAR ON LISTN · THIS WEEK" : "POPULAR ON LISTN"}
                                     </Text>
@@ -1326,7 +1338,11 @@ const styles = StyleSheet.create({
         paddingTop: 24,
         paddingBottom: 96,
     },
-    spinner: { marginTop: 40 },
+    loaderSlot: {
+        minHeight: 68,
+        alignItems: "center",
+        justifyContent: "center",
+    },
     errorText: {
         color: colors.danger,
         fontSize: 14,
@@ -1521,6 +1537,9 @@ const styles = StyleSheet.create({
     discoverSectionRow: {
         marginTop: 12,
         marginBottom: 7,
+    },
+    firstDiscoverSectionRow: {
+        marginTop: 0,
     },
     discoverSectionLabel: {
         fontFamily: fonts.mono,

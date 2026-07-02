@@ -2,7 +2,15 @@
 // Tapping the actor avatar/handle opens their profile; tapping a "liked" row's body opens the
 // activity card; tapping a "followed" row's body opens the follower's profile.
 import { useCallback, useEffect, useState } from "react"
-import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import {
+    ActivityIndicator,
+    FlatList,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 
 import { ApiError } from "../../api/client"
@@ -127,8 +135,13 @@ export default function NotificationsScreen({ navigation }: Props) {
                     contentContainerStyle={styles.list}
                     onEndReached={loadMore}
                     onEndReachedThreshold={0.4}
-                    refreshing={refreshing}
-                    onRefresh={onRefresh}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={onRefresh}
+                            tintColor={colors.inkDim}
+                        />
+                    }
                     ListEmptyComponent={<Text style={styles.empty}>No notifications yet.</Text>}
                     ListFooterComponent={
                         isLoadingMore ? <ActivityIndicator color={colors.accent} style={styles.footerLoader} /> : null
