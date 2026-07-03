@@ -1376,7 +1376,7 @@ export default function DiscoverScreen() {
                     style={styles.quietToast}
                     testID="discover-quiet-toast"
                 >
-                    <Text style={styles.quietToastText}>Quiet for now</Text>
+                    <Text style={styles.quietToastText}>It’s Quiet For Now</Text>
                 </Animated.View>
             ) : null}
         </View>
@@ -1389,11 +1389,10 @@ const styles = StyleSheet.create({
         backgroundColor: colors.bg,
     },
     quietToast: {
-        position: "absolute",
-        left: 0,
-        right: 0,
-        bottom: 104,
+        // Full-screen non-interactive overlay so the pill floats dead-center.
+        ...StyleSheet.absoluteFillObject,
         alignItems: "center",
+        justifyContent: "center",
         zIndex: 20,
     },
     quietToastText: {

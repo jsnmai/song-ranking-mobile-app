@@ -256,7 +256,7 @@ describe("DiscoverScreen", () => {
         try {
             fireEvent.press(screen.getByTestId("co-sign-quiet-cue"))
 
-            expect(within(screen.getByTestId("discover-quiet-toast")).getByText("Quiet for now")).toBeTruthy()
+            expect(within(screen.getByTestId("discover-quiet-toast")).getByText("It’s Quiet For Now")).toBeTruthy()
 
             act(() => {
                 jest.advanceTimersByTime(1200)

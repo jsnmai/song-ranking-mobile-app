@@ -2743,7 +2743,7 @@ export default function FeedScreen() {
                     style={styles.quietToast}
                     testID="feed-quiet-toast"
                 >
-                    <Text style={styles.quietToastText}>Quiet for now</Text>
+                    <Text style={styles.quietToastText}>It’s Quiet For Now</Text>
                 </Animated.View>
             ) : null}
         </View>
@@ -2781,11 +2781,10 @@ const styles = StyleSheet.create({
         paddingTop: 8,
     },
     quietToast: {
-        position: "absolute",
-        left: 0,
-        right: 0,
-        bottom: 104,
+        // Full-screen non-interactive overlay so the pill floats dead-center.
+        ...StyleSheet.absoluteFillObject,
         alignItems: "center",
+        justifyContent: "center",
         zIndex: 20,
     },
     quietToastText: {

@@ -1337,7 +1337,7 @@ describe("FeedScreen", () => {
         try {
             fireEvent.press(screen.getByTestId("feed-split-locked"))
 
-            expect(within(screen.getByTestId("feed-quiet-toast")).getByText("Quiet for now")).toBeTruthy()
+            expect(within(screen.getByTestId("feed-quiet-toast")).getByText("It’s Quiet For Now")).toBeTruthy()
 
             act(() => {
                 jest.advanceTimersByTime(1200)
