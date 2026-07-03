@@ -15,7 +15,7 @@ import {
     useWindowDimensions,
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import Svg, { Circle, Defs, Ellipse, G, Line, LinearGradient, Path, RadialGradient, Rect, Stop } from "react-native-svg"
+import Svg, { Circle, Defs, Ellipse, G, Line, LinearGradient, Mask, Path, RadialGradient, Rect, Stop } from "react-native-svg"
 import { CompositeNavigationProp, RouteProp, useNavigation, useRoute } from "@react-navigation/native"
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
@@ -666,11 +666,11 @@ export default function RankMapScreen() {
         <View style={styles.root}>
             <Cosmos width={width} height={height} seed={`rank-map-${view}`} zoom={zoom} pan={pan} />
 
-            {/* Full-screen stage: the clip window starts at the very top (not below the title) so
-                the map fills the screen and orbs dissolve into the top fade near the title instead
-                of hard-clipping at a line. The world stays centered on the stage region below the
-                chrome (top offset = stageTop), so the map's framing is unchanged. */}
-            <View style={[styles.viewport, { top: 0, height: stageTop + stageH }]} {...panResponder.panHandlers}>
+            {/* Full-screen stage: the clip window is the whole screen (not a band below the title)
+                so the map fills the screen top-to-bottom and dissolves into the edge fades near the
+                title and lens dock instead of hard-clipping at a line. The world stays centered on
+                the stage region between the chrome (top offset = stageTop), so its framing is unchanged. */}
+            <View style={[styles.viewport, { top: 0, height }]} {...panResponder.panHandlers}>
                 {songs.length === 0 && (
                     <View style={styles.empty}>
                         <Text style={styles.emptyText}>No songs to map yet.</Text>
@@ -917,20 +917,49 @@ export default function RankMapScreen() {
                 </View>
             </View>
 
-            {/* Top fade — now that the stage is full-screen, this dissolves the map into the
-                background as it rises toward the title: opaque navy behind the "Rank Map" title
-                (kept legible), fading to transparent just below it. pointerEvents none so it never
-                intercepts a pan or a tap on the map. Sits above the map, below the title/legend. */}
-            <View style={[styles.topFade, { height: stageTop + 16 }]} pointerEvents="none">
-                <Svg width={width} height={stageTop + 16}>
+            {/* Edge fade — dissolves the map into the cosmos near the title (top) and lens dock
+                (bottom). Painting a flat colour seams against the cosmos' radial gradient, so instead
+                it re-paints the SAME cosmos gradient (+ vignette) over the map, masked by a soft
+                vertical alpha ramp: covered orbs vanish into a backdrop identical to the real cosmos,
+                so there's no band or line. pointerEvents none; above the map, below the chrome. */}
+            <View style={styles.edgeFade} pointerEvents="none">
+                <Svg width={width} height={height}>
                     <Defs>
-                        <LinearGradient id="rankMapTopFade" x1="0" y1="0" x2="0" y2="1">
-                            <Stop offset="0" stopColor={colors.navy2} stopOpacity={1} />
-                            <Stop offset="0.7" stopColor={colors.navy2} stopOpacity={0.95} />
-                            <Stop offset="1" stopColor={colors.navy2} stopOpacity={0} />
+                        {/* Exact copies of Cosmos' background + vignette so the covered region
+                            matches the real backdrop pixel-for-pixel (see Cosmos.tsx). */}
+                        <RadialGradient id="rankMapFadeSky" cx="50%" cy="28%" rx="135%" ry="105%">
+                            <Stop offset="0%" stopColor={colors.navyHi} />
+                            <Stop offset="44%" stopColor={colors.navy} />
+                            <Stop offset="100%" stopColor={colors.navy2} />
+                        </RadialGradient>
+                        <RadialGradient id="rankMapFadeVignette" cx="50%" cy="40%" rx="125%" ry="92%">
+                            <Stop offset="50%" stopColor="#05070d" stopOpacity={0} />
+                            <Stop offset="100%" stopColor="#05070d" stopOpacity={0.6} />
+                        </RadialGradient>
+                        {/* Alpha ramp: opaque behind the title, clear through the middle, opaque
+                            again behind the dock — a long, gentle dissolve at each edge. */}
+                        <LinearGradient id="rankMapEdgeAlpha" x1="0" y1="0" x2="0" y2="1">
+                            {/* Top edge: opaque behind the title, then a long eased (smoothstep)
+                                dissolve into the map so no slope kink reads as a line. */}
+                            <Stop offset={0} stopColor="#fff" stopOpacity={1} />
+                            <Stop offset={(insets.top + 42) / height} stopColor="#fff" stopOpacity={1} />
+                            <Stop offset={(insets.top + 64) / height} stopColor="#fff" stopOpacity={0.85} />
+                            <Stop offset={(insets.top + 88) / height} stopColor="#fff" stopOpacity={0.5} />
+                            <Stop offset={(insets.top + 112) / height} stopColor="#fff" stopOpacity={0.15} />
+                            <Stop offset={(insets.top + 132) / height} stopColor="#fff" stopOpacity={0} />
+                            {/* Bottom edge: clear above the lens dock, opaque behind it. */}
+                            <Stop offset={(height - insets.bottom - 178) / height} stopColor="#fff" stopOpacity={0} />
+                            <Stop offset={(height - insets.bottom - 116) / height} stopColor="#fff" stopOpacity={1} />
+                            <Stop offset={1} stopColor="#fff" stopOpacity={1} />
                         </LinearGradient>
+                        <Mask id="rankMapEdgeMask">
+                            <Rect x={0} y={0} width={width} height={height} fill="url(#rankMapEdgeAlpha)" />
+                        </Mask>
                     </Defs>
-                    <Rect x={0} y={0} width={width} height={stageTop + 16} fill="url(#rankMapTopFade)" />
+                    <G mask="url(#rankMapEdgeMask)">
+                        <Rect x={0} y={0} width={width} height={height} fill="url(#rankMapFadeSky)" />
+                        <Rect x={0} y={0} width={width} height={height} fill="url(#rankMapFadeVignette)" />
+                    </G>
                 </Svg>
             </View>
 
@@ -1208,8 +1237,9 @@ const styles = StyleSheet.create({
     empty: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
     emptyText: { fontFamily: fonts.mono, fontSize: 12, color: colors.cdim, letterSpacing: 0.5 },
 
-    // Above the map (default z), below the title/back/legend/controls so they stay crisp on top.
-    topFade: { position: "absolute", left: 0, right: 0, top: 0, zIndex: 22 },
+    // Full-screen; above the map (default z), below the title/back/legend/controls/dock so they
+    // stay crisp on top. Its own mask limits the visible paint to the top and bottom edges.
+    edgeFade: { ...StyleSheet.absoluteFillObject, zIndex: 22 },
 
     topChrome: {
         position: "absolute",
