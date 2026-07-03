@@ -13,6 +13,7 @@ from src.crud.circle_aggregates import (
     CircleContributorRow,
     aggregate_circle_most_rated,
     aggregate_circle_trending,
+    count_circle_members,
     get_songs_by_ids,
     get_viewer_rankings,
     list_circle_contributors,
@@ -75,6 +76,7 @@ def list_circle_most_rated(
             )
             for row in rows
         ],
+        circle_size=count_circle_members(db, user_id),
     )
 
 
@@ -121,6 +123,7 @@ def list_circle_trending(
             for row in rows
         ],
         window_days=TRENDING_WINDOW_DAYS,
+        circle_size=count_circle_members(db, user_id),
     )
 
 

@@ -45,6 +45,10 @@ class CircleMostRatedResponse(BaseModel):
     """Current-user Most-rated-in-circle module."""
 
     items: list[CircleMostRatedItem]
+    # Count of the viewer's visible circle members (mutual follows). Lets the client tell
+    # "not enough friends yet" (circle_size < 3) apart from "circle has no shared song yet"
+    # (circle_size >= 3 but items empty), instead of guessing from one-way follow counts.
+    circle_size: int
 
 
 class CircleTrendingItem(BaseModel):
@@ -63,3 +67,7 @@ class CircleTrendingResponse(BaseModel):
 
     items: list[CircleTrendingItem]
     window_days: int
+    # Count of the viewer's visible circle members (mutual follows). Lets the client tell
+    # "not enough friends yet" (circle_size < 3) apart from "circle has nothing trending yet"
+    # (circle_size >= 3 but items empty), instead of guessing from one-way follow counts.
+    circle_size: int

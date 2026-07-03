@@ -7,7 +7,7 @@ from src.pydantic_schemas.song import SongResponse
 
 
 class SocialDiscoveryContributor(BaseModel):
-    """One visible friend contributing a high score."""
+    """One visible person the viewer follows contributing a high score."""
 
     user_id: int
     username: str
@@ -16,10 +16,11 @@ class SocialDiscoveryContributor(BaseModel):
 
 
 class CoSignItem(BaseModel):
-    """One song Co-Signed by at least two visible friends."""
+    """One song Co-Signed by at least two visible people the viewer follows."""
 
     song: SongResponse
     co_sign_count: int
+    # Legacy response name kept for compatibility; this is the average among visible followed users.
     average_visible_friend_score: float
     latest_visible_rating_at: datetime
     contributors: list[SocialDiscoveryContributor]

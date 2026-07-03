@@ -16,6 +16,7 @@ from src.crud.social_access import (
     followed_visible_taste_owner_predicate,
 )
 from src.sqlalchemy_tables.comparison import Comparison
+from src.sqlalchemy_tables.follow import Follow
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
@@ -91,6 +92,34 @@ class MatchMomentRow:
     loser_song_id: int
     decision_duration_ms: int | None
     finalized_at: datetime
+
+
+def count_circle_members(
+    db: Session,
+    viewer_id: int,
+) -> int:
+    """Count the viewer's visible circle members (mutual follows the viewer can see).
+
+    This is the honest denominator for the circle modules' locked state: a viewer needs
+    at least CIRCLE_MIN_CONTRIBUTORS circle members before an aggregate can ever surface.
+    It intentionally counts mutual, visible follows only — never one-way follows — so the
+    "X/3" progress a card shows tracks the same population the aggregate draws from. It says
+    nothing about whether those members have converged on a song yet (that's the difference
+    between "not enough friends" and "circle has no shared song yet").
+    """
+    return int(
+        db.execute(
+            select(func.count())
+            .select_from(Follow)
+            .where(Follow.follower_id == viewer_id)
+            .where(
+                circle_visible_taste_owner_predicate(
+                    viewer_id,
+                    Follow.following_id,
+                )
+            )
+        ).scalar_one()
+    )
 
 
 def aggregate_circle_most_rated(

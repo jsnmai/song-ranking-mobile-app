@@ -665,3 +665,77 @@ def test_recent_verdict_raters_requires_auth(
 ):
     """The Recent Verdict raters endpoint rejects unauthenticated requests."""
     assert client.get("/api/v1/feed/songs/1/circle-raters").status_code == 401
+
+
+# --- circle_size (the locked-vs-warming-up signal) ------------------------------
+
+
+def test_circle_size_counts_mutual_members(
+    client: TestClient,
+    db_session: Session,
+):
+    """circle_size reports the viewer's mutual, visible circle members on both endpoints."""
+    viewer_token = _register(client, "viewer@example.com", "viewer")
+    _three_public_members(client, viewer_token)
+
+    assert _get(client, viewer_token, TRENDING_PATH)["circle_size"] == 3
+    assert _get(client, viewer_token, MOST_RATED_PATH)["circle_size"] == 3
+
+
+def test_circle_size_excludes_one_way_follows(
+    client: TestClient,
+    db_session: Session,
+):
+    """One-way follows never raise circle_size, so the counter can't read 3/3 while locked.
+
+    This is the seed_locked_full case: the viewer follows three people who never follow
+    back. The aggregate stays empty AND circle_size stays 0, so the card shows 0/3 ("follow
+    friends") instead of a misleading 3/3-but-locked.
+    """
+    viewer_token = _register(client, "viewer@example.com", "viewer")
+    for name in ("alice", "bob", "carol"):
+        _register(client, f"{name}@example.com", name)
+        _follow(client, viewer_token, name)  # one-way: they never follow back
+
+    payload = _get(client, viewer_token, TRENDING_PATH)
+    assert payload["items"] == []
+    assert payload["circle_size"] == 0
+
+
+def test_circle_size_signals_warming_up_with_no_shared_song(
+    client: TestClient,
+    db_session: Session,
+):
+    """Three mutual members who haven't converged on a song: items empty but circle_size == 3.
+
+    This is the 'warming up' state the client shows distinctly from 'follow more friends' —
+    enough circle members to unlock, just no shared song for them to trend on yet.
+    """
+    viewer_token = _register(client, "viewer@example.com", "viewer")
+    _three_public_members(client, viewer_token)
+    # Each member rates a DIFFERENT song, so no song reaches 3 circle contributors.
+    _rate(db_session, "alice", 3001, "Alice Only", 8.0)
+    _rate(db_session, "bob", 3002, "Bob Only", 8.0)
+    _rate(db_session, "carol", 3003, "Carol Only", 8.0)
+
+    trending = _get(client, viewer_token, TRENDING_PATH)
+    assert trending["items"] == []
+    assert trending["circle_size"] == 3
+    most_rated = _get(client, viewer_token, MOST_RATED_PATH)
+    assert most_rated["items"] == []
+    assert most_rated["circle_size"] == 3
+
+
+def test_circle_size_excludes_blocked_mutual_member(
+    client: TestClient,
+    db_session: Session,
+):
+    """A mutual follow the viewer blocked counts toward neither the aggregate nor circle_size."""
+    viewer_token = _register(client, "viewer@example.com", "viewer")
+    _three_public_members(client, viewer_token)
+    blocked_token = _register(client, "blocked@example.com", "blockeduser")
+    _mutual(client, viewer_token, blocked_token, "blockeduser")
+    _block(client, viewer_token, "blockeduser")
+
+    # alice/bob/carol are visible mutuals; blockeduser is excluded → 3, not 4.
+    assert _get(client, viewer_token, TRENDING_PATH)["circle_size"] == 3
