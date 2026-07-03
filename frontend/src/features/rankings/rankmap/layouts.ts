@@ -163,10 +163,10 @@ function timeKey(ts: number, granularity: TimeGranularity): number {
 
 function timeLabel(ts: number, granularity: TimeGranularity): string {
     const d = new Date(ts)
-    if (granularity === "month") return `${MONTHS[d.getMonth()]} ’${String(d.getFullYear()).slice(2)}`
+    if (granularity === "month") return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`
 
     const start = weekStart(d)
-    return `${MONTHS[start.getMonth()]} ${start.getDate()} ’${String(start.getFullYear()).slice(2)}`
+    return `${MONTHS[start.getMonth()]} ${start.getDate()}, ${start.getFullYear()}`
 }
 
 // Ordered time buckets for the scrubber. Weekly uses local Monday starts; monthly uses calendar months.
@@ -410,19 +410,30 @@ export type NebulaCloud = {
     nodes: { s: RankMapSong; x: number; y: number; size: number }[]
 }
 
-const NEBULA_NODE_SPACING = 26
+// A Vogel spiral's nearest-neighbor distance is ≈ 1.7× its spacing constant, so to pack stars
+// (diameter ≈ 28) nearly touching, this is set well below their radius — declutter then opens
+// the few real overlaps to a hair's gap. Bigger stars, minimal space between them.
+const NEBULA_NODE_SPACING = 15
 
 export function nebulaLayout(
     songs: RankMapSong[],
-    opts: { w: number; h: number; colors: { like: string; sky: string; plum: string } },
+    opts: {
+        w: number
+        h: number
+        colors: { like: string; sky: string; plum: string }
+        // Clear radius kept empty at each cloud's center — the stars ring around it (annulus)
+        // so the cloud's summary stat can sit crisply in the middle without any orb under it.
+        innerRadius?: number
+    },
 ): NebulaCloud[] {
-    const { w, h, colors } = opts
+    const { w, h, colors, innerRadius = 0 } = opts
     const by: Record<BucketName, RankMapSong[]> = { like: [], alright: [], dislike: [] }
     songs.forEach((s) => by[s.bucket].push(s))
+    // Spread wide across the world so compact clouds have clear gaps between them.
     const defs: { key: BucketName; color: string; cx: number; cy: number }[] = [
-        { key: "like", color: colors.like, cx: w * 0.32, cy: h * 0.32 },
-        { key: "alright", color: colors.sky, cx: w * 0.7, cy: h * 0.52 },
-        { key: "dislike", color: colors.plum, cx: w * 0.34, cy: h * 0.76 },
+        { key: "like", color: colors.like, cx: w * 0.28, cy: h * 0.24 },
+        { key: "alright", color: colors.sky, cx: w * 0.72, cy: h * 0.5 },
+        { key: "dislike", color: colors.plum, cx: w * 0.3, cy: h * 0.78 },
     ]
     const total = songs.length || 1
     const maxBlob = Math.min(w, h) * 0.29
@@ -435,15 +446,17 @@ export function nebulaLayout(
         const share = list.length / total
         const blob = clamp(minBlob + Math.sqrt(Math.max(list.length, 1)) * 15, minBlob, maxBlob)
         const nodes = list.map((s, i) => {
-            const rad = i === 0 ? 0 : NEBULA_NODE_SPACING * Math.sqrt(i)
+            const rad = innerRadius + NEBULA_NODE_SPACING * Math.sqrt(i)
             const ang = i * GA + rr() * 0.3
-            const size = 19 + (s.score / 10) * 13
+            const size = 24 + (s.score / 10) * 6
             return { s, x: d.cx + Math.cos(ang) * rad, y: d.cy + Math.sin(ang) * rad, size, r: size / 2 }
         })
         allNodes.push(...nodes)
         return { ...d, list, share, blob, nodes }
     })
-    declutter(allNodes, 10, 6)
+    // The tight spiral starts stars overlapping on purpose; enough relaxation passes open every
+    // overlap out to a hair's gap (pad 3) — a dense touching-packing, the tightest they can sit.
+    declutter(allNodes, 60, 3)
 
     return clouds.map((c) => ({
         ...c,

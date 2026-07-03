@@ -491,11 +491,13 @@ const styles = StyleSheet.create({
         gap: 8,
         borderRadius: 13,
         paddingVertical: 15,
+        // Hard ink offset shadow — the app's primary-action treatment (matches the
+        // Discover rate/follow pills). Solid ink, no blur, so it reads as a crisp
+        // black shadow rather than a faint smudge.
         shadowColor: colors.ink,
-        shadowOpacity: 0.18,
+        shadowOpacity: 1,
         shadowRadius: 0,
-        shadowOffset: { width: 3, height: 3 },
-        elevation: 4,
+        shadowOffset: { width: 2, height: 2 },
     },
     viewBtnText: {
         fontFamily: fonts.display,
@@ -510,6 +512,13 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         borderWidth: 1.5,
         borderColor: colors.line,
+        // Opaque fill so the hard ink shadow casts a solid black block behind the
+        // outlined button, matching the View in Rankings shadow beside it.
+        backgroundColor: colors.bg,
+        shadowColor: colors.ink,
+        shadowOpacity: 1,
+        shadowRadius: 0,
+        shadowOffset: { width: 2, height: 2 },
     },
     doneBtnText: {
         fontFamily: fonts.display,

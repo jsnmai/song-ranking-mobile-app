@@ -218,6 +218,30 @@ describe("nebulaLayout", () => {
         const circles = clouds.flatMap((c) => c.nodes.map((n) => ({ x: n.x, y: n.y, r: n.size / 2 })))
         assertNoOverlap(circles, "nebula stars")
     })
+
+    it("keeps each cloud's center clear when innerRadius is set (stat sits in the middle)", () => {
+        const buckets = ["like", "alright", "dislike"] as const
+        const songs = Array.from({ length: 45 }, (_, i) =>
+            song(i + 1, "Pop", { bucket: buckets[i % 3], score: 3 + (i % 7) }),
+        )
+
+        const clouds = nebulaLayout(songs, {
+            w: 900,
+            h: 900,
+            colors: { like: "#f00", sky: "#0af", plum: "#a0f" },
+            innerRadius: 80,
+        })
+
+        // No star sits in the middle of its cloud — they ring around the reserved center.
+        clouds.forEach((c) => {
+            c.nodes.forEach((n) => {
+                expect(Math.hypot(n.x - c.cx, n.y - c.cy)).toBeGreaterThan(80 * 0.6)
+            })
+        })
+        // Still overlap-free with the annulus in place.
+        const circles = clouds.flatMap((c) => c.nodes.map((n) => ({ x: n.x, y: n.y, r: n.size / 2 })))
+        assertNoOverlap(circles, "nebula annulus stars")
+    })
 })
 
 describe("enrichRankings", () => {

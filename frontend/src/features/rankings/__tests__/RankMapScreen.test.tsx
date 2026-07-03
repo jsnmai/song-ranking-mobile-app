@@ -111,7 +111,7 @@ describe("RankMapScreen", () => {
         render(<RankMapScreen />)
 
         expect(screen.getByText("Rank Map")).toBeTruthy()
-        expect(screen.getByText("Gravity")).toBeTruthy()
+        expect(screen.getByText("Orbit")).toBeTruthy()
         expect(screen.getByText("Genres")).toBeTruthy()
         expect(screen.getByText("Verdict")).toBeTruthy()
         expect(screen.getByText("DISTANCE TO YOUR SUN = HOW MUCH YOU LOVE IT")).toBeTruthy()
@@ -181,14 +181,14 @@ describe("RankMapScreen", () => {
         fireEvent.press(screen.getByLabelText("Taste over time"))
 
         expect(screen.getByText("TASTE OVER TIME")).toBeTruthy()
-        expect(screen.getByText("Mar ’26")).toBeTruthy()
+        expect(screen.getByText("Mar 2026")).toBeTruthy()
         expect(screen.getByText("Monthly")).toBeTruthy()
         // The top-right time-travel icon toggles to its "exit" label while active.
         expect(screen.getByLabelText("Exit taste over time")).toBeTruthy()
 
         fireEvent.press(screen.getByLabelText("Show weekly time travel"))
 
-        expect(screen.getByText("Mar 9 ’26")).toBeTruthy()
+        expect(screen.getByText("Mar 9, 2026")).toBeTruthy()
         expect(screen.getByLabelText("Show weekly time travel").props.accessibilityState).toEqual({
             selected: true,
             disabled: false,

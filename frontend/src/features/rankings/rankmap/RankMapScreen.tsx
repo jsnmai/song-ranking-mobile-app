@@ -15,7 +15,7 @@ import {
     useWindowDimensions,
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import Svg, { Circle, Defs, Ellipse, G, Line, Path, RadialGradient, Rect, Stop } from "react-native-svg"
+import Svg, { Circle, Defs, Ellipse, G, Line, LinearGradient, Path, RadialGradient, Rect, Stop } from "react-native-svg"
 import { CompositeNavigationProp, RouteProp, useNavigation, useRoute } from "@react-navigation/native"
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
@@ -24,6 +24,7 @@ import { AppStackParamList, RankingsStackParamList, TabParamList } from "../../.
 import { useAuth } from "../../auth/AuthContext"
 import { BucketName } from "../../comparison/types"
 import { bucketColor, colors, fonts } from "../../../theme"
+import { LockIcon } from "../../../components/LockIcon"
 import { BloomCard } from "./BloomCard"
 import { Cosmos, OrbitRings } from "./Cosmos"
 import { Planet, Sun } from "./Planet"
@@ -52,7 +53,7 @@ type RankMapNavigation = CompositeNavigationProp<
 type Point = { x: number; y: number }
 
 const VIEWS: { key: RankView; label: string }[] = [
-    { key: "gravity", label: "Gravity" },
+    { key: "gravity", label: "Orbit" },
     { key: "genres", label: "Genres" },
     { key: "nebula", label: "Verdict" },
 ]
@@ -103,6 +104,18 @@ const CLUSTER_ZOOM_SIZE_EXPONENT = 0.92
 // so it never rides this transform at all — see the overlay block in render.
 const RENDER_SCALE = MAX_ZOOM
 
+// Screen-space chrome labels float this far above their group's top orb — approximate label
+// heights (2 text lines each) plus a gap, so the label's bottom clears every orb at any zoom.
+const LABEL_GAP = 10
+const CLUSTER_LABEL_H = 38
+const CLOUD_LABEL_H = 46
+// Clear radius (logical units) kept empty at each Verdict cloud's center so its stat sits in
+// the middle with the stars ringing around it. At zoom = 1 this is its on-screen radius too;
+// zooming in only opens it wider, so the label is never covered at the default zoom or above.
+const CLOUD_CENTER_KEEPOUT = 48
+// Height of the Verdict left-rail taste-balance bar (bar + counts share it).
+const BALANCE_STRIP_H = 220
+
 function clamp(value: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, value))
 }
@@ -113,6 +126,21 @@ function touchDistance(event: GestureResponderEvent): number {
     const dx = a.pageX - b.pageX
     const dy = a.pageY - b.pageY
     return Math.sqrt(dx * dx + dy * dy)
+}
+
+// Average of all active touch points (in absolute page coords) — the pinch focal point for
+// two fingers, or just the finger position for a one-finger drag. Zoom pins the world point
+// under this so it stays put while you pinch, i.e. you zoom into wherever your fingers are.
+function touchFocal(event: GestureResponderEvent): { x: number; y: number } {
+    const touches = event.nativeEvent.touches
+    if (touches.length === 0) return { x: 0, y: 0 }
+    let sx = 0
+    let sy = 0
+    for (const t of touches) {
+        sx += t.pageX
+        sy += t.pageY
+    }
+    return { x: sx / touches.length, y: sy / touches.length }
 }
 
 // A verdict cloud is drawn as a few overlapping soft-edged radial puffs (each
@@ -167,15 +195,15 @@ function ClockIcon({ active }: { active: boolean }) {
     )
 }
 
-// Gravity — a planet on a tilted orbit around a sun, mirroring the spiral lens.
+// Orbit — concentric orbit rings around a central sun, with a planet on the outer
+// ring: the clearest read of the gravity/orbit lens (distance from your #1 sun).
 function GravityIcon({ color }: { color: string }) {
     return (
         <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-            <G transform="rotate(-24 12 12)">
-                <Ellipse cx={12} cy={12} rx={9.5} ry={5} stroke={color} strokeWidth={1.6} />
-                <Circle cx={21.5} cy={12} r={1.7} fill={color} />
-            </G>
+            <Circle cx={12} cy={12} r={5} stroke={color} strokeWidth={1.3} strokeOpacity={0.45} />
+            <Circle cx={12} cy={12} r={9} stroke={color} strokeWidth={1.3} strokeOpacity={0.7} />
             <Circle cx={12} cy={12} r={2.7} fill={color} />
+            <Circle cx={18.4} cy={5.6} r={1.8} fill={color} />
         </Svg>
     )
 }
@@ -309,7 +337,18 @@ export default function RankMapScreen() {
 
     const panRef = useRef(pan)
     const zoomRef = useRef(zoom)
-    const gestureRef = useRef({ panStart: pan, zoomStart: zoom, pinchStart: 0 })
+    // Gesture baseline, re-captured whenever the number of fingers changes so a pinch→drag
+    // (or lifting one finger) never jumps. focalStart is the pinch midpoint in viewport-local
+    // coords at that baseline; deltas are measured against it.
+    const gestureRef = useRef({
+        panStart: pan,
+        zoomStart: zoom,
+        pinchStart: 0,
+        focalStart: { x: 0, y: 0 },
+        touchCount: 0,
+    })
+    // Live world geometry (updated every render, read by the memoized gesture handler).
+    const geomRef = useRef({ stageTop: 0, cx: 0, cy: 0 })
 
     const selected = useMemo(() => songs.find((s) => s.id === selectedId) ?? null, [songs, selectedId])
     const weeklyEra = useMemo(() => eraTimeline(songs, "week"), [songs])
@@ -346,19 +385,33 @@ export default function RankMapScreen() {
         x: worldLeftSS + worldWSS / 2 + (zoom / RENDER_SCALE) * (sx - worldWSS / 2) + pan.x,
         y: worldTopSS + worldHSS / 2 + (zoom / RENDER_SCALE) * (sy - worldHSS / 2) + pan.y,
     })
+    // Live world geometry for the gesture handler (its PanResponder is memoized once, so it must
+    // read current values through a ref — stageH/worldH change when the time strip appears).
+    // `cx`/`cy` are the viewport-local screen position of the world's center at pan = 0.
+    geomRef.current = {
+        stageTop,
+        cx: worldLeftSS + worldWSS / 2,
+        cy: worldTopSS + worldHSS / 2,
+    }
 
     const genreLayouts = useMemo(() => {
         if (songs.length === 0) return []
-        return constellationLayout(songs, { w: worldW, h: worldH }).map((con) => ({
-            ...con,
-            ctr: { x: con.ctr.x * RENDER_SCALE, y: con.ctr.y * RENDER_SCALE },
-            nodes: con.nodes.map((n) => ({
+        return constellationLayout(songs, { w: worldW, h: worldH }).map((con) => {
+            const ctr = { x: con.ctr.x * RENDER_SCALE, y: con.ctr.y * RENDER_SCALE }
+            const nodes = con.nodes.map((n) => ({
                 ...n,
                 x: n.x * RENDER_SCALE,
                 y: n.y * RENDER_SCALE,
                 size: n.size * RENDER_SCALE,
-            })),
-        }))
+            }))
+            // Farthest reach of any orb's edge from the cluster center — the group's radius.
+            // Used to float the label just outside it so text never sits on top of an orb.
+            const radius = nodes.reduce(
+                (m, n) => Math.max(m, Math.hypot(n.x - ctr.x, n.y - ctr.y) + n.size / 2),
+                0,
+            )
+            return { ...con, ctr, nodes, radius }
+        })
     }, [songs, worldW, worldH])
     const genreNames = useMemo(() => genreLayouts.map((con) => con.genre), [genreLayouts])
     const activeGenreSet = activeGenres ?? new Set(genreNames)
@@ -402,8 +455,20 @@ export default function RankMapScreen() {
         setTimeMode(true)
     }
 
-    const panResponder = useMemo(
-        () => PanResponder.create({
+    const panResponder = useMemo(() => {
+        // Snapshot the current view + finger positions as the reference the next moves measure
+        // against. Called on grant and whenever the finger count changes mid-gesture.
+        const rebaseline = (event: GestureResponderEvent) => {
+            const focalPage = touchFocal(event)
+            gestureRef.current = {
+                panStart: panRef.current,
+                zoomStart: zoomRef.current,
+                pinchStart: touchDistance(event),
+                focalStart: { x: focalPage.x, y: focalPage.y - geomRef.current.stageTop },
+                touchCount: event.nativeEvent.touches.length,
+            }
+        }
+        return PanResponder.create({
             onStartShouldSetPanResponder: (event) => event.nativeEvent.touches.length >= 2,
             onMoveShouldSetPanResponder: (event, gesture) => (
                 event.nativeEvent.touches.length >= 2 ||
@@ -411,27 +476,44 @@ export default function RankMapScreen() {
                 Math.abs(gesture.dy) > 5
             ),
             onPanResponderGrant: (event) => {
-                gestureRef.current = {
-                    panStart: panRef.current,
-                    zoomStart: zoomRef.current,
-                    pinchStart: touchDistance(event),
-                }
+                rebaseline(event)
             },
-            onPanResponderMove: (event, gesture) => {
+            onPanResponderMove: (event) => {
                 const touches = event.nativeEvent.touches
-                if (touches.length >= 2 && gestureRef.current.pinchStart > 0) {
-                    const dist = touchDistance(event)
-                    updateZoom(gestureRef.current.zoomStart * (dist / gestureRef.current.pinchStart))
+                // A finger landed or lifted since the last frame → reset the baseline to now so
+                // the transition (1↔2 fingers) doesn't jump. This frame then applies zero delta.
+                if (touches.length !== gestureRef.current.touchCount) {
+                    rebaseline(event)
                     return
                 }
-                updatePan({
-                    x: gestureRef.current.panStart.x + gesture.dx,
-                    y: gestureRef.current.panStart.y + gesture.dy,
-                })
+                const g = gestureRef.current
+                const { cx, cy, stageTop } = geomRef.current
+                // Focal point in viewport-local coords (viewport sits at screen x = 0, y = stageTop).
+                const focalPage = touchFocal(event)
+                const fx = focalPage.x
+                const fy = focalPage.y - stageTop
+
+                // Zoom factor from the pinch (1 when a single finger is down = pure drag). Clamp
+                // first, then derive the *actual* ratio so the focal point stays pinned even at
+                // the zoom limits (the map doesn't creep once you hit min/max).
+                let newZoom = g.zoomStart
+                if (touches.length >= 2 && g.pinchStart > 0) {
+                    newZoom = clamp(g.zoomStart * (touchDistance(event) / g.pinchStart), MIN_ZOOM, MAX_ZOOM)
+                }
+                const ratio = newZoom / g.zoomStart
+
+                // Keep the world point that was under focalStart under the *current* focal point:
+                // pan = currentFocal − worldCenter − ratio·(focalStart − worldCenter − panStart).
+                // This composes zoom-about-focus with the focal's own drift (two-finger panning).
+                const newPan = {
+                    x: fx - cx - ratio * (g.focalStart.x - cx - g.panStart.x),
+                    y: fy - cy - ratio * (g.focalStart.y - cy - g.panStart.y),
+                }
+                if (newZoom !== zoomRef.current) updateZoom(newZoom)
+                updatePan(newPan)
             },
-        }),
-        [],
-    )
+        })
+    }, [])
 
     const timePanResponder = useMemo(
         () => PanResponder.create({
@@ -492,6 +574,7 @@ export default function RankMapScreen() {
             w: worldW,
             h: worldH,
             colors: { like: colors.like, sky: colors.sky, plum: colors.plum },
+            innerRadius: CLOUD_CENTER_KEEPOUT,
         }).map((c) => ({
             ...c,
             cx: c.cx * s,
@@ -561,6 +644,8 @@ export default function RankMapScreen() {
     const progress = maxEra === 0 ? 1 : effEra / maxEra
     const progressPx = timeTrackWidth * progress
     const visibleAtTime = songs.filter((s) => (currentEra.indexBySongId.get(s.id) ?? 0) <= effEra).length
+    // The label of a granularity that isn't scrubbable yet (needs more history), for the locked note.
+    const lockedGranularity = TIME_GRANULARITIES.find((o) => eraCountFor(o.key) <= 1)?.label ?? null
     // The reset control only "lights up" when there's something to reset.
     const isDefaultView = pan.x === 0 && pan.y === 0 && zoom === 1
 
@@ -758,11 +843,15 @@ export default function RankMapScreen() {
                     {genres &&
                         genres.cl.map((con) => {
                             if (!activeGenreSet.has(con.genre)) return null
-                            const p = project(con.ctr.x, con.ctr.y - 70 * RENDER_SCALE)
+                            // Float the label just above the cluster's on-screen top edge (its
+                            // world radius scaled to screen), so no orb is ever under the text.
+                            const center = project(con.ctr.x, con.ctr.y)
+                            const screenR = con.radius * (zoom / RENDER_SCALE)
+                            const top = center.y - screenR - LABEL_GAP - CLUSTER_LABEL_H
                             return (
                                 <View
                                     key={con.genre}
-                                    style={[styles.clusterLabel, { left: p.x - 70, top: p.y }]}
+                                    style={[styles.clusterLabel, { left: center.x - 70, top }]}
                                 >
                                     <Text style={styles.clusterTitle} numberOfLines={1}>
                                         {con.genre}
@@ -777,9 +866,14 @@ export default function RankMapScreen() {
                     {nebula &&
                         nebula.map((c) => {
                             if (!activeBuckets.has(c.key)) return null
-                            const p = project(c.cx, c.cy - 26 * RENDER_SCALE)
+                            // Sits dead center of the cloud — the stars are laid out in a ring around
+                            // it (CLOUD_CENTER_KEEPOUT), so it's the middle of the group, never covered.
+                            const center = project(c.cx, c.cy)
                             return (
-                                <View key={c.key} style={[styles.cloudLabel, { left: p.x - 72, top: p.y }]}>
+                                <View
+                                    key={c.key}
+                                    style={[styles.cloudLabel, { left: center.x - 72, top: center.y - CLOUD_LABEL_H / 2 }]}
+                                >
                                     <Text style={styles.cloudPercent}>{Math.round(c.share * 100)}%</Text>
                                     <Text style={[styles.cloudSub, { color: c.color }]}>
                                         {bucketLabel(c.key).toUpperCase()} · {c.list.length}
@@ -912,12 +1006,14 @@ export default function RankMapScreen() {
                                         disabled={disabled}
                                         accessibilityRole="button"
                                         accessibilityState={{ selected: active, disabled }}
-                                        accessibilityLabel={`Show ${option.label.toLowerCase()} time travel`}
+                                        accessibilityLabel={`Show ${option.label.toLowerCase()} time travel${disabled ? " (locked)" : ""}`}
                                     >
+                                        {disabled && <LockIcon color={colors.cdim} size={9} />}
                                         <Text
                                             style={[
                                                 styles.timeGranularityText,
                                                 active && styles.timeGranularityTextActive,
+                                                disabled && styles.timeGranularityTextDisabled,
                                             ]}
                                         >
                                             {option.label}
@@ -927,13 +1023,40 @@ export default function RankMapScreen() {
                             })}
                         </View>
                     </View>
+                    {lockedGranularity && (
+                        <Text style={styles.timeLockedNote}>
+                            {lockedGranularity} unlocks once you&apos;ve rated across more {lockedGranularity === "Monthly" ? "months" : "weeks"}
+                        </Text>
+                    )}
                     <View
                         style={styles.timeTrack}
                         onLayout={(event) => setTimeTrackWidth(Math.max(1, event.nativeEvent.layout.width))}
                         {...timePanResponder.panHandlers}
                     >
                         <View style={styles.timeRail} />
-                        <View style={[styles.timeFill, { width: progressPx }]} />
+                        {/* Notches — one per era point you can scrub to; brighten once reached. */}
+                        {maxEra > 0 &&
+                            Array.from({ length: maxEra + 1 }).map((_, i) => (
+                                <View
+                                    key={i}
+                                    style={[
+                                        styles.timeNotch,
+                                        { left: (i / maxEra) * timeTrackWidth - 1, opacity: i <= effEra ? 0.85 : 0.32 },
+                                    ]}
+                                />
+                            ))}
+                        {/* Orange→yellow gradient fill, clipped to the current progress. */}
+                        <View style={[styles.timeFill, { width: progressPx }]}>
+                            <Svg width={Math.max(progressPx, 1)} height={6}>
+                                <Defs>
+                                    <LinearGradient id="timeFillGrad" x1="0" y1="0" x2="1" y2="0">
+                                        <Stop offset="0" stopColor={colors.accent} />
+                                        <Stop offset="1" stopColor={colors.gold} />
+                                    </LinearGradient>
+                                </Defs>
+                                <Rect x={0} y={0} width={Math.max(progressPx, 1)} height={6} fill="url(#timeFillGrad)" />
+                            </Svg>
+                        </View>
                         <View style={[styles.timeKnob, { left: progressPx - 8 }]} />
                     </View>
                     <Text style={styles.timeBody}>
@@ -942,22 +1065,44 @@ export default function RankMapScreen() {
                 </View>
             )}
 
-            {showBalanceStrip && (
-                <View style={[styles.balanceStrip, { bottom: bottomStripLift }]}>
-                    <Text style={styles.balanceKicker}>YOUR TASTE BALANCE</Text>
+            {showBalanceStrip && nebula && (
+                <View
+                    style={[styles.balanceStrip, { top: stageTop + Math.max(0, (stageH - BALANCE_STRIP_H) / 2) }]}
+                    pointerEvents="none"
+                >
+                    <View style={styles.balanceLabelWrap}>
+                        <Text style={styles.balanceVLabel}>TASTE BALANCE</Text>
+                    </View>
                     <View style={styles.balanceBar}>
-                        {nebula?.map((c) => (
+                        {nebula.map((c) => (
                             <View
                                 key={c.key}
-                                style={[
-                                    styles.balancePart,
-                                    {
-                                        flex: Math.max(c.list.length, 0.2),
-                                        backgroundColor: c.color,
-                                        opacity: activeBuckets.has(c.key) ? 1 : 0.28,
-                                    },
-                                ]}
+                                style={{
+                                    flex: Math.max(c.list.length, 0.2),
+                                    backgroundColor: c.color,
+                                    opacity: activeBuckets.has(c.key) ? 1 : 0.28,
+                                }}
                             />
+                        ))}
+                    </View>
+                    <View style={styles.balanceCounts}>
+                        {nebula.map((c) => (
+                            // Each count gets a flex slot proportional to its share — exactly like the
+                            // bar segment beside it — and centers its number, so it sits at the vertical
+                            // middle of its own bucket section.
+                            <View
+                                key={c.key}
+                                style={{
+                                    flex: Math.max(c.list.length, 0.2),
+                                    justifyContent: "center",
+                                    opacity: activeBuckets.has(c.key) ? 1 : 0.4,
+                                }}
+                            >
+                                <View style={styles.balanceCountRow}>
+                                    <Text style={styles.balanceCountNum}>{c.list.length}</Text>
+                                    <Text style={styles.balanceCountLabel}>{bucketLabel(c.key).toUpperCase()}</Text>
+                                </View>
+                            </View>
                         ))}
                     </View>
                 </View>
@@ -1259,15 +1404,18 @@ const styles = StyleSheet.create({
     timeGranularityOption: {
         minWidth: 58,
         height: 25,
+        flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
+        gap: 4,
         borderRadius: 8,
     },
     timeGranularityOptionActive: {
         backgroundColor: colors.gold,
     },
     timeGranularityOptionDisabled: {
-        opacity: 0.36,
+        opacity: 0.6,
+        backgroundColor: "rgba(245,238,220,0.04)",
     },
     timeGranularityText: {
         fontFamily: fonts.mono,
@@ -1277,6 +1425,16 @@ const styles = StyleSheet.create({
     },
     timeGranularityTextActive: {
         color: colors.navy,
+    },
+    timeGranularityTextDisabled: {
+        color: colors.cdim,
+    },
+    timeLockedNote: {
+        fontFamily: fonts.mono,
+        fontSize: 7,
+        letterSpacing: 0.3,
+        color: colors.cdim,
+        marginTop: 6,
     },
     timeTrack: { height: 18, justifyContent: "center" },
     timeRail: {
@@ -1294,7 +1452,15 @@ const styles = StyleSheet.create({
         top: 6,
         height: 6,
         borderRadius: 3,
-        backgroundColor: colors.gold,
+        overflow: "hidden",
+    },
+    timeNotch: {
+        position: "absolute",
+        top: 3,
+        width: 2,
+        height: 12,
+        borderRadius: 1,
+        backgroundColor: colors.cream,
     },
     timeKnob: {
         position: "absolute",
@@ -1314,18 +1480,34 @@ const styles = StyleSheet.create({
 
     balanceStrip: {
         position: "absolute",
-        left: 12,
-        right: 12,
+        left: 14,
         zIndex: 23,
-        paddingHorizontal: 13,
-        paddingVertical: 10,
-        borderRadius: 14,
-        borderWidth: 1,
-        borderColor: colors.cline,
-        backgroundColor: "rgba(16,20,30,0.84)",
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 9,
     },
-    balanceKicker: { fontFamily: fonts.mono, fontSize: 7.5, letterSpacing: 1.1, color: colors.cdim, marginBottom: 7 },
-    balanceBar: { flexDirection: "row", height: 8, borderRadius: 4, overflow: "hidden", gap: 2 },
-    balancePart: { height: 8 },
+    balanceLabelWrap: { width: 12, height: BALANCE_STRIP_H, alignItems: "center", justifyContent: "center" },
+    balanceVLabel: {
+        width: BALANCE_STRIP_H,
+        textAlign: "center",
+        transform: [{ rotate: "-90deg" }],
+        fontFamily: fonts.mono,
+        fontSize: 7.5,
+        fontWeight: "700",
+        letterSpacing: 2,
+        color: colors.cdim,
+    },
+    balanceBar: {
+        width: 10,
+        height: BALANCE_STRIP_H,
+        borderRadius: 6,
+        overflow: "hidden",
+        flexDirection: "column",
+        gap: 2,
+    },
+    balanceCounts: { height: BALANCE_STRIP_H },
+    balanceCountRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+    balanceCountNum: { fontFamily: fonts.serif, fontSize: 14, color: colors.cream, lineHeight: 16 },
+    balanceCountLabel: { fontFamily: fonts.mono, fontSize: 7.5, letterSpacing: 0.6, color: colors.cdim },
 
 })
