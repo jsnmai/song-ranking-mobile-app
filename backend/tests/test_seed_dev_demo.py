@@ -361,6 +361,27 @@ def test_discovery_seed_co_sign_present(
     assert contributor_usernames == {"demo_disc_a", "demo_disc_b"}
 
 
+def test_discovery_seed_co_sign_carousel_for_seed_cosign(
+    client,
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """seed_cosign sees the five-card carousel, including one three-contributor co-sign."""
+    _run_seed(db_session, monkeypatch)
+    token = _login(client, seed_email("seed_cosign"))
+
+    body = client.get(
+        "/api/v1/discover/co-signs",
+        headers={"Authorization": f"Bearer {token}"},
+    ).json()
+
+    co_sign_ids = {item["song"]["deezer_id"] for item in body["items"]}
+    assert co_sign_ids == {9_000_001, 9_000_003, 9_000_005, 9_000_007, DISCO_CO_SIGN_DEEZER_ID}
+    triple = next(item for item in body["items"] if item["song"]["deezer_id"] == 9_000_001)
+    assert triple["co_sign_count"] == 3
+    assert {c["username"] for c in triple["contributors"]} == {"demo_power", "demo_friend", "demo_disc_a"}
+
+
 def test_discovery_seed_blocked_user_song_excluded(
     client,
     db_session,

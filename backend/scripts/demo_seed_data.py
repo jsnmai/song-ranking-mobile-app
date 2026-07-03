@@ -200,7 +200,8 @@ DEMO_ACCOUNTS: tuple[DemoAccountSpec, ...] = (
     # ── Seed accounts: targeted UI state testing ──────────────────────────────
     DemoAccountSpec(
         seed_email("seed_cosign"), "seed_cosign", "Seed Co-Sign", "public",
-        note="Discover: co-sign card shows; compatibility locked; trending 2/3 locked; lists locked.",
+        note="Discover: co-sign CAROUSEL (5 cards; 9_000_001 shows 3 contributors); compatibility "
+        "locked (no mutuals); trending/most-rated locked (circle_size 0); lists locked.",
     ),
     DemoAccountSpec(
         seed_email("seed_scores_only"), "seed_scores_only", "Seed Scores Only", "public",
@@ -374,8 +375,11 @@ RANKINGS_BY_USERNAME: dict[str, tuple[RankingSeedSpec, ...]] = {
         RankingSeedSpec(9_000_008, "dislike", 4),
     ),
     # ── Seed accounts ──────────────────────────────────────────────────────────
-    # seed_cosign: 5 own likes on songs disc_a/disc_b have never rated → no compatibility
-    # overlap. Follows both disc accounts so 9_000_031 (scored 10.0 by both) shows as co-sign.
+    # seed_cosign: 5 own likes chosen so none of its co-sign songs are self-rated (co-signs
+    # require the viewer hasn't rated the song). Its follows (disc_a, disc_b, power, friend)
+    # yield five co-signs: 9_000_031 (disc_a+disc_b), 9_000_001 (power+friend+disc_a → 3
+    # contributors), and 9_000_003/005/007 (power+friend). Compatibility stays locked: Most
+    # Compatible uses the mutual-follow circle and nobody follows seed_cosign back.
     "seed_cosign": (
         RankingSeedSpec(9_000_008, "like", 1),
         RankingSeedSpec(9_000_010, "like", 2),
@@ -511,9 +515,16 @@ FOLLOW_EDGES: tuple[tuple[str, str], ...] = (
     ("demo_friend", "demo_power"),
     ("demo_opposite", "demo_power"),
     ("demo_disc_a", "demo_power"),
-    # seed_cosign follows both disc accounts so 9_000_031 qualifies as a co-sign (min_count=2).
+    # seed_cosign follows both disc accounts (9_000_031 co-signs, min_count=2) PLUS power and
+    # friend, whose mirrored like buckets score 9_000_001/003/005/007 at >= 9.0. seed_cosign has
+    # rated none of those, so it sees a FIVE-card co-sign carousel — including 9_000_001 with
+    # THREE contributors (power + friend + disc_a) for the stacked-chip state. All four follows
+    # are one-way (nobody follows seed_cosign back), so circle_size stays 0 and the trending /
+    # most-rated cards keep their honest locked state.
     ("seed_cosign", "demo_disc_a"),
     ("seed_cosign", "demo_disc_b"),
+    ("seed_cosign", "demo_power"),
+    ("seed_cosign", "demo_friend"),
     # seed_graduated: 3 follows so the "Follow 3 friends" setup step clears and the checklist
     # card fully graduates (it now gates on follows too, not just the 10-rating count).
     ("seed_graduated", "demo_disc_a"),
