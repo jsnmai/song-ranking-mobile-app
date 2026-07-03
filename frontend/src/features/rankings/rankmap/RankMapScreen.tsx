@@ -1134,7 +1134,9 @@ export default function RankMapScreen() {
                 <View
                     style={[
                         styles.balanceStrip,
-                        { top: stageTop + Math.max(0, (stageH - BALANCE_STRIP_H) / 2) - BALANCE_LABEL_H },
+                        // Center the full strip (label + bar) in the stage so the gap above the
+                        // TASTE BALANCE label matches the gap below the DISLIKE end of the bar.
+                        { top: stageTop + Math.max(0, (stageH - BALANCE_STRIP_H - BALANCE_LABEL_H) / 2) },
                     ]}
                     pointerEvents="none"
                 >
