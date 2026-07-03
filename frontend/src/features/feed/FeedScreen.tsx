@@ -4,6 +4,7 @@ import {
     ActivityIndicator,
     Alert,
     Image,
+    Linking,
     Modal,
     Pressable,
     RefreshControl,
@@ -48,6 +49,7 @@ import { PulsingMeterTick } from "../../components/PulsingMeterTick"
 import { AppStackParamList, FeedStackParamList, TabParamList } from "../../navigation/types"
 import { colors, fonts, bucketColor, goldMeterShade, meterSegment, avatarColorFor, avatarColorToken } from "../../theme"
 import { usePullRefresh } from "../../hooks/usePullRefresh"
+import { useAudioPlayer } from "../../hooks/useAudioPlayer"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
 import ActivityLikeButton from "../activity/ActivityLikeButton"
 import RatingActivityCard from "../activity/RatingActivityCard"
@@ -58,6 +60,7 @@ import { useAuth } from "../auth/AuthContext"
 import { blockUser } from "../profile/apiRequests"
 import { ProfileBase, ReportReason } from "../profile/types"
 import { getMyRankingByDeezerId, getMyRankingBySongId, removeRating } from "../rankings/apiRequests"
+import { fetchPreviewUrlBySongId } from "../songs/apiRequests"
 import {
     chooseThisOrThat,
     dismissThisOrThat,
@@ -179,6 +182,22 @@ function CheckIcon({ color, size = 12 }: { color: string; size?: number }) {
         <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
             stroke={color} strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round">
             <Polyline points="20 6 9 17 4 12" />
+        </Svg>
+    )
+}
+
+function PlayIcon({ color, size = 14 }: { color: string; size?: number }) {
+    return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+            <Path d="M8 5v14l11-7z" fill={color} />
+        </Svg>
+    )
+}
+
+function PauseIcon({ color, size = 14 }: { color: string; size?: number }) {
+    return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+            <Path d="M7 5h4v14H7zM13 5h4v14h-4z" fill={color} />
         </Svg>
     )
 }
@@ -583,6 +602,18 @@ export default function FeedScreen() {
         return () => clearInterval(interval)
     }, [thisOrThatDisplayMode])
     const hiddenThisOrThatPair = useRef<string | null>(null)
+    const [thisOrThatPreviewSongId, setThisOrThatPreviewSongId] = useState<number | null>(null)
+    const [thisOrThatPreviewUrl, setThisOrThatPreviewUrl] = useState<string | null>(null)
+    const [thisOrThatPreviewAppleViewUrl, setThisOrThatPreviewAppleViewUrl] = useState<string | null>(null)
+    const [thisOrThatPreviewIsApple, setThisOrThatPreviewIsApple] = useState(false)
+    const [thisOrThatPreviewUnavailableSongId, setThisOrThatPreviewUnavailableSongId] = useState<number | null>(null)
+    const [thisOrThatPreviewLoadingSongId, setThisOrThatPreviewLoadingSongId] = useState<number | null>(null)
+    const [shouldPlayThisOrThatAfterLoad, setShouldPlayThisOrThatAfterLoad] = useState(false)
+    const {
+        isPlaying: isThisOrThatPreviewPlaying,
+        toggle: toggleThisOrThatPreview,
+        stop: stopThisOrThatPreview,
+    } = useAudioPlayer(thisOrThatPreviewUrl)
     // Drives the armed-side "inflate" (art scales up slightly) and the Confirm pill's pop-in.
     const totLeftScale = useSharedValue(1)
     const totRightScale = useSharedValue(1)
@@ -609,6 +640,21 @@ export default function FeedScreen() {
             totConfirmScale.value = withTiming(0, { duration: 150 })
         }
     }, [armedThisOrThatSongId, thisOrThat, thisOrThatResult])
+    useEffect(() => {
+        stopThisOrThatPreview()
+        setThisOrThatPreviewSongId(null)
+        setThisOrThatPreviewUrl(null)
+        setThisOrThatPreviewAppleViewUrl(null)
+        setThisOrThatPreviewIsApple(false)
+        setThisOrThatPreviewUnavailableSongId(null)
+        setThisOrThatPreviewLoadingSongId(null)
+        setShouldPlayThisOrThatAfterLoad(false)
+    }, [thisOrThat?.left.song.id, thisOrThat?.right.song.id, stopThisOrThatPreview])
+    useEffect(() => {
+        if (!shouldPlayThisOrThatAfterLoad || thisOrThatPreviewUrl === null) return
+        setShouldPlayThisOrThatAfterLoad(false)
+        toggleThisOrThatPreview()
+    }, [shouldPlayThisOrThatAfterLoad, thisOrThatPreviewUrl, toggleThisOrThatPreview])
     const totLeftArtStyle = useAnimatedStyle(() => ({ transform: [{ scale: totLeftScale.value }] }))
     const totRightArtStyle = useAnimatedStyle(() => ({ transform: [{ scale: totRightScale.value }] }))
     const totConfirmAnimatedStyle = useAnimatedStyle(() => ({
@@ -829,6 +875,43 @@ export default function FeedScreen() {
             Alert.alert("Could not save that pick", "Pull to refresh and try the next one.")
         } finally {
             setThisOrThatSaving(false)
+        }
+    }
+
+    const handleThisOrThatPreview = async (side: ThisOrThatModule["left"]) => {
+        if (!token || thisOrThatSaving || thisOrThatResult !== null) return
+        if (thisOrThatPreviewSongId === side.song.id && thisOrThatPreviewUrl !== null) {
+            toggleThisOrThatPreview()
+            return
+        }
+        stopThisOrThatPreview()
+        setThisOrThatPreviewSongId(side.song.id)
+        setThisOrThatPreviewUrl(null)
+        setThisOrThatPreviewAppleViewUrl(null)
+        setThisOrThatPreviewIsApple(false)
+        setThisOrThatPreviewUnavailableSongId(null)
+        setShouldPlayThisOrThatAfterLoad(false)
+        setThisOrThatPreviewLoadingSongId(side.song.id)
+        try {
+            const response = await fetchPreviewUrlBySongId(side.song.id, token)
+            setThisOrThatPreviewAppleViewUrl(response.apple_view_url)
+            setThisOrThatPreviewIsApple(response.provider === "apple")
+            if (response.preview_url !== null) {
+                setThisOrThatPreviewUrl(response.preview_url)
+                setShouldPlayThisOrThatAfterLoad(true)
+            } else {
+                setThisOrThatPreviewUnavailableSongId(side.song.id)
+            }
+        } catch {
+            setError("Could not load preview.")
+        } finally {
+            setThisOrThatPreviewLoadingSongId(null)
+        }
+    }
+
+    const handleOpenThisOrThatApple = () => {
+        if (thisOrThatPreviewAppleViewUrl) {
+            Linking.openURL(thisOrThatPreviewAppleViewUrl).catch(() => {})
         }
     }
 
@@ -1815,6 +1898,11 @@ export default function FeedScreen() {
         const option = (side: ThisOrThatModule["left"], edge: "left" | "right", artStyle: typeof totLeftArtStyle) => {
             const isArmed = armedThisOrThatSongId === side.song.id && !resolving
             const isDimmed = armedThisOrThatSongId !== null && !isArmed
+            const isPreviewActive = thisOrThatPreviewSongId === side.song.id
+            const isPreviewLoading = thisOrThatPreviewLoadingSongId === side.song.id
+            const isPreviewUnavailable = thisOrThatPreviewUnavailableSongId === side.song.id
+            const canPreview = (side.song.preview_available !== false || side.song.preview_url !== null)
+                && !isPreviewUnavailable
             return (
                 <TouchableOpacity
                     style={styles.totHalf}
@@ -1843,6 +1931,35 @@ export default function FeedScreen() {
                             pointerEvents="none"
                         />
                     )}
+                    {canPreview && (
+                        <Pressable
+                            style={[
+                                styles.totPreviewButton,
+                                isPreviewActive && styles.totPreviewButtonActive,
+                            ]}
+                            accessibilityLabel={
+                                isPreviewLoading
+                                    ? `Loading ${side.song.title} preview`
+                                    : isPreviewActive && isThisOrThatPreviewPlaying
+                                        ? `Pause ${side.song.title} preview`
+                                        : `Play ${side.song.title} preview`
+                            }
+                            disabled={resolving || isPreviewLoading}
+                            onPress={(event) => {
+                                event?.stopPropagation?.()
+                                handleThisOrThatPreview(side)
+                            }}
+                            testID={`feed-this-or-that-preview-${side.song.id}`}
+                        >
+                            {isPreviewLoading ? (
+                                <ActivityIndicator size="small" color={colors.cream} />
+                            ) : isPreviewActive && isThisOrThatPreviewPlaying ? (
+                                <PauseIcon color={colors.cream} />
+                            ) : (
+                                <PlayIcon color={colors.cream} />
+                            )}
+                        </Pressable>
+                    )}
                     {isArmed && (
                         <Animated.View style={[styles.totConfirmPillWrap, totConfirmAnimatedStyle]} pointerEvents="box-none">
                             <TouchableOpacity
@@ -1863,6 +1980,11 @@ export default function FeedScreen() {
                 </TouchableOpacity>
             )
         }
+        const showPreviewFooter = thisOrThatPreviewSongId !== null
+            && (
+                (thisOrThatPreviewUrl !== null && thisOrThatPreviewIsApple)
+                || thisOrThatPreviewUnavailableSongId === thisOrThatPreviewSongId
+            )
 
         return (
             <View style={styles.thisOrThatCard} testID="feed-this-or-that-card">
@@ -1890,6 +2012,24 @@ export default function FeedScreen() {
                         <Text style={styles.totOrChipText}>or</Text>
                     </View>
                 </View>
+                {showPreviewFooter && (
+                    <View style={styles.totAppleAttribution}>
+                        <Text style={styles.totAppleCourtesy} numberOfLines={1}>
+                            {thisOrThatPreviewUnavailableSongId === thisOrThatPreviewSongId
+                                ? "Preview unavailable"
+                                : "Provided courtesy of iTunes"}
+                        </Text>
+                        {thisOrThatPreviewAppleViewUrl !== null && (
+                            <Pressable onPress={handleOpenThisOrThatApple}>
+                                <Text style={styles.totAppleLink} numberOfLines={1}>
+                                    {thisOrThatPreviewUnavailableSongId === thisOrThatPreviewSongId
+                                        ? "Listen on Apple Music"
+                                        : "Get on Apple Music"}
+                                </Text>
+                            </Pressable>
+                        )}
+                    </View>
+                )}
             </View>
         )
     }
@@ -4326,12 +4466,30 @@ const styles = StyleSheet.create({
         color: colors.ink,
         letterSpacing: 1,
     },
+    totPreviewButton: {
+        position: "absolute",
+        right: 11,
+        bottom: 12,
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        backgroundColor: "rgba(10,9,14,0.58)",
+        borderWidth: 1,
+        borderColor: "rgba(245,238,220,0.28)",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    totPreviewButtonActive: {
+        backgroundColor: "rgba(245,184,64,0.34)",
+        borderColor: "rgba(245,184,64,0.72)",
+    },
     totHalfCaption: {
         position: "absolute",
         left: 0,
         right: 0,
         bottom: 0,
         padding: 12,
+        paddingRight: 54,
     },
     totHalfTitle: {
         fontFamily: fonts.display,
@@ -4405,6 +4563,32 @@ const styles = StyleSheet.create({
         fontFamily: fonts.serifItalic,
         fontSize: 15,
         color: "#fff",
+    },
+    totAppleAttribution: {
+        minHeight: 34,
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        backgroundColor: colors.navy,
+        borderTopWidth: 1,
+        borderTopColor: "rgba(245,238,220,0.12)",
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+    },
+    totAppleCourtesy: {
+        flex: 1,
+        minWidth: 0,
+        fontFamily: fonts.mono,
+        fontSize: 9,
+        color: "rgba(253,251,244,0.62)",
+        letterSpacing: 0.4,
+    },
+    totAppleLink: {
+        fontFamily: fonts.monoBold,
+        fontSize: 9,
+        color: colors.gold,
+        letterSpacing: 0.4,
     },
     // ── This or That result popup (compact Score Reveal echo) ──────────────
     totResultOverlay: {

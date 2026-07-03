@@ -26,6 +26,9 @@ const mockGetFeedModules = jest.fn()
 const mockChooseThisOrThat = jest.fn()
 const mockDismissThisOrThat = jest.fn()
 const mockUndoThisOrThat = jest.fn()
+const mockFetchPreviewUrlBySongId = jest.fn()
+const mockToggleAudio = jest.fn()
+const mockStopAudio = jest.fn()
 const mockReportRatingEvent = jest.fn()
 const mockLikeActivity = jest.fn()
 const mockUnlikeActivity = jest.fn()
@@ -35,6 +38,7 @@ const mockGetMyRankingByDeezerId = jest.fn()
 const mockRemoveRating = jest.fn()
 const mockBlockUser = jest.fn()
 const mockRefreshProfile = jest.fn()
+let mockIsPreviewPlaying = false
 let mockCurrentProfile: Profile = {
     id: 1,
     user_id: 2,
@@ -145,6 +149,20 @@ jest.mock("../../activity/apiRequests", () => ({
 jest.mock("../../rankings/apiRequests", () => ({
     getMyRankingByDeezerId: (...args: unknown[]) => mockGetMyRankingByDeezerId(...args),
     removeRating: (...args: unknown[]) => mockRemoveRating(...args),
+}))
+
+jest.mock("../../songs/apiRequests", () => ({
+    fetchPreviewUrlBySongId: (...args: unknown[]) => mockFetchPreviewUrlBySongId(...args),
+}))
+
+jest.mock("../../../hooks/useAudioPlayer", () => ({
+    useAudioPlayer: () => ({
+        isPlaying: mockIsPreviewPlaying,
+        currentTime: 0,
+        duration: 30,
+        toggle: mockToggleAudio,
+        stop: mockStopAudio,
+    }),
 }))
 
 jest.mock("../../profile/apiRequests", () => ({
@@ -308,6 +326,12 @@ beforeEach(() => {
     })
     mockDismissThisOrThat.mockResolvedValue({ dismissed: true })
     mockUndoThisOrThat.mockResolvedValue({ undone: true })
+    mockFetchPreviewUrlBySongId.mockResolvedValue({
+        preview_url: "https://example.com/preview.mp3",
+        apple_view_url: null,
+        provider: "deezer",
+    })
+    mockIsPreviewPlaying = false
     mockGetSongCircleRaters.mockResolvedValue({ raters: [] })
     mockRefreshProfile.mockResolvedValue(undefined)
     mockUpdateLikePrivacy.mockResolvedValue({ ...mockCurrentProfile, hide_like_counts: true })
@@ -786,6 +810,43 @@ describe("FeedScreen", () => {
         expect(popup.getByTestId("feed-this-or-that-result-done")).toBeTruthy()
         expect(popup.getByTestId("feed-this-or-that-result-undo")).toBeTruthy()
         expect(screen.getByTestId("feed-this-or-that-card")).toBeTruthy()
+    })
+
+    it("plays This-or-That previews through saved-song lookup and shows Apple attribution after playback", async () => {
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 15, bookmarked_count: 0 },
+            following_count: 0,
+        }
+        mockFetchPreviewUrlBySongId.mockResolvedValue({
+            preview_url: "https://example.com/apple-live-preview.m4a",
+            apple_view_url: "https://music.apple.com/us/album/pink-white/1440841363?i=1440841364",
+            provider: "apple",
+        })
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+        mockGetFeedModules.mockResolvedValue({ ...emptyModules, this_or_that: thisOrThatModule })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-card")).toBeTruthy()
+        })
+        expect(screen.queryByText("Provided courtesy of iTunes")).toBeNull()
+
+        await act(async () => {
+            fireEvent.press(screen.getByTestId("feed-this-or-that-preview-43"))
+        })
+
+        await waitFor(() => {
+            expect(mockFetchPreviewUrlBySongId).toHaveBeenCalledWith(43, "test-token")
+        })
+        await waitFor(() => {
+            expect(mockToggleAudio).toHaveBeenCalledTimes(1)
+        })
+        expect(screen.getByText("Provided courtesy of iTunes")).toBeTruthy()
+        expect(screen.getByText("Get on Apple Music")).toBeTruthy()
+        expect(screen.queryByTestId("feed-this-or-that-confirm-43")).toBeNull()
+        expect(mockChooseThisOrThat).not.toHaveBeenCalled()
     })
 
     it("deselects an armed side on a second tap, and arms the other side when tapped instead", async () => {
@@ -1306,7 +1367,7 @@ describe("FeedScreen", () => {
         expect(screen.queryByText("QUIET FOR NOW")).toBeNull()
         expect(screen.getByText("No verdicts yet")).toBeTruthy()
         expect(screen.getByText("FOLLOW FOR VERDICTS")).toBeTruthy()
-        expect(screen.getAllByTestId("quiet-moon-icon")).toHaveLength(7)
+        expect(screen.getAllByTestId("quiet-moon-icon")).toHaveLength(6)
 
         // The toggle now appears above the gate and collapses the full-size cards.
         fireEvent.press(screen.getByTestId("feed-social-cards-toggle"))
