@@ -19,7 +19,7 @@ import { useAudioPlayer } from "../../hooks/useAudioPlayer"
 import { AppStackParamList } from "../../navigation/types"
 import { colors, fonts, bucketColor } from "../../theme"
 import { useAuth } from "../auth/AuthContext"
-import { fetchPreviewUrl, fetchPreviewUrlBySongId } from "../songs/apiRequests"
+import { fetchPreviewUrlBySongId } from "../songs/apiRequests"
 import { cancelComparisonSession, chooseComparisonWinner, finalizeComparisonSession, undoComparisonChoice } from "./apiRequests"
 import { ComparisonSessionResponse } from "./types"
 
@@ -182,6 +182,16 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
         })
     }, [navigation, candidatePlayer, targetPlayer])
 
+    // Leaving the rate flow must fully pop the ComparisonFlow slot off the root stack.
+    // navigate("MainTabs", { screen }) truncates the JS route back to MainTabs but, because
+    // it also switches the nested tab in the same frame, react-native-screens can leave the
+    // flow's native screen attached as a ghost that the swipe-back gesture later resurfaces
+    // (unclickable, but swipeable). A plain goBack pops the slot cleanly — the same unwind
+    // ScoreReveal uses — landing back on wherever Rate was tapped.
+    const leaveFlow = () => {
+        if (navigation.canGoBack()) navigation.goBack()
+        else navigation.navigate("MainTabs", { screen: "Discover" })
+    }
     const handleCancel = async () => {
         if (!token || isSubmitting) return
         candidatePlayer.stop()
@@ -189,9 +199,11 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
         setIsSubmitting(true)
         try {
             await cancelComparisonSession(session.session_uuid, token)
-            navigation.navigate("MainTabs", { screen: "Discover" })
         } catch {
-            navigation.navigate("MainTabs", { screen: "Discover" })
+            // Leave the flow even if the cancel request fails — the session expires
+            // server-side and the user must never be trapped on this screen.
+        } finally {
+            leaveFlow()
         }
     }
 
@@ -352,43 +364,45 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
         const candidate = session.candidate
         // Each candidate carries its own preview state — reset the per-candidate flags.
         setCandidatePreviewUnavailable(false)
-        setCandidatePreviewIsApple(candidate?.song.provider === "apple")
         setCandidateHasPlayed(false)
         if (candidate === null) {
             setCandidatePreviewUrl(null)
             setCandidateAppleViewUrl(null)
-            setCandidatePreviewLoading(false)
-            return
-        }
-        if (!token) {
-            setCandidatePreviewUrl(candidate.song.preview_url)
-            setCandidateAppleViewUrl(null)
+            setCandidatePreviewIsApple(false)
             setCandidatePreviewLoading(false)
             return
         }
         const candidateSong = candidate.song
-        if (candidateSong.deezer_id == null) {
-            setCandidatePreviewUrl(candidate.song.preview_url)
-            setCandidateAppleViewUrl(
-                candidateSong.provider === "apple" && candidateSong.preview_url !== null
-                    ? candidateSong.apple_view_url ?? null
-                    : null,
-            )
+        const savedSongId = candidateSong.id ?? candidate.song_id ?? null
+        if (!token || savedSongId == null) {
+            // Without auth (or a durable id) fall back to whatever inline URL the
+            // session carried; no way to resolve provider, so show no attribution.
+            setCandidatePreviewUrl(candidateSong.preview_url)
+            setCandidateAppleViewUrl(null)
+            setCandidatePreviewIsApple(candidateSong.provider === "apple")
             setCandidatePreviewLoading(false)
             return
         }
-        const candidateDeezerId = candidateSong.deezer_id
 
         let isActive = true
         const authToken = token
+        const previewSongId = savedSongId
         setCandidatePreviewUrl(null)
         setCandidateAppleViewUrl(null)
+        // A persisted candidate reports provider "listn"/"deezer_legacy" even when its
+        // current preview is Apple's, so the song row can't tell us whether to show the
+        // iTunes footer. Resolve provider + store link + a fresh URL from the by-id
+        // lookup (the same authoritative path the target uses) instead.
+        setCandidatePreviewIsApple(false)
         setCandidatePreviewLoading(true)
 
         async function loadCandidatePreviewUrl() {
             try {
-                const url = await fetchPreviewUrl(candidateDeezerId, authToken)
-                if (isActive) setCandidatePreviewUrl(url)
+                const response = await fetchPreviewUrlBySongId(previewSongId, authToken)
+                if (!isActive) return
+                setCandidateAppleViewUrl(response.apple_view_url)
+                setCandidatePreviewIsApple(response.provider === "apple")
+                setCandidatePreviewUrl(response.preview_url)
             } catch {
                 if (isActive) setCandidatePreviewUrl(candidateSong.preview_url)
             } finally {
@@ -433,6 +447,14 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
     useEffect(() => {
         submitDim.value = withTiming(isSubmitting ? 1 : 0, { duration: 160 })
     }, [isSubmitting, submitDim])
+
+    // The X and choice buttons are disabled while a choice/cancel/undo request is in flight;
+    // gate the swipe-back gesture the same way. Otherwise a mid-request swipe pops this screen
+    // out from under the awaited navigation.replace/setSession that follows, dropping the user
+    // out of the flow with the session left half-advanced. Idle swipe-back still works.
+    useEffect(() => {
+        navigation.setOptions({ gestureEnabled: !isSubmitting })
+    }, [navigation, isSubmitting])
 
     const rankings = session.current_bucket_rankings
     const targetHasApplePreview = targetPreviewUrl !== null && targetPreviewIsApple && targetHasPlayed
@@ -575,7 +597,12 @@ export default function ComparisonFlowScreen({ navigation, route }: ComparisonFl
             {/* ── Header ── */}
             <View style={styles.header}>
                 <View style={styles.headerLeft}>
-                    <TouchableOpacity style={styles.roundBtn} onPress={handleCancel} disabled={isSubmitting}>
+                    <TouchableOpacity
+                        style={styles.roundBtn}
+                        onPress={handleCancel}
+                        disabled={isSubmitting}
+                        accessibilityLabel="Cancel rating"
+                    >
                         <CloseIcon />
                     </TouchableOpacity>
                 </View>

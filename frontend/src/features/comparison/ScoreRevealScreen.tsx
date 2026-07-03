@@ -119,7 +119,14 @@ export default function ScoreRevealScreen({ navigation, route }: ScoreRevealProp
             })
         } catch {}
     }
-    const handleViewRankings = () => navigation.navigate("MainTabs", { screen: "Rankings" })
+    // Pop the flow slot off the root stack before switching tabs. navigate("MainTabs", ...)
+    // on its own truncates the JS route but can leave this screen attached as a swipe-back
+    // ghost — it sits in the transparentModal-derived slot from the replace chain. popToTop
+    // tears it down cleanly first; navigate is then just a tab switch on the sole MainTabs route.
+    const handleViewRankings = () => {
+        navigation.popToTop()
+        navigation.navigate("MainTabs", { screen: "Rankings" })
+    }
     // Done: unwind the whole rate flow and land back on the exact tab screen the user was
     // browsing, skipping any intermediate song page. popToTop only touches the root stack,
     // so the originating tab (Discover, Feed, Rankings) stays mounted with its scroll and

@@ -217,6 +217,14 @@ export default function BucketSelectionScreen({ navigation, route }: BucketSelec
         })
     }, [navigation, stopAudio])
 
+    // Continue is disabled while the rating request is in flight; gate the swipe-to-dismiss
+    // gesture the same way. Otherwise dismissing this sheet mid-request lets the awaited
+    // navigation.replace fire against an already-gone screen, leaving a comparison session
+    // started server-side but abandoned. Idle dismiss still works.
+    useEffect(() => {
+        navigation.setOptions({ gestureEnabled: !isSubmitting })
+    }, [navigation, isSubmitting])
+
     const handleClose = () => {
         if (isClosing.current) return
         isClosing.current = true

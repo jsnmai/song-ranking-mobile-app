@@ -61,6 +61,7 @@ const baseSong: SongSearchResult = {
 const navigation = {
     goBack: mockGoBack,
     replace: mockReplace,
+    setOptions: jest.fn(),
     addListener: mockAddNavigationListener,
 }
 

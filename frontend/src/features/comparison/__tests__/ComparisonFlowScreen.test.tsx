@@ -1,12 +1,13 @@
 // Tests for Comparison Flow audio preview behavior.
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native"
 
-import { chooseComparisonWinner, finalizeComparisonSession, undoComparisonChoice } from "../apiRequests"
+import { cancelComparisonSession, chooseComparisonWinner, finalizeComparisonSession, undoComparisonChoice } from "../apiRequests"
 import ComparisonFlowScreen from "../ComparisonFlowScreen"
 import { ComparisonSessionResponse } from "../types"
 
 const mockNavigate = jest.fn()
 const mockReplace = jest.fn()
+const mockGoBack = jest.fn()
 const mockFetchPreviewUrl = jest.fn()
 const mockFetchPreviewUrlBySongId = jest.fn()
 const mockPlay = jest.fn()
@@ -100,6 +101,9 @@ const session: ComparisonSessionResponse = {
 const navigation = {
     navigate: mockNavigate,
     replace: mockReplace,
+    goBack: mockGoBack,
+    canGoBack: () => true,
+    setOptions: jest.fn(),
     addListener: mockAddNavigationListener,
 }
 
@@ -132,26 +136,36 @@ afterEach(() => {
 })
 
 describe("ComparisonFlowScreen", () => {
-    it("refreshes the persisted candidate preview URL before playback", async () => {
+    it("resolves a legacy candidate preview via the by-song lookup and shows iTunes attribution", async () => {
+        // The default candidate is a persisted song with a stale Deezer id + inline
+        // preview_url. Its stored provider is not "apple", so the footer used to stay on
+        // the tagline. The by-id lookup resolves the real (Apple) provider instead.
         const rendered = render(<ComparisonFlowScreen navigation={navigation as never} route={route as never} />)
 
         await waitFor(() => {
-            expect(mockFetchPreviewUrl).toHaveBeenCalledWith(999, "test-token")
+            expect(mockFetchPreviewUrlBySongId).toHaveBeenCalledWith(42, "test-token")
         })
+        // The legacy Deezer refresh endpoint is never hit and the stale inline URL is ignored.
+        expect(mockFetchPreviewUrl).not.toHaveBeenCalled()
 
         const previewButton = await screen.findByLabelText("Preview candidate")
         act(() => {
             fireEvent.press(previewButton, { stopPropagation: jest.fn() })
         })
 
-        expect(mockCreatePlayer).toHaveBeenCalledWith("https://example.com/fresh-preview.mp3")
+        expect(mockCreatePlayer).toHaveBeenCalledWith("https://example.com/apple-live-preview.m4a")
         expect(mockPlay).toHaveBeenCalledTimes(1)
+        // Playing the candidate's Apple preview swaps the footer to iTunes attribution,
+        // including the store link, matching the target side.
+        expect(screen.getByText("Provided courtesy of iTunes")).toBeTruthy()
+        expect(screen.getByText("Get on Apple Music")).toBeTruthy()
+        expect(screen.queryByText("We'll find the fairest comparison.")).toBeNull()
         act(() => {
             rendered.unmount()
         })
     })
 
-    it("uses by-song preview lazily for saved Apple candidates", async () => {
+    it("resolves saved Apple candidate previews via the by-song lookup", async () => {
         const appleRoute = {
             params: {
                 session: {
@@ -173,8 +187,12 @@ describe("ComparisonFlowScreen", () => {
 
         const rendered = render(<ComparisonFlowScreen navigation={navigation as never} route={appleRoute as never} />)
 
+        // Candidate previews resolve through the provider-neutral by-id endpoint, never
+        // the legacy Deezer refresh.
+        await waitFor(() => {
+            expect(mockFetchPreviewUrlBySongId).toHaveBeenCalledWith(42, "test-token")
+        })
         expect(mockFetchPreviewUrl).not.toHaveBeenCalled()
-        expect(mockFetchPreviewUrlBySongId).not.toHaveBeenCalled()
 
         const previewButton = await screen.findByLabelText("Preview candidate")
         await act(async () => {
@@ -182,14 +200,47 @@ describe("ComparisonFlowScreen", () => {
         })
 
         await waitFor(() => {
-            expect(mockFetchPreviewUrlBySongId).toHaveBeenCalledWith(42, "test-token")
-        })
-        await waitFor(() => {
             expect(mockCreatePlayer).toHaveBeenCalledWith("https://example.com/apple-live-preview.m4a")
         })
         // Attribution lives in the footer, replacing the tagline while the played preview is Apple's.
         expect(screen.getByText("Provided courtesy of iTunes")).toBeTruthy()
         expect(screen.queryByText("We'll find the fairest comparison.")).toBeNull()
+        act(() => {
+            rendered.unmount()
+        })
+    })
+
+    it("cancelling pops the flow off the stack with goBack instead of navigating to a tab", async () => {
+        const mockCancel = cancelComparisonSession as jest.Mock
+        mockCancel.mockResolvedValue(undefined)
+        const rendered = render(<ComparisonFlowScreen navigation={navigation as never} route={route as never} />)
+
+        fireEvent.press(screen.getByLabelText("Cancel rating"))
+
+        await waitFor(() => {
+            expect(mockCancel).toHaveBeenCalledWith("session-123", "test-token")
+        })
+        // Must pop the slot cleanly (goBack) — navigate("MainTabs", { screen }) leaves the
+        // native screen attached as a swipe-back ghost after the transparentModal replace chain.
+        await waitFor(() => {
+            expect(mockGoBack).toHaveBeenCalledTimes(1)
+        })
+        expect(mockNavigate).not.toHaveBeenCalled()
+        act(() => {
+            rendered.unmount()
+        })
+    })
+
+    it("still leaves the flow when the cancel request fails", async () => {
+        const mockCancel = cancelComparisonSession as jest.Mock
+        mockCancel.mockRejectedValue(new Error("network"))
+        const rendered = render(<ComparisonFlowScreen navigation={navigation as never} route={route as never} />)
+
+        fireEvent.press(screen.getByLabelText("Cancel rating"))
+
+        await waitFor(() => {
+            expect(mockGoBack).toHaveBeenCalledTimes(1)
+        })
         act(() => {
             rendered.unmount()
         })
