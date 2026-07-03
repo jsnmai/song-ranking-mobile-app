@@ -121,6 +121,10 @@ const BALANCE_STRIP_H = 220
 const BALANCE_LABEL_LEN = 100
 const BALANCE_LABEL_GAP = 6
 const BALANCE_LABEL_H = BALANCE_LABEL_LEN + BALANCE_LABEL_GAP
+// Floor every bucket's bar segment and its count get, regardless of how few songs
+// it holds. Without it, an empty bucket (0 songs) next to a heavy one collapses to
+// an invisible sliver and its count label clips. Sized to clear one count row.
+const BALANCE_MIN_SLOT = 22
 
 function clamp(value: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, value))
@@ -389,7 +393,10 @@ export default function RankMapScreen() {
     // the world View applies — so the overlay can place fixed-size chrome over moving orbs.
     const project = (sx: number, sy: number) => ({
         x: worldLeftSS + worldWSS / 2 + (zoom / RENDER_SCALE) * (sx - worldWSS / 2) + pan.x,
-        y: worldTopSS + worldHSS / 2 + (zoom / RENDER_SCALE) * (sy - worldHSS / 2) + pan.y,
+        // + stageTop: the viewport now spans the full screen (top = 0) so the map fades under the
+        // title instead of hard-clipping at a line, but the world is still centered on the stage
+        // region below the chrome — so shift projected chrome down by the stage's top inset.
+        y: stageTop + worldTopSS + worldHSS / 2 + (zoom / RENDER_SCALE) * (sy - worldHSS / 2) + pan.y,
     })
     // Live world geometry for the gesture handler (its PanResponder is memoized once, so it must
     // read current values through a ref — stageH/worldH change when the time strip appears).
@@ -659,7 +666,11 @@ export default function RankMapScreen() {
         <View style={styles.root}>
             <Cosmos width={width} height={height} seed={`rank-map-${view}`} zoom={zoom} pan={pan} />
 
-            <View style={[styles.viewport, { top: stageTop, height: stageH }]} {...panResponder.panHandlers}>
+            {/* Full-screen stage: the clip window starts at the very top (not below the title) so
+                the map fills the screen and orbs dissolve into the top fade near the title instead
+                of hard-clipping at a line. The world stays centered on the stage region below the
+                chrome (top offset = stageTop), so the map's framing is unchanged. */}
+            <View style={[styles.viewport, { top: 0, height: stageTop + stageH }]} {...panResponder.panHandlers}>
                 {songs.length === 0 && (
                     <View style={styles.empty}>
                         <Text style={styles.emptyText}>No songs to map yet.</Text>
@@ -673,7 +684,9 @@ export default function RankMapScreen() {
                         styles.world,
                         {
                             left: worldLeftSS,
-                            top: worldTopSS,
+                            // + stageTop: viewport origin is now screen-top (0), so shift the world
+                            // down by the stage inset to keep it centered on the same on-screen region.
+                            top: worldTopSS + stageTop,
                             width: worldWSS,
                             height: worldHSS,
                             transform: [
@@ -904,6 +917,23 @@ export default function RankMapScreen() {
                 </View>
             </View>
 
+            {/* Top fade — now that the stage is full-screen, this dissolves the map into the
+                background as it rises toward the title: opaque navy behind the "Rank Map" title
+                (kept legible), fading to transparent just below it. pointerEvents none so it never
+                intercepts a pan or a tap on the map. Sits above the map, below the title/legend. */}
+            <View style={[styles.topFade, { height: stageTop + 16 }]} pointerEvents="none">
+                <Svg width={width} height={stageTop + 16}>
+                    <Defs>
+                        <LinearGradient id="rankMapTopFade" x1="0" y1="0" x2="0" y2="1">
+                            <Stop offset="0" stopColor={colors.navy2} stopOpacity={1} />
+                            <Stop offset="0.7" stopColor={colors.navy2} stopOpacity={0.95} />
+                            <Stop offset="1" stopColor={colors.navy2} stopOpacity={0} />
+                        </LinearGradient>
+                    </Defs>
+                    <Rect x={0} y={0} width={width} height={stageTop + 16} fill="url(#rankMapTopFade)" />
+                </Svg>
+            </View>
+
             <View style={[styles.topChrome, { top: insets.top + 8 }]}>
                 <Pressable
                     style={styles.back}
@@ -1089,6 +1119,7 @@ export default function RankMapScreen() {
                                     key={c.key}
                                     style={{
                                         flex: Math.max(c.list.length, 0.2),
+                                        minHeight: BALANCE_MIN_SLOT,
                                         backgroundColor: c.color,
                                         opacity: activeBuckets.has(c.key) ? 1 : 0.28,
                                     }}
@@ -1098,12 +1129,14 @@ export default function RankMapScreen() {
                         <View style={styles.balanceCounts}>
                             {nebula.map((c) => (
                                 // Each count gets a flex slot proportional to its share — exactly like the
-                                // bar segment beside it — and centers its number, so it sits at the vertical
-                                // middle of its own bucket section.
+                                // bar segment beside it (same flex, same minHeight floor, same gap) — and
+                                // centers its number, so it sits at the vertical middle of its own bucket
+                                // section and never clips when the bucket is empty.
                                 <View
                                     key={c.key}
                                     style={{
                                         flex: Math.max(c.list.length, 0.2),
+                                        minHeight: BALANCE_MIN_SLOT,
                                         justifyContent: "center",
                                         opacity: activeBuckets.has(c.key) ? 1 : 0.4,
                                     }}
@@ -1174,6 +1207,9 @@ const styles = StyleSheet.create({
     world: { position: "absolute" },
     empty: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
     emptyText: { fontFamily: fonts.mono, fontSize: 12, color: colors.cdim, letterSpacing: 0.5 },
+
+    // Above the map (default z), below the title/back/legend/controls so they stay crisp on top.
+    topFade: { position: "absolute", left: 0, right: 0, top: 0, zIndex: 22 },
 
     topChrome: {
         position: "absolute",
@@ -1524,7 +1560,9 @@ const styles = StyleSheet.create({
         flexDirection: "column",
         gap: 2,
     },
-    balanceCounts: { height: BALANCE_STRIP_H },
+    // Same height and internal gap as balanceBar so each count resolves to the exact
+    // same slot as its bar segment and stays aligned with it.
+    balanceCounts: { height: BALANCE_STRIP_H, gap: 2 },
     balanceCountRow: { flexDirection: "row", alignItems: "center", gap: 5 },
     balanceCountNum: { fontFamily: fonts.serif, fontSize: 14, color: colors.cream, lineHeight: 16 },
     balanceCountLabel: { fontFamily: fonts.mono, fontSize: 7.5, letterSpacing: 0.6, color: colors.cdim },
