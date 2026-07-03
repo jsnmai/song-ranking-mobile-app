@@ -618,6 +618,11 @@ export default function FeedScreen() {
     const modulesGateComplete =
         (profile?.user_stats?.rated_count ?? 0) >= MODULE_UNLOCK_RATED &&
         (profile?.following_count ?? 0) >= 3
+    // The Getting-started banner tracks the FULL onboarding journey, not just the module gate: its
+    // meter runs to 10 ratings (5 is only the "cards unlock" marker) and it also wants 3 follows.
+    // So it stays up until BOTH are done — a user who cleared the 5-rating module gate but is at,
+    // say, 6/10 still sees it counting toward Rankings-at-10.
+    const onboardingComplete = gettingStartedComplete && (profile?.following_count ?? 0) >= 3
     // This-or-That has its own, higher rated threshold so it doesn't surface in the same moment as
     // the score reveal or the module-strip unlock above. Keep in sync with backend
     // THIS_OR_THAT_MIN_RATED — only used to decide whether it's worth fetching modules at all below
@@ -1030,6 +1035,18 @@ export default function FeedScreen() {
     const heroEvent = events.find((e) => e.actor_profile.user_id !== profile?.user_id) ?? null
     const heroSongId = heroEvent?.song.id ?? null
 
+    // The social-cards area is collapsible whenever it is entirely locked: below the gate (compact
+    // teaser grid) OR gate-met-but-every-card-locked (full-size cards, followed users just inactive).
+    // Once any card can go live we never let the whole strip be hidden.
+    const allSocialCardsLocked =
+        heroEvent === null &&
+        !rerateRadar &&
+        !consensus &&
+        !disagreement &&
+        !splitDecision &&
+        !matchMoment
+    const socialCardsCollapsible = !modulesGateComplete || allSocialCardsLocked
+
     // Fetch the circle members (mutual follows, visible) who rate the featured song so the
     // Recent Verdict hero can show their avatars next to the song's total LISTn rating count.
     useEffect(() => {
@@ -1100,7 +1117,7 @@ export default function FeedScreen() {
                                 <View style={styles.lockDotXl}><LockIcon color="#fff" size={24} /></View>
                                 <View style={{ flex: 1 }}>
                                     <Text style={styles.lvLockedTitle}>Locked for now</Text>
-                                    <Text style={styles.lvLockedBody}>Follow friends to see their freshest ratings.</Text>
+                                    <Text style={styles.lvLockedBody}>Follow people to see their freshest ratings.</Text>
                                 </View>
                             </View>
                         </View>
@@ -1225,7 +1242,8 @@ export default function FeedScreen() {
                                 <Text style={styles.lockTagLabel}>LOCKED</Text>
                             </View>
                         </View>
-                        {/* Placeholder text pill next to the empty square */}
+                        {/* Placeholder song row. Sits clear of the pill: the four space-between rows
+                            share the freed height from the shorter sparkline below. */}
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                             <HatchBox size={24} radius={6} tone="light" />
                             <View style={{ flex: 1 }}>
@@ -1233,7 +1251,7 @@ export default function FeedScreen() {
                             </View>
                         </View>
                         {/* Sparkline as flex child 3/4 */}
-                        <Svg width="100%" height={34} viewBox="0 0 100 34" preserveAspectRatio="none">
+                        <Svg width="100%" height={20} viewBox="0 0 100 34" preserveAspectRatio="none">
                             <Polyline
                                 points="8,27 32,22 54,18 75,12 89,7"
                                 fill="none"
@@ -1245,10 +1263,11 @@ export default function FeedScreen() {
                                 strokeLinejoin="round"
                             />
                         </Svg>
-                        {/* Caption next to the lock */}
+                        {/* Caption next to the lock. Capped at 2 lines so this row matches the Match
+                            Moment card's caption height and both lock dots line up across the pair. */}
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                             <View style={styles.lockDotSm}><LockIcon color="#fff" size={13} /></View>
-                            <Text style={[styles.lockCardDesc, { flex: 1, color: "rgba(255,255,255,0.55)" }]}>When a friend changes a score</Text>
+                            <Text style={[styles.lockCardDesc, { flex: 1, color: "rgba(255,255,255,0.55)" }]} numberOfLines={2}>When someone you follow changes a score</Text>
                         </View>
                     </View>
                 </BouncyPressable>
@@ -1325,8 +1344,8 @@ export default function FeedScreen() {
         )
     }
 
-    // Consensus half-tile: live friend average + score distribution when ≥3 friends rate a song,
-    // otherwise the original locked placeholder. Friends = mutual follows (backend filters to mutual +
+    // Consensus half-tile: live circle average + score distribution when ≥3 circle members rate a song,
+    // otherwise the original locked placeholder. Circle = mutual follows (backend filters to mutual +
     // visible, never one-way); the viewer is never part of the aggregate.
     const renderConsensus = () => {
         if (consensus === null) {
@@ -1342,7 +1361,7 @@ export default function FeedScreen() {
                         </View>
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                             <View style={styles.lockDotLg}><LockIcon color="#fff" size={18} /></View>
-                            <Text style={[styles.lockCardDesc, { flex: 1 }]}>How your friends score a track</Text>
+                            <Text style={[styles.lockCardDesc, { flex: 1 }]}>How your circle scores a track</Text>
                         </View>
                         <View>
                             <View style={styles.consensusFullBars}>
@@ -1358,7 +1377,7 @@ export default function FeedScreen() {
         }
 
         const c = consensus
-        // Histogram: flat-bottomed bars spanning the friends' low→high range (their values flank it),
+        // Histogram: flat-bottomed bars spanning the circle's low→high range (their values flank it),
         // heights following a bell peaked at the average so the tallest bar IS the average (marked with a
         // dot). The peak's horizontal position shows skew within the range; the raw 10-bin distribution
         // couldn't do this with only a handful of friends (every occupied bin held one rater, all equal).
@@ -1385,9 +1404,9 @@ export default function FeedScreen() {
                     <View style={styles.fullCellTop}>
                         <View style={styles.lightPill}><Text style={styles.lightPillText}>Consensus</Text></View>
                     </View>
-                    {/* "N friends rated <song>". Each line is its own space-between child so the
+                    {/* "N circle ratings" sits above the song. Each line is its own space-between child so the
                         pill→label, label→title, and title→verdict gaps all come out equal. */}
-                    <Text style={styles.consRatedLabel}>{c.contributor_count} FRIENDS RATED</Text>
+                    <Text style={styles.consRatedLabel}>{c.contributor_count} CIRCLE RATINGS</Text>
                     <Text style={styles.consSong} numberOfLines={1}>{c.song.title}</Text>
                     {/* Their verdict: the average (big number + label) peaking over a low→high histogram. */}
                     <View>
@@ -1406,8 +1425,8 @@ export default function FeedScreen() {
         )
     }
 
-    // Disagreement Spotlight: live "you vs your friends" gap when a qualifying song exists, else the
-    // original locked placeholder. Friends = mutual follows (viewer excluded from their average).
+    // Disagreement Spotlight: live "you vs your circle" gap when a qualifying song exists, else the
+    // original locked placeholder. Circle = mutual follows (viewer excluded from their average).
     const renderDisagreement = () => {
         if (disagreement === null) {
             return (
@@ -1423,7 +1442,7 @@ export default function FeedScreen() {
                         <HatchBox size={48} radius={9} tone="dark" />
                         <View style={{ flex: 1 }}>
                             <Text style={styles.disagreeLockedTitle}>Locked for now</Text>
-                            <Text style={styles.disagreeLockedBody}>Rate more to see where you split from your friends.</Text>
+                            <Text style={styles.disagreeLockedBody}>Rate more to see where you split from your circle.</Text>
                         </View>
                         <View style={{ flexDirection: "row", gap: 14, alignItems: "center" }}>
                             <View style={{ alignItems: "center" }}>
@@ -1432,7 +1451,7 @@ export default function FeedScreen() {
                             </View>
                             <View style={styles.disagreeDivider} />
                             <View style={{ alignItems: "center" }}>
-                                <Text style={styles.disagreeColLabel}>FRIENDS</Text>
+                                <Text style={styles.disagreeColLabel}>CIRCLE</Text>
                                 <View style={styles.disagreeColCircle}><LockIcon color={colors.inkDim} size={12} /></View>
                             </View>
                         </View>
@@ -1443,7 +1462,7 @@ export default function FeedScreen() {
 
         const d = disagreement
         // Backend gap = abs(your_score − friends_average) on raw scores. Derive the displayed "APART"
-        // from the SAME rounded values shown below so YOU, FRIENDS, and APART always reconcile on screen
+        // from the SAME rounded values shown below so YOU, CIRCLE, and APART always reconcile on screen
         // (rounding each independently could otherwise leave them looking 0.1 off, e.g. 7.5 − 4.9 ≠ 2.5).
         const apart = Math.abs(Number(d.your_score.toFixed(1)) - Number(d.friends_average.toFixed(1)))
         return (
@@ -1475,7 +1494,7 @@ export default function FeedScreen() {
                         </View>
                         <View style={styles.disagreeDivider} />
                         <View style={{ alignItems: "center" }}>
-                            <Text style={styles.disagreeColLabel}>FRIENDS</Text>
+                            <Text style={styles.disagreeColLabel}>CIRCLE</Text>
                             <Text style={[styles.disagreeScore, { color: colors.inkSoft }]}>{d.friends_average.toFixed(1)}</Text>
                         </View>
                     </View>
@@ -1578,19 +1597,20 @@ export default function FeedScreen() {
                                 <Text style={styles.lockTagLabel}>LOCKED</Text>
                             </View>
                         </View>
-                        {/* Head-to-head: winner (check badge) › loser */}
+                        {/* Head-to-head: winner (check badge) › loser. Static › on the locked teaser. */}
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
                             <View>
                                 <HatchBox size={42} radius={8} tone="light" />
                                 <View style={styles.matchMomentCheck}><CheckIcon color={colors.mint} size={10} /></View>
                             </View>
-                            <MatchMomentGtMotion />
+                            <Text style={styles.matchMomentGt}>›</Text>
                             <HatchBox size={32} radius={7} tone="light" />
                         </View>
-                        {/* Caption next to the lock */}
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
+                        {/* Caption next to the lock. Capped at 2 lines so this row matches the Re-rate
+                            card's caption height and both lock dots line up across the pair. */}
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                             <View style={styles.lockDotSm}><LockIcon color="#fff" size={13} /></View>
-                            <Text style={[styles.lockCardDesc, { flex: 1 }]}>Head-to-head picks from people you follow</Text>
+                            <Text style={[styles.lockCardDesc, { flex: 1 }]} numberOfLines={2}>Picks from people you follow</Text>
                         </View>
                     </View>
                 </BouncyPressable>
@@ -1966,7 +1986,7 @@ export default function FeedScreen() {
     // Heads the whole social-cards area (Recent Verdict + the module grid). Rendered above
     // renderRecentVerdict() so it stays above Recent Verdict whether the verdict is the live hero,
     // the locked teaser, or the compact locked row — in every gate state. While the module gate
-    // is locked it also carries a lock+friend-count badge and the show/hide toggle that collapses
+    // is locked it also carries a lock+following-count badge and the show/hide toggle that collapses
     // the locked cards below (renderRecentVerdict + renderLockedSection).
     const renderSocialCardsHeader = () => {
         const followingCount = profile?.following_count ?? 0
@@ -1977,15 +1997,15 @@ export default function FeedScreen() {
             // your people card above doesn't read as a void.
             <View style={[styles.sectionRow, { marginTop: 6, marginBottom: 8, alignItems: "center" }]}>
                 <View style={styles.socialCardsHeaderLeft}>
-                    <Text style={styles.sectionLabel}>SOCIAL CARDS</Text>
+                    <Text style={styles.sectionLabel}>TASTE SIGNALS</Text>
                     {!modulesGateComplete && (
                         <View style={styles.socialCardsLockBadge}>
                             <LockIcon color={colors.inkDim} size={10} />
-                            <Text style={styles.socialCardsLockCount}>{Math.min(followingCount, 3)}/3 FRIENDS</Text>
+                            <Text style={styles.socialCardsLockCount}>{Math.min(followingCount, 3)}/3 FOLLOWING</Text>
                         </View>
                     )}
                 </View>
-                {!modulesGateComplete && (
+                {socialCardsCollapsible && (
                     <TouchableOpacity
                         onPress={() => setSocialCardsCollapsed((c) => !c)}
                         accessibilityRole="button"
@@ -2022,14 +2042,14 @@ export default function FeedScreen() {
 
     // Compact teaser grid — shown below the module gate (brand-new accounts). Each tile is a locked
     // placeholder that bounces on tap; the full-size cards replace this grid once the gate
-    // (rated >= MODULE_UNLOCK_RATED AND following >= 3) is met. The "SOCIAL CARDS" header is rendered
+    // (rated >= MODULE_UNLOCK_RATED AND following >= 3) is met. The "TASTE SIGNALS" header is rendered
     // above renderRecentVerdict() in the page body, so it always heads this whole area. Recent Verdict
     // appears here as a compact row only while it has no live hero (the live hero is promoted above).
     const renderLockedSection = () => (
         <View style={styles.lockedSection} testID="feed-social-cards-locked-section">
             {/* Recent Verdicts compact teaser — only while it's still locked. Once a followed
                 verdict exists it is promoted to the full hero above, so this row drops out and the
-                "SOCIAL CARDS" header then heads only the modules below that are still locked. */}
+                "TASTE SIGNALS" header then heads only the modules below that are still locked. */}
             {heroEvent === null && (
                 <BouncyPressable style={[styles.miniRow, styles.miniRowNavy]}>
                     <DriftingStars dots={ORBIT_DOTS_DIM_10} />
@@ -2040,7 +2060,7 @@ export default function FeedScreen() {
                         <View style={styles.miniRowText}>
                             <Text style={styles.miniRowLabel} numberOfLines={1}>Recent Verdicts</Text>
                             <Text style={[styles.miniRowSub, { color: colors.cdim }]} numberOfLines={1}>
-                                Friends' fresh ratings, front and center
+                                People you follow, front and center
                             </Text>
                         </View>
                         <Text style={[styles.miniLockedTag, { color: colors.cdim }]}>LOCKED</Text>
@@ -2063,7 +2083,7 @@ export default function FeedScreen() {
                         </View>
                         <View>
                             <Text style={[styles.miniTileLabel, { color: "#fff" }]}>Split Decision</Text>
-                            <Text style={[styles.miniTileSub, { color: "rgba(255,255,255,0.78)" }]} numberOfLines={1}>Friends clash on a song</Text>
+                            <Text style={[styles.miniTileSub, { color: "rgba(255,255,255,0.78)" }]} numberOfLines={1}>People you follow clash</Text>
                         </View>
                     </View>
                 </BouncyPressable>
@@ -2113,7 +2133,7 @@ export default function FeedScreen() {
                         </View>
                         <View>
                             <Text style={[styles.miniTileLabel, { color: colors.cream }]}>Re-rate Radar</Text>
-                            <Text style={[styles.miniTileSub, { color: colors.cdim }]}>A score a friend moved</Text>
+                            <Text style={[styles.miniTileSub, { color: colors.cdim }]}>Someone you follow moved</Text>
                         </View>
                     </View>
                 </BouncyPressable>
@@ -2131,7 +2151,7 @@ export default function FeedScreen() {
                         </View>
                         <View>
                             <Text style={[styles.miniTileLabel, { color: "#fff" }]}>Match Moment</Text>
-                            <Text style={[styles.miniTileSub, { color: "rgba(255,255,255,0.78)" }]}>Head-to-head picks</Text>
+                            <Text style={[styles.miniTileSub, { color: "rgba(255,255,255,0.78)" }]}>Picks from people you follow</Text>
                         </View>
                     </View>
                 </BouncyPressable>
@@ -2146,7 +2166,7 @@ export default function FeedScreen() {
                     <View style={styles.miniRowText}>
                         <Text style={[styles.miniRowLabel, { color: colors.ink }]} numberOfLines={1}>Disagreement Spotlight</Text>
                         <Text style={[styles.miniRowSub, { color: colors.inkDim }]} numberOfLines={1}>
-                            You vs. the crowd on one track
+                            You vs. your circle
                         </Text>
                     </View>
                     <Text style={[styles.miniLockedTag, { color: colors.inkDim }]}>LOCKED</Text>
@@ -2157,12 +2177,13 @@ export default function FeedScreen() {
 
     const renderGettingStartedBanner = () => {
         const rated = Math.min(profile?.user_stats?.rated_count ?? 0, 10)
-        const friendCount = Math.min(profile?.following_count ?? 0, 3)
-        // Once all 10 ratings are in but the 3 follows aren't, the banner drops its rating CTA and
-        // leans fully into finding people: the meter stays gold as a "songs done" trophy while the
-        // copy and the promoted gold button both point at friends. Mirrors the Profile setup card's
-        // friendsPending home stretch.
-        const friendsPending = rated >= 10 && friendCount < 3
+        const followingCount = Math.min(profile?.following_count ?? 0, 3)
+        // Two home-stretch states mirror each other. followingPending: all 10 ratings in but the 3
+        // follows aren't — drop the rating CTA and lean fully into finding people. ratingsPending:
+        // the 3 follows are in but ratings aren't at 10 yet — drop the people CTA and lean into
+        // rating toward the Rankings-at-10 unlock. (Both done => the banner isn't shown at all.)
+        const followingPending = rated >= 10 && followingCount < 3
+        const ratingsPending = rated < 10 && followingCount >= 3
 
         return (
             <View style={styles.orbitCard}>
@@ -2172,14 +2193,20 @@ export default function FeedScreen() {
                         <View style={styles.orbitPill}>
                             <Text style={styles.orbitPillText}>Getting started</Text>
                         </View>
-                        <Text style={styles.friendCounter}>{friendCount} / 3 FRIENDS</Text>
+                        <Text style={styles.friendCounter}>{followingCount} / 3 FOLLOWING</Text>
                     </View>
                     <Text style={styles.orbitTitle}>
-                        {friendsPending ? "Songs rated. Follow friends." : "Rate songs. Follow friends."}
+                        {followingPending
+                            ? "Songs rated. Follow people."
+                            : ratingsPending
+                            ? "People followed. Keep rating."
+                            : "Rate songs. Follow people."}
                     </Text>
                     <Text style={styles.orbitBody}>
-                        {friendsPending
+                        {followingPending
                             ? "Follow 3 people to unlock the Feed modules below."
+                            : ratingsPending
+                            ? "Rate 10 songs to unlock Rankings and your Taste Profile."
                             : "Rate 5 songs and follow 3 people to unlock the Feed modules below."}
                     </Text>
                     <View style={styles.tasteMeterRow}>
@@ -2201,13 +2228,18 @@ export default function FeedScreen() {
                         })}
                     </View>
                     <Text style={styles.tasteMeterLabel}>
-                        {friendsPending
-                            ? "10 / 10 RATED · MODULES AT 3 FRIENDS"
+                        {followingPending
+                            ? "10 / 10 RATED · MODULES AT 3 FOLLOWING"
+                            : ratingsPending && rated >= 5
+                            // Follows done and cards already unlocked → only Rankings-at-10 is left.
+                            ? `${rated} / 10 RATED · RANKINGS AT 10`
+                            // Both markers still ahead (both-pending, or follows-done but under 5).
                             : `${rated} / 10 RATED · CARDS AT 5 · RANKINGS AT 10`}
                     </Text>
                     <View style={styles.bannerBtns}>
-                        {/* Ratings done → drop the rate CTA and promote Find friends to the gold slot. */}
-                        {!friendsPending && (
+                        {/* Ratings done → drop the rate CTA and promote Find people to the gold slot;
+                            follows done → drop the Find people CTA and keep the gold rate button. */}
+                        {!followingPending && (
                             <TouchableOpacity
                                 style={styles.bannerBtnGold}
                                 onPress={() => navigation.navigate("Discover", { screen: "DiscoverHome", params: { focusSearch: true, searchMode: "songs" } })}
@@ -2215,14 +2247,16 @@ export default function FeedScreen() {
                                 <Text style={styles.bannerBtnGoldText}>+ Rate songs</Text>
                             </TouchableOpacity>
                         )}
-                        <TouchableOpacity
-                            style={friendsPending ? styles.bannerBtnGold : styles.bannerBtnGhost}
-                            onPress={handleFindUsers}
-                        >
-                            <Text style={friendsPending ? styles.bannerBtnGoldText : styles.bannerBtnGhostText}>
-                                Find friends
-                            </Text>
-                        </TouchableOpacity>
+                        {!ratingsPending && (
+                            <TouchableOpacity
+                                style={followingPending ? styles.bannerBtnGold : styles.bannerBtnGhost}
+                                onPress={handleFindUsers}
+                            >
+                                <Text style={followingPending ? styles.bannerBtnGoldText : styles.bannerBtnGhostText}>
+                                    Find people
+                                </Text>
+                            </TouchableOpacity>
+                        )}
                     </View>
                 </View>
             </View>
@@ -2230,7 +2264,7 @@ export default function FeedScreen() {
     }
 
     // "Find your people" nudge — shown until the user follows 3 people or dismisses
-    // it (✕). Friend-gated (not rating-gated), and rendered in both the empty feed
+    // it (✕). Follow-gated (not rating-gated), and rendered in both the empty feed
     // and the normal feed header so it persists past the first rating. Both buttons
     // open user search for now (handleFindUsers); see FindYourPeopleCard for the
     // deferred contacts/invite flows.
@@ -2304,17 +2338,17 @@ export default function FeedScreen() {
 
                 {/* Below the gate (rated < 5 or follow < 3): banner + compact teaser grid, no module
                     data fetched. At the gate: the full-size cards go live per their own data rules. */}
-                {!modulesGateComplete && renderGettingStartedBanner()}
+                {!onboardingComplete && renderGettingStartedBanner()}
                 {renderFindFriends()}
                 {renderThisOrThatHeader()}
                 {renderThisOrThat()}
                 {renderThisOrThatResultModal()}
-                {/* SOCIAL CARDS heads the whole area; Recent Verdict is its first card. Recent Verdict
+                {/* TASTE SIGNALS heads the whole area; Recent Verdict is its first card. Recent Verdict
                     sits with the other module cards but is never gated by rated count — only by having
                     a followed verdict — so it can go live before the rest. */}
                 {renderSocialCardsHeader()}
-                {(modulesGateComplete || !socialCardsCollapsed) && renderRecentVerdict()}
-                {(modulesGateComplete || !socialCardsCollapsed) &&
+                {(!socialCardsCollapsed || !socialCardsCollapsible) && renderRecentVerdict()}
+                {(!socialCardsCollapsed || !socialCardsCollapsible) &&
                     (modulesGateComplete ? renderUnlockedSection() : renderLockedSection())}
 
                 {events.length > 0 && (
@@ -2602,17 +2636,17 @@ export default function FeedScreen() {
                     </View>
                 </TouchableOpacity>
 
-                {!modulesGateComplete && renderGettingStartedBanner()}
+                {!onboardingComplete && renderGettingStartedBanner()}
                 {renderFindFriends()}
                 {renderThisOrThatHeader()}
                 {renderThisOrThat()}
                 {renderThisOrThatResultModal()}
-                {/* SOCIAL CARDS heads the whole area; Recent Verdict is its first card. Recent Verdict
+                {/* TASTE SIGNALS heads the whole area; Recent Verdict is its first card. Recent Verdict
                     sits with the other module cards but is never gated by rated count — only by having
                     a followed verdict — so it can go live before the rest. */}
                 {renderSocialCardsHeader()}
-                {(modulesGateComplete || !socialCardsCollapsed) && renderRecentVerdict()}
-                {(modulesGateComplete || !socialCardsCollapsed) &&
+                {(!socialCardsCollapsed || !socialCardsCollapsible) && renderRecentVerdict()}
+                {(!socialCardsCollapsed || !socialCardsCollapsible) &&
                     (modulesGateComplete ? renderUnlockedSection() : renderLockedSection())}
 
                 {/* Activity section — always visible */}
@@ -2627,7 +2661,7 @@ export default function FeedScreen() {
                         <View style={styles.emptyMsgBlock}>
                             <Text style={styles.emptyMsgTitle}>Your feed is empty</Text>
                             <Text style={styles.emptyMsgBody}>
-                                Follow friends and rate songs — their ratings, re-rates and co-signs will land here.
+                                Follow people and rate songs — their ratings, re-rates and co-signs will land here.
                             </Text>
                         </View>
                     )}
@@ -3306,7 +3340,7 @@ const styles = StyleSheet.create({
     // Recent Verdicts full card
     fvOuter: {
         marginHorizontal: 14,
-        // No top margin: Recent Verdict always sits right under the SOCIAL CARDS header, which now
+        // No top margin: Recent Verdict always sits right under the TASTE SIGNALS header, which now
         // owns the 8px gap below itself (so the gap is identical whether or not this card renders).
         marginBottom: 10,
         borderRadius: 20,
@@ -3327,7 +3361,9 @@ const styles = StyleSheet.create({
         overflow: "hidden",
     },
     fvPill: {
-        backgroundColor: "rgba(255,255,255,0.14)",
+        // Accent-orange to match the live Recent Verdict pill (a "like" verdict's bucket color),
+        // so the locked card reads as the same card, not a greyed-out stub.
+        backgroundColor: colors.accent,
         borderRadius: 999,
         paddingHorizontal: 10,
         paddingVertical: 4,
@@ -3667,8 +3703,8 @@ const styles = StyleSheet.create({
         backgroundColor: "rgba(255,255,255,0.28)",
         borderRadius: 1,
     },
-    // Consensus — live half-tile. "N FRIENDS RATED" caption sits above the song title so the card
-    // reads as a sentence; the pill ("· Circle Avg") labels the big number as the friend average.
+    // Consensus — live half-tile. "N CIRCLE RATINGS" caption sits above the song title so the card
+    // reads as a sentence; the pill ("· Circle Avg") labels the big number as the circle average.
     consRatedLabel: {
         fontFamily: fonts.mono,
         fontSize: 8,
@@ -3951,7 +3987,7 @@ const styles = StyleSheet.create({
         height: 30,
         backgroundColor: colors.line,
     },
-    // Disagreement Spotlight — live state (you vs friends gap)
+    // Disagreement Spotlight — live state (you vs circle gap)
     disagreeApart: {
         fontFamily: fonts.mono,
         fontSize: 8,
@@ -4101,7 +4137,7 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         gap: 7,
     },
-    // ── Find friends card ─────────────────────────────────────────────────
+    // ── Find people card ──────────────────────────────────────────────────
     // Just the outer spacing; the card itself lives in FindYourPeopleCard.
     findFriendsCard: {
         marginHorizontal: 14,

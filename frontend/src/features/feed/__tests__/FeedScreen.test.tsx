@@ -1060,13 +1060,13 @@ describe("FeedScreen", () => {
         // No live card, but the locked placeholder keeps the module slot visible.
         expect(screen.queryByTestId("feed-rerate-radar-55")).toBeNull()
         expect(screen.getByTestId("feed-rerate-radar-locked")).toBeTruthy()
-        expect(screen.getByText("When a friend changes a score")).toBeTruthy()
+        expect(screen.getByText("When someone you follow changes a score")).toBeTruthy()
         // No This-or-That prompt this time, so its "FOR YOU" header stays off too.
         expect(screen.queryByTestId("feed-this-or-that-card")).toBeNull()
         expect(screen.queryByText("FOR YOU")).toBeNull()
     })
 
-    it("surfaces a live Consensus card with the friend average and count, and opens the song", async () => {
+    it("surfaces a live Consensus card with the circle average and count, and opens the song", async () => {
         mockCurrentProfile = {
             ...mockCurrentProfile,
             user_stats: { rated_count: 12, bookmarked_count: 0 },
@@ -1083,9 +1083,7 @@ describe("FeedScreen", () => {
         })
         expect(screen.queryByTestId("feed-consensus-locked")).toBeNull()
         expect(screen.getByText("8.4")).toBeTruthy()
-        // Card reads as a sentence: "5 friends rated <song>". Friend count uses "FRIENDS", never "IN YOUR CIRCLE".
-        expect(screen.getByText("5 FRIENDS RATED")).toBeTruthy()
-        expect(screen.queryByText(/IN YOUR CIRCLE/)).toBeNull()
+        expect(screen.getByText("5 CIRCLE RATINGS")).toBeTruthy()
 
         fireEvent.press(screen.getByTestId("feed-consensus-42"))
         await waitFor(() => {
@@ -1093,7 +1091,7 @@ describe("FeedScreen", () => {
         })
     })
 
-    it("falls back to the locked Consensus card when no song has enough friend raters", async () => {
+    it("falls back to the locked Consensus card when no song has enough circle raters", async () => {
         mockCurrentProfile = {
             ...mockCurrentProfile,
             user_stats: { rated_count: 12, bookmarked_count: 0 },
@@ -1111,7 +1109,7 @@ describe("FeedScreen", () => {
         expect(screen.getByTestId("feed-consensus-locked")).toBeTruthy()
     })
 
-    it("surfaces a live Disagreement card (you vs friends) and opens the song", async () => {
+    it("surfaces a live Disagreement card (you vs circle) and opens the song", async () => {
         mockCurrentProfile = {
             ...mockCurrentProfile,
             user_stats: { rated_count: 12, bookmarked_count: 0 },
@@ -1128,10 +1126,10 @@ describe("FeedScreen", () => {
         })
         expect(screen.queryByTestId("feed-disagreement-locked")).toBeNull()
         expect(screen.getByText("9.1")).toBeTruthy()          // YOU
-        expect(screen.getByText("4.2")).toBeTruthy()          // FRIENDS
+        expect(screen.getByText("4.2")).toBeTruthy()          // CIRCLE
         expect(screen.getByText("4.9 APART")).toBeTruthy()
-        // Column is "FRIENDS", never "CROWD".
-        expect(screen.getByText("FRIENDS")).toBeTruthy()
+        // Column is "CIRCLE", never "CROWD".
+        expect(screen.getByText("CIRCLE")).toBeTruthy()
         expect(screen.queryByText("CROWD")).toBeNull()
 
         fireEvent.press(screen.getByTestId("feed-disagreement-42"))
@@ -1247,14 +1245,16 @@ describe("FeedScreen", () => {
         await waitFor(() => {
             expect(screen.getByTestId("feed-song-9")).toBeTruthy()
         })
-        // Below the social gate the compact "SOCIAL CARDS" teaser grid shows (not the full cards).
-        expect(screen.getByText("SOCIAL CARDS")).toBeTruthy()
+        // Below the social gate the compact "TASTE SIGNALS" teaser grid shows (not the full cards).
+        expect(screen.getByText("TASTE SIGNALS")).toBeTruthy()
         expect(screen.queryByTestId("feed-split-locked")).toBeNull()
-        expect(screen.getByText("Rate 5 songs and follow 3 people to unlock the Feed modules below.")).toBeTruthy()
+        // rated 15 (>=10) + following 1 (<3) is the "following pending" home stretch, so the
+        // getting-started banner shows its follow-only copy rather than the rate+follow copy.
+        expect(screen.getByText("Follow 3 people to unlock the Feed modules below.")).toBeTruthy()
         expect(mockGetFeedModules).toHaveBeenCalledWith("test-token")
     })
 
-    it("shows a lock+friend-count badge on the locked Social Cards header, and the show/hide toggle collapses the locked grid", async () => {
+    it("shows a lock+following-count badge on the locked Taste Signals header, and the show/hide toggle collapses the locked grid", async () => {
         mockCurrentProfile = {
             ...mockCurrentProfile,
             user_stats: { rated_count: 15, bookmarked_count: 0 },
@@ -1267,7 +1267,7 @@ describe("FeedScreen", () => {
         await waitFor(() => {
             expect(screen.getByTestId("feed-song-9")).toBeTruthy()
         })
-        expect(screen.getByText("1/3 FRIENDS")).toBeTruthy()
+        expect(screen.getByText("1/3 FOLLOWING")).toBeTruthy()
         expect(screen.getByTestId("feed-social-cards-locked-section")).toBeTruthy()
 
         fireEvent.press(screen.getByTestId("feed-social-cards-toggle"))
@@ -1277,6 +1277,36 @@ describe("FeedScreen", () => {
         fireEvent.press(screen.getByTestId("feed-social-cards-toggle"))
 
         expect(screen.getByTestId("feed-social-cards-locked-section")).toBeTruthy()
+    })
+
+    it("shows the show/hide toggle on the full-size cards when the gate is met but every module is locked", async () => {
+        // Gate met (rated 12, following 3) but all modules null and the only event is the viewer's
+        // own (no hero) → the whole social strip is locked, so it stays collapsible above the gate.
+        mockCurrentProfile = { ...mockCurrentProfile, ...gatedProfile }
+        const ownEvent: FeedEvent = {
+            ...feedEvent,
+            id: 31,
+            actor_profile: { ...feedEvent.actor_profile, user_id: 2, username: "jason" },
+        }
+        mockListMyFeed.mockResolvedValue({ events: [ownEvent], next_cursor: null })
+        mockGetFeedModules.mockResolvedValue({ ...emptyModules })
+
+        render(<FeedScreen />)
+
+        // Full-size locked cards render (not the compact teaser grid).
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-split-locked")).toBeTruthy()
+        })
+        expect(screen.getByTestId("feed-consensus-locked")).toBeTruthy()
+        expect(screen.queryByTestId("feed-social-cards-locked-section")).toBeNull()
+
+        // The toggle now appears above the gate and collapses the full-size cards.
+        fireEvent.press(screen.getByTestId("feed-social-cards-toggle"))
+        expect(screen.queryByTestId("feed-split-locked")).toBeNull()
+        expect(screen.queryByTestId("feed-consensus-locked")).toBeNull()
+
+        fireEvent.press(screen.getByTestId("feed-social-cards-toggle"))
+        expect(screen.getByTestId("feed-split-locked")).toBeTruthy()
     })
 
     it("still reveals the viewer's own scores below the base gate (score reveal is rated-only)", async () => {
@@ -1303,7 +1333,7 @@ describe("FeedScreen", () => {
         expect(screen.queryByText("?")).toBeNull()
     })
 
-    it("shifts the Getting started banner to a friends-only state once all 10 ratings are in", async () => {
+    it("shifts the Getting started banner to a following-only state once all 10 ratings are in", async () => {
         // rated >= 10 but following < 3: songs are done, only follows remain. The banner drops its
         // "Rate songs" CTA and re-points title + button at finding people.
         mockCurrentProfile = {
@@ -1318,11 +1348,55 @@ describe("FeedScreen", () => {
         await waitFor(() => {
             expect(screen.getByTestId("feed-song-9")).toBeTruthy()
         })
-        // Friends-pending copy is shown, the rating framing is gone, and the rate CTA is removed.
-        expect(screen.getByText("Songs rated. Follow friends.")).toBeTruthy()
-        expect(screen.queryByText("Rate songs. Follow friends.")).toBeNull()
+        // Following-pending copy is shown, the rating framing is gone, and the rate CTA is removed.
+        expect(screen.getByText("Songs rated. Follow people.")).toBeTruthy()
+        expect(screen.queryByText("Rate songs. Follow people.")).toBeNull()
         expect(screen.queryByText("+ Rate songs")).toBeNull()
-        expect(screen.getByText("Find friends")).toBeTruthy()
+        expect(screen.getByText("Find people")).toBeTruthy()
+    })
+
+    it("keeps the Getting started banner up (tracking to 10 ratings) past the 5-rating module gate once follows are done", async () => {
+        // rated 6 (past the 5 cards-marker, under 10) + following 3 → the module gate is met, but
+        // the banner tracks the FULL journey to 10, so it stays up in a follows-done "keep rating"
+        // state rather than vanishing at 5.
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 6, bookmarked_count: 0 },
+            following_count: 3,
+        }
+        // Own-only event so there's no hero; modules stay null → full-size cards render locked.
+        const ownEvent: FeedEvent = {
+            ...feedEvent,
+            id: 41,
+            actor_profile: { ...feedEvent.actor_profile, user_id: 2, username: "jason" },
+        }
+        mockListMyFeed.mockResolvedValue({ events: [ownEvent], next_cursor: null })
+        mockGetFeedModules.mockResolvedValue({ ...emptyModules })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByText("Getting started")).toBeTruthy()
+        })
+        expect(screen.getByText("People followed. Keep rating.")).toBeTruthy()
+        expect(screen.getByText("6 / 10 RATED · RANKINGS AT 10")).toBeTruthy()
+        // Follows are done → the Find people CTA drops, the rate CTA stays.
+        expect(screen.queryByText("Find people")).toBeNull()
+        expect(screen.getByText("+ Rate songs")).toBeTruthy()
+        // Module gate is met, so the full-size cards render below (all locked here).
+        expect(screen.getByTestId("feed-split-locked")).toBeTruthy()
+    })
+
+    it("hides the Getting started banner only once both 10 ratings and 3 follows are in", async () => {
+        mockCurrentProfile = { ...mockCurrentProfile, ...gatedProfile }   // rated 12, following 3
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-song-9")).toBeTruthy()
+        })
+        expect(screen.queryByText("Getting started")).toBeNull()
     })
 
     it("keeps the Getting started banner's rate CTA while ratings are still incomplete", async () => {
@@ -1338,7 +1412,7 @@ describe("FeedScreen", () => {
         await waitFor(() => {
             expect(screen.getByTestId("feed-song-9")).toBeTruthy()
         })
-        expect(screen.getByText("Rate songs. Follow friends.")).toBeTruthy()
+        expect(screen.getByText("Rate songs. Follow people.")).toBeTruthy()
         expect(screen.getByText("+ Rate songs")).toBeTruthy()
     })
 
