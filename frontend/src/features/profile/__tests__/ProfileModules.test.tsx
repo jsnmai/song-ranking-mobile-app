@@ -12,14 +12,17 @@ import { RankingListResponse, RankingResponse } from "../../comparison/types"
 const mockNavigate = jest.fn()
 const mockGoBack = jest.fn()
 
-jest.mock("@react-navigation/native", () => ({
-    ...jest.requireActual("@react-navigation/native"),
-    useNavigation: () => ({ navigate: mockNavigate }),
-    useFocusEffect: (cb: () => void) => cb(),
-    // useScrollToTop reaches for useRoute()/tab navigator context that the bare
-    // render here doesn't provide — stub it; the scroll-to-top wiring isn't under test.
-    useScrollToTop: () => {},
-}))
+jest.mock("@react-navigation/native", () => {
+    const React = jest.requireActual("react")
+    return {
+        ...jest.requireActual("@react-navigation/native"),
+        useNavigation: () => ({ navigate: mockNavigate }),
+        useFocusEffect: (cb: () => void) => React.useEffect(cb, [cb]),
+        // useScrollToTop reaches for useRoute()/tab navigator context that the bare
+        // render here doesn't provide — stub it; the scroll-to-top wiring isn't under test.
+        useScrollToTop: () => {},
+    }
+})
 
 // ── Auth mock ────────────────────────────────────────────────────────────────
 
@@ -208,13 +211,42 @@ const compatibleUser: MostCompatibleItem = {
 const mostCompatibleResponse: MostCompatibleResponse = { users: [compatibleUser] }
 const emptyMostCompatibleResponse: MostCompatibleResponse = { users: [] }
 
+const emptyTasteProfile: TasteProfileResponse = {
+    total_rated: 0,
+    avg_score: null,
+    bucket_breakdown: { like: 0, okay: 0, dislike: 0 },
+    overall: { genres: [], top_artists: [] },
+    by_bucket: {
+        like: { genres: [], top_artists: [], avg_score: null, count: 0 },
+        okay: { genres: [], top_artists: [], avg_score: null, count: 0 },
+        dislike: { genres: [], top_artists: [], avg_score: null, count: 0 },
+    },
+    harshness: { status: "forming", percentile: null },
+}
+
+const refreshedTasteProfile: TasteProfileResponse = {
+    total_rated: 11,
+    avg_score: 7.4,
+    bucket_breakdown: { like: 6, okay: 4, dislike: 1 },
+    overall: {
+        genres: [{ name: "Electronic", count: 5, percentage: 45 }],
+        top_artists: [{ name: "Skrillex", count: 3, cover_url: null }],
+    },
+    by_bucket: {
+        like: { genres: [], top_artists: [], avg_score: 8.8, count: 6 },
+        okay: { genres: [], top_artists: [], avg_score: 6.1, count: 4 },
+        dislike: { genres: [], top_artists: [], avg_score: 3.2, count: 1 },
+    },
+    harshness: { status: "ready", percentile: 62 },
+}
+
 // ── ProfileScreen tests ───────────────────────────────────────────────────────
 
 describe("ProfileScreen profile modules", () => {
     beforeEach(() => {
         jest.resetAllMocks()
         mockGetMyProfile.mockResolvedValue(myProfile)
-        mockGetMyTasteProfile.mockResolvedValue({ total_rated: 0, avg_score: null, bucket_breakdown: { like: 0, okay: 0, dislike: 0 }, overall: { genres: [], top_artists: [] }, by_bucket: { like: { genres: [], top_artists: [], avg_score: null, count: 0 }, okay: { genres: [], top_artists: [], avg_score: null, count: 0 }, dislike: { genres: [], top_artists: [], avg_score: null, count: 0 } } })
+        mockGetMyTasteProfile.mockResolvedValue(emptyTasteProfile)
         mockGetMyRecentRatings.mockResolvedValue(ratingsResponse)
         mockListMyRankings.mockResolvedValue(rankingsResponse)
         mockGetMostCompatible.mockResolvedValue(mostCompatibleResponse)
@@ -329,6 +361,33 @@ describe("ProfileScreen profile modules", () => {
             expect(screen.getByTestId("stats-bookmarked")).toBeTruthy()
             expect(screen.getByText("42")).toBeTruthy()
             expect(screen.getByText("7")).toBeTruthy()
+        })
+    })
+
+    it("pull refresh reloads the unlock count and taste profile together", async () => {
+        mockGetMyProfile
+            .mockResolvedValueOnce({ ...myProfile, user_stats: { rated_count: 9, bookmarked_count: 0 } })
+            .mockResolvedValueOnce({ ...myProfile, user_stats: { rated_count: 11, bookmarked_count: 0 } })
+        mockGetMyTasteProfile
+            .mockResolvedValueOnce(emptyTasteProfile)
+            .mockResolvedValueOnce(refreshedTasteProfile)
+
+        render(<ProfileScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByText("Unlocks at 10 ratings")).toBeTruthy()
+        })
+
+        const refreshControl = screen.getByTestId("profile-scroll").props.refreshControl
+        await act(async () => {
+            await refreshControl.props.onRefresh()
+        })
+
+        await waitFor(() => {
+            expect(mockGetMyProfile).toHaveBeenCalledTimes(2)
+            expect(mockGetMyTasteProfile).toHaveBeenCalledTimes(2)
+            expect(screen.getByText("Skrillex")).toBeTruthy()
+            expect(screen.getByText("7.4")).toBeTruthy()
         })
     })
 

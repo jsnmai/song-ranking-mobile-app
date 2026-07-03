@@ -1,11 +1,12 @@
 // Profile tab — own profile with identity card, To LISTn shelf, taste & activity.
-import { Fragment, useCallback, useEffect, useRef, useState } from "react"
+import { Fragment, useCallback, useRef, useState } from "react"
 import {
     ActivityIndicator,
     Alert,
     Dimensions,
     type GestureResponderEvent,
     Pressable,
+    RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
@@ -21,6 +22,7 @@ import { ApiError } from "../../api/client"
 import { AppStackParamList } from "../../navigation/types"
 import { avatarColorToken, colors, fonts } from "../../theme"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
+import { usePullRefresh } from "../../hooks/usePullRefresh"
 import Avatar from "../../components/Avatar"
 import { DriftingStars } from "../../components/DriftingStars"
 import ActivityLikeButton from "../activity/ActivityLikeButton"
@@ -108,6 +110,70 @@ export default function ProfileScreen() {
     const [hideLikeCounts, setHideLikeCounts] = useState(false)
     const [isMutatingActivity, setIsMutatingActivity] = useState(false)
 
+    const loadProfile = useCallback(async () => {
+        if (!token) return
+        try {
+            const data = await getMyProfile(token)
+            setProfile(data)
+            setHideLikeCounts(data.hide_like_counts)
+            setProfileError(null)
+        } catch (err) {
+            if (err instanceof ApiError) setProfileError(err.detail)
+            else if (err instanceof Error) setProfileError(err.message)
+            else setProfileError("Failed to load profile.")
+        }
+    }, [token])
+
+    const loadModules = useCallback(async () => {
+        if (!token) return
+        try {
+            const [vData, mcData] = await Promise.all([
+                getMyRecentRatings(token),
+                getMostCompatible(token),
+            ])
+            setRatings(vData.items)
+            setMostCompatible(mcData.users)
+        } catch {
+            setRatings([])
+            setMostCompatible([])
+        }
+    }, [token])
+
+    const loadTaste = useCallback(async () => {
+        if (!token) return
+        setTasteLoading(true)
+        try {
+            const data = await getMyTasteProfile(token)
+            setTaste(data)
+        } catch {
+            // non-critical — taste sections remain locked
+        } finally {
+            setTasteLoading(false)
+        }
+    }, [token])
+
+    const loadAuxstrology = useCallback(async () => {
+        if (!token) return
+        try {
+            const data = await getMyAuxstrology(token)
+            setAux(data)
+        } catch {
+            // non-critical — the Auxstrology card falls back to its locked state
+        }
+    }, [token])
+
+    const refreshProfileData = useCallback(async () => {
+        if (!token) return
+        await Promise.all([
+            loadProfile(),
+            loadModules(),
+            loadTaste(),
+            loadAuxstrology(),
+        ])
+    }, [loadAuxstrology, loadModules, loadProfile, loadTaste, token])
+
+    const { refreshing, onRefresh } = usePullRefresh(refreshProfileData)
+
     const dismissTastePopover = useCallback(() => {
         setOpenTasteTile(null)
         setTastePopoverFrame(null)
@@ -131,34 +197,8 @@ export default function ProfileScreen() {
 
     useFocusEffect(
         useCallback(() => {
-            if (!token) return
-            async function fetchProfile() {
-                try {
-                    const data = await getMyProfile(token!)
-                    setProfile(data)
-                    setHideLikeCounts(data.hide_like_counts)
-                } catch (err) {
-                    if (err instanceof ApiError) setProfileError(err.detail)
-                    else if (err instanceof Error) setProfileError(err.message)
-                    else setProfileError("Failed to load profile.")
-                }
-            }
-            async function fetchModules() {
-                try {
-                    const [vData, mcData] = await Promise.all([
-                        getMyRecentRatings(token!),
-                        getMostCompatible(token!),
-                    ])
-                    setRatings(vData.items)
-                    setMostCompatible(mcData.users)
-                } catch {
-                    setRatings([])
-                    setMostCompatible([])
-                }
-            }
-            fetchProfile()
-            fetchModules()
-        }, [token])
+            refreshProfileData()
+        }, [refreshProfileData])
     )
 
     useFocusEffect(
@@ -170,31 +210,6 @@ export default function ProfileScreen() {
             [dismissTastePopover],
         )
     )
-
-    useEffect(() => {
-        if (!token) return
-        async function fetchTaste() {
-            setTasteLoading(true)
-            try {
-                const data = await getMyTasteProfile(token!)
-                setTaste(data)
-            } catch {
-                // non-critical — taste sections remain locked
-            } finally {
-                setTasteLoading(false)
-            }
-        }
-        async function fetchAuxstrology() {
-            try {
-                const data = await getMyAuxstrology(token!)
-                setAux(data)
-            } catch {
-                // non-critical — the Auxstrology card falls back to its locked state
-            }
-        }
-        fetchTaste()
-        fetchAuxstrology()
-    }, [token])
 
     const profileInitial = profile
         ? (profile.display_name || profile.username).charAt(0).toUpperCase()
@@ -245,7 +260,7 @@ export default function ProfileScreen() {
                         setIsMutatingActivity(true)
                         try {
                             await removeRating(item.song.id, token)
-                            setRatings((prev) => prev?.filter((r) => r.rating_event_id !== item.rating_event_id) ?? prev)
+                            await refreshProfileData()
                         } catch {
                             // best effort — leave the card in place if the removal failed
                         } finally {
@@ -332,6 +347,7 @@ export default function ProfileScreen() {
         <>
         <ScrollView
             ref={scrollRef}
+            testID="profile-scroll"
             style={styles.container}
             // Clear the raised center FAB by the same margin as the Feed: the cap (8) plus the
             // content view's own bottom padding (8) plus this leaves insets.bottom + 108 under the
@@ -340,6 +356,14 @@ export default function ProfileScreen() {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             scrollEnabled={!genreScrubbing}
+            refreshControl={
+                <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    progressViewOffset={insets.top}
+                    tintColor={colors.inkDim}
+                />
+            }
             onStartShouldSetResponderCapture={dismissTastePopoverForScreenTouch}
             // Any touch reliably clears the genre tooltip and (outside its own tiles/popover) the
             // taste explainer too. onTouchStart fires for empty space, which the responder-capture
