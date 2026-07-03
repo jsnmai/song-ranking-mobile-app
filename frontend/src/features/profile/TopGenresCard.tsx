@@ -32,6 +32,11 @@ const GENRE_PALETTE = [
     colors.berry,
     colors.teal,
 ]
+// Untagged songs ("Unknown") read as a muted grey rather than a real genre hue — and don't consume a
+// palette slot, so the actual genres keep their sequential distinct colors regardless of where the
+// Unknown bucket falls in the count order.
+const UNKNOWN_GENRE_NAME = "Unknown"
+const UNKNOWN_GENRE_COLOR = colors.inkDim
 // A segment narrower than this share of the bar gets a floor width so it stays visible / tappable.
 const TINY_SEGMENT_SHARE = 0.07
 // In-bar percentage labels are only drawn on segments wide enough to fit them legibly.
@@ -107,14 +112,19 @@ const GenreSplit = forwardRef<
     // Keep the latest callback in a ref so the once-created PanResponder always calls the current one.
     const onScrubbingChangeRef = useRef(onScrubbingChange)
     onScrubbingChangeRef.current = onScrubbingChange
-    const segments: Segment[] = genres.map((g, i) => ({
+    let paletteIndex = 0
+    const segments: Segment[] = genres.map((g) => ({
         name: g.name,
         // `label` is the whole-number share printed inside the bar; `pct` keeps the exact value the
         // tooltip shows so tiny slivers aren't flattened to 0%.
         label: Math.round(Math.min(100, Math.max(0, g.percentage))),
         pct: g.percentage,
         count: g.count,
-        color: GENRE_PALETTE[i % GENRE_PALETTE.length],
+        // Unknown is grey and skips the palette; real genres advance the palette so their hues stay
+        // sequential and distinct even when the Unknown bucket sits between them.
+        color: g.name === UNKNOWN_GENRE_NAME
+            ? UNKNOWN_GENRE_COLOR
+            : GENRE_PALETTE[paletteIndex++ % GENRE_PALETTE.length],
     }))
     const total = segments.reduce((sum, s) => sum + s.label, 0) || 1
 
