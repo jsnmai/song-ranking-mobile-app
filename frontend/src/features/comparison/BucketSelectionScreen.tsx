@@ -745,16 +745,17 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
         gap: 9,
+        // Hard ink offset shadow — matches the score-reveal / Discover primary-action
+        // treatment. Solid ink, no blur, so it reads as a crisp black shadow rather
+        // than a faint smudge.
         shadowColor: colors.ink,
-        shadowOpacity: 0.22,
+        shadowOpacity: 1,
         shadowRadius: 0,
-        shadowOffset: { width: 3, height: 3 },
-        elevation: 4,
+        shadowOffset: { width: 2, height: 2 },
     },
     nextButtonDisabled: {
         backgroundColor: colors.sand,
         shadowOpacity: 0,
-        elevation: 0,
     },
     nextButtonText: {
         fontFamily: fonts.display,
