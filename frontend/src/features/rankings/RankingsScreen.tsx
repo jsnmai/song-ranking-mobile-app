@@ -28,6 +28,7 @@ import Svg, { Circle, Defs, LinearGradient, Path, RadialGradient, Rect, Stop } f
 import { ApiError } from "../../api/client"
 import { ArrowLabel } from "../../components/Arrow"
 import BouncyPressable from "../../components/BouncyPressable"
+import { DriftingStars } from "../../components/DriftingStars"
 import HatchBox from "../../components/HatchBox"
 import { LockIcon } from "../../components/LockIcon"
 import { PulsingMeterTick } from "../../components/PulsingMeterTick"
@@ -431,12 +432,8 @@ export default function RankingsScreen() {
         const toUnlock = 10 - rated
         return (
             <View style={styles.buildCard}>
-                <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
-                    {STARS.map((st, i) => (
-                        <Circle key={i} cx={`${st.x}%`} cy={`${st.y}%`} r={st.r}
-                            fill={colors.cream} opacity={st.o} />
-                    ))}
-                </Svg>
+                <DriftingStars dots={STARS} color={colors.cream} />
+
                 <View style={styles.buildRow}>
                     <TouchableOpacity onPress={handleRateFirstSong} style={styles.buildOrbitWrap}>
                         <Svg width={70} height={70} viewBox="0 0 70 70">
