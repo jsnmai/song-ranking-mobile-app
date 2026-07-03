@@ -1254,6 +1254,31 @@ describe("FeedScreen", () => {
         expect(mockGetFeedModules).toHaveBeenCalledWith("test-token")
     })
 
+    it("shows a lock+friend-count badge on the locked Social Cards header, and the show/hide toggle collapses the locked grid", async () => {
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 15, bookmarked_count: 0 },
+            following_count: 1,
+        }
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-song-9")).toBeTruthy()
+        })
+        expect(screen.getByText("1/3 FRIENDS")).toBeTruthy()
+        expect(screen.getByTestId("feed-social-cards-locked-section")).toBeTruthy()
+
+        fireEvent.press(screen.getByTestId("feed-social-cards-toggle"))
+
+        expect(screen.queryByTestId("feed-social-cards-locked-section")).toBeNull()
+
+        fireEvent.press(screen.getByTestId("feed-social-cards-toggle"))
+
+        expect(screen.getByTestId("feed-social-cards-locked-section")).toBeTruthy()
+    })
+
     it("still reveals the viewer's own scores below the base gate (score reveal is rated-only)", async () => {
         // rated >= 10 but following < 3: modules gated off, but own scores are NOT following-gated.
         const ownEvent: FeedEvent = {
