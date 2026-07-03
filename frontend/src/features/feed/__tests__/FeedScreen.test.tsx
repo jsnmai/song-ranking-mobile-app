@@ -1303,6 +1303,45 @@ describe("FeedScreen", () => {
         expect(screen.queryByText("?")).toBeNull()
     })
 
+    it("shifts the Getting started banner to a friends-only state once all 10 ratings are in", async () => {
+        // rated >= 10 but following < 3: songs are done, only follows remain. The banner drops its
+        // "Rate songs" CTA and re-points title + button at finding people.
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 10, bookmarked_count: 0 },
+            following_count: 0,
+        }
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-song-9")).toBeTruthy()
+        })
+        // Friends-pending copy is shown, the rating framing is gone, and the rate CTA is removed.
+        expect(screen.getByText("Songs rated. Follow friends.")).toBeTruthy()
+        expect(screen.queryByText("Rate songs. Follow friends.")).toBeNull()
+        expect(screen.queryByText("+ Rate songs")).toBeNull()
+        expect(screen.getByText("Find friends")).toBeTruthy()
+    })
+
+    it("keeps the Getting started banner's rate CTA while ratings are still incomplete", async () => {
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 6, bookmarked_count: 0 },
+            following_count: 0,
+        }
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-song-9")).toBeTruthy()
+        })
+        expect(screen.getByText("Rate songs. Follow friends.")).toBeTruthy()
+        expect(screen.getByText("+ Rate songs")).toBeTruthy()
+    })
+
     it("opens Discover user search from the empty state", async () => {
         mockListMyFeed.mockResolvedValue({
             events: [],

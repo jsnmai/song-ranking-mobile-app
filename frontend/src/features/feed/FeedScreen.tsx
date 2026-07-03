@@ -2158,6 +2158,11 @@ export default function FeedScreen() {
     const renderGettingStartedBanner = () => {
         const rated = Math.min(profile?.user_stats?.rated_count ?? 0, 10)
         const friendCount = Math.min(profile?.following_count ?? 0, 3)
+        // Once all 10 ratings are in but the 3 follows aren't, the banner drops its rating CTA and
+        // leans fully into finding people: the meter stays gold as a "songs done" trophy while the
+        // copy and the promoted gold button both point at friends. Mirrors the Profile setup card's
+        // friendsPending home stretch.
+        const friendsPending = rated >= 10 && friendCount < 3
 
         return (
             <View style={styles.orbitCard}>
@@ -2169,9 +2174,13 @@ export default function FeedScreen() {
                         </View>
                         <Text style={styles.friendCounter}>{friendCount} / 3 FRIENDS</Text>
                     </View>
-                    <Text style={styles.orbitTitle}>{"Rate songs. Follow friends."}</Text>
+                    <Text style={styles.orbitTitle}>
+                        {friendsPending ? "Songs rated. Follow friends." : "Rate songs. Follow friends."}
+                    </Text>
                     <Text style={styles.orbitBody}>
-                        Rate 5 songs and follow 3 people to unlock the Feed modules below.
+                        {friendsPending
+                            ? "Follow 3 people to unlock the Feed modules below."
+                            : "Rate 5 songs and follow 3 people to unlock the Feed modules below."}
                     </Text>
                     <View style={styles.tasteMeterRow}>
                         {Array.from({ length: 10 }).map((_, i) => {
@@ -2192,17 +2201,27 @@ export default function FeedScreen() {
                         })}
                     </View>
                     <Text style={styles.tasteMeterLabel}>
-                        {rated} / 10 RATED · CARDS AT 5 · RANKINGS AT 10
+                        {friendsPending
+                            ? "10 / 10 RATED · MODULES AT 3 FRIENDS"
+                            : `${rated} / 10 RATED · CARDS AT 5 · RANKINGS AT 10`}
                     </Text>
                     <View style={styles.bannerBtns}>
+                        {/* Ratings done → drop the rate CTA and promote Find friends to the gold slot. */}
+                        {!friendsPending && (
+                            <TouchableOpacity
+                                style={styles.bannerBtnGold}
+                                onPress={() => navigation.navigate("Discover", { screen: "DiscoverHome", params: { focusSearch: true, searchMode: "songs" } })}
+                            >
+                                <Text style={styles.bannerBtnGoldText}>+ Rate songs</Text>
+                            </TouchableOpacity>
+                        )}
                         <TouchableOpacity
-                            style={styles.bannerBtnGold}
-                            onPress={() => navigation.navigate("Discover", { screen: "DiscoverHome", params: { focusSearch: true, searchMode: "songs" } })}
+                            style={friendsPending ? styles.bannerBtnGold : styles.bannerBtnGhost}
+                            onPress={handleFindUsers}
                         >
-                            <Text style={styles.bannerBtnGoldText}>+ Rate songs</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.bannerBtnGhost} onPress={handleFindUsers}>
-                            <Text style={styles.bannerBtnGhostText}>Find friends</Text>
+                            <Text style={friendsPending ? styles.bannerBtnGoldText : styles.bannerBtnGhostText}>
+                                Find friends
+                            </Text>
                         </TouchableOpacity>
                     </View>
                 </View>
