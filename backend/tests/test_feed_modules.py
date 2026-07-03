@@ -1,7 +1,7 @@
 # Integration tests for the bundled Feed modules endpoint.
 # Live modules: Re-rate Radar, Consensus, Disagreement Spotlight, Split Decision, Match Moment.
 #
-# All modules sit behind a base gate (rated >= 5 AND following >= 3). The autouse fixture below opens
+# All modules sit behind a base gate (rated >= 10 AND following >= 3). The autouse fixture below opens
 # that gate (thresholds -> 0) for the per-module tests so they exercise each module's own logic; the
 # gate's enforcement is covered by the dedicated `test_feed_modules_gate_*` tests, which set the real
 # thresholds. (We don't rate several songs per test because the rating API requires a completed
@@ -302,7 +302,7 @@ def test_this_or_that_surfaces_adjacent_pair_without_social_gate(
     monkeypatch,
 ):
     """Personal refinement can appear before the friend-gated social modules unlock."""
-    monkeypatch.setattr("src.services.feed.MODULE_GATE_MIN_RATED", 5)
+    monkeypatch.setattr("src.services.feed.MODULE_GATE_MIN_RATED", 10)
     monkeypatch.setattr("src.services.feed.MODULE_GATE_MIN_FOLLOWING", 3)
     monkeypatch.setattr("src.services.feed.THIS_OR_THAT_MIN_RATED", 10)
     token = _register(client, "tot@example.com", "totuser")
@@ -1414,7 +1414,7 @@ def test_match_moment_excludes_private_actor(client: TestClient, db_session: Ses
 
 
 def test_match_moment_blocked_by_base_gate(client: TestClient, db_session: Session, monkeypatch):
-    """Real gate: a finalized pick stays null until the viewer clears rated >= 5 AND following >= 3."""
+    """Real gate: a finalized pick stays null until the viewer clears rated >= 10 AND following >= 3."""
     monkeypatch.setattr("src.services.feed.MODULE_GATE_MIN_RATED", 10)
     monkeypatch.setattr("src.services.feed.MODULE_GATE_MIN_FOLLOWING", 1)
     viewer = _register(client, "viewer@example.com", "viewer")

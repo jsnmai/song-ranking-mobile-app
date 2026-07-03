@@ -56,11 +56,11 @@ MAX_FEED_LIMIT = 50
 RECENT_VERDICT_RATER_LIMIT = 8
 
 # ── Feed module base gate ────────────────────────────────────────────────────
-# The bundled module area unlocks only after the viewer has rated >= 5 songs AND follows >= 3 people
+# The bundled module area unlocks only after the viewer has rated >= 10 songs AND follows >= 3 people
 # (mirrors the getting-started banner). Enforced here so older clients / direct calls can't get live
-# module data before the gate is met. This gate affects ONLY /feed/modules — the rated >= 10 score
-# reveal is a separate, unaffected calibration gate. Per-card data rules still apply after the gate.
-MODULE_GATE_MIN_RATED = 5
+# module data before the gate is met. This gate affects ONLY /feed/modules; score reveal also uses
+# rated >= 10, but remains a separate rated-only calibration gate. Per-card data rules still apply.
+MODULE_GATE_MIN_RATED = 10
 MODULE_GATE_MIN_FOLLOWING = 3
 
 # ── Consensus module (tunable) ───────────────────────────────────────────────
@@ -102,8 +102,8 @@ SPLIT_CANDIDATE_LIMIT = 50
 MATCH_MOMENT_CANDIDATE_LIMIT = 50
 
 # ── This or That (personal ranking refinement) ───────────────────────────────
-# Deliberately higher than MODULE_GATE_MIN_RATED (5) and the score-reveal gate (10, see
-# FeedScreen's gettingStartedComplete) so this doesn't surface in the same moment as those other
+# Deliberately higher than MODULE_GATE_MIN_RATED and the score-reveal gate (10, see
+# FeedScreen's gettingStartedComplete) so this doesn't surface in the same moment as those
 # unlocks — and so there's a real backlog of ranked songs before we ask for refinement.
 THIS_OR_THAT_MIN_RATED = 15
 THIS_OR_THAT_COOLDOWN = timedelta(hours=24)
