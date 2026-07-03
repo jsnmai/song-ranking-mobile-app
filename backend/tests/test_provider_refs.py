@@ -921,6 +921,36 @@ def test_apple_annotation_returns_song_and_current_user_rating(
     }
 
 
+def test_apple_annotation_resolves_and_normalizes_three_letter_country_storefront(
+    client: TestClient,
+):
+    """iTunes returns `country` as a 3-letter code ("USA"), which clients send as the storefront.
+
+    The request schema normalizes it to the stored 2-letter form ("US"), so the direct rating
+    lookup resolves AND the echoed storefront comes back "US". The client must key its rows by the
+    same "US" (not "USA") to merge the rating in — the frontend bug this guards against. Title/
+    artist are omitted so the fuzzy fallback can't mask the direct-hit path.
+    """
+    token = _get_token(client)
+    payload = _apple_payload(apple_track_id="999", title="Country Apple")
+    payload["song"]["storefront"] = "USA"
+    _finalize(client, token, payload)
+
+    response = client.post(
+        "/api/v1/search/apple/annotations",
+        json={"results": [{"apple_track_id": "999", "storefront": "USA"}]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    result = response.json()["results"][0]
+    assert result["already_rated"] is True
+    assert result["my_bucket"] == "like"
+    assert result["song_id"] is not None
+    # Echoed as the normalized 2-letter storefront — the client must key its row by "US" to match.
+    assert result["storefront"] == "US"
+
+
 def test_saved_apple_song_can_rerate_by_listn_song_id(
     client: TestClient,
 ):

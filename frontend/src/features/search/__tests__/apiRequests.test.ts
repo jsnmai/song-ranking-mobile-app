@@ -35,7 +35,12 @@ describe("searchSongs", () => {
                         releaseDate: "2016-08-20T07:00:00Z",
                         artistId: 442122051,
                         collectionId: 1440840117,
-                        country: "US",
+                        // iTunes returns a 3-letter country code. The result's storefront must
+                        // still resolve to the 2-letter "US" the search ran in (and that the
+                        // backend files refs / echoes annotations under) — otherwise the merged
+                        // annotation below is keyed "…:US" but looked up "…:USA" and the rating
+                        // (my_bucket/my_score) silently drops, so a rated song shows unrated.
+                        country: "USA",
                     },
                 ],
             }),

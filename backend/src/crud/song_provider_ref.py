@@ -39,12 +39,20 @@ def get_song_provider_ref(
     song_id: int,
     provider: str,
 ) -> SongProviderRef | None:
-    """Return one provider reference for a durable song, or None."""
+    """Return one provider reference for a durable song, or None.
+
+    A song can hold more than one ref for the same provider — different storefronts, or a
+    duplicate left behind by a matching sweep — since the unique constraint is on
+    (provider, provider_track_id, storefront), not (song_id, provider). Take the most
+    recently matched ref rather than asserting exactly one, which would 500 on dupes.
+    """
     return db.execute(
         select(SongProviderRef)
         .where(SongProviderRef.song_id == song_id)
         .where(SongProviderRef.provider == provider)
-    ).scalar_one_or_none()
+        .order_by(SongProviderRef.matched_at.desc(), SongProviderRef.id.desc())
+        .limit(1)
+    ).scalars().first()
 
 
 def list_apple_provider_refs_for_songs(

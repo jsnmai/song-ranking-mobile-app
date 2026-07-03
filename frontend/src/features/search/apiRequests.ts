@@ -113,7 +113,11 @@ function mapAppleSearchRow(row: AppleSearchRow): SongSearchResult | null {
         artwork_url: artworkUrl,
         preview_url: row.previewUrl ?? null,
         apple_track_id: String(row.trackId),
-        storefront: row.country ?? APPLE_STOREFRONT,
+        // The storefront we searched in (2-letter, "US") — NOT the result's `country` field,
+        // which iTunes returns as a 3-letter code ("USA"). The backend files provider refs under,
+        // and echoes annotations keyed by, the normalized 2-letter storefront; sending "USA" makes
+        // the annotation merge miss, so a just-rated song keeps showing the Rate pill.
+        storefront: APPLE_STOREFRONT,
         apple_view_url: row.trackViewUrl ?? null,
         apple_artist_id: row.artistId != null ? String(row.artistId) : null,
         apple_album_id: row.collectionId != null ? String(row.collectionId) : null,
