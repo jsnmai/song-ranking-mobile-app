@@ -76,12 +76,6 @@ const STAR_DOTS_DIM = STAR_DOTS.map((s) => ({ ...s, o: s.o * 0.8 }))
 
 // Setup checklist "friends pending" state — once the rating steps are done the only step
 // left is "Follow 3 friends", so we surface three glowing avatars top-right to point at it.
-const SETUP_FRIENDS = [
-    { id: 1, initial: "M", color: colors.accent },
-    { id: 2, initial: "T", color: colors.sky },
-    { id: 3, initial: "K", color: colors.plum },
-] as const
-
 export default function ProfileScreen() {
     const navigation = useNavigation<ProfileNavigationProp>()
     const insets = useSafeAreaInsets()
@@ -274,8 +268,7 @@ export default function ProfileScreen() {
     const step3Done = (profile?.following_count ?? 0) >= 3
     // The checklist stays up until every step is done — not just the 10-rating gate — so a user who
     // rates but never follows still sees the nudge. `friendsPending` is that home stretch: rating is
-    // finished, only "Follow 3 friends" remains. In it we drop the "Rate a song" CTA and spotlight
-    // the follow step with an avatar cluster instead.
+    // finished, only "Follow 3 friends" remains, so the CTA below switches from rating to finding people.
     const setupComplete = step2Done && step3Done
     const friendsPending = step2Done && !step3Done
     // Each setup step deep-links to where you complete it: the rating steps open Discover song
@@ -448,28 +441,8 @@ export default function ProfileScreen() {
                             <DriftingStars dots={STAR_DOTS} viewBox="0 0 100 100" />
                             <View style={styles.setupHeaderRow}>
                                 <Text style={styles.setupKicker}>SET UP YOUR PROFILE</Text>
-                                {friendsPending && (
-                                    <TouchableOpacity
-                                        style={styles.setupFriendsStack}
-                                        onPress={() => goToDiscoverSearch("users")}
-                                        activeOpacity={0.8}
-                                        accessibilityLabel="Follow 3 friends"
-                                    >
-                                        {SETUP_FRIENDS.map((f, i) => (
-                                            <View
-                                                key={f.id}
-                                                style={[
-                                                    styles.setupFriendAva,
-                                                    { backgroundColor: f.color, marginLeft: i > 0 ? -9 : 0 },
-                                                ]}
-                                            >
-                                                <Text style={styles.setupFriendLetter}>{f.initial}</Text>
-                                            </View>
-                                        ))}
-                                    </TouchableOpacity>
-                                )}
                             </View>
-                            <View style={[styles.setupSteps, friendsPending && styles.setupStepsFlush]}>
+                            <View style={styles.setupSteps}>
                                 {([
                                     ["Rate your first song", step1Done, () => goToDiscoverSearch("songs")],
                                     ["Reach 10 ratings to unlock Rankings and Taste Profile", step2Done, () => goToDiscoverSearch("songs")],
@@ -513,16 +486,16 @@ export default function ProfileScreen() {
                                     </TouchableOpacity>
                                 ))}
                             </View>
-                            {/* Rating is finished in the friends-pending state, so drop the "Rate a
-                                song" CTA — the avatar cluster up top is the remaining call to action. */}
-                            {!friendsPending && (
-                                <TouchableOpacity
-                                    style={styles.setupBtn}
-                                    onPress={() => navigation.navigate("MainTabs", { screen: "Discover", params: { screen: "DiscoverHome", params: { focusSearch: true, searchMode: "songs" } } })}
-                                >
-                                    <Text style={styles.setupBtnText}>Rate a song</Text>
-                                </TouchableOpacity>
-                            )}
+                            {/* Once rating is done (friends-pending), the CTA switches from rating a
+                                song to finding people to follow — the last remaining setup step. */}
+                            <TouchableOpacity
+                                style={styles.setupBtn}
+                                onPress={() => goToDiscoverSearch(friendsPending ? "users" : "songs")}
+                            >
+                                <Text style={styles.setupBtnText}>
+                                    {friendsPending ? "Find friends" : "Rate a song"}
+                                </Text>
+                            </TouchableOpacity>
                         </View>
                     )}
 
@@ -536,7 +509,7 @@ export default function ProfileScreen() {
                                 <Svg width={64} height={64} viewBox="0 0 80 80" opacity={0.5}>
                                     {CONST_EDGES.map(([a, b], i) => (
                                         <Line
-                                            key={i}
+                                            key={`edge-${i}`}
                                             x1={CONST_NODES[a][0]}
                                             y1={CONST_NODES[a][1]}
                                             x2={CONST_NODES[b][0]}
@@ -548,7 +521,7 @@ export default function ProfileScreen() {
                                     ))}
                                     {CONST_NODES.map(([x, y], i) => (
                                         <Circle
-                                            key={i}
+                                            key={`node-${i}`}
                                             cx={x}
                                             cy={y}
                                             r={i === 1 ? 3 : 2}
@@ -584,7 +557,7 @@ export default function ProfileScreen() {
                                 >
                                     {CONST_EDGES.map(([a, b], i) => (
                                         <Line
-                                            key={i}
+                                            key={`edge-${i}`}
                                             x1={CONST_NODES[a][0]}
                                             y1={CONST_NODES[a][1]}
                                             x2={CONST_NODES[b][0]}
@@ -596,7 +569,7 @@ export default function ProfileScreen() {
                                     ))}
                                     {CONST_NODES.map(([x, y], i) => (
                                         <Circle
-                                            key={i}
+                                            key={`node-${i}`}
                                             cx={x}
                                             cy={y}
                                             r={i === 1 ? 3 : 2}
@@ -964,35 +937,6 @@ const styles = StyleSheet.create({
     setupSteps: {
         gap: 10,
         marginBottom: 14,
-    },
-    // No trailing gap when the CTA below is dropped (friends-pending state).
-    setupStepsFlush: {
-        marginBottom: 0,
-    },
-    // Three overlapping avatars top-right, spotlighting the remaining "Follow 3 friends" step.
-    setupFriendsStack: {
-        flexDirection: "row",
-        flexShrink: 0,
-    },
-    setupFriendAva: {
-        width: 26,
-        height: 26,
-        borderRadius: 13,
-        alignItems: "center",
-        justifyContent: "center",
-        borderWidth: 2,
-        borderColor: colors.navy,
-        shadowColor: colors.accent,
-        shadowOpacity: 0.5,
-        shadowRadius: 5,
-        shadowOffset: { width: 0, height: 0 },
-        elevation: 4,
-    },
-    setupFriendLetter: {
-        fontFamily: fonts.mono,
-        fontSize: 11,
-        fontWeight: "700",
-        color: "#fff",
     },
     setupStep: {
         flexDirection: "row",
