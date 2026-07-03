@@ -1061,23 +1061,21 @@ export default function DiscoverScreen() {
                                     </TouchableOpacity>
                                 ) : (
                                     <BouncyPressable style={styles.trendingCard}>
-                                        <Text style={styles.trendingKicker}>TRENDING IN YOUR CIRCLE</Text>
-                                        <View style={styles.trendingRow}>
-                                            <View style={styles.trendingLockCircle}>
-                                                <Svg width={17} height={17} viewBox="0 0 24 24" fill="none">
-                                                    <Path d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4"
-                                                        stroke="rgba(17,19,28,0.5)" strokeWidth={2}
-                                                        strokeLinecap="round" strokeLinejoin="round" />
-                                                </Svg>
-                                            </View>
-                                            <View style={styles.trendingTextBlock}>
-                                                <Text style={styles.trendingTitle}>Locked</Text>
-                                                <Text style={styles.trendingBody}>
-                                                    Follow friends to see what's hot in your circle.
-                                                </Text>
-                                            </View>
-                                            <Text style={styles.trendingCounter}>{Math.min(followingCount, 3)}/3</Text>
+                                        <View style={styles.trendingLockCircle}>
+                                            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                                                <Path d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4"
+                                                    stroke={colors.ink} strokeWidth={2}
+                                                    strokeLinecap="round" strokeLinejoin="round" />
+                                            </Svg>
                                         </View>
+                                        <View style={styles.trendingTextBlock}>
+                                            <Text style={styles.trendingKicker}>TRENDING IN YOUR CIRCLE</Text>
+                                            <Text style={styles.trendingTitle}>Locked</Text>
+                                            <Text style={styles.trendingBody}>
+                                                Follow friends to see what's hot in your circle.
+                                            </Text>
+                                        </View>
+                                        <Text style={styles.trendingCounter}>{Math.min(followingCount, 3)}/3</Text>
                                     </BouncyPressable>
                                 )}
 
@@ -1727,8 +1725,11 @@ const styles = StyleSheet.create({
     trendingCard: {
         backgroundColor: colors.butter,
         borderRadius: 16,
-        padding: 14,
+        padding: 12,
         marginBottom: 8,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 11,
     },
     // Live trending card: a rounded square album art on the left, then text + stat in a centered
     // row (matches the core-screen design treatment).
@@ -1767,28 +1768,22 @@ const styles = StyleSheet.create({
     },
     trendingKicker: {
         fontFamily: fonts.mono,
-        fontSize: 8.5,
-        letterSpacing: 1.8,
-        color: "rgba(17,19,28,0.5)",
+        fontSize: 8,
+        letterSpacing: 1.3,
+        color: colors.ink,
         fontWeight: "700",
-        marginBottom: 12,
-    },
-    trendingRow: {
-        flexDirection: "row",
-        alignItems: "flex-start",
-        gap: 12,
+        marginBottom: 3,
     },
     trendingLockCircle: {
-        width: 42,
-        height: 42,
+        width: 44,
+        height: 44,
         borderRadius: 8,
         borderWidth: 1.5,
-        borderColor: "rgba(17,19,28,0.3)",
+        borderColor: "rgba(17,19,28,0.35)",
         borderStyle: "dashed",
         alignItems: "center",
         justifyContent: "center",
         flexShrink: 0,
-        marginTop: 2,
     },
     trendingTextBlock: {
         flex: 1,
