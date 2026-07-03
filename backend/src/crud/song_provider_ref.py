@@ -46,13 +46,14 @@ def get_song_provider_ref(
     (provider, provider_track_id, storefront), not (song_id, provider). Take the most
     recently matched ref rather than asserting exactly one, which would 500 on dupes.
     """
-    return db.execute(
+    refs = db.execute(
         select(SongProviderRef)
         .where(SongProviderRef.song_id == song_id)
         .where(SongProviderRef.provider == provider)
-        .order_by(SongProviderRef.matched_at.desc(), SongProviderRef.id.desc())
-        .limit(1)
-    ).scalars().first()
+    ).scalars().all()
+    if not refs:
+        return None
+    return max(refs, key=_provider_ref_priority)
 
 
 def list_apple_provider_refs_for_songs(
@@ -69,10 +70,23 @@ def list_apple_provider_refs_for_songs(
         .where(SongProviderRef.provider == "apple")
         .where(SongProviderRef.song_id.in_(unique_song_ids))
     ).scalars().all()
-    return {
-        ref.song_id: ref
-        for ref in refs
-    }
+    selected: dict[int, SongProviderRef] = {}
+    for ref in refs:
+        current = selected.get(ref.song_id)
+        if current is None or _provider_ref_priority(ref) > _provider_ref_priority(current):
+            selected[ref.song_id] = ref
+    return selected
+
+
+def _provider_ref_priority(ref: SongProviderRef) -> tuple[bool, bool, datetime, int]:
+    """Prefer useful preview refs over later fallback identity refs for one song/provider."""
+    matched_at = ref.matched_at or datetime.min.replace(tzinfo=timezone.utc)
+    return (
+        ref.preview_available is True,
+        ref.url is not None,
+        matched_at,
+        ref.id,
+    )
 
 
 def get_song_by_provider_track(

@@ -1,9 +1,12 @@
 # Integration tests for Slice 1 provider refs and Apple finalize behavior.
+from datetime import datetime, timedelta, timezone
+
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from src.crud.song_provider_ref import get_song_provider_ref
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.song import Song
 from src.sqlalchemy_tables.song_provider_ref import SongProviderRef
@@ -292,6 +295,85 @@ def test_deezer_bookmark_backfills_legacy_provider_ref(
     assert provider_ref.provider_artist_id == "456"
     assert provider_ref.artwork_url == "https://example.com/cover.jpg"
     assert provider_ref.preview_available is True
+
+
+def test_rankings_prefer_previewable_apple_ref_when_duplicate_refs_exist(
+    client: TestClient,
+    db_session: Session,
+):
+    """A later fallback Apple ref must not hide a known-previewable Apple ref."""
+    email = "duplicate-apple@example.com"
+    token = _get_token(
+        client,
+        email=email,
+        username="duplicateapple",
+    )
+    user = db_session.execute(
+        select(User).where(User.email == email)
+    ).scalar_one()
+    song = Song(
+        deezer_id=None,
+        isrc="USAT22602481",
+        title="Smoke",
+        artist="Skrillex, ISOxo, Cristale & TeeZandos",
+        artist_deezer_id=None,
+        album="SOMA",
+        cover_url="https://example.com/smoke.jpg",
+    )
+    db_session.add(song)
+    db_session.flush()
+    now = datetime.now(timezone.utc)
+    db_session.add_all(
+        [
+            SongProviderRef(
+                song_id=song.id,
+                provider="apple",
+                provider_track_id="previewable-track",
+                storefront="US",
+                url="https://music.apple.com/us/album/smoke/1?i=previewable-track",
+                preview_available=True,
+                confidence="apple_lookup",
+                matched_at=now - timedelta(minutes=5),
+            ),
+            SongProviderRef(
+                song_id=song.id,
+                provider="apple",
+                provider_track_id="fallback-track",
+                storefront="US",
+                url=None,
+                preview_available=None,
+                confidence="apple_legacy_fallback_match",
+                matched_at=now,
+            ),
+            Ranking(
+                user_id=user.id,
+                song_id=song.id,
+                bucket="like",
+                position=1,
+                score=10.0,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    selected_ref = get_song_provider_ref(
+        db_session,
+        song.id,
+        "apple",
+    )
+    assert selected_ref is not None
+    assert selected_ref.provider_track_id == "previewable-track"
+
+    response = client.get(
+        "/api/v1/rankings/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    response_song = response.json()["rankings"][0]["song"]
+    assert response_song["title"] == "Smoke"
+    assert response_song["preview_url"] is None
+    assert response_song["preview_available"] is True
+    assert response_song["apple_view_url"] == "https://music.apple.com/us/album/smoke/1?i=previewable-track"
 
 
 def test_apple_bookmark_creates_song_and_provider_ref(

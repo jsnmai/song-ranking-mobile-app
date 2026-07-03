@@ -245,6 +245,8 @@ describe("RankMapScreen", () => {
         await waitFor(() => {
             expect(mockFetchPreviewUrlBySongId).toHaveBeenCalledWith(2, "test-token")
         })
+        expect(screen.getByText("Provided courtesy of iTunes")).toBeTruthy()
+        expect(screen.getByText("Get on Apple Music")).toBeTruthy()
     })
 
     it("goes back when the back control is pressed", () => {
