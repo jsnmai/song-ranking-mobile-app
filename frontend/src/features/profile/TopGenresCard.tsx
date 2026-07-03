@@ -21,8 +21,9 @@ import * as Haptics from "expo-haptics"
 
 import { colors, fonts } from "../../theme"
 
-// Distinct hues cycled across the genres in count order. Seven is more than most users reach; beyond
-// that the palette repeats, but same-hue genres are never adjacent at realistic counts.
+// The brand hues assigned to the first genres in count order. A user with more genres than this never
+// repeats a color: `buildGenreColors` keeps these exact hues and generates additional distinct ones in
+// the same tonal family (see below).
 const GENRE_PALETTE = [
     colors.accent,
     colors.sky,
@@ -37,6 +38,60 @@ const GENRE_PALETTE = [
 // Unknown bucket falls in the count order.
 const UNKNOWN_GENRE_NAME = "Unknown"
 const UNKNOWN_GENRE_COLOR = colors.inkDim
+
+function hexToHsl(hex: string): { h: number; s: number; l: number } {
+    const clean = hex.replace("#", "")
+    const r = parseInt(clean.slice(0, 2), 16) / 255
+    const g = parseInt(clean.slice(2, 4), 16) / 255
+    const b = parseInt(clean.slice(4, 6), 16) / 255
+    const max = Math.max(r, g, b)
+    const min = Math.min(r, g, b)
+    const l = (max + min) / 2
+    const d = max - min
+    let s = 0
+    let h = 0
+    if (d !== 0) {
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+        if (max === r) h = ((g - b) / d) % 6
+        else if (max === g) h = (b - r) / d + 2
+        else h = (r - g) / d + 4
+        h = (h * 60 + 360) % 360
+    }
+    return { h, s: s * 100, l: l * 100 }
+}
+
+const PALETTE_HSL = GENRE_PALETTE.map(hexToHsl)
+// The palette's own average saturation/lightness, so any generated overflow color sits in the same
+// bold, mid-lightness tonal family rather than reading as a separate, flatter set.
+const OVERFLOW_S = Math.round(PALETTE_HSL.reduce((sum, c) => sum + c.s, 0) / PALETTE_HSL.length)
+const OVERFLOW_L = Math.round(PALETTE_HSL.reduce((sum, c) => sum + c.l, 0) / PALETTE_HSL.length)
+
+// Colors for `count` real (non-Unknown) genres, guaranteed all-distinct. Up to the palette size it's
+// the palette verbatim (the common case). Beyond it, the palette's 7 exact hues are kept and each
+// extra genre takes the hue sitting in the largest remaining gap on the color wheel — maximally far
+// from every hue already used — rendered at the palette's saturation/lightness. No color ever repeats.
+function buildGenreColors(count: number): string[] {
+    if (count <= GENRE_PALETTE.length) return GENRE_PALETTE.slice(0, count)
+    const usedHues = PALETTE_HSL.map((c) => c.h)
+    const out: string[] = [...GENRE_PALETTE]
+    for (let k = GENRE_PALETTE.length; k < count; k++) {
+        const sorted = [...usedHues].sort((a, b) => a - b)
+        let bestGap = -1
+        let bestHue = 0
+        for (let i = 0; i < sorted.length; i++) {
+            const lo = sorted[i]
+            const hi = i + 1 < sorted.length ? sorted[i + 1] : sorted[0] + 360
+            const gap = hi - lo
+            if (gap > bestGap) {
+                bestGap = gap
+                bestHue = (lo + gap / 2) % 360
+            }
+        }
+        usedHues.push(bestHue)
+        out.push(`hsl(${Math.round(bestHue)}, ${OVERFLOW_S}%, ${OVERFLOW_L}%)`)
+    }
+    return out
+}
 // A segment narrower than this share of the bar gets a floor width so it stays visible / tappable.
 const TINY_SEGMENT_SHARE = 0.07
 // In-bar percentage labels are only drawn on segments wide enough to fit them legibly.
@@ -112,7 +167,10 @@ const GenreSplit = forwardRef<
     // Keep the latest callback in a ref so the once-created PanResponder always calls the current one.
     const onScrubbingChangeRef = useRef(onScrubbingChange)
     onScrubbingChangeRef.current = onScrubbingChange
-    let paletteIndex = 0
+    // One distinct color per real genre (Unknown excluded); generated once per genre-count change.
+    const realGenreCount = genres.reduce((n, g) => (g.name === UNKNOWN_GENRE_NAME ? n : n + 1), 0)
+    const genreColors = useMemo(() => buildGenreColors(realGenreCount), [realGenreCount])
+    let colorIndex = 0
     const segments: Segment[] = genres.map((g) => ({
         name: g.name,
         // `label` is the whole-number share printed inside the bar; `pct` keeps the exact value the
@@ -120,11 +178,8 @@ const GenreSplit = forwardRef<
         label: Math.round(Math.min(100, Math.max(0, g.percentage))),
         pct: g.percentage,
         count: g.count,
-        // Unknown is grey and skips the palette; real genres advance the palette so their hues stay
-        // sequential and distinct even when the Unknown bucket sits between them.
-        color: g.name === UNKNOWN_GENRE_NAME
-            ? UNKNOWN_GENRE_COLOR
-            : GENRE_PALETTE[paletteIndex++ % GENRE_PALETTE.length],
+        // Unknown is grey and takes no color slot; every real genre draws the next distinct color.
+        color: g.name === UNKNOWN_GENRE_NAME ? UNKNOWN_GENRE_COLOR : genreColors[colorIndex++],
     }))
     const total = segments.reduce((sum, s) => sum + s.label, 0) || 1
 
