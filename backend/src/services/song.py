@@ -94,9 +94,13 @@ def get_preview_url_by_song_id(
             storefront=apple_ref.storefront,
         )
         preview_url = _apple_preview_url(lookup)
+        # Prefer the stored store link, but fall back to the live lookup's trackViewUrl
+        # when the provider ref has none (e.g. a song persisted without an apple_view_url).
+        # A non-None lookup row is guaranteed to carry a valid trackViewUrl, so this keeps
+        # the "Get on Apple Music" link present whenever the iTunes preview resolves.
         return SavedSongPreviewUrlResponse(
             preview_url=preview_url,
-            apple_view_url=apple_ref.url,
+            apple_view_url=apple_ref.url or _apple_view_url(lookup),
             provider="apple",
         )
 
@@ -155,6 +159,19 @@ def _apple_preview_url(
     if lookup is None:
         return None
     value = lookup.get("previewUrl")
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def _apple_view_url(
+    lookup: dict[str, object] | None,
+) -> str | None:
+    """Extract Apple's canonical store link (trackViewUrl) from an exact-track lookup row."""
+    if lookup is None:
+        return None
+    value = lookup.get("trackViewUrl")
     if not isinstance(value, str):
         return None
     stripped = value.strip()

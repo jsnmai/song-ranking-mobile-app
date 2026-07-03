@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from src.pydantic_schemas.song import SongCreate
 from src.services.song import persist_user_touched_song
 from src.sqlalchemy_tables.song import Song
+from src.sqlalchemy_tables.song_provider_ref import SongProviderRef
 
 REGISTER_PAYLOAD = {
     "email": "user@example.com",
@@ -205,6 +206,94 @@ def test_preview_url_by_song_id_uses_legacy_deezer_refresh(
     db_session.expire_all()
     refreshed = db_session.get(Song, song.id)
     assert refreshed.preview_url == REFRESHED_URL
+
+
+APPLE_PREVIEW_URL = "https://audio-ssl.itunes.apple.com/preview/smoke.m4a"
+APPLE_VIEW_URL = "https://music.apple.com/us/album/smoke/1440841363?i=1440841363"
+
+
+def _add_apple_ref(
+    db: Session,
+    song: Song,
+    url: str | None,
+    provider_track_id: str = "1440841363",
+) -> None:
+    """Attach an Apple provider ref to a durable song, optionally without a stored link."""
+    db.add(
+        SongProviderRef(
+            song_id=song.id,
+            provider="apple",
+            provider_track_id=provider_track_id,
+            storefront="US",
+            url=url,
+        )
+    )
+    db.commit()
+
+
+def test_preview_url_by_song_id_falls_back_to_lookup_view_url(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    """An Apple song whose provider ref stored no store link still returns the live
+    lookup's trackViewUrl, so the client can render the 'Get on Apple Music' link."""
+    song = _insert_song(db_session)
+    _add_apple_ref(db_session, song, url=None)
+    token = _get_token(client)
+
+    def mock_lookup(apple_track_id: str, storefront: str) -> dict:
+        assert apple_track_id == "1440841363"
+        assert storefront == "US"
+        return {
+            "previewUrl": APPLE_PREVIEW_URL,
+            "trackViewUrl": APPLE_VIEW_URL,
+        }
+
+    monkeypatch.setattr("src.services.song.lookup_apple_song", mock_lookup)
+
+    response = client.get(
+        f"/api/v1/songs/by-id/{song.id}/preview-url",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "preview_url": APPLE_PREVIEW_URL,
+        "apple_view_url": APPLE_VIEW_URL,
+        "provider": "apple",
+    }
+
+
+def test_preview_url_by_song_id_prefers_stored_apple_view_url(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    """When the provider ref already carries a store link, it wins over the live lookup."""
+    song = _insert_song(db_session)
+    stored = "https://music.apple.com/us/album/stored/1?i=1"
+    _add_apple_ref(db_session, song, url=stored)
+    token = _get_token(client)
+
+    def mock_lookup(apple_track_id: str, storefront: str) -> dict:
+        return {
+            "previewUrl": APPLE_PREVIEW_URL,
+            "trackViewUrl": APPLE_VIEW_URL,
+        }
+
+    monkeypatch.setattr("src.services.song.lookup_apple_song", mock_lookup)
+
+    response = client.get(
+        f"/api/v1/songs/by-id/{song.id}/preview-url",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "apple"
+    assert body["preview_url"] == APPLE_PREVIEW_URL
+    assert body["apple_view_url"] == stored
 
 
 def test_preview_url_treats_null_expiry_as_expired(
