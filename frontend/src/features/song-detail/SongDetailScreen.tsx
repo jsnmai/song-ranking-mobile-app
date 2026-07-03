@@ -201,8 +201,15 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
         }
         setRankingStatus("loading")
         try {
-            const resolved = passedSong.song_id != null
-                ? await getMyRankingBySongId(passedSong.song_id, token)
+            // Resolve by the durable song id when we have one. `song_id` is set on
+            // ranking-derived songs; `id` is the durable id on any persisted SongResponse
+            // (e.g. Popular / co-sign items, which serialize it as `id`, not `song_id`).
+            // Falling back to `id` is what lets an Apple-identity song (no deezer_id) still
+            // find the viewer's ranking — without it, such songs render as unrated even when
+            // rated. Deezer id is the last resort for legacy songs that only carry that.
+            const durableSongId = passedSong.song_id ?? passedSong.id ?? null
+            const resolved = durableSongId != null
+                ? await getMyRankingBySongId(durableSongId, token)
                 : passedSong.deezer_id != null
                     ? await getMyRankingByDeezerId(passedSong.deezer_id, token)
                     : null
@@ -221,7 +228,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
                 setRankingStatus("error")
             }
         }
-    }, [token, passedSong.deezer_id, passedSong.song_id])
+    }, [token, passedSong.deezer_id, passedSong.song_id, passedSong.id])
 
     useEffect(() => {
         // Skip the lookup when the caller already handed us the ranking.

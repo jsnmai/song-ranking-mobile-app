@@ -9,6 +9,8 @@ const mockGoBack = jest.fn()
 const mockNavigate = jest.fn()
 const mockRemoveRating = jest.fn()
 const mockListMyVersusHistory = jest.fn()
+const mockGetMyRankingBySongId = jest.fn()
+const mockGetMyRankingByDeezerId = jest.fn()
 const mockFetchPreviewUrl = jest.fn()
 const mockFetchPreviewUrlBySongId = jest.fn()
 const mockGetBookmarkStatus = jest.fn()
@@ -38,6 +40,8 @@ jest.mock("../../auth/AuthContext", () => ({
 jest.mock("../../rankings/apiRequests", () => ({
     removeRating: (...args: unknown[]) => mockRemoveRating(...args),
     listMyVersusHistory: (...args: unknown[]) => mockListMyVersusHistory(...args),
+    getMyRankingBySongId: (...args: unknown[]) => mockGetMyRankingBySongId(...args),
+    getMyRankingByDeezerId: (...args: unknown[]) => mockGetMyRankingByDeezerId(...args),
 }))
 
 jest.mock("../../songs/apiRequests", () => ({
@@ -117,6 +121,10 @@ beforeEach(() => {
     mockGetBookmarkStatus.mockResolvedValue({ is_bookmarked: false, bookmark: null })
     mockGetBookmarkStatusBySongId.mockResolvedValue({ is_bookmarked: false, bookmark: null })
     mockListMyVersusHistory.mockResolvedValue({ receipts: [] })
+    // Default: the viewer hasn't rated the song-only param (unrated view). Tests that
+    // exercise the rated path override these per case.
+    mockGetMyRankingBySongId.mockResolvedValue(null)
+    mockGetMyRankingByDeezerId.mockResolvedValue(null)
 })
 
 describe("SongDetailScreen", () => {
@@ -298,6 +306,35 @@ describe("SongDetailScreen", () => {
 
         expect(await screen.findByText("Provided courtesy of iTunes")).toBeTruthy()
         expect(screen.getByText("Get on Apple Music")).toBeTruthy()
+    })
+
+    it("resolves the viewer's ranking by durable song id for an Apple song opened from Popular", async () => {
+        // Popular serializes the durable id as `id` (not `song_id`), and an Apple-identity
+        // song has no deezer_id. Regression: Song Detail must still resolve the ranking via
+        // `id`, or a rated song renders as unrated (no score, Rate button, no versus history).
+        const popularAppleSong = {
+            ...ranking.song,
+            song_id: undefined,
+            deezer_id: null,
+            provider: "apple" as const,
+        }
+        mockGetMyRankingBySongId.mockResolvedValue(ranking)
+
+        render(
+            <SongDetailScreen
+                navigation={navigation as never}
+                route={{ params: { song: popularAppleSong } } as never}
+            />,
+        )
+
+        // Looked up by the durable song id (42), not left unresolved.
+        await waitFor(() => {
+            expect(mockGetMyRankingBySongId).toHaveBeenCalledWith(42, "test-token")
+        })
+        expect(mockGetMyRankingByDeezerId).not.toHaveBeenCalled()
+        // The rated score renders instead of the unrated state (hero + score card).
+        expect((await screen.findAllByText("9.4")).length).toBeGreaterThan(0)
+        expect(screen.queryByText("Not rated yet")).toBeNull()
     })
 
     it("renders iTunes attribution even when the Apple store link is missing", async () => {
