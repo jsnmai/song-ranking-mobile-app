@@ -445,7 +445,7 @@ export default function ProfileScreen() {
                             <View style={styles.setupSteps}>
                                 {([
                                     ["Rate your first song", step1Done, () => goToDiscoverSearch("songs")],
-                                    ["Reach 10 ratings to unlock Rankings and Taste Profile", step2Done, () => goToDiscoverSearch("songs")],
+                                    ["Rate 10 songs to unlock Rankings and Taste Profile", step2Done, () => goToDiscoverSearch("songs")],
                                     ["Follow 3 friends", step3Done, () => goToDiscoverSearch("users")],
                                 ] as [string, boolean, () => void][]).map(([label, done, onPress], i) => (
                                     <TouchableOpacity
