@@ -50,7 +50,7 @@ import RecentRatingsModule from "./RecentRatingsModule"
 import { StreakBadge } from "./StreakBadge"
 import TasteProfileGrid, { type TasteProfileOpenTile } from "./TasteProfileGrid"
 import { type PopoverFrame } from "./TasteStripTile"
-import TopGenresCard from "./TopGenresCard"
+import TopGenresCard, { type TopGenresHandle } from "./TopGenresCard"
 
 type OtherProfileProps = NativeStackScreenProps<AppStackParamList, "OtherProfile">
 const POPOVER_TOUCH_SLOP = 8
@@ -147,6 +147,9 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
     const { token, profile: viewerProfile } = useAuth()
     const insets = useSafeAreaInsets()
     const tasteProfileSectionRef = useRef<View>(null)
+    const topGenresRef = useRef<TopGenresHandle>(null)
+    // True while a finger is dragging the Top Genres bar, so page scroll is locked for that gesture.
+    const [genreScrubbing, setGenreScrubbing] = useState(false)
     const { username } = route.params
     const [profile, setProfile] = useState<Profile | null>(null)
     const [isLoading, setIsLoading] = useState(true)
@@ -181,7 +184,10 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
 
     useEffect(() => {
         if (typeof navigation.addListener !== "function") return undefined
-        return navigation.addListener("blur", dismissTastePopover)
+        return navigation.addListener("blur", () => {
+            dismissTastePopover()
+            topGenresRef.current?.dismiss()
+        })
     }, [dismissTastePopover, navigation])
 
     const bottomChromeInset = insets.bottom + 92
@@ -381,7 +387,7 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
     // this viewer can see the profile's taste and there is an active streak.
     const streakWeeks = profile?.user_stats?.current_streak ?? 0
 
-    const topGenres = taste ? taste.overall.genres.slice(0, 3) : []
+    const topGenres = taste ? taste.overall.genres : []
     const firstName = profile ? (profile.display_name || profile.username).split(" ")[0] : ""
     const viewerInitial = (viewerProfile?.display_name || viewerProfile?.username || "You")
         .charAt(0)
@@ -406,8 +412,20 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
             contentContainerStyle={[styles.contentContainer, { paddingBottom: bottomChromeInset }]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            scrollEnabled={!genreScrubbing}
             onStartShouldSetResponderCapture={dismissTastePopoverForScreenTouch}
-            onScrollBeginDrag={dismissTastePopover}
+            // Any touch reliably clears the genre tooltip and (outside its own tiles/popover) the
+            // taste explainer too. onTouchStart fires for empty space, which the responder-capture
+            // hook above does not reliably; the genre card ignores touches on its own bar and the
+            // taste handler ignores touches on its own section, so both stay interactive.
+            onTouchStart={(e) => {
+                topGenresRef.current?.handleScreenTouch(e.nativeEvent.pageX, e.nativeEvent.pageY)
+                dismissTastePopoverForScreenTouch(e)
+            }}
+            onScrollBeginDrag={() => {
+                dismissTastePopover()
+                topGenresRef.current?.dismiss()
+            }}
         >
             {openTasteTile ? (
                 <Pressable
@@ -721,7 +739,11 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
                                 <TasteProfileGrid
                                     taste={taste}
                                     openTile={openTasteTile}
-                                    onOpenTileChange={setOpenTasteTile}
+                                    onOpenTileChange={(next) => {
+                                        // Opening a taste tile closes the genre tooltip so only one is up.
+                                        if (next) topGenresRef.current?.dismiss()
+                                        setOpenTasteTile(next)
+                                    }}
                                     onPopoverFrameChange={setTastePopoverFrame}
                                     popoverViewportBottomInset={bottomChromeInset}
                                 />
@@ -732,7 +754,14 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
                         {profile.can_view_taste && topGenres.length > 0 && (
                             <>
                                 {sectionLabel("TOP GENRES")}
-                                <TopGenresCard genres={topGenres} />
+                                <TopGenresCard
+                                    ref={topGenresRef}
+                                    genres={topGenres}
+                                    onScrubbingChange={(scrubbing) => {
+                                        setGenreScrubbing(scrubbing)
+                                        if (scrubbing) dismissTastePopover()
+                                    }}
+                                />
                             </>
                         )}
 

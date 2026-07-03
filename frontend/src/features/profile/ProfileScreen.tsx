@@ -40,7 +40,7 @@ import MostCompatibleModule from "./MostCompatibleModule"
 import { OwnStreakChip } from "./StreakBadge"
 import TasteProfileGrid, { type TasteProfileOpenTile } from "./TasteProfileGrid"
 import { type PopoverFrame } from "./TasteStripTile"
-import TopGenresCard from "./TopGenresCard"
+import TopGenresCard, { type TopGenresHandle } from "./TopGenresCard"
 
 type ProfileNavigationProp = NativeStackNavigationProp<AppStackParamList, "MainTabs">
 const POPOVER_TOUCH_SLOP = 8
@@ -83,6 +83,9 @@ export default function ProfileScreen() {
     // Re-tapping the "You" tab while scrolled down jumps back to the top.
     const scrollRef = useRef<ScrollView>(null)
     const tasteProfileSectionRef = useRef<View>(null)
+    const topGenresRef = useRef<TopGenresHandle>(null)
+    // True while a finger is dragging the Top Genres bar, so page scroll is locked for that gesture.
+    const [genreScrubbing, setGenreScrubbing] = useState(false)
     useScrollToTop(scrollRef)
 
     // Navigate immediately; Song Detail resolves the viewer's ranking so it offers Re-rate (not Rate).
@@ -159,7 +162,13 @@ export default function ProfileScreen() {
     )
 
     useFocusEffect(
-        useCallback(() => dismissTastePopover, [dismissTastePopover])
+        useCallback(
+            () => () => {
+                dismissTastePopover()
+                topGenresRef.current?.dismiss()
+            },
+            [dismissTastePopover],
+        )
     )
 
     useEffect(() => {
@@ -317,7 +326,7 @@ export default function ProfileScreen() {
         })
     }
 
-    const topGenres = taste?.overall?.genres?.slice(0, 3) ?? []
+    const topGenres = taste?.overall?.genres ?? []
 
     return (
         <>
@@ -330,8 +339,20 @@ export default function ProfileScreen() {
             contentContainerStyle={[styles.contentContainer, { paddingBottom: bottomChromeInset }]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            scrollEnabled={!genreScrubbing}
             onStartShouldSetResponderCapture={dismissTastePopoverForScreenTouch}
-            onScrollBeginDrag={dismissTastePopover}
+            // Any touch reliably clears the genre tooltip and (outside its own tiles/popover) the
+            // taste explainer too. onTouchStart fires for empty space, which the responder-capture
+            // hook above does not reliably; the genre card ignores touches on its own bar and the
+            // taste handler ignores touches on its own section, so both stay interactive.
+            onTouchStart={(e) => {
+                topGenresRef.current?.handleScreenTouch(e.nativeEvent.pageX, e.nativeEvent.pageY)
+                dismissTastePopoverForScreenTouch(e)
+            }}
+            onScrollBeginDrag={() => {
+                dismissTastePopover()
+                topGenresRef.current?.dismiss()
+            }}
         >
             {openTasteTile ? (
                 <Pressable
@@ -628,7 +649,11 @@ export default function ProfileScreen() {
                                     taste={taste}
                                     isOwn
                                     openTile={openTasteTile}
-                                    onOpenTileChange={setOpenTasteTile}
+                                    onOpenTileChange={(next) => {
+                                        // Opening a taste tile closes the genre tooltip so only one is up.
+                                        if (next) topGenresRef.current?.dismiss()
+                                        setOpenTasteTile(next)
+                                    }}
                                     onPopoverFrameChange={setTastePopoverFrame}
                                     popoverViewportBottomInset={bottomChromeInset}
                                 />
@@ -642,9 +667,14 @@ export default function ProfileScreen() {
                         <View>
                             <Text style={styles.stripKicker}>TOP GENRES</Text>
                             <TopGenresCard
+                                ref={topGenresRef}
                                 genres={topGenres}
                                 loading={tasteLoading}
                                 emptyText="Rate more songs to see your top genres."
+                                onScrubbingChange={(scrubbing) => {
+                                    setGenreScrubbing(scrubbing)
+                                    if (scrubbing) dismissTastePopover()
+                                }}
                             />
                         </View>
                     )}
