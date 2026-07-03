@@ -2,7 +2,9 @@ from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
 
+import src.sqlalchemy_tables.artist  # noqa: F401 — registers Artist tables with Base.metadata so Alembic sees the tables
 import src.sqlalchemy_tables.block  # noqa: F401 — registers Block with Base.metadata so Alembic sees the table
+import src.sqlalchemy_tables.bookmark  # noqa: F401 — registers Bookmark with Base.metadata so Alembic sees the table
 import src.sqlalchemy_tables.comparison  # noqa: F401 — registers Comparison with Base.metadata so Alembic sees the table
 import src.sqlalchemy_tables.comparison_session  # noqa: F401 — registers ComparisonSession with Base.metadata so Alembic sees the table
 import src.sqlalchemy_tables.follow  # noqa: F401 — registers Follow with Base.metadata so Alembic sees the table
@@ -13,7 +15,6 @@ import src.sqlalchemy_tables.profile  # noqa: F401 — registers Profile with Ba
 import src.sqlalchemy_tables.ranking  # noqa: F401 — registers Ranking with Base.metadata so Alembic sees the table
 import src.sqlalchemy_tables.rating_event  # noqa: F401 — registers RatingEvent with Base.metadata so Alembic sees the table
 import src.sqlalchemy_tables.report  # noqa: F401 — registers Report with Base.metadata so Alembic sees the table
-import src.sqlalchemy_tables.bookmark  # noqa: F401 — registers Bookmark with Base.metadata so Alembic sees the table
 import src.sqlalchemy_tables.song  # noqa: F401 — registers Song with Base.metadata so Alembic sees the table
 import src.sqlalchemy_tables.song_provider_ref  # noqa: F401 — registers SongProviderRef with Base.metadata so Alembic sees the table
 import src.sqlalchemy_tables.user  # noqa: F401 — registers User with Base.metadata so Alembic sees the table

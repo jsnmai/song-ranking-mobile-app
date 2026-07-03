@@ -123,6 +123,10 @@ class Song(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    artist_credits_enriched_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     # "pending" | "enriched" | "no_match" | "failed_temporary"
     # Plain string — no PostgreSQL ENUM — so new statuses need no ALTER TYPE migration.
     enrichment_status: Mapped[str | None] = mapped_column(

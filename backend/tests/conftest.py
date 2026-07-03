@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+import src.sqlalchemy_tables.artist  # noqa: F401 — registers Artist tables with Base.metadata so create_all() creates them
 import src.sqlalchemy_tables.auxstrology_snapshot  # noqa: F401 — registers AuxstrologySnapshot with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.block  # noqa: F401 — registers Block with Base.metadata so create_all() creates the table
 import src.sqlalchemy_tables.bookmark  # noqa: F401 — registers Bookmark with Base.metadata so create_all() creates the table

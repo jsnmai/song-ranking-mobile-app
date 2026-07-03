@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import httpx
 from sqlalchemy.orm import Session
 
+from src.crud.artist import ArtistCreditData, replace_song_artist_credits
 from src.crud.song import (
     get_by_id,
     mark_song_enrichment_failed,
@@ -14,6 +15,7 @@ from src.crud.song import (
 )
 from src.crud.song_provider_ref import ensure_musicbrainz_ref
 from src.pydantic_schemas.song import SongResponse
+from src.sqlalchemy_tables.song import Song
 
 MUSICBRAINZ_RECORDING_URL = "https://musicbrainz.org/ws/2/recording/"
 MUSICBRAINZ_RELEASE_URL = "https://musicbrainz.org/ws/2/release/"
@@ -34,7 +36,7 @@ def enrich_song_metadata(
     """
     Enrich a persisted song with MusicBrainz genre and release-year metadata.
 
-    1. Skip missing or already-enriched songs without calling MusicBrainz.
+    1. Skip missing or already-complete songs without calling MusicBrainz.
     2. Prefer ISRC lookup because it is the most reliable cross-provider key.
     3. Fall back to fuzzy artist/title search only when ISRC is unavailable.
     4. Leave metadata empty if no confident match is found.
@@ -46,10 +48,23 @@ def enrich_song_metadata(
     if song is None:
         return None
 
-    if song.metadata_enriched_at is not None:
+    if song.enrichment_status == "no_match":
         return SongResponse.model_validate(song)
 
-    if song.enrichment_status == "no_match":
+    if song.metadata_enriched_at is not None:
+        if song.artist_credits_enriched_at is None and song.musicbrainz_id is not None:
+            try:
+                _refresh_artist_credits_from_recording_id(
+                    db,
+                    song,
+                    recording_mbid=song.musicbrainz_id,
+                )
+                db.commit()
+                db.refresh(song)
+            except Exception:
+                db.rollback()
+                _mark_song_failed_after_rollback(db, song_id)
+                raise
         return SongResponse.model_validate(song)
 
     try:
@@ -87,6 +102,13 @@ def enrich_song_metadata(
             track_position=track_position,
             track_count=track_count,
         )
+        _apply_musicbrainz_artist_credits(
+            db,
+            enriched_song,
+            recording,
+            match_confidence=match_confidence,
+            enriched_at=enriched_song.metadata_enriched_at or datetime.now(timezone.utc),
+        )
         ensure_musicbrainz_ref(
             db,
             enriched_song,
@@ -99,17 +121,24 @@ def enrich_song_metadata(
         db.refresh(enriched_song)
     except Exception:
         db.rollback()
-        # Best-effort status write after rollback. Re-fetch to avoid stale ORM state.
-        try:
-            fresh_song = get_by_id(db, song_id)
-            if fresh_song is not None:
-                mark_song_enrichment_failed(db, fresh_song)
-                db.commit()
-        except Exception:
-            pass
+        _mark_song_failed_after_rollback(db, song_id)
         raise
 
     return SongResponse.model_validate(enriched_song)
+
+
+def _mark_song_failed_after_rollback(
+    db: Session,
+    song_id: int,
+) -> None:
+    """Best-effort status write after a failed MusicBrainz attempt."""
+    try:
+        fresh_song = get_by_id(db, song_id)
+        if fresh_song is not None:
+            mark_song_enrichment_failed(db, fresh_song)
+            db.commit()
+    except Exception:
+        pass
 
 
 def _find_musicbrainz_recording(
@@ -157,6 +186,28 @@ def _musicbrainz_recording_search(query: str) -> dict:
         MUSICBRAINZ_RECORDING_URL,
         params={
             "query": query,
+            "fmt": "json",
+        },
+        headers={"User-Agent": MUSICBRAINZ_USER_AGENT},
+        timeout=MUSICBRAINZ_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if isinstance(payload, dict):
+        return payload
+    return {}
+
+
+def _musicbrainz_recording_lookup(
+    recording_mbid: str,
+    inc: str,
+) -> dict:
+    """Call MusicBrainz recording lookup by MBID with required headers and throttling."""
+    _wait_for_musicbrainz_budget()
+    response = httpx.get(
+        f"{MUSICBRAINZ_RECORDING_URL}{recording_mbid}",
+        params={
+            "inc": inc,
             "fmt": "json",
         },
         headers={"User-Agent": MUSICBRAINZ_USER_AGENT},
@@ -217,23 +268,10 @@ def _fetch_recording_isrc(recording_mbid: str) -> str | None:
     Any failure returns None — enrichment must not fail over a missing ISRC.
     """
     try:
-        _wait_for_musicbrainz_budget()
-        response = httpx.get(
-            f"{MUSICBRAINZ_RECORDING_URL}{recording_mbid}",
-            params={
-                "inc": "isrcs",
-                "fmt": "json",
-            },
-            headers={"User-Agent": MUSICBRAINZ_USER_AGENT},
-            timeout=MUSICBRAINZ_TIMEOUT_SECONDS,
-        )
-        response.raise_for_status()
-        payload = response.json()
+        payload = _musicbrainz_recording_lookup(recording_mbid, "isrcs")
     except Exception:
         return None
 
-    if not isinstance(payload, dict):
-        return None
     isrcs = payload.get("isrcs", [])
     if not isinstance(isrcs, list):
         return None
@@ -241,6 +279,80 @@ def _fetch_recording_isrc(recording_mbid: str) -> str | None:
         if isinstance(isrc, str) and len(isrc) == ISRC_LENGTH:
             return isrc
     return None
+
+
+def _refresh_artist_credits_from_recording_id(
+    db: Session,
+    song: Song,
+    recording_mbid: str,
+) -> None:
+    """Backfill artist-credit rows for a song whose recording MBID is already known."""
+    recording = _musicbrainz_recording_lookup(recording_mbid, "artist-credits")
+    _apply_musicbrainz_artist_credits(
+        db,
+        song,
+        recording,
+        match_confidence="mb_recording_lookup",
+        enriched_at=datetime.now(timezone.utc),
+    )
+
+
+def _apply_musicbrainz_artist_credits(
+    db: Session,
+    song: Song,
+    recording: dict,
+    match_confidence: str,
+    enriched_at: datetime,
+) -> None:
+    """
+    Store structured MusicBrainz artist credits and mark the credit harvest attempted.
+
+    Even an empty/invalid artist-credit list is marked as attempted so the retry sweep
+    does not loop forever on recordings MusicBrainz cannot structure for us.
+    """
+    credits = _extract_artist_credits(recording)
+    if credits:
+        replace_song_artist_credits(
+            db,
+            song,
+            credits,
+            source="musicbrainz",
+            confidence=match_confidence,
+        )
+    song.artist_credits_enriched_at = enriched_at
+
+
+def _extract_artist_credits(recording: dict) -> list[ArtistCreditData]:
+    """Extract ordered MusicBrainz artist credits with stable MBIDs."""
+    artist_credit = recording.get("artist-credit", [])
+    if not isinstance(artist_credit, list):
+        return []
+
+    credits: list[ArtistCreditData] = []
+    for index, credit in enumerate(artist_credit):
+        if not isinstance(credit, dict):
+            continue
+        artist = credit.get("artist")
+        if not isinstance(artist, dict):
+            continue
+        mbid = artist.get("id")
+        if not isinstance(mbid, str) or not mbid.strip():
+            continue
+        name = credit.get("name") or artist.get("name")
+        if not isinstance(name, str) or not name.strip():
+            continue
+        join_phrase = credit.get("joinphrase")
+        credits.append(
+            ArtistCreditData(
+                name=name.strip()[:255],
+                musicbrainz_id=mbid.strip(),
+                position=index + 1,
+                join_phrase=join_phrase.strip()[:32]
+                if isinstance(join_phrase, str) and join_phrase.strip()
+                else None,
+            )
+        )
+    return credits
 
 
 def _extract_artist_mbid(recording: dict) -> str | None:

@@ -2,6 +2,7 @@
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from src.sqlalchemy_tables.artist import Artist, SongArtistCredit
 from src.sqlalchemy_tables.song import Song
 
 
@@ -195,6 +196,77 @@ def test_taste_top_artists(client: TestClient) -> None:
     assert artists[0]["count"] == 2
     assert artists[1]["name"] == "Kendrick Lamar"
     assert artists[1]["count"] == 1
+
+
+def test_taste_top_artists_use_structured_artist_credits(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    """A collaboration counts toward each credited artist when structured credits exist."""
+    token, _ = _register(client, "artistcredits@example.com", "artistcredits")
+    _rate(client, token, deezer_id=10, artist="Skrillex & ISOxo", bucket="like", title="fuze")
+    _rate(client, token, deezer_id=11, artist="Skrillex", bucket="alright", title="Rumble")
+
+    collab = db_session.query(Song).filter(Song.deezer_id == 10).one()
+    skrillex = Artist(
+        name="Skrillex",
+        musicbrainz_id="ae002c5d-aac6-4900-a39a-30aa9e2edf2b",
+    )
+    isoxo = Artist(
+        name="ISOxo",
+        musicbrainz_id="b768ec2f-5e65-4fd8-b87a-6ad8f7f1c999",
+    )
+    db_session.add_all([skrillex, isoxo])
+    db_session.flush()
+    db_session.add_all(
+        [
+            SongArtistCredit(
+                song_id=collab.id,
+                artist_id=skrillex.id,
+                position=1,
+                credited_name="Skrillex",
+                join_phrase=" & ",
+                source="musicbrainz",
+                confidence="mb_fuzzy",
+            ),
+            SongArtistCredit(
+                song_id=collab.id,
+                artist_id=isoxo.id,
+                position=2,
+                credited_name="ISOxo",
+                join_phrase=None,
+                source="musicbrainz",
+                confidence="mb_fuzzy",
+            ),
+        ]
+    )
+    db_session.commit()
+
+    response = _get_taste(client, token)
+
+    artists = response.json()["overall"]["top_artists"]
+    assert artists[0]["name"] == "Skrillex"
+    assert artists[0]["count"] == 2
+    assert artists[1]["name"] == "ISOxo"
+    assert artists[1]["count"] == 1
+    assert "Skrillex & ISOxo" not in [artist["name"] for artist in artists]
+
+
+def test_taste_top_artist_ties_use_best_score_then_name(client: TestClient) -> None:
+    """Equal artist counts sort predictably by highest score, then name."""
+    token, _ = _register(client, "artistties@example.com", "artistties")
+    _rate(client, token, deezer_id=20, artist="Lower Artist", bucket="dislike")
+    _rate(client, token, deezer_id=21, artist="Higher Artist", bucket="like")
+    _rate(client, token, deezer_id=22, artist="Alpha Artist", bucket="alright")
+
+    response = _get_taste(client, token)
+
+    artists = response.json()["overall"]["top_artists"]
+    assert [artist["name"] for artist in artists] == [
+        "Higher Artist",
+        "Alpha Artist",
+        "Lower Artist",
+    ]
 
 
 def test_taste_top_artist_cover_is_highest_scored_song(client: TestClient) -> None:

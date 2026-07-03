@@ -214,19 +214,32 @@ def _compute_top_artists(rows: list[TasteRow]) -> list[TasteArtistItem]:
     """
     if not rows:
         return []
-    counts = Counter(r.artist for r in rows)
+    counts: Counter[str] = Counter()
     best_cover: dict[str, tuple[float, str]] = {}
+    best_score: dict[str, float] = {}
     for row in rows:
-        if not row.cover_url:
-            continue
-        current = best_cover.get(row.artist)
-        if current is None or row.score > current[0]:
-            best_cover[row.artist] = (row.score, row.cover_url)
+        artist_names = row.artist_credits if row.artist_credits else [row.artist]
+        for artist_name in dict.fromkeys(artist_names):
+            counts[artist_name] += 1
+            best_score[artist_name] = max(best_score.get(artist_name, row.score), row.score)
+            if not row.cover_url:
+                continue
+            current = best_cover.get(artist_name)
+            if current is None or row.score > current[0]:
+                best_cover[artist_name] = (row.score, row.cover_url)
+    sorted_artists = sorted(
+        counts.items(),
+        key=lambda item: (
+            -item[1],
+            -best_score[item[0]],
+            item[0].casefold(),
+        ),
+    )
     return [
         TasteArtistItem(
             name=name,
             count=count,
             cover_url=best_cover[name][1] if name in best_cover else None,
         )
-        for name, count in counts.most_common(_TOP_ARTIST_LIMIT)
+        for name, count in sorted_artists[:_TOP_ARTIST_LIMIT]
     ]

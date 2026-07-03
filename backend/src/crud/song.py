@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from src.pydantic_schemas.song import SongCreate
+from src.sqlalchemy_tables.artist import SongArtistCredit
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.song import Song
 
@@ -322,19 +323,42 @@ def list_enrichment_retry_candidates(
     """
     Return songs still waiting on MusicBrainz enrichment, least-attempted first.
 
-    "pending" and "failed_temporary" are retryable; "no_match" and "enriched" are terminal.
+    "pending" and "failed_temporary" are retryable for full metadata; "no_match" is terminal.
     NULL status is included defensively for pre-status rows, guarded by the enriched_at check.
+    Already-enriched songs with a MusicBrainz recording but no artist-credit refresh marker are
+    also included once so deployments after the artist-credit migration can backfill structured credits.
     """
+    missing_artist_credits = ~select(SongArtistCredit.id).where(
+        SongArtistCredit.song_id == Song.id,
+    ).exists()
+    # The attempt cap bounds fuzzy-search retries only. An already-enriched song already holds a
+    # confident MusicBrainz recording id, so its artist-credit backfill is a single reliable
+    # lookup by that id, bounded by the artist_credits_enriched_at marker (set after one attempt,
+    # even when MusicBrainz returns no structured credits). Gating it by the metadata attempt cap
+    # would strand songs that only became enriched after many search attempts — exactly the
+    # collaborations we most want to split — so the cap stays on the metadata branch alone.
+    needs_metadata_retry = (
+        Song.metadata_enriched_at.is_(None)
+        & or_(
+            Song.enrichment_status.in_(["pending", "failed_temporary"]),
+            Song.enrichment_status.is_(None),
+        )
+        & (Song.enrichment_attempt_count < max_attempts)
+    )
+    needs_artist_credit_refresh = (
+        Song.metadata_enriched_at.is_not(None)
+        & Song.musicbrainz_id.is_not(None)
+        & Song.artist_credits_enriched_at.is_(None)
+        & missing_artist_credits
+    )
     statement = (
         select(Song)
-        .where(Song.metadata_enriched_at.is_(None))
         .where(
             or_(
-                Song.enrichment_status.in_(["pending", "failed_temporary"]),
-                Song.enrichment_status.is_(None),
+                needs_metadata_retry,
+                needs_artist_credit_refresh,
             )
         )
-        .where(Song.enrichment_attempt_count < max_attempts)
         .order_by(
             Song.enrichment_attempt_count.asc(),
             Song.id.asc(),

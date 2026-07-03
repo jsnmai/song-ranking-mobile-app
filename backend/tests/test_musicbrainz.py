@@ -13,6 +13,7 @@ from src.pydantic_schemas.song import SongCreate
 from src.services.musicbrainz import enrich_song_metadata
 from src.services.musicbrainz_tasks import run_enrichment_sweep
 from src.services.song import persist_user_touched_song
+from src.sqlalchemy_tables.artist import Artist, SongArtistCredit
 from src.sqlalchemy_tables.song import Song
 from src.sqlalchemy_tables.song_provider_ref import SongProviderRef
 
@@ -549,6 +550,116 @@ def test_musicbrainz_fuzzy_enrichment_harvests_identity_and_isrc(
     assert provider_ref.storefront == "global"
     assert provider_ref.confidence == "mb_fuzzy"
 
+    artist = db_session.execute(
+        select(Artist)
+        .where(Artist.musicbrainz_id == "e520459c-dff4-491d-a6e4-c97be35e0044")
+    ).scalar_one()
+    credit = db_session.execute(
+        select(SongArtistCredit)
+        .where(SongArtistCredit.song_id == song.id)
+    ).scalar_one()
+    assert artist.name == "Frank Ocean"
+    assert credit.artist_id == artist.id
+    assert credit.position == 1
+    assert credit.credited_name == "Frank Ocean"
+    assert credit.source == "musicbrainz"
+    assert credit.confidence == "mb_fuzzy"
+    assert song.artist_credits_enriched_at is not None
+
+
+class ArtistCreditLookupResponse:
+    """The recording lookup payload used to backfill structured artist credits."""
+
+    def raise_for_status(self) -> None:
+        """Match the httpx response API used by the service."""
+        return None
+
+    def json(self) -> dict:
+        """Return ordered collaborator credits."""
+        return {
+            "id": "fuze-recording",
+            "artist-credit": [
+                {
+                    "name": "Skrillex",
+                    "joinphrase": " & ",
+                    "artist": {
+                        "id": "ae002c5d-aac6-4900-a39a-30aa9e2edf2b",
+                        "name": "Skrillex",
+                    },
+                },
+                {
+                    "name": "ISOxo",
+                    "artist": {
+                        "id": "b768ec2f-5e65-4fd8-b87a-6ad8f7f1c999",
+                        "name": "ISOxo",
+                    },
+                },
+            ],
+        }
+
+
+def test_musicbrainz_artist_credit_backfill_for_already_enriched_song(
+    db_session: Session,
+    monkeypatch,
+):
+    """Existing enriched songs with a recording MBID can refresh only artist-credit rows."""
+    payload = _song_payload()
+    payload.deezer_id = 880011
+    payload.title = "fuze"
+    payload.artist = "Skrillex & ISOxo"
+    song_response = persist_user_touched_song(
+        db_session,
+        payload,
+    )
+    song = db_session.get(Song, song_response.id)
+    assert song is not None
+    song.musicbrainz_id = "fuze-recording"
+    song.metadata_enriched_at = datetime.now(timezone.utc)
+    song.enrichment_status = "enriched"
+    db_session.commit()
+
+    calls: list[tuple[str, dict]] = []
+
+    def mock_get(
+        url: str,
+        params: dict,
+        headers: dict,
+        timeout: float,
+    ) -> ArtistCreditLookupResponse:
+        calls.append((url, params))
+        assert url.endswith("/fuze-recording")
+        assert params == {"inc": "artist-credits", "fmt": "json"}
+        return ArtistCreditLookupResponse()
+
+    monkeypatch.setattr(
+        "src.services.musicbrainz.httpx.get",
+        mock_get,
+    )
+    monkeypatch.setattr(
+        "src.services.musicbrainz.time.sleep",
+        lambda seconds: None,
+    )
+
+    response = enrich_song_metadata(
+        db_session,
+        song_response.id,
+    )
+
+    assert response is not None
+    assert len(calls) == 1
+    db_session.expire_all()
+    refreshed_song = db_session.get(Song, song_response.id)
+    assert refreshed_song is not None
+    assert refreshed_song.artist_credits_enriched_at is not None
+
+    credits = db_session.execute(
+        select(SongArtistCredit)
+        .where(SongArtistCredit.song_id == song_response.id)
+        .order_by(SongArtistCredit.position)
+    ).scalars().all()
+    assert [credit.credited_name for credit in credits] == ["Skrillex", "ISOxo"]
+    assert [credit.join_phrase for credit in credits] == ["&", None]
+
 
 def test_musicbrainz_isrc_enrichment_keeps_isrc_and_skips_lookup(
     db_session: Session,
@@ -619,6 +730,23 @@ def test_list_enrichment_retry_candidates_selects_and_orders(
     enriched = make_song(880023)
     enriched.enrichment_status = "enriched"
     enriched.metadata_enriched_at = datetime.now(timezone.utc)
+    credit_refresh = make_song(880025)
+    credit_refresh.enrichment_status = "enriched"
+    credit_refresh.metadata_enriched_at = datetime.now(timezone.utc)
+    credit_refresh.musicbrainz_id = "credit-refresh-recording"
+    credit_done = make_song(880026)
+    credit_done.enrichment_status = "enriched"
+    credit_done.metadata_enriched_at = datetime.now(timezone.utc)
+    credit_done.musicbrainz_id = "credit-done-recording"
+    credit_done.artist_credits_enriched_at = datetime.now(timezone.utc)
+    # Enriched song that only matched after many search attempts (attempt_count over the cap).
+    # It holds a confident recording id, so its artist-credit backfill must not be blocked by the
+    # metadata attempt cap — otherwise collaborations like "fuze" would never get split.
+    credit_refresh_capped = make_song(880027)
+    credit_refresh_capped.enrichment_status = "enriched"
+    credit_refresh_capped.metadata_enriched_at = datetime.now(timezone.utc)
+    credit_refresh_capped.musicbrainz_id = "credit-refresh-capped-recording"
+    credit_refresh_capped.enrichment_attempt_count = 17
     capped = make_song(880024)
     capped.enrichment_status = "failed_temporary"
     capped.enrichment_attempt_count = 5
@@ -635,6 +763,9 @@ def test_list_enrichment_retry_candidates_selects_and_orders(
     assert failed.id in candidate_ids
     assert no_match.id not in candidate_ids
     assert enriched.id not in candidate_ids
+    assert credit_refresh.id in candidate_ids
+    assert credit_refresh_capped.id in candidate_ids
+    assert credit_done.id not in candidate_ids
     assert capped.id not in candidate_ids
     # Least-attempted first.
     assert candidate_ids.index(pending.id) < candidate_ids.index(failed.id)
