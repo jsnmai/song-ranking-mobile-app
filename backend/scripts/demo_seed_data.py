@@ -46,6 +46,9 @@ class DemoAccountSpec:
     visibility: str
     # Avatar palette token (accent/sky/plum/mint/gold/ink). None => the deterministic default.
     avatar_color: str | None = None
+    # One-line "what this account is good for testing", printed in the login cheat-sheet so you
+    # can pick the right login without guessing. Keep it short (fits one table row).
+    note: str | None = None
 
     @property
     def is_public(self) -> bool:
@@ -134,43 +137,112 @@ def seed_email(username: str) -> str:
 DEMO_ACCOUNTS: tuple[DemoAccountSpec, ...] = (
     # Deliberate avatar colors across the palette so avatars read consistently on the feed and
     # profiles (and demo the picker); demo_newbie keeps the black "ink" icon as an explicit choice.
-    DemoAccountSpec(demo_email("demo_empty"), "demo_empty", "Demo Empty", "public", avatar_color="gold"),
-    DemoAccountSpec(demo_email("demo_newbie"), "demo_newbie", "Demo Newbie", "public", avatar_color="ink"),
-    DemoAccountSpec(demo_email("demo_power"), "demo_power", "Demo Power", "public", avatar_color="accent"),
-    DemoAccountSpec(demo_email("demo_friend"), "demo_friend", "Demo Friend", "public", avatar_color="sky"),
-    DemoAccountSpec(demo_email("demo_opposite"), "demo_opposite", "Demo Opposite", "public", avatar_color="plum"),
-    DemoAccountSpec(demo_email("demo_private"), "demo_private", "Demo Only Me", "only_me", avatar_color="mint"),
+    DemoAccountSpec(
+        demo_email("demo_empty"), "demo_empty", "Demo Empty", "public", avatar_color="gold",
+        note="Setup card: all 3 steps pending, 'Rate a song' CTA. Empty feed/rankings/taste.",
+    ),
+    DemoAccountSpec(
+        demo_email("demo_newbie"), "demo_newbie", "Demo Newbie", "public", avatar_color="ink",
+        note="Setup card: step 1 done (3 rated), rate + follow steps pending, CTA present.",
+    ),
+    DemoAccountSpec(
+        demo_email("demo_power"), "demo_power", "Demo Power", "public", avatar_color="accent",
+        note="Fully set up (card gone): feed modules, notifications, streak, discover, versus.",
+    ),
+    DemoAccountSpec(
+        demo_email("demo_friend"), "demo_friend", "Demo Friend", "public", avatar_color="sky",
+        note="High-compatibility match for demo_power (mirrors its ratings); public profile.",
+    ),
+    DemoAccountSpec(
+        demo_email("demo_opposite"), "demo_opposite", "Demo Opposite", "public", avatar_color="plum",
+        note="Low-compatibility match for demo_power (anti-correlated ratings).",
+    ),
+    DemoAccountSpec(
+        demo_email("demo_private"), "demo_private", "Demo Only Me", "only_me", avatar_color="mint",
+        note="only_me visibility: profile hidden from others, taste stats gated.",
+    ),
     DemoAccountSpec(
         demo_email("demo_friends_only"), "demo_friends_only", "Demo Friends Only",
         "friends_only", avatar_color="gold",
+        note="friends_only visibility: visible to mutual follows, hidden from strangers.",
     ),
-    DemoAccountSpec(demo_email("demo_blocked"), "demo_blocked", "Demo Blocked", "public", avatar_color="plum"),
-    DemoAccountSpec(demo_email("demo_feed"), "demo_feed", "Demo Feed", "public", avatar_color="mint"),
+    DemoAccountSpec(
+        demo_email("demo_blocked"), "demo_blocked", "Demo Blocked", "public", avatar_color="plum",
+        note="Blocked by demo_power: excluded from its discovery/feed despite 10.0 ratings.",
+    ),
+    DemoAccountSpec(
+        demo_email("demo_feed"), "demo_feed", "Demo Feed", "public", avatar_color="mint",
+        note="Feed actor: recent rating events + a Match-Moment comparison for demo_power's feed.",
+    ),
     # Discovery demo contributors — followed by demo_power for Co-Sign; demo_disc_a is also a
     # mutual follow, so it counts toward demo_power's circle (Trending / Most-rated).
-    DemoAccountSpec(demo_email("demo_disc_a"), "demo_disc_a", "Demo Disc A", "public"),
-    DemoAccountSpec(demo_email("demo_disc_b"), "demo_disc_b", "Demo Disc B", "public"),
+    DemoAccountSpec(
+        demo_email("demo_disc_a"), "demo_disc_a", "Demo Disc A", "public",
+        note="Discovery contributor (Co-Sign on 9_000_031); mutual follow in demo_power's circle.",
+    ),
+    DemoAccountSpec(
+        demo_email("demo_disc_b"), "demo_disc_b", "Demo Disc B", "public",
+        note="Discovery contributor (second Co-Sign voter on 9_000_031).",
+    ),
     # Calibration UI demo accounts — for testing the comparison ranked-list ladder states.
-    # demo_calib_s: 1 song per bucket → 6 ghost rows; tests max-ghost state for all three bucket colors.
-    DemoAccountSpec(demo_email("demo_calib_s"), "demo_calib_s", "Calib Sparse", "public"),
-    # demo_calib_m: 6 like / 3 alright / 4 dislike → mixed ghost counts (1/4/3 ghosts per bucket).
-    DemoAccountSpec(demo_email("demo_calib_m"), "demo_calib_m", "Calib Medium", "public"),
-    # demo_calib_f: 12 like / 8 alright / 7 dislike → windowing active for all buckets (no ghosts).
-    DemoAccountSpec(demo_email("demo_calib_f"), "demo_calib_f", "Calib Full", "public"),
+    DemoAccountSpec(
+        demo_email("demo_calib_s"), "demo_calib_s", "Calib Sparse", "public",
+        note="Calibration ladder: 1 song/bucket → max 6 ghost rows across all bucket colors.",
+    ),
+    DemoAccountSpec(
+        demo_email("demo_calib_m"), "demo_calib_m", "Calib Medium", "public",
+        note="Calibration ladder: 6L/3A/4D → mixed ghost counts (1/4/3 per bucket).",
+    ),
+    DemoAccountSpec(
+        demo_email("demo_calib_f"), "demo_calib_f", "Calib Full", "public",
+        note="Calibration ladder: 12L/8A/7D → windowing active, no ghosts.",
+    ),
     # ── Seed accounts: targeted UI state testing ──────────────────────────────
-    # seed_cosign: follows disc_a + disc_b so co-sign (9_000_031) appears on Discover;
-    #   own songs don't overlap with disc accounts → compatibility stays locked;
-    #   2 follows → trending shows 2/3 locked; 5 songs < 30 → curated lists locked.
-    DemoAccountSpec(seed_email("seed_cosign"), "seed_cosign", "Seed Co-Sign", "public"),
-    # seed_scores_only: 7 likes, 0 alright/dislike → scores + positions unlocked (≥5),
-    #   but anchor section stays locked (missing okay/dislike buckets).
-    DemoAccountSpec(seed_email("seed_scores_only"), "seed_scores_only", "Seed Scores Only", "public"),
-    # seed_anchors: 1 like + 3 alright + 1 dislike = 5 songs → both scores AND anchors
-    #   just unlock simultaneously (minimum viable state for both gates).
-    DemoAccountSpec(seed_email("seed_anchors"), "seed_anchors", "Seed Anchors Min", "public"),
-    # seed_graduated: 10 songs (3L + 4A + 3D) → setup checklist disappears, taste profile
-    #   starts forming; anchors and scores unlocked; no follows.
-    DemoAccountSpec(seed_email("seed_graduated"), "seed_graduated", "Seed Graduated", "public"),
+    DemoAccountSpec(
+        seed_email("seed_cosign"), "seed_cosign", "Seed Co-Sign", "public",
+        note="Discover: co-sign card shows; compatibility locked; trending 2/3 locked; lists locked.",
+    ),
+    DemoAccountSpec(
+        seed_email("seed_scores_only"), "seed_scores_only", "Seed Scores Only", "public",
+        note="Rankings: 7 likes → scores + positions unlocked (≥5), anchors still locked.",
+    ),
+    DemoAccountSpec(
+        seed_email("seed_anchors"), "seed_anchors", "Seed Anchors Min", "public",
+        note="Rankings: 1L/3A/1D → scores AND anchors unlock together (min viable both gates).",
+    ),
+    # seed_graduated: 10 ratings AND 3 follows → every setup step done, so the checklist card is
+    # gone and the taste profile is forming. (Since the card now also gates on follows, it needs
+    # the follow edges below to actually "graduate" — 10 ratings alone leaves it friends-pending.)
+    DemoAccountSpec(
+        seed_email("seed_graduated"), "seed_graduated", "Seed Graduated", "public",
+        note="Setup complete (card gone): 10 rated + 3 follows; taste forming, scores/anchors on.",
+    ),
+    # seed_friends_pending: 11 ratings, 0 follows → the setup card's "friends pending" state —
+    # rating steps show glowing ticks, the 'Rate a song' CTA is dropped, and the 3-avatar cluster
+    # top-right spotlights the remaining "Follow 3 friends" step.
+    DemoAccountSpec(
+        seed_email("seed_friends_pending"), "seed_friends_pending", "Seed Friends Pending", "public",
+        avatar_color="sky",
+        note="Setup card FRIENDS-PENDING: 11 rated / 0 follows → glowing ticks, avatar cluster, no CTA.",
+    ),
+    # seed_friends_first: 4 ratings but already 3 follows → follow step is ticked while the rating
+    # steps are still mixed (step 1 done, step 2 pending). Verifies ticks/glow on non-contiguous
+    # steps and that the 'Rate a song' CTA stays because rating is unfinished.
+    DemoAccountSpec(
+        seed_email("seed_friends_first"), "seed_friends_first", "Seed Friends First", "public",
+        avatar_color="mint",
+        note="Setup card FRIENDS-FIRST: 4 rated / 3 follows → step 3 ticked, rating steps pending, CTA on.",
+    ),
+    # seed_locked_full: the module gate is MET (6 rated ≥5, 3 follows), so Feed renders the
+    # full-size unlocked section — but every followed user is inactive (no rating events /
+    # comparisons / re-rates, and none follow back so there are 0 mutual friends), so all six
+    # full-size module cards (Split, Consensus, Re-rate, Match, Disagreement, Recent Verdict)
+    # render in their LOCKED placeholder state at once.
+    DemoAccountSpec(
+        seed_email("seed_locked_full"), "seed_locked_full", "Seed Locked Full", "public",
+        avatar_color="plum",
+        note="Feed FULL-SIZE locked cards: gate met (6 rated / 3 follows) but follows inactive → every module card locked.",
+    ),
 )
 
 DEMO_USERNAMES = frozenset(account.username for account in DEMO_ACCOUNTS)
@@ -329,7 +401,8 @@ RANKINGS_BY_USERNAME: dict[str, tuple[RankingSeedSpec, ...]] = {
         RankingSeedSpec(9_000_023, "alright", 3),
         RankingSeedSpec(9_000_024, "dislike", 1),
     ),
-    # seed_graduated: 10 songs (3L + 4A + 3D) → setup checklist gone, taste starts forming.
+    # seed_graduated: 10 songs (3L + 4A + 3D). Paired with 3 follow edges below so all setup
+    # steps clear and the checklist card is gone (taste forming, scores + anchors on).
     "seed_graduated": (
         RankingSeedSpec(9_000_025, "like", 1),
         RankingSeedSpec(9_000_026, "like", 2),
@@ -341,6 +414,40 @@ RANKINGS_BY_USERNAME: dict[str, tuple[RankingSeedSpec, ...]] = {
         RankingSeedSpec(9_000_028, "dislike", 1),
         RankingSeedSpec(9_000_029, "dislike", 2),
         RankingSeedSpec(9_000_030, "dislike", 3),
+    ),
+    # seed_friends_pending: 11 songs (4L + 4A + 3D), 0 follows → rating steps done, friend step
+    # not. Drives the setup card's friends-pending state (glowing ticks + avatar cluster, no CTA).
+    "seed_friends_pending": (
+        RankingSeedSpec(9_000_001, "like", 1),
+        RankingSeedSpec(9_000_002, "like", 2),
+        RankingSeedSpec(9_000_003, "like", 3),
+        RankingSeedSpec(9_000_004, "like", 4),
+        RankingSeedSpec(9_000_005, "alright", 1),
+        RankingSeedSpec(9_000_006, "alright", 2),
+        RankingSeedSpec(9_000_007, "alright", 3),
+        RankingSeedSpec(9_000_008, "alright", 4),
+        RankingSeedSpec(9_000_009, "dislike", 1),
+        RankingSeedSpec(9_000_010, "dislike", 2),
+        RankingSeedSpec(9_000_011, "dislike", 3),
+    ),
+    # seed_friends_first: 4 songs (2L + 1A + 1D), paired with 3 follow edges below → follow step
+    # ticks while the rating steps stay mixed (step 1 done, step 2 pending); CTA remains.
+    "seed_friends_first": (
+        RankingSeedSpec(9_000_012, "like", 1),
+        RankingSeedSpec(9_000_013, "like", 2),
+        RankingSeedSpec(9_000_014, "alright", 1),
+        RankingSeedSpec(9_000_015, "dislike", 1),
+    ),
+    # seed_locked_full: 6 songs (2L + 2A + 2D) → clears the module rated gate (≥5). Paired with 3
+    # follows of inactive, non-mutual users below so the full-size unlocked section renders while
+    # every module card stays in its locked placeholder.
+    "seed_locked_full": (
+        RankingSeedSpec(9_000_017, "like", 1),
+        RankingSeedSpec(9_000_018, "like", 2),
+        RankingSeedSpec(9_000_019, "alright", 1),
+        RankingSeedSpec(9_000_020, "alright", 2),
+        RankingSeedSpec(9_000_021, "dislike", 1),
+        RankingSeedSpec(9_000_022, "dislike", 2),
     ),
     # demo_calib_f — 12 like / 8 alright / 7 dislike → windowing active, no ghosts.
     # Pivot position shifts through the 7-slot window as comparisons narrow the range.
@@ -407,6 +514,23 @@ FOLLOW_EDGES: tuple[tuple[str, str], ...] = (
     # seed_cosign follows both disc accounts so 9_000_031 qualifies as a co-sign (min_count=2).
     ("seed_cosign", "demo_disc_a"),
     ("seed_cosign", "demo_disc_b"),
+    # seed_graduated: 3 follows so the "Follow 3 friends" setup step clears and the checklist
+    # card fully graduates (it now gates on follows too, not just the 10-rating count).
+    ("seed_graduated", "demo_disc_a"),
+    ("seed_graduated", "demo_disc_b"),
+    ("seed_graduated", "demo_friend"),
+    # seed_friends_first: friends done before rating — 3 follows with only 4 ratings, so the
+    # follow step is ticked while the rating steps are still in progress.
+    ("seed_friends_first", "demo_disc_a"),
+    ("seed_friends_first", "demo_disc_b"),
+    ("seed_friends_first", "demo_friend"),
+    # seed_locked_full: 3 follows that open the module gate but generate no module data — none
+    # follow back (0 mutual friends → Consensus/Disagreement locked), none have rating events
+    # (→ Recent Verdict / Re-rate Radar locked) or comparisons (→ Match Moment / Split locked),
+    # and disc_a/disc_b agree on their only shared song (→ no Split). Everything stays locked.
+    ("seed_locked_full", "demo_empty"),
+    ("seed_locked_full", "demo_disc_a"),
+    ("seed_locked_full", "demo_disc_b"),
 )
 
 # blocker_username -> blocked_username
@@ -467,6 +591,16 @@ FEED_EVENT_SPECS: tuple[tuple[str, RatingEventSeedSpec], ...] = (
         (
             RatingEventSeedSpec(9_000_020, "like", 1, 0.2),
             RatingEventSeedSpec(9_000_022, "alright", 1, 4.75),
+        ),
+    ),
+    # seed_locked_full's own verdicts so its Feed is populated (not the empty-welcome layout)
+    # while every module card above stays locked. Own events never become the hero (the hero
+    # excludes the viewer), so Recent Verdict stays locked too.
+    *_feed_events(
+        "seed_locked_full",
+        (
+            RatingEventSeedSpec(9_000_017, "like", 1, 1.0),
+            RatingEventSeedSpec(9_000_019, "alright", 1, 3.0),
         ),
     ),
     *_feed_events(

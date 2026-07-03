@@ -704,12 +704,12 @@ def seed_bookmarks(
 
 
 def print_login_table() -> None:
-    """Print demo credentials for local manual and curl testing."""
+    """Print demo credentials + what each account is good for, for local manual testing."""
     print(f"\nDemo accounts (password: {DEMO_PASSWORD}):\n")
-    print(f"{'Email':<42} {'Username'}")
-    print("-" * 60)
+    print(f"{'Email':<34} {'Username':<22} {'What to test'}")
+    print("-" * 120)
     for account in DEMO_ACCOUNTS:
-        print(f"{account.email:<42} {account.username}")
+        print(f"{account.email:<34} {account.username:<22} {account.note or ''}")
     print()
 
 
