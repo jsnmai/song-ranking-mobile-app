@@ -656,12 +656,18 @@ export default function DiscoverScreen() {
 
     // Refetch on focus (not just on token change) so a transient backend error can't leave the
     // discovery section stuck on a stale error — matching how Feed and Profile recover on focus.
+    // Only the FIRST load shows the full-section spinner; every later focus (e.g. swiping back from
+    // Song Detail) refreshes silently in the background so the content never flashes to a spinner.
+    const hasLoadedDiscoveryRef = useRef(false)
     useFocusEffect(
         useCallback(() => {
             if (!token) return
             let isCurrentRequest = true
-            setIsDiscoveryLoading(true)
-            setDiscoveryError(null)
+            const isFirstLoad = !hasLoadedDiscoveryRef.current
+            if (isFirstLoad) {
+                setIsDiscoveryLoading(true)
+                setDiscoveryError(null)
+            }
             Promise.all([
                 listCoSigns(token),
                 getCircleTrending(token),
@@ -671,6 +677,8 @@ export default function DiscoverScreen() {
             ])
                 .then(([coSignResponse, trendingResponse, mostRatedResponse, popularResponse, newReleaseResponse]) => {
                     if (!isCurrentRequest) return
+                    hasLoadedDiscoveryRef.current = true
+                    setDiscoveryError(null)
                     setCoSigns(coSignResponse.items)
                     setTrending(trendingResponse.items)
                     setMostRated(mostRatedResponse.items)
@@ -680,7 +688,9 @@ export default function DiscoverScreen() {
                     setNewRelease(newReleaseResponse.items[0] ?? null)
                 })
                 .catch((err) => {
-                    if (isCurrentRequest) {
+                    // A failed SILENT refresh leaves the existing content in place; only surface the
+                    // error (and the blanked section) when there is nothing to show yet (first load).
+                    if (isCurrentRequest && isFirstLoad) {
                         setDiscoveryError(
                             err instanceof ApiError
                                 ? err.detail
@@ -689,7 +699,7 @@ export default function DiscoverScreen() {
                     }
                 })
                 .finally(() => {
-                    if (isCurrentRequest) setIsDiscoveryLoading(false)
+                    if (isCurrentRequest && isFirstLoad) setIsDiscoveryLoading(false)
                 })
             return () => { isCurrentRequest = false }
         }, [token]),
