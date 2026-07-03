@@ -43,6 +43,7 @@ import { DriftingStars, StarDot } from "../../components/DriftingStars"
 import EndOfListCap from "../../components/EndOfListCap"
 import FindYourPeopleCard from "../../components/FindYourPeopleCard"
 import HatchBox from "../../components/HatchBox"
+import { GlowingMeterTick } from "../../components/GlowingMeterTick"
 import { PulsingMeterTick } from "../../components/PulsingMeterTick"
 import { AppStackParamList, FeedStackParamList, TabParamList } from "../../navigation/types"
 import { colors, fonts, bucketColor, goldMeterShade, meterSegment, avatarColorFor, avatarColorToken } from "../../theme"
@@ -2240,6 +2241,16 @@ export default function FeedScreen() {
                     </Text>
                     <View style={styles.tasteMeterRow}>
                         {Array.from({ length: 10 }).map((_, i) => {
+                            // Ratings done but follows pending: the whole bar is full, so every tick
+                            // glow-pulses to celebrate the milestone and push toward "follow people".
+                            if (followingPending)
+                                return (
+                                    <GlowingMeterTick
+                                        key={i}
+                                        testID={`feed-getting-started-meter-tick-${i}`}
+                                        style={styles.tasteMeterSegment}
+                                    />
+                                )
                             // The first empty segment pulses to point at the next rating.
                             if (i === rated) return <PulsingMeterTick key={i} style={styles.tasteMeterSegment} />
                             return (
@@ -2251,9 +2262,7 @@ export default function FeedScreen() {
                                         // Empty segments all look identical. Reached segments climb a gold
                                         // ramp — muted gold early, bright luminous gold by 10 — so the bar
                                         // "shines up" as you progress (same hue, rising brightness).
-                                        i < rated && {
-                                            backgroundColor: followingPending ? colors.gold : goldMeterShade(i),
-                                        },
+                                        i < rated && { backgroundColor: goldMeterShade(i) },
                                     ]}
                                 />
                             )
