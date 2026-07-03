@@ -102,6 +102,7 @@ export function BloomCard({
     const showAudio = loadingPreview || hasPreview || canFetchSavedPreview || lazyPreviewLoading
     const dur = duration && duration > 0 ? duration : 30
     const progress = duration && duration > 0 ? Math.min(1, currentTime / duration) : 0
+    const showAppleAttribution = (previewUrl !== null && isApplePreview) || previewUnavailable
 
     // Stop any preview before leaving — the card stays mounted under Song Detail.
     const handleOpen = () => {
@@ -221,20 +222,6 @@ export function BloomCard({
                                 </Text>
                             </Pressable>
                         ) : null}
-                        {(previewUrl !== null && isApplePreview) || previewUnavailable ? (
-                            <View style={styles.appleAttribution}>
-                                <Text style={styles.appleCourtesy} numberOfLines={1}>
-                                    {previewUnavailable ? "Preview unavailable" : "Provided courtesy of iTunes"}
-                                </Text>
-                                {appleViewUrl !== null ? (
-                                    <Pressable onPress={handleOpenApple}>
-                                        <Text style={styles.appleLink} numberOfLines={1}>
-                                            {previewUnavailable ? "Listen on Apple Music" : "Get on Apple Music"}
-                                        </Text>
-                                    </Pressable>
-                                ) : null}
-                            </View>
-                        ) : null}
                     </View>
 
                     <View style={styles.scoreCol}>
@@ -246,6 +233,20 @@ export function BloomCard({
                         </Text>
                     </View>
                 </Pressable>
+                {showAppleAttribution ? (
+                    <View style={styles.appleAttribution}>
+                        <Text style={styles.appleCourtesy} numberOfLines={1}>
+                            {previewUnavailable ? "Preview unavailable" : "Provided courtesy of iTunes"}
+                        </Text>
+                        {appleViewUrl !== null ? (
+                            <Pressable onPress={handleOpenApple}>
+                                <Text style={styles.appleLink} numberOfLines={1}>
+                                    {previewUnavailable ? "Listen on Apple Music" : "Get on Apple Music"}
+                                </Text>
+                            </Pressable>
+                        ) : null}
+                    </View>
+                ) : null}
             </BlurView>
         </Animated.View>
     )
@@ -326,7 +327,7 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "space-between",
         gap: 8,
-        marginTop: 7,
+        marginTop: 10,
         paddingHorizontal: 9,
         paddingVertical: 5,
         borderRadius: 8,
