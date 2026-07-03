@@ -60,9 +60,16 @@ export default function NotificationsScreen({ navigation }: Props) {
         setIsLoading(true)
         fetchPage().finally(() => setIsLoading(false))
         // Clear the unread badge in the background. The just-loaded rows keep their unread dots
-        // for this viewing session; they read as read on the next visit.
+        // for this viewing session (they read as read on the next visit) — EXCEPT rows the user
+        // taps, which clear immediately so returning from the pushed screen shows them as seen.
         if (token) markNotificationsRead(token).catch(() => {})
     }, [fetchPage, token])
+
+    // Server-side everything is already read (marked on mount); this syncs the tapped row's
+    // local state so its dot doesn't linger when the user navigates away and comes right back.
+    const markItemReadLocally = (id: number) => {
+        setItems((prev) => prev.map((row) => (row.id === id ? { ...row, read: true } : row)))
+    }
 
     const loadMore = async () => {
         if (!nextCursor || isLoadingMore) return
@@ -75,11 +82,13 @@ export default function NotificationsScreen({ navigation }: Props) {
     const { refreshing, onRefresh } = usePullRefresh(fetchPage)
 
     const openProfile = (item: NotificationItem) => {
+        markItemReadLocally(item.id)
         navigation.navigate("OtherProfile", { username: item.actor.username })
     }
 
     // Body tap: a follow opens the follower's profile; a like opens the activity that was liked.
     const handleBodyPress = (item: NotificationItem) => {
+        markItemReadLocally(item.id)
         if (item.type === "like" && item.rating_event_id !== null) {
             navigation.navigate("SingleActivity", { ratingEventId: item.rating_event_id })
             return
@@ -111,7 +120,7 @@ export default function NotificationsScreen({ navigation }: Props) {
                 <Text style={styles.time}>{formatRelativeTime(item.created_at)}</Text>
             </View>
 
-            {!item.read && <View style={styles.unreadDot} />}
+            {!item.read && <View style={styles.unreadDot} testID={`notification-unread-${item.id}`} />}
         </TouchableOpacity>
     )
 

@@ -114,6 +114,18 @@ describe("NotificationsScreen", () => {
         expect(mockNavigate).toHaveBeenCalledWith("OtherProfile", { username: "maya" })
     })
 
+    it("clears a row's unread dot immediately when it is tapped", async () => {
+        mockGetNotifications.mockResolvedValue({ items: [followNotification], next_cursor: null })
+
+        render(<NotificationsScreen navigation={navigationProp} route={routeProp} />)
+        await waitFor(() => expect(screen.getByTestId("notification-unread-1")).toBeTruthy())
+
+        fireEvent.press(screen.getByTestId("notification-1"))
+
+        // Returning from the pushed screen must not show the orange dot on a row already visited.
+        expect(screen.queryByTestId("notification-unread-1")).toBeNull()
+    })
+
     it("shows an empty state when there are no notifications", async () => {
         mockGetNotifications.mockResolvedValue({ items: [], next_cursor: null })
 
