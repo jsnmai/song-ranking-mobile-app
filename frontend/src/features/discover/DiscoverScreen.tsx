@@ -354,6 +354,15 @@ export default function DiscoverScreen() {
         }
     }, [searchFocused])
 
+    // The "Find your people" nudge stays available on the People tab every visit; the ✕
+    // only hides it for the current visit. Reset the dismiss each time search is (re)opened
+    // so it's offered again next time, without nagging within the same session.
+    useEffect(() => {
+        if (searchFocused) {
+            setFindPeopleDismissed(false)
+        }
+    }, [searchFocused])
+
     // Deliberately do NOT re-focus the input when this screen regains focus
     // (e.g. returning from Song Detail or dismissing the Rate sheet). The search
     // UI and results stay visible, but the keyboard stays down until the user
@@ -770,19 +779,6 @@ export default function DiscoverScreen() {
                             </View>
                         )}
 
-                        {/* Find-your-people nudge — People tab resting state, above Recent so
-                            it's the first thing a friendless user sees. It disappears once they
-                            follow 3+ people (or dismiss it), letting Recent take the top. */}
-                        {searchMode === "users" && !isLoading && error === null && !hasQuery
-                            && followingCount < 3 && !findPeopleDismissed && (
-                            <FindYourPeopleCard
-                                style={styles.findPeopleCard}
-                                onConnect={handleFindPeople}
-                                onInvite={handleFindPeople}
-                                onDismiss={() => setFindPeopleDismissed(true)}
-                            />
-                        )}
-
                         {/* No query: recent searches, scoped to the active tab. The RECENT /
                             Clear header stays anchored; only the chip cloud below it slides
                             toward the tab you just tapped. */}
@@ -844,6 +840,20 @@ export default function DiscoverScreen() {
                                     )}
                                 </Animated.View>
                             </>
+                        )}
+
+                        {/* Find-your-people nudge — People tab resting state, below Recent so a
+                            returning user's recent searches stay at the top. Always available
+                            here (no follow-count gate); the ✕ only hides it for the current visit
+                            and it returns on the next one. */}
+                        {searchMode === "users" && !isLoading && error === null && !hasQuery
+                            && !findPeopleDismissed && (
+                            <FindYourPeopleCard
+                                style={styles.findPeopleCard}
+                                onConnect={handleFindPeople}
+                                onInvite={handleFindPeople}
+                                onDismiss={() => setFindPeopleDismissed(true)}
+                            />
                         )}
 
                         {/* No results */}
@@ -1315,10 +1325,11 @@ const styles = StyleSheet.create({
         color: "#fff",
     },
     // ── Find your people (People tab) ──────────────────────────────────
-    // No horizontal margin — scrollContent already pads 14. Bottom gap separates it
-    // from the RECENT label below.
+    // No horizontal margin — scrollContent already pads 14. Top gap separates it from
+    // the recent chips above (collapses to just the scroll's top padding when there
+    // are no recents, so it sits near the top for a first-time visitor).
     findPeopleCard: {
-        marginBottom: 18,
+        marginTop: 18,
     },
     // ── Recent searches ────────────────────────────────────────────────
     recentHeader: {

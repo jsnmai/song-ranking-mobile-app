@@ -22,6 +22,7 @@ import { AppStackParamList } from "../../navigation/types"
 import { avatarColorToken, colors, fonts } from "../../theme"
 import { formatRelativeTime } from "../../utils/formatRelativeTime"
 import Avatar from "../../components/Avatar"
+import { DriftingStars } from "../../components/DriftingStars"
 import ActivityLikeButton from "../activity/ActivityLikeButton"
 import { updateLikePrivacy } from "../activity/apiRequests"
 import OwnActivitySheet from "../activity/OwnActivitySheet"
@@ -64,12 +65,22 @@ const STAR_DOTS = [
     // low dots — one left, two in the bottom-right corner just below the body copy
     { x: 8, y: 26 }, { x: 68, y: 26.5 }, { x: 90, y: 27 },
 ].map((p, i) => ({
-    key: i,
     x: p.x,
     y: p.y,
     r: i % 3 === 0 ? 1 : 0.6,
-    op: 0.2 + (i % 4) * 0.08,
+    o: 0.2 + (i % 4) * 0.08,
 }))
+
+// The Auxstrology card renders the same field a touch fainter than the setup checklist card.
+const STAR_DOTS_DIM = STAR_DOTS.map((s) => ({ ...s, o: s.o * 0.8 }))
+
+// Setup checklist "friends pending" state — once the rating steps are done the only step
+// left is "Follow 3 friends", so we surface three glowing avatars top-right to point at it.
+const SETUP_FRIENDS = [
+    { id: 1, initial: "M", color: colors.accent },
+    { id: 2, initial: "T", color: colors.sky },
+    { id: 3, initial: "K", color: colors.plum },
+] as const
 
 export default function ProfileScreen() {
     const navigation = useNavigation<ProfileNavigationProp>()
@@ -261,6 +272,12 @@ export default function ProfileScreen() {
     const step1Done = ratedCount > 0
     const step2Done = ratedCount >= 10
     const step3Done = (profile?.following_count ?? 0) >= 3
+    // The checklist stays up until every step is done — not just the 10-rating gate — so a user who
+    // rates but never follows still sees the nudge. `friendsPending` is that home stretch: rating is
+    // finished, only "Follow 3 friends" remains. In it we drop the "Rate a song" CTA and spotlight
+    // the follow step with an avatar cluster instead.
+    const setupComplete = step2Done && step3Done
+    const friendsPending = step2Done && !step3Done
     // Each setup step deep-links to where you complete it: the rating steps open Discover song
     // search, the follow step opens Discover user search.
     const goToDiscoverSearch = (searchMode: "songs" | "users") =>
@@ -425,20 +442,34 @@ export default function ProfileScreen() {
             {/* Below-fold content */}
             {profile && (
                 <View style={styles.content}>
-                    {/* Setup checklist — shown until user has 10 ratings */}
-                    {isNew && (
+                    {/* Setup checklist — shown until every step (10 ratings + 3 follows) is done */}
+                    {!setupComplete && (
                         <View style={styles.setupCard}>
-                            <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-                                <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
-                                    {STAR_DOTS.map((s) => (
-                                        <Circle key={s.key} cx={s.x} cy={s.y} r={s.r} fill="#fff" opacity={s.op} />
-                                    ))}
-                                </Svg>
-                            </View>
+                            <DriftingStars dots={STAR_DOTS} viewBox="0 0 100 100" />
                             <View style={styles.setupHeaderRow}>
                                 <Text style={styles.setupKicker}>SET UP YOUR PROFILE</Text>
+                                {friendsPending && (
+                                    <TouchableOpacity
+                                        style={styles.setupFriendsStack}
+                                        onPress={() => goToDiscoverSearch("users")}
+                                        activeOpacity={0.8}
+                                        accessibilityLabel="Follow 3 friends"
+                                    >
+                                        {SETUP_FRIENDS.map((f, i) => (
+                                            <View
+                                                key={f.id}
+                                                style={[
+                                                    styles.setupFriendAva,
+                                                    { backgroundColor: f.color, marginLeft: i > 0 ? -9 : 0 },
+                                                ]}
+                                            >
+                                                <Text style={styles.setupFriendLetter}>{f.initial}</Text>
+                                            </View>
+                                        ))}
+                                    </TouchableOpacity>
+                                )}
                             </View>
-                            <View style={styles.setupSteps}>
+                            <View style={[styles.setupSteps, friendsPending && styles.setupStepsFlush]}>
                                 {([
                                     ["Rate your first song", step1Done, () => goToDiscoverSearch("songs")],
                                     ["Reach 10 ratings to unlock Rankings and Taste Profile", step2Done, () => goToDiscoverSearch("songs")],
@@ -482,24 +513,22 @@ export default function ProfileScreen() {
                                     </TouchableOpacity>
                                 ))}
                             </View>
-                            <TouchableOpacity
-                                style={styles.setupBtn}
-                                onPress={() => navigation.navigate("MainTabs", { screen: "Discover", params: { screen: "DiscoverHome", params: { focusSearch: true, searchMode: "songs" } } })}
-                            >
-                                <Text style={styles.setupBtnText}>Rate a song</Text>
-                            </TouchableOpacity>
+                            {/* Rating is finished in the friends-pending state, so drop the "Rate a
+                                song" CTA — the avatar cluster up top is the remaining call to action. */}
+                            {!friendsPending && (
+                                <TouchableOpacity
+                                    style={styles.setupBtn}
+                                    onPress={() => navigation.navigate("MainTabs", { screen: "Discover", params: { screen: "DiscoverHome", params: { focusSearch: true, searchMode: "songs" } } })}
+                                >
+                                    <Text style={styles.setupBtnText}>Rate a song</Text>
+                                </TouchableOpacity>
+                            )}
                         </View>
                     )}
 
                     {/* Auxstrology orbit card */}
                     <View style={styles.auxCard}>
-                        <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-                            <Svg width="100%" height="100%" viewBox="0 0 100 30" preserveAspectRatio="xMidYMid slice">
-                                {STAR_DOTS.map((s) => (
-                                    <Circle key={s.key} cx={s.x} cy={s.y} r={s.r} fill="#fff" opacity={s.op * 0.8} />
-                                ))}
-                            </Svg>
-                        </View>
+                        <DriftingStars dots={STAR_DOTS_DIM} viewBox="0 0 100 30" />
                         {!aux || aux.status === "locked" || !aux.sign ? (
                             // Locked / new-user state — Claude Design "Profile · New user
                             // (empty)": gold constellation on the LEFT, taste copy on the RIGHT.
@@ -936,6 +965,35 @@ const styles = StyleSheet.create({
         gap: 10,
         marginBottom: 14,
     },
+    // No trailing gap when the CTA below is dropped (friends-pending state).
+    setupStepsFlush: {
+        marginBottom: 0,
+    },
+    // Three overlapping avatars top-right, spotlighting the remaining "Follow 3 friends" step.
+    setupFriendsStack: {
+        flexDirection: "row",
+        flexShrink: 0,
+    },
+    setupFriendAva: {
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        alignItems: "center",
+        justifyContent: "center",
+        borderWidth: 2,
+        borderColor: colors.navy,
+        shadowColor: colors.accent,
+        shadowOpacity: 0.5,
+        shadowRadius: 5,
+        shadowOffset: { width: 0, height: 0 },
+        elevation: 4,
+    },
+    setupFriendLetter: {
+        fontFamily: fonts.mono,
+        fontSize: 11,
+        fontWeight: "700",
+        color: "#fff",
+    },
     setupStep: {
         flexDirection: "row",
         alignItems: "center",
@@ -953,6 +1011,12 @@ const styles = StyleSheet.create({
     setupStepCircleDone: {
         backgroundColor: colors.mint,
         borderColor: colors.mint,
+        // Completed ticks glow mint so "done" reads uniformly across the finished steps.
+        shadowColor: colors.mint,
+        shadowOpacity: 0.6,
+        shadowRadius: 5,
+        shadowOffset: { width: 0, height: 0 },
+        elevation: 4,
     },
     setupStepNum: {
         fontFamily: fonts.mono,

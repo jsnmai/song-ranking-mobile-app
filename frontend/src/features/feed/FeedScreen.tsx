@@ -37,7 +37,9 @@ import { ApiError } from "../../api/client"
 import { ArrowLabel } from "../../components/Arrow"
 import Avatar from "../../components/Avatar"
 import BouncyPressable from "../../components/BouncyPressable"
+import { DriftingStars, StarDot } from "../../components/DriftingStars"
 import EndOfListCap from "../../components/EndOfListCap"
+import FindYourPeopleCard from "../../components/FindYourPeopleCard"
 import HatchBox from "../../components/HatchBox"
 import { PulsingMeterTick } from "../../components/PulsingMeterTick"
 import { AppStackParamList, FeedStackParamList, TabParamList } from "../../navigation/types"
@@ -111,6 +113,14 @@ const ORBIT_STARS = [
     { x: 55, y: 55, r: 0.5, o: 0.25 },
 ] as const
 
+// Dimmed / trimmed variants of the orbit starfield for the smaller locked cards, precomputed
+// once so the drift layers get a stable array reference.
+const dimOrbit = (count: number, mult: number): StarDot[] =>
+    ORBIT_STARS.slice(0, count).map((s) => ({ x: s.x, y: s.y, r: s.r, o: s.o * mult }))
+const ORBIT_DOTS_DIM = dimOrbit(ORBIT_STARS.length, 0.7)
+const ORBIT_DOTS_DIM_10 = dimOrbit(10, 0.7)
+const ORBIT_DOTS_DIM_8 = dimOrbit(8, 0.6)
+
 // Re-rate Radar sparkline row height (px); the trajectory node tops are computed against it.
 const SPARK_H = 24
 
@@ -118,13 +128,6 @@ const SPARK_H = 24
 // instant a pick is confirmed, client-side — close enough to server truth for the current
 // session; a later real module fetch replaces the whole view with server state regardless.
 const THIS_OR_THAT_COOLDOWN_MS = 24 * 60 * 60 * 1000
-
-const FRIEND_AVATARS = [
-    { id: 1, initial: "M", color: colors.accent },
-    { id: 2, initial: "T", color: colors.sky },
-    { id: 3, initial: "K", color: colors.mint },
-    { id: 4, initial: "J", color: colors.plum },
-] as const
 
 function GhostRow() {
     return (
@@ -186,6 +189,17 @@ function ChevronRightIcon({ color, size = 15 }: { color: string; size?: number }
         <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
             stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
             <Path d="M9 6l6 6-6 6" />
+        </Svg>
+    )
+}
+
+// Points down at rest; the Social Cards show/hide toggle flips it 180° when expanded.
+function ChevronDownIcon({ color, size = 13, up = false }: { color: string; size?: number; up?: boolean }) {
+    return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+            style={up ? { transform: [{ rotate: "180deg" }] } : undefined}
+            stroke={color} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+            <Path d="M6 9l6 6 6-6" />
         </Svg>
     )
 }
@@ -497,6 +511,9 @@ export default function FeedScreen() {
     const [otherMenuEvent, setOtherMenuEvent] = useState<FeedEvent | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [friendsCardDismissed, setFriendsCardDismissed] = useState(false)
+    // Session-only show/hide for the locked Social Cards block (Recent Verdict teaser +
+    // the locked module grid). Only surfaced while the module gate itself is locked.
+    const [socialCardsCollapsed, setSocialCardsCollapsed] = useState(false)
     const [heroRaters, setHeroRaters] = useState<ProfileBase[]>([])
     const [rerateRadar, setRerateRadar] = useState<RerateRadarItem | null>(null)
     const [consensus, setConsensus] = useState<ConsensusModule | null>(null)
@@ -1070,11 +1087,7 @@ export default function FeedScreen() {
             return (
                 <BouncyPressable style={styles.fvOuter}>
                     <View style={styles.fvInner}>
-                        <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
-                            {ORBIT_STARS.map((s, i) => (
-                                <Circle key={i} cx={`${s.x}%`} cy={`${s.y}%`} r={s.r} fill="white" fillOpacity={s.o * 0.7} />
-                            ))}
-                        </Svg>
+                        <DriftingStars dots={ORBIT_DOTS_DIM} />
                         <View style={{ position: "relative" }}>
                             <View style={styles.fullCellTop}>
                                 <View style={styles.fvPill}><Text style={styles.fvPillText}>Recent verdict</Text></View>
@@ -1952,16 +1965,42 @@ export default function FeedScreen() {
 
     // Heads the whole social-cards area (Recent Verdict + the module grid). Rendered above
     // renderRecentVerdict() so it stays above Recent Verdict whether the verdict is the live hero,
-    // the locked teaser, or the compact locked row — in every gate state.
-    const renderSocialCardsHeader = () => (
-        // The header owns both its margins so it sits right in every state. For an empty user
-        // Recent Verdict below is null, so the header can't lean on that card's top margin for its
-        // bottom gap — hence an explicit marginBottom. Top is trimmed so the gap up to the Find
-        // your people card above doesn't read as a void.
-        <View style={[styles.sectionRow, { marginTop: 6, marginBottom: 8 }]}>
-            <Text style={styles.sectionLabel}>SOCIAL CARDS</Text>
-        </View>
-    )
+    // the locked teaser, or the compact locked row — in every gate state. While the module gate
+    // is locked it also carries a lock+friend-count badge and the show/hide toggle that collapses
+    // the locked cards below (renderRecentVerdict + renderLockedSection).
+    const renderSocialCardsHeader = () => {
+        const followingCount = profile?.following_count ?? 0
+        return (
+            // The header owns both its margins so it sits right in every state. For an empty user
+            // Recent Verdict below is null, so the header can't lean on that card's top margin for its
+            // bottom gap — hence an explicit marginBottom. Top is trimmed so the gap up to the Find
+            // your people card above doesn't read as a void.
+            <View style={[styles.sectionRow, { marginTop: 6, marginBottom: 8, alignItems: "center" }]}>
+                <View style={styles.socialCardsHeaderLeft}>
+                    <Text style={styles.sectionLabel}>SOCIAL CARDS</Text>
+                    {!modulesGateComplete && (
+                        <View style={styles.socialCardsLockBadge}>
+                            <LockIcon color={colors.inkDim} size={10} />
+                            <Text style={styles.socialCardsLockCount}>{Math.min(followingCount, 3)}/3 FRIENDS</Text>
+                        </View>
+                    )}
+                </View>
+                {!modulesGateComplete && (
+                    <TouchableOpacity
+                        onPress={() => setSocialCardsCollapsed((c) => !c)}
+                        accessibilityRole="button"
+                        accessibilityLabel={socialCardsCollapsed ? "Show locked cards" : "Hide locked cards"}
+                        hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                        style={styles.socialCardsToggle}
+                        testID="feed-social-cards-toggle"
+                    >
+                        <Text style={styles.socialCardsToggleText}>{socialCardsCollapsed ? "SHOW" : "HIDE"}</Text>
+                        <ChevronDownIcon color={colors.accent} size={12} up={!socialCardsCollapsed} />
+                    </TouchableOpacity>
+                )}
+            </View>
+        )
+    }
 
     const renderUnlockedSection = () => (
         <View style={styles.unlockedSection}>
@@ -1987,17 +2026,13 @@ export default function FeedScreen() {
     // above renderRecentVerdict() in the page body, so it always heads this whole area. Recent Verdict
     // appears here as a compact row only while it has no live hero (the live hero is promoted above).
     const renderLockedSection = () => (
-        <View style={styles.lockedSection}>
+        <View style={styles.lockedSection} testID="feed-social-cards-locked-section">
             {/* Recent Verdicts compact teaser — only while it's still locked. Once a followed
                 verdict exists it is promoted to the full hero above, so this row drops out and the
                 "SOCIAL CARDS" header then heads only the modules below that are still locked. */}
             {heroEvent === null && (
                 <BouncyPressable style={[styles.miniRow, styles.miniRowNavy]}>
-                    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
-                        {ORBIT_STARS.slice(0, 10).map((s, i) => (
-                            <Circle key={i} cx={`${s.x}%`} cy={`${s.y}%`} r={s.r} fill="white" fillOpacity={s.o * 0.7} />
-                        ))}
-                    </Svg>
+                    <DriftingStars dots={ORBIT_DOTS_DIM_10} />
                     <View style={styles.miniRowInner}>
                         <View style={styles.miniLockCircle}>
                             <LockIcon color={colors.cream} />
@@ -2054,11 +2089,7 @@ export default function FeedScreen() {
 
             <View style={styles.miniGridRow}>
                 <BouncyPressable style={[styles.miniTile, { backgroundColor: colors.navy }]}>
-                    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
-                        {ORBIT_STARS.slice(0, 8).map((s, i) => (
-                            <Circle key={i} cx={`${s.x}%`} cy={`${s.y}%`} r={s.r} fill="white" fillOpacity={s.o * 0.6} />
-                        ))}
-                    </Svg>
+                    <DriftingStars dots={ORBIT_DOTS_DIM_8} />
                     <Svg
                         style={{ position: "absolute", left: 28, right: 10, top: 11, height: 36 }}
                         viewBox="0 0 100 28"
@@ -2130,11 +2161,7 @@ export default function FeedScreen() {
 
         return (
             <View style={styles.orbitCard}>
-                <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
-                    {ORBIT_STARS.map((s, i) => (
-                        <Circle key={i} cx={`${s.x}%`} cy={`${s.y}%`} r={s.r} fill="white" fillOpacity={s.o} />
-                    ))}
-                </Svg>
+                <DriftingStars dots={ORBIT_STARS} />
                 <View style={styles.orbitContent}>
                     <View style={styles.bannerTopRow}>
                         <View style={styles.orbitPill}>
@@ -2185,44 +2212,19 @@ export default function FeedScreen() {
 
     // "Find your people" nudge — shown until the user follows 3 people or dismisses
     // it (✕). Friend-gated (not rating-gated), and rendered in both the empty feed
-    // and the normal feed header so it persists past the first rating.
-    // DEFERRED: "Connect contacts" and "Invite" both just open user search for now
-    // (handleFindUsers). A real contacts-sync / invite-a-friend surface is not built
-    // yet — TODO: wire these to a dedicated connect/invite flow when it exists.
+    // and the normal feed header so it persists past the first rating. Both buttons
+    // open user search for now (handleFindUsers); see FindYourPeopleCard for the
+    // deferred contacts/invite flows.
     const renderFindFriends = () => {
         const followingCount = profile?.following_count ?? 0
         if (friendsCardDismissed || followingCount >= 3) return null
         return (
-            <View style={styles.findFriendsCard}>
-                <TouchableOpacity
-                    style={styles.findDismiss}
-                    onPress={() => setFriendsCardDismissed(true)}
-                    hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-                >
-                    <Text style={styles.findDismissX}>✕</Text>
-                </TouchableOpacity>
-                <View style={styles.findTopRow}>
-                    <View style={styles.findTextBlock}>
-                        <Text style={styles.findTitle}>Find your people</Text>
-                        <Text style={styles.findBody}>Compare taste and see more stats.</Text>
-                    </View>
-                    <View style={styles.friendStack}>
-                        {FRIEND_AVATARS.map((f, i) => (
-                            <View key={f.id} style={[styles.friendStackAva, { backgroundColor: f.color, marginLeft: i > 0 ? -10 : 0 }]}>
-                                <Text style={styles.friendStackLetter}>{f.initial}</Text>
-                            </View>
-                        ))}
-                    </View>
-                </View>
-                <View style={styles.findBtns}>
-                    <TouchableOpacity style={styles.findBtnPrimary} onPress={handleFindUsers}>
-                        <Text style={styles.findBtnPrimaryText}>Connect contacts</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.findBtnSecondary} onPress={handleFindUsers}>
-                        <Text style={styles.findBtnSecondaryText}>Invite</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
+            <FindYourPeopleCard
+                style={styles.findFriendsCard}
+                onConnect={handleFindUsers}
+                onInvite={handleFindUsers}
+                onDismiss={() => setFriendsCardDismissed(true)}
+            />
         )
     }
 
@@ -2292,8 +2294,9 @@ export default function FeedScreen() {
                     sits with the other module cards but is never gated by rated count — only by having
                     a followed verdict — so it can go live before the rest. */}
                 {renderSocialCardsHeader()}
-                {renderRecentVerdict()}
-                {modulesGateComplete ? renderUnlockedSection() : renderLockedSection()}
+                {(modulesGateComplete || !socialCardsCollapsed) && renderRecentVerdict()}
+                {(modulesGateComplete || !socialCardsCollapsed) &&
+                    (modulesGateComplete ? renderUnlockedSection() : renderLockedSection())}
 
                 {events.length > 0 && (
                     <View style={styles.sectionRow}>
@@ -2589,8 +2592,9 @@ export default function FeedScreen() {
                     sits with the other module cards but is never gated by rated count — only by having
                     a followed verdict — so it can go live before the rest. */}
                 {renderSocialCardsHeader()}
-                {renderRecentVerdict()}
-                {modulesGateComplete ? renderUnlockedSection() : renderLockedSection()}
+                {(modulesGateComplete || !socialCardsCollapsed) && renderRecentVerdict()}
+                {(modulesGateComplete || !socialCardsCollapsed) &&
+                    (modulesGateComplete ? renderUnlockedSection() : renderLockedSection())}
 
                 {/* Activity section — always visible */}
                 <View style={styles.sectionRow}>
@@ -2808,6 +2812,40 @@ const styles = StyleSheet.create({
         color: colors.accent,
         fontWeight: "700",
         letterSpacing: 0.5,
+    },
+    // ── Social Cards header (lock+count badge, show/hide toggle) ───────────
+    socialCardsHeaderLeft: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        flexShrink: 1,
+        minWidth: 0,
+    },
+    socialCardsLockBadge: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+        flexShrink: 0,
+    },
+    socialCardsLockCount: {
+        fontFamily: fonts.mono,
+        fontSize: 8.5,
+        letterSpacing: 0.6,
+        color: colors.inkDim,
+        fontWeight: "700",
+    },
+    socialCardsToggle: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+        flexShrink: 0,
+    },
+    socialCardsToggleText: {
+        fontFamily: fonts.mono,
+        fontSize: 8.5,
+        letterSpacing: 0.6,
+        color: colors.accent,
+        fontWeight: "700",
     },
     // ── Event card ────────────────────────────────────────────────────────
     // The shared RatingActivityCard owns the card chrome (background, border, radius, padding,
@@ -4045,106 +4083,13 @@ const styles = StyleSheet.create({
         gap: 7,
     },
     // ── Find friends card ─────────────────────────────────────────────────
+    // Just the outer spacing; the card itself lives in FindYourPeopleCard.
     findFriendsCard: {
         marginHorizontal: 14,
         // Even 10px gaps on both sides to match the module stack's internal gap.
         // Top: orbitCard.marginBottom(8) + 2 = 10. Bottom: 6 + unlockedSection.marginTop(4) = 10.
         marginTop: 2,
         marginBottom: 6,
-        borderRadius: 16,
-        backgroundColor: colors.mint,
-        padding: 12,
-        position: "relative",
-    },
-    findDismiss: {
-        position: "absolute",
-        top: 10,
-        right: 10,
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        backgroundColor: "rgba(255,255,255,0.20)",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1,
-    },
-    findDismissX: {
-        color: "#fff",
-        fontSize: 11,
-        fontWeight: "700",
-    },
-    findTopRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 16,
-        paddingRight: 28,
-    },
-    findTextBlock: {
-        flex: 1,
-        minWidth: 0,
-    },
-    findTitle: {
-        fontFamily: fonts.display,
-        fontSize: 16,
-        color: "#fff",
-    },
-    findBody: {
-        fontFamily: fonts.mono,
-        fontSize: 11.5,
-        color: "#fff",
-        opacity: 0.92,
-        lineHeight: 16,
-        marginTop: 3,
-    },
-    friendStack: {
-        flexDirection: "row",
-        flexShrink: 0,
-    },
-    friendStackAva: {
-        width: 30,
-        height: 30,
-        borderRadius: 15,
-        alignItems: "center",
-        justifyContent: "center",
-        borderWidth: 2,
-        borderColor: colors.mint,
-    },
-    friendStackLetter: {
-        color: "#fff",
-        fontWeight: "700",
-        fontSize: 13,
-    },
-    findBtns: {
-        flexDirection: "row",
-        gap: 8,
-        marginTop: 8,
-    },
-    findBtnPrimary: {
-        flex: 1,
-        backgroundColor: "#fff",
-        borderRadius: 11,
-        paddingVertical: 10,
-        alignItems: "center",
-    },
-    findBtnPrimaryText: {
-        fontFamily: fonts.display,
-        fontSize: 12.5,
-        color: colors.mint,
-    },
-    findBtnSecondary: {
-        flex: 1,
-        backgroundColor: "rgba(255,255,255,0.18)",
-        borderRadius: 11,
-        paddingVertical: 10,
-        borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.35)",
-        alignItems: "center",
-    },
-    findBtnSecondaryText: {
-        fontFamily: fonts.display,
-        fontSize: 12.5,
-        color: "#fff",
     },
     // ── This or That refinement ───────────────────────────────────────────
     thisOrThatCard: {

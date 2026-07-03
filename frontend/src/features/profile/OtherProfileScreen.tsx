@@ -24,6 +24,7 @@ import Svg, { Circle, Line, Path } from "react-native-svg"
 
 import { ApiError } from "../../api/client"
 import { ArrowLabel } from "../../components/Arrow"
+import { DriftingStars } from "../../components/DriftingStars"
 import { RankingResponse } from "../comparison/types"
 import { AppStackParamList } from "../../navigation/types"
 import { avatarColorToken, bucketColor, colors, fonts } from "../../theme"
@@ -83,11 +84,10 @@ const CONST_EDGES: [number, number][] = [[0, 1], [1, 2], [2, 3], [2, 4], [0, 4],
 
 // Star dot positions for the dark navy card backdrop (in 0–100 viewBox space)
 const STAR_DOTS = Array.from({ length: 20 }, (_, i) => ({
-    key: i,
     x: ((i * 37 + 13) * 941) % 100,
     y: ((i * 53 + 7) * 613) % 100,
     r: i % 3 === 0 ? 1 : 0.6,
-    op: 0.2 + (i % 4) * 0.08,
+    o: (0.2 + (i % 4) * 0.08) * 0.8,
 }))
 
 
@@ -668,13 +668,7 @@ export default function OtherProfileScreen({ navigation, route }: OtherProfilePr
                         {/* Auxstrology — their taste signature */}
                         {profile.can_view_taste && auxActive && (
                             <View style={styles.auxCard} testID="other-profile-auxstrology">
-                                <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-                                    <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
-                                        {STAR_DOTS.map((s) => (
-                                            <Circle key={s.key} cx={s.x} cy={s.y} r={s.r} fill="#fff" opacity={s.op * 0.8} />
-                                        ))}
-                                    </Svg>
-                                </View>
+                                <DriftingStars dots={STAR_DOTS} viewBox="0 0 100 100" />
                                 <View style={styles.auxInner}>
                                     <View style={styles.auxTextBlock}>
                                         <View style={styles.auxPill}>
