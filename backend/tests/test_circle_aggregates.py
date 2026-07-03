@@ -399,6 +399,48 @@ def test_viewer_rating_is_null_when_unrated(
     assert item["viewer_rating"] is None
 
 
+def test_viewer_rated_artist_ids_skips_null_artist_deezer_id(
+    client: TestClient,
+    db_session: Session,
+):
+    """A rated Apple/MusicBrainz song has a NULL artist_deezer_id; the Consensus relevance
+    signal must skip it, not coerce it. Regression: int(None) here 500'd the whole feed
+    modules endpoint the moment a viewer had rated any non-Deezer song."""
+    from src.crud.circle_aggregates import viewer_rated_artist_ids
+
+    _register(client, "viewer@example.com", "viewer")
+    viewer_id = _user_id(db_session, "viewer")
+
+    # One legacy Deezer song (artist_deezer_id=789 via _song) and one Apple song (NULL), both rated.
+    _rate(db_session, "viewer", 2001, "Deezer Song", 7.0)
+    apple_song = Song(
+        deezer_id=None,
+        isrc="USxx11900842",
+        title="Apple Song",
+        artist="Apple Artist",
+        artist_deezer_id=None,
+        album="Apple Album",
+        cover_url="https://example.com/cover.jpg",
+        preview_url=None,
+        genre_deezer=None,
+    )
+    db_session.add(apple_song)
+    db_session.flush()
+    db_session.add(
+        Ranking(
+            user_id=viewer_id,
+            song_id=apple_song.id,
+            bucket="like",
+            position=2,
+            score=9.0,
+        )
+    )
+    db_session.commit()
+
+    # No crash, and the NULL artist is dropped rather than coerced.
+    assert viewer_rated_artist_ids(db_session, viewer_id) == {789}
+
+
 def test_below_three_contributors_is_omitted(
     client: TestClient,
     db_session: Session,

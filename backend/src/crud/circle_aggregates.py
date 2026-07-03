@@ -435,7 +435,12 @@ def viewer_rated_artist_ids(
     db: Session,
     viewer_id: int,
 ) -> set[int]:
-    """Distinct artist ids the viewer has rated — the Consensus 'your relevance' signal."""
+    """Distinct artist ids the viewer has rated — the Consensus 'your relevance' signal.
+
+    Post-migration Apple/MusicBrainz songs have no `artist_deezer_id` (NULL), so the NULLs are
+    filtered out rather than coerced — `int(None)` would otherwise raise and 500 the whole feed
+    modules endpoint the moment the viewer has rated any non-Deezer song.
+    """
     artist_ids = db.execute(
         select(Song.artist_deezer_id)
         .join(
@@ -443,6 +448,7 @@ def viewer_rated_artist_ids(
             Ranking.song_id == Song.id,
         )
         .where(Ranking.user_id == viewer_id)
+        .where(Song.artist_deezer_id.is_not(None))
         .distinct()
     ).scalars().all()
     return {int(artist_id) for artist_id in artist_ids}
