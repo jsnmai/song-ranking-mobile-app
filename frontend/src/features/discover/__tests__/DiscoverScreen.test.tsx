@@ -397,6 +397,38 @@ describe("DiscoverScreen", () => {
         })
     })
 
+    it("shows the Find-your-people card on the People tab, hides it while typing, and dismisses it per visit", async () => {
+        render(<DiscoverScreen />)
+
+        // Songs tab (default): the friends nudge is a People-tab thing, so it's absent.
+        fireEvent(screen.getByPlaceholderText("Search songs or people…"), "focus")
+        expect(screen.queryByText("Find your people")).toBeNull()
+
+        // People tab, empty query: the card appears with both deferred actions.
+        fireEvent.press(screen.getByText("People"))
+        expect(screen.getByText("Find your people")).toBeTruthy()
+        expect(screen.getByText("Connect contacts")).toBeTruthy()
+        expect(screen.getByText("Invite")).toBeTruthy()
+
+        // It's a resting-state nudge — typing a query replaces it with results.
+        fireEvent.changeText(screen.getByPlaceholderText("Search songs or people…"), "jason")
+        act(() => {
+            jest.advanceTimersByTime(350)
+        })
+        expect(screen.queryByText("Find your people")).toBeNull()
+
+        // Clearing the query brings it back, and the ✕ dismisses it for this visit.
+        fireEvent.changeText(screen.getByPlaceholderText("Search songs or people…"), "")
+        expect(screen.getByText("Find your people")).toBeTruthy()
+        fireEvent.press(screen.getByText("✕"))
+        expect(screen.queryByText("Find your people")).toBeNull()
+
+        // The dismiss is per-visit: leaving search and reopening it offers the card again.
+        fireEvent.press(screen.getByText("Cancel"))
+        fireEvent(screen.getByPlaceholderText("Search songs or people…"), "focus")
+        expect(screen.getByText("Find your people")).toBeTruthy()
+    })
+
     it("shows taste match and follows-you note on people results and follows from the row", async () => {
         mockSearchProfiles.mockResolvedValue({
             results: [{ ...profile, similarity_score: 0.87, is_followed_by: true }],
