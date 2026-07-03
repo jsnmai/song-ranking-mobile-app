@@ -385,6 +385,7 @@ def persist_finalized_rating(
         song = resolve_song_for_finalize(
             db,
             data.song,
+            user_id=user_id,
         )
     else:
         song = upsert_from_deezer(

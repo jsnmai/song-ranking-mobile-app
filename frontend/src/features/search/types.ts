@@ -39,6 +39,20 @@ export type SongSearchResponse = {
     results: SongSearchResult[];
 }
 
+// Mirrors AppleSearchAnnotationItem.
+export type AppleSearchAnnotationItem = {
+    apple_track_id: string;
+    storefront?: string;
+    title?: string;
+    artist?: string;
+    album?: string | null;
+}
+
+// Mirrors AppleSearchAnnotationRequest.
+export type AppleSearchAnnotationRequest = {
+    results: AppleSearchAnnotationItem[];
+}
+
 export type AppleSearchAnnotationResult = {
     apple_track_id: string;
     storefront: string;

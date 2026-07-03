@@ -6,9 +6,11 @@ import httpx
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from src.crud.rating import get_user_ranking_by_song
 from src.crud.song import create_from_provider_metadata
-from src.crud.song_provider_ref import create_provider_ref, get_song_by_provider_track
+from src.crud.song_provider_ref import create_provider_ref, ensure_apple_ref, get_song_by_provider_track
 from src.pydantic_schemas.song import SongCreate, normalize_storefront
+from src.services.song_matching import find_users_rated_song_match
 from src.sqlalchemy_tables.song import Song
 
 APPLE_LOOKUP_URL = "https://itunes.apple.com/lookup"
@@ -20,12 +22,22 @@ MAX_PROVIDER_URL_LENGTH = 1000
 def resolve_song_for_finalize(
     db: Session,
     data: SongCreate,
+    user_id: int | None = None,
 ) -> Song:
     """
     Resolve or create the durable song for a finalized rating.
 
-    Deezer keeps the legacy upsert path. Apple first deduplicates by provider ref,
-    then tries lookup-on-finalize, and finally falls back to sanitized client data.
+    Deezer keeps the legacy upsert path. Apple resolution order:
+    1. An existing Apple ref this user has already rated (unchanged fast path).
+    2. A song this user rated before the Deezer->Apple migration, matched by
+       normalized title/artist/album — reused so their existing rating updates in
+       place instead of forking a duplicate. Self-heals a missing Apple ref only
+       when no ref exists yet for this track; a match against a track another song
+       already claims is a read-time override only, never a table write, and the
+       response never depends on winning that write's race (see song_matching.py).
+    3. No user match found, but an Apple ref already exists (ordinary shared-song
+       case: someone else already Apple-rated this exact track).
+    4. Lookup-on-finalize, then sanitized client data, for a genuinely new song.
     """
     if data.provider != "apple":
         raise ValueError("resolve_song_for_finalize only handles Apple provider data.")
@@ -38,6 +50,34 @@ def resolve_song_for_finalize(
         provider_track_id=apple_track_id,
         storefront=storefront,
     )
+    if existing_song is not None and user_id is not None:
+        if get_user_ranking_by_song(db, user_id, existing_song.id) is not None:
+            return existing_song
+
+    if user_id is not None:
+        fallback = find_users_rated_song_match(
+            db,
+            user_id=user_id,
+            title=data.title,
+            artist=data.artist,
+            album=data.album,
+        )
+        if fallback is not None:
+            if existing_song is None:
+                ensure_apple_ref(
+                    db,
+                    song=fallback.song,
+                    apple_track_id=apple_track_id,
+                    storefront=storefront,
+                    provider_artist_id=data.apple_artist_id,
+                    provider_album_id=data.apple_album_id,
+                    url=_safe_provider_url(data.apple_view_url),
+                    artwork_url=_safe_provider_url(data.artwork_url or data.cover_url),
+                    preview_available=data.preview_available,
+                    confidence="apple_legacy_fallback_match",
+                )
+            return fallback.song
+
     if existing_song is not None:
         return existing_song
 

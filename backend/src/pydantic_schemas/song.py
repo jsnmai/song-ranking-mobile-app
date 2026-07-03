@@ -121,10 +121,15 @@ class SongCreate(BaseModel):
     @classmethod
     def strip_optional_strings(cls, value: object) -> object:
         """Trim provider strings and normalize blank optional values to None."""
-        if isinstance(value, str):
-            stripped = value.strip()
-            return stripped or None
-        return value
+        return strip_blank_to_none(value)
+
+
+def strip_blank_to_none(value: object) -> object:
+    """Trim a string field and fold blank input to None; pass through non-strings as-is."""
+    if isinstance(value, str):
+        stripped = value.strip()
+        return stripped or None
+    return value
 
 
 def normalize_storefront(value: str | None) -> str:

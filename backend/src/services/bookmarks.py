@@ -29,6 +29,7 @@ BOOKMARKS_LIMIT = 100
 def _resolve_bookmark_song(
     db: Session,
     song_data: SongCreate,
+    user_id: int,
 ):
     """Resolve the durable song for a bookmark, dispatching by provider like rating finalize."""
     if song_data.provider == "listn" and song_data.id is not None:
@@ -46,6 +47,7 @@ def _resolve_bookmark_song(
         return resolve_song_for_finalize(
             db,
             song_data,
+            user_id=user_id,
         )
     song = upsert_from_deezer(
         db,
@@ -68,6 +70,7 @@ def bookmark_song(
         song = _resolve_bookmark_song(
             db,
             data.song,
+            user_id,
         )
         create_or_get_bookmark(
             db,

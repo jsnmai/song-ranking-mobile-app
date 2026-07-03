@@ -3,7 +3,7 @@
 
 import { apiClient } from "../../api/client"
 import { upsizeCoverArt } from "../../utils/artwork"
-import { AppleSearchAnnotationResponse, SongSearchResponse, SongSearchResult } from "./types"
+import { AppleSearchAnnotationRequest, AppleSearchAnnotationResponse, SongSearchResponse, SongSearchResult } from "./types"
 
 const APPLE_SEARCH_URL = "https://itunes.apple.com/search"
 const APPLE_STOREFRONT = "US"
@@ -53,14 +53,19 @@ async function annotateAppleSearchResults(
     if (songs.length === 0) {
         return { results: [] }
     }
+    // apple_track_id is typed optional on SongSearchResult (shared with non-Apple providers)
+    // but every `song` here came through mapAppleSearchRow, which never omits it.
     return apiClient.post<AppleSearchAnnotationResponse>(
         "/api/v1/search/apple/annotations",
         {
             results: songs.map((song) => ({
-                apple_track_id: song.apple_track_id,
+                apple_track_id: song.apple_track_id as string,
                 storefront: song.storefront ?? APPLE_STOREFRONT,
+                title: song.title,
+                artist: song.artist,
+                album: song.album,
             })),
-        },
+        } satisfies AppleSearchAnnotationRequest,
         token,
     )
 }

@@ -1,7 +1,7 @@
 # Pydantic schemas for normalized song search responses.
 from pydantic import BaseModel, Field, field_validator
 
-from src.pydantic_schemas.song import normalize_storefront
+from src.pydantic_schemas.song import normalize_storefront, strip_blank_to_none
 
 
 class SongSearchResult(BaseModel):
@@ -34,6 +34,14 @@ class AppleSearchAnnotationItem(BaseModel):
         default="US",
         max_length=8,
     )
+    # Client-supplied title/artist/album, used only to fall back to a match against a song
+    # this user rated before the Deezer->Apple migration when no direct provider-ref match
+    # resolves to their own rating. Optional so older clients that don't send them keep
+    # working (the fallback is simply skipped). Bounded to Song.title/artist/album's column
+    # widths since this is untrusted client text.
+    title: str | None = Field(default=None, max_length=255)
+    artist: str | None = Field(default=None, max_length=255)
+    album: str | None = Field(default=None, max_length=255)
 
     @field_validator("apple_track_id", mode="before")
     @classmethod
@@ -46,6 +54,12 @@ class AppleSearchAnnotationItem(BaseModel):
     def normalize_item_storefront(cls, value: str | None) -> str:
         """Default malformed or absent Apple storefronts to the launch country."""
         return normalize_storefront(value)
+
+    @field_validator("title", "artist", "album", mode="before")
+    @classmethod
+    def strip_optional_match_fields(cls, value: object) -> object:
+        """Trim match-fallback strings and normalize blank input to None."""
+        return strip_blank_to_none(value)
 
 
 class AppleSearchAnnotationRequest(BaseModel):

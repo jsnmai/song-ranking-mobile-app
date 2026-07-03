@@ -151,6 +151,47 @@ def ensure_musicbrainz_ref(
     db.flush()
 
 
+def ensure_apple_ref(
+    db: Session,
+    song: Song,
+    apple_track_id: str,
+    storefront: str,
+    provider_artist_id: str | None,
+    provider_album_id: str | None,
+    url: str | None,
+    artwork_url: str | None,
+    preview_available: bool | None,
+    confidence: str,
+) -> None:
+    """Attach a missing Apple provider ref to an already-known song, idempotently.
+
+    Callers must only invoke this when no ref exists yet for (apple, apple_track_id,
+    storefront) — the unique constraint means a second ref can never attach to the same
+    Apple track, so calling this when one already exists would just silently no-op.
+    """
+    statement = (
+        insert(SongProviderRef)
+        .values(
+            song_id=song.id,
+            provider="apple",
+            provider_track_id=apple_track_id,
+            provider_artist_id=provider_artist_id,
+            provider_album_id=provider_album_id,
+            storefront=storefront,
+            url=url,
+            artwork_url=artwork_url,
+            preview_available=preview_available,
+            confidence=confidence,
+            matched_at=datetime.now(timezone.utc),
+        )
+        .on_conflict_do_nothing(
+            constraint="uq_song_provider_refs_provider_track_storefront",
+        )
+    )
+    db.execute(statement)
+    db.flush()
+
+
 def ensure_deezer_legacy_ref(
     db: Session,
     song: Song,

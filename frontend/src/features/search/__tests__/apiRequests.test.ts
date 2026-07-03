@@ -60,7 +60,15 @@ describe("searchSongs", () => {
         )
         expect(mockPost).toHaveBeenCalledWith(
             "/api/v1/search/apple/annotations",
-            { results: [{ apple_track_id: "1440841363", storefront: "US" }] },
+            {
+                results: [{
+                    apple_track_id: "1440841363",
+                    storefront: "US",
+                    title: "Nights",
+                    artist: "Frank Ocean",
+                    album: "Blonde",
+                }],
+            },
             "test-token",
         )
         expect(response.results[0]).toMatchObject({

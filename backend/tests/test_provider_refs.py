@@ -4,8 +4,10 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.song import Song
 from src.sqlalchemy_tables.song_provider_ref import SongProviderRef
+from src.sqlalchemy_tables.user import User
 
 
 class MockAppleResponse:
@@ -131,6 +133,81 @@ def _bookmark(
     )
     assert response.status_code == 200
     return response.json()
+
+
+def _seed_legacy_song_and_ranking(
+    db_session: Session,
+    user_id: int,
+    *,
+    deezer_id: int,
+    title: str,
+    artist: str,
+    album: str,
+    bucket: str = "like",
+) -> int:
+    """Directly seed a legacy-rated song (deezer_legacy ref, no Apple ref) and return its id."""
+    song = Song(
+        deezer_id=deezer_id,
+        title=title,
+        artist=artist,
+        artist_deezer_id=None,
+        album=album,
+        cover_url="https://example.com/cover.jpg",
+    )
+    db_session.add(song)
+    db_session.flush()
+    db_session.add(
+        SongProviderRef(
+            song_id=song.id,
+            provider="deezer_legacy",
+            provider_track_id=str(deezer_id),
+            storefront="global",
+        )
+    )
+    db_session.add(
+        Ranking(
+            user_id=user_id,
+            song_id=song.id,
+            bucket=bucket,
+            position=1,
+            score=7.0,
+        )
+    )
+    db_session.commit()
+    return song.id
+
+
+def _seed_apple_song_and_legacy_conflict(
+    client: TestClient,
+    monkeypatch,
+    *,
+    apple_track_id: str,
+    owner_bucket: str = "dislike",
+) -> dict:
+    """
+    Seed a conflicting-identity scenario for the fallback-override tests.
+
+    `owner` finalizes an Apple-sourced rating (song X, gets the Apple ref). `other`
+    separately finalizes a legacy Deezer rating for the same title/artist/album (song
+    Y), with no Apple ref at all. Returns other's token and both song ids.
+    """
+    monkeypatch.setattr(
+        "src.services.provider_catalog.httpx.get",
+        lambda *args, **kwargs: MockAppleResponse({"results": []}),
+    )
+    owner_token = _get_token(client, email="conflict-owner@example.com", username="conflictowner")
+    owner_payload = _apple_payload(apple_track_id=apple_track_id, title="Nights")
+    owner_payload["bucket"] = owner_bucket
+    owner_response = _finalize(client, owner_token, owner_payload)
+
+    other_token = _get_token(client, email="conflict-other@example.com", username="conflictother")
+    other_response = _finalize(client, other_token, _deezer_payload())
+
+    return {
+        "other_token": other_token,
+        "song_x_id": owner_response["ranking"]["song_id"],
+        "song_y_id": other_response["ranking"]["song_id"],
+    }
 
 
 def test_provider_refs_uniqueness_and_storefront_required(db_session: Session):
@@ -906,3 +983,355 @@ def test_ranking_by_song_and_legacy_by_deezer_both_work(client: TestClient):
     assert by_song.status_code == 200
     assert by_deezer.status_code == 200
     assert by_song.json()["song_id"] == by_deezer.json()["song_id"]
+
+
+# --- Legacy-song fallback matching (songs rated before the Apple search migration) --------
+
+
+def test_apple_annotation_fallback_matches_legacy_song_and_self_heals_ref(
+    client: TestClient,
+    db_session: Session,
+):
+    """A song rated before the Apple migration self-heals its missing Apple ref on match."""
+    token = _get_token(client)
+    finalized = _finalize(client, token, _deezer_payload())
+    legacy_song_id = finalized["ranking"]["song_id"]
+
+    response = client.post(
+        "/api/v1/search/apple/annotations",
+        json={
+            "results": [
+                {
+                    "apple_track_id": "3001",
+                    "storefront": "US",
+                    "title": "Nights",
+                    "artist": "Frank Ocean",
+                    "album": "Blonde",
+                }
+            ]
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    result = response.json()["results"][0]
+    assert result["song_id"] == legacy_song_id
+    assert result["my_bucket"] == "like"
+    assert result["already_rated"] is True
+
+    provider_ref = db_session.execute(
+        select(SongProviderRef)
+        .where(SongProviderRef.provider == "apple")
+        .where(SongProviderRef.provider_track_id == "3001")
+    ).scalar_one()
+    assert provider_ref.song_id == legacy_song_id
+    assert provider_ref.confidence == "apple_legacy_fallback_match"
+
+    # Self-heal took: a follow-up request without title/artist now resolves via the direct hit.
+    follow_up = client.post(
+        "/api/v1/search/apple/annotations",
+        json={"results": [{"apple_track_id": "3001", "storefront": "US"}]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    follow_up_result = follow_up.json()["results"][0]
+    assert follow_up_result["song_id"] == legacy_song_id
+    assert follow_up_result["already_rated"] is True
+
+
+def test_apple_finalize_fallback_reuses_legacy_song_without_apple_lookup(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    """Finalize reuses a legacy-rated song by title/artist match instead of creating a duplicate."""
+    token = _get_token(client)
+    finalized = _finalize(client, token, _deezer_payload())
+    legacy_song_id = finalized["ranking"]["song_id"]
+
+    def fail_lookup(*args, **kwargs):
+        raise AssertionError("Legacy fallback match must short-circuit before any Apple lookup.")
+
+    monkeypatch.setattr("src.services.provider_catalog.httpx.get", fail_lookup)
+
+    response = _finalize(
+        client,
+        token,
+        _apple_payload(apple_track_id="3002", title="Nights"),
+    )
+
+    assert response["ranking"]["song_id"] == legacy_song_id
+
+    songs = db_session.execute(select(Song)).scalars().all()
+    assert len(songs) == 1
+
+    rankings = db_session.execute(
+        select(Ranking).where(Ranking.song_id == legacy_song_id)
+    ).scalars().all()
+    assert len(rankings) == 1
+
+    provider_ref = db_session.execute(
+        select(SongProviderRef)
+        .where(SongProviderRef.provider == "apple")
+        .where(SongProviderRef.provider_track_id == "3002")
+    ).scalar_one()
+    assert provider_ref.song_id == legacy_song_id
+
+
+def test_apple_annotation_fallback_overrides_conflicting_apple_ref(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    """A user's legacy rating still shows as rated even when the Apple ref points elsewhere."""
+    seed = _seed_apple_song_and_legacy_conflict(
+        client,
+        monkeypatch,
+        apple_track_id="9001",
+        owner_bucket="dislike",
+    )
+
+    response = client.post(
+        "/api/v1/search/apple/annotations",
+        json={
+            "results": [
+                {
+                    "apple_track_id": "9001",
+                    "storefront": "US",
+                    "title": "Nights",
+                    "artist": "Frank Ocean",
+                    "album": "Blonde",
+                }
+            ]
+        },
+        headers={"Authorization": f"Bearer {seed['other_token']}"},
+    )
+
+    result = response.json()["results"][0]
+    assert result["already_rated"] is True
+    assert result["song_id"] == seed["song_y_id"]
+    assert result["my_bucket"] == "like"
+
+    refs = db_session.execute(
+        select(SongProviderRef)
+        .where(SongProviderRef.provider == "apple")
+        .where(SongProviderRef.provider_track_id == "9001")
+    ).scalars().all()
+    assert len(refs) == 1
+    assert refs[0].song_id == seed["song_x_id"]
+
+
+def test_apple_finalize_fallback_updates_existing_ranking_despite_conflicting_ref(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    """Finalize reuses the user's own legacy song/ranking instead of creating a second one."""
+    seed = _seed_apple_song_and_legacy_conflict(
+        client,
+        monkeypatch,
+        apple_track_id="9002",
+        owner_bucket="like",
+    )
+
+    other_payload = _apple_payload(apple_track_id="9002", title="Nights")
+    other_payload["bucket"] = "dislike"
+    response = _finalize(client, seed["other_token"], other_payload)
+
+    assert response["ranking"]["song_id"] == seed["song_y_id"]
+    assert response["ranking"]["bucket"] == "dislike"
+
+    rankings = db_session.execute(
+        select(Ranking).where(Ranking.song_id == seed["song_y_id"])
+    ).scalars().all()
+    assert len(rankings) == 1
+
+    songs = db_session.execute(select(Song)).scalars().all()
+    assert {song.id for song in songs} == {seed["song_x_id"], seed["song_y_id"]}
+
+
+def test_apple_finalize_no_fallback_match_reuses_existing_apple_song(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    """A second, unrelated user rating the same Apple track attaches normally (no conflict)."""
+    monkeypatch.setattr(
+        "src.services.provider_catalog.httpx.get",
+        lambda *args, **kwargs: MockAppleResponse({"results": []}),
+    )
+    owner_token = _get_token(client, email="shared-owner@example.com", username="sharedowner")
+    owner_response = _finalize(
+        client,
+        owner_token,
+        _apple_payload(apple_track_id="9500", title="Nights"),
+    )
+    song_x_id = owner_response["ranking"]["song_id"]
+
+    other_token = _get_token(client, email="shared-other@example.com", username="sharedother")
+    other_response = _finalize(
+        client,
+        other_token,
+        _apple_payload(apple_track_id="9500", title="Nights"),
+    )
+
+    assert other_response["ranking"]["song_id"] == song_x_id
+    songs = db_session.execute(select(Song)).scalars().all()
+    assert len(songs) == 1
+
+
+def test_apple_annotation_fallback_no_match_stays_unrated(
+    client: TestClient,
+    db_session: Session,
+):
+    """Unrelated title/artist falls through to today's unrated behavior, no ref written."""
+    token = _get_token(client)
+    _finalize(client, token, _deezer_payload())
+
+    response = client.post(
+        "/api/v1/search/apple/annotations",
+        json={
+            "results": [
+                {
+                    "apple_track_id": "5001",
+                    "storefront": "US",
+                    "title": "Completely Different Song",
+                    "artist": "Someone Else",
+                    "album": "Nowhere",
+                }
+            ]
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    result = response.json()["results"][0]
+    assert result["already_rated"] is False
+    assert result["song_id"] is None
+
+    refs = db_session.execute(
+        select(SongProviderRef).where(SongProviderRef.provider == "apple")
+    ).scalars().all()
+    assert refs == []
+
+
+def test_apple_annotation_fallback_ambiguous_tie_stays_unrated(
+    client: TestClient,
+    db_session: Session,
+):
+    """Two of the user's own songs sharing title+artist, with no disambiguating album, never guess."""
+    token = _get_token(client)
+    _finalize(client, token, _deezer_payload())
+    user_id = db_session.execute(
+        select(User).where(User.email == "provider@example.com")
+    ).scalar_one().id
+    _seed_legacy_song_and_ranking(
+        db_session,
+        user_id,
+        deezer_id=6001,
+        title="Nights",
+        artist="Frank Ocean",
+        album="Endless",
+    )
+
+    response = client.post(
+        "/api/v1/search/apple/annotations",
+        json={
+            "results": [
+                {
+                    "apple_track_id": "6002",
+                    "storefront": "US",
+                    "title": "Nights",
+                    "artist": "Frank Ocean",
+                }
+            ]
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    result = response.json()["results"][0]
+    assert result["already_rated"] is False
+    assert result["song_id"] is None
+
+
+def test_apple_annotation_fallback_album_breaks_tie(
+    client: TestClient,
+    db_session: Session,
+):
+    """A disambiguating album isolates the correct song among title+artist ties."""
+    token = _get_token(client)
+    finalized = _finalize(client, token, _deezer_payload())
+    blonde_song_id = finalized["ranking"]["song_id"]
+    user_id = db_session.execute(
+        select(User).where(User.email == "provider@example.com")
+    ).scalar_one().id
+    _seed_legacy_song_and_ranking(
+        db_session,
+        user_id,
+        deezer_id=7001,
+        title="Nights",
+        artist="Frank Ocean",
+        album="Endless",
+    )
+
+    response = client.post(
+        "/api/v1/search/apple/annotations",
+        json={
+            "results": [
+                {
+                    "apple_track_id": "7002",
+                    "storefront": "US",
+                    "title": "Nights",
+                    "artist": "Frank Ocean",
+                    "album": "Blonde",
+                }
+            ]
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    result = response.json()["results"][0]
+    assert result["already_rated"] is True
+    assert result["song_id"] == blonde_song_id
+
+
+def test_apple_annotation_and_finalize_fallback_scoped_to_requesting_user(
+    client: TestClient,
+    db_session: Session,
+):
+    """One user's rated song never matches a different user's identically-titled search."""
+    owner_token = _get_token(client, email="scope-owner@example.com", username="scopeowner")
+    owner_finalized = _finalize(client, owner_token, _deezer_payload())
+    owner_song_id = owner_finalized["ranking"]["song_id"]
+
+    other_token = _get_token(client, email="scope-other@example.com", username="scopeother")
+
+    annotate_response = client.post(
+        "/api/v1/search/apple/annotations",
+        json={
+            "results": [
+                {
+                    "apple_track_id": "8001",
+                    "storefront": "US",
+                    "title": "Nights",
+                    "artist": "Frank Ocean",
+                    "album": "Blonde",
+                }
+            ]
+        },
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+    result = annotate_response.json()["results"][0]
+    assert result["already_rated"] is False
+    assert result["song_id"] is None
+
+    finalize_response = _finalize(
+        client,
+        other_token,
+        _apple_payload(apple_track_id="8001", title="Nights"),
+    )
+    assert finalize_response["ranking"]["song_id"] != owner_song_id
+
+    refs = db_session.execute(
+        select(SongProviderRef).where(SongProviderRef.provider == "apple")
+    ).scalars().all()
+    assert len(refs) == 1
+    assert refs[0].song_id != owner_song_id
