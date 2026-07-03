@@ -240,7 +240,9 @@ describe("DiscoverScreen", () => {
         expect(screen.getByText("PEOPLE YOU FOLLOW RATED 9+")).toBeTruthy()
         expect(screen.getByTestId("co-sign-lock-cue")).toBeTruthy()
         expect(screen.queryByTestId("co-sign-quiet-cue")).toBeNull()
-        expect(screen.getByText("No lists yet")).toBeTruthy()
+        // Curated Lists is commented out until the recommendations work ships.
+        expect(screen.queryByText("No lists yet")).toBeNull()
+        expect(screen.queryByText("CURATED LISTS")).toBeNull()
     })
 
     it("shows a sleepy Co-Sign cue when enough followed people have no qualifying 9+ activity", async () => {
@@ -399,8 +401,8 @@ describe("DiscoverScreen", () => {
         render(<DiscoverScreen />)
 
         expect(await screen.findByText("THIS WEEK")).toBeTruthy()
-        // Most-rated had no items, so its locked state remains.
-        expect(screen.getByText("IN CIRCLE")).toBeTruthy()
+        // Most-rated had no items but the circle is big enough (4 members), so it warms up.
+        expect(screen.getByTestId("most-rated-warming")).toBeTruthy()
 
         fireEvent.press(screen.getByLabelText("Open Nights"))
         expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { song: ranking.song })
@@ -421,8 +423,13 @@ describe("DiscoverScreen", () => {
     it("keeps both circle cards locked when there is no circle data", async () => {
         render(<DiscoverScreen />)
 
-        expect(await screen.findByText("Locked")).toBeTruthy()
-        expect(screen.getByText("IN CIRCLE")).toBeTruthy()
+        // Both the Trending card and the Most-rated card show their locked state. The
+        // Most-rated card folds the lock signal into its "X/3 friends / to unlock" progress.
+        const mostRatedLocked = await screen.findByTestId("most-rated-locked")
+        expect(within(mostRatedLocked).getByText("to unlock")).toBeTruthy()
+        expect(within(mostRatedLocked).getByText("0/3")).toBeTruthy()
+        // Trending keeps its own "Locked" state.
+        expect(screen.getByText("Locked")).toBeTruthy()
     })
 
     it("counts mutual circle members, not one-way follows, in the locked Trending counter", async () => {
@@ -431,17 +438,23 @@ describe("DiscoverScreen", () => {
         mockGetCircleTrending.mockResolvedValue({ items: [], window_days: 7, circle_size: 0 })
         render(<DiscoverScreen />)
 
-        expect(await screen.findByText("0/3")).toBeTruthy()
+        // Both locked circle cards read the shared 0/3 (Trending's counter and the
+        // Most-rated "0/3 friends / to unlock" line), never a misleading 3/3.
+        await screen.findByTestId("most-rated-locked")
+        expect(screen.getAllByText("0/3")).toHaveLength(2)
         expect(screen.getByText("Locked")).toBeTruthy()
     })
 
     it("shows the Warming up state when the circle is big enough but has nothing trending", async () => {
         // 3 visible mutual members but no shared song this week: this is NOT locked on a user
-        // action, so it drops the lock/counter and explains it will fill in.
+        // action, so both circle cards drop the lock/counter and explain they will fill in.
         mockGetCircleTrending.mockResolvedValue({ items: [], window_days: 7, circle_size: 3 })
         render(<DiscoverScreen />)
 
-        expect(await screen.findByText("Warming up")).toBeTruthy()
+        const mostRatedWarming = await screen.findByTestId("most-rated-warming")
+        expect(within(mostRatedWarming).getByText("Warming up")).toBeTruthy()
+        // Trending is warming too, so both cards show the copy.
+        expect(screen.getAllByText("Warming up")).toHaveLength(2)
         // No lock copy and no X/3 counter in this state.
         expect(screen.queryByText("Locked")).toBeNull()
         expect(screen.queryByText("3/3")).toBeNull()

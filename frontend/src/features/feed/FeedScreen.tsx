@@ -1468,7 +1468,12 @@ export default function FeedScreen() {
                         <View style={styles.butterPill}><Text style={styles.butterPillText}>Disagreement spotlight</Text></View>
                     </View>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 11 }}>
-                        <HatchBox size={48} radius={9} tone="dark" />
+                        <View style={styles.disagreeLockedArt}>
+                            <HatchBox size={48} radius={9} tone="dark" />
+                            <View style={styles.disagreeLockedArtIcon}>
+                                <MoonIcon color={colors.inkDim} size={22} />
+                            </View>
+                        </View>
                         <View style={{ flex: 1 }}>
                             <Text style={styles.disagreeLockedTitle}>Quiet for now</Text>
                             <Text style={styles.disagreeLockedBody}>Rate more to see where you split from your circle.</Text>
@@ -1476,12 +1481,12 @@ export default function FeedScreen() {
                         <View style={{ flexDirection: "row", gap: 14, alignItems: "center" }}>
                             <View style={{ alignItems: "center" }}>
                                 <Text style={styles.disagreeColLabel}>YOU</Text>
-                                <View style={styles.disagreeColCircle}><MoonIcon color={colors.inkDim} size={13} /></View>
+                                <View style={styles.disagreeColCircle}><Text style={styles.disagreeColQuestion}>?</Text></View>
                             </View>
                             <View style={styles.disagreeDivider} />
                             <View style={{ alignItems: "center" }}>
                                 <Text style={styles.disagreeColLabel}>CIRCLE</Text>
-                                <View style={styles.disagreeColCircle}><MoonIcon color={colors.inkDim} size={13} /></View>
+                                <View style={styles.disagreeColCircle}><Text style={styles.disagreeColQuestion}>?</Text></View>
                             </View>
                         </View>
                     </View>
@@ -3156,7 +3161,10 @@ const styles = StyleSheet.create({
     orbitCard: {
         marginHorizontal: 14,
         marginTop: 10,
-        marginBottom: 8,
+        // 6 so the gap up to the next section header (when Find your people is dismissed) is a
+        // consistent 12 (6 + sectionRow.marginTop 6), matching every other card→header gap. The
+        // peer gap down to Find your people stays 10 via that card's marginTop(4).
+        marginBottom: 6,
         borderRadius: 20,
         backgroundColor: colors.navy,
         overflow: "hidden",
@@ -3264,7 +3272,11 @@ const styles = StyleSheet.create({
     // ── Unlocked modules (full preview) ──────────────────────────────────
     unlockedSection: {
         gap: 10,
-        marginTop: 4,
+        // No top margin: Recent Verdict's own marginBottom (10) already sets the gap up to the
+        // first card row, so it matches the 10 between the rows below (and the grid's horizontal
+        // gap). The extra 4 here stacked on that mb — RN margins don't collapse — making the
+        // verdict→grid gap read 14, heavier than the rest of the grid.
+        marginTop: 0,
     },
     // Re-rate Radar — live half-tile state (a followed user's score change), modeled on the
     // design's RerateCard: gold pill + handle, song, rising/falling trajectory, struck-from → gold-to.
@@ -4025,6 +4037,24 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
     },
+    disagreeColQuestion: {
+        fontFamily: fonts.display,
+        fontSize: 14,
+        color: colors.inkDim,
+    },
+    disagreeLockedArt: {
+        width: 48,
+        height: 48,
+    },
+    disagreeLockedArtIcon: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        alignItems: "center",
+        justifyContent: "center",
+    },
     disagreeDivider: {
         width: 1,
         height: 30,
@@ -4184,16 +4214,19 @@ const styles = StyleSheet.create({
     // Just the outer spacing; the card itself lives in FindYourPeopleCard.
     findFriendsCard: {
         marginHorizontal: 14,
-        // Even 10px gaps on both sides to match the module stack's internal gap.
-        // Top: orbitCard.marginBottom(8) + 2 = 10. Bottom: 6 + unlockedSection.marginTop(4) = 10.
-        marginTop: 2,
+        // Peer gap 10 up to Getting Started (orbitCard.marginBottom 6 + 4). This card is always
+        // followed by a section header (FOR YOU / SOCIAL CARDS), so the bottom gap is the
+        // card→header 12 (marginBottom 6 + sectionRow.marginTop 6).
+        marginTop: 4,
         marginBottom: 6,
     },
     // ── This or That refinement ───────────────────────────────────────────
     thisOrThatCard: {
         marginHorizontal: 14,
-        marginTop: 2,
-        marginBottom: 8,
+        // 0/6 keeps this card on the shared rhythm: header→card 8 (FOR YOU sectionRow.marginBottom
+        // 8 + 0 above) and card→header 12 (6 + SOCIAL CARDS sectionRow.marginTop 6 below).
+        marginTop: 0,
+        marginBottom: 6,
         borderRadius: 20,
         backgroundColor: colors.navy,
         overflow: "hidden",
@@ -4601,8 +4634,10 @@ const styles = StyleSheet.create({
     // ── This or That collapsed teaser (after X) ─────────────────────────────
     totCollapsed: {
         marginHorizontal: 14,
-        marginTop: 2,
-        marginBottom: 8,
+        // Occupies the same slot as thisOrThatCard, so it carries the same 0/6 header rhythm:
+        // header→card 8 above, card→header 12 below.
+        marginTop: 0,
+        marginBottom: 6,
         flexDirection: "row",
         alignItems: "center",
         gap: 13,

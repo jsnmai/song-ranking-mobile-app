@@ -3,8 +3,6 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import {
     ActivityIndicator,
     Image,
-    NativeScrollEvent,
-    NativeSyntheticEvent,
     Pressable,
     RefreshControl,
     ScrollView,
@@ -23,11 +21,15 @@ import Animated, {
     FadeInRight,
     FadeOut,
     FadeOutRight,
+    interpolate,
     LinearTransition,
+    useAnimatedScrollHandler,
     useAnimatedStyle,
     useSharedValue,
     withSpring,
+    withTiming,
 } from "react-native-reanimated"
+import type { SharedValue } from "react-native-reanimated"
 import { CompositeNavigationProp, useFocusEffect, useNavigation, useRoute, RouteProp } from "@react-navigation/native"
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs"
 import { NativeStackNavigationProp } from "@react-navigation/native-stack"
@@ -320,6 +322,19 @@ function MostRatedStars() {
     return <DriftingStars dots={MOST_RATED_DOTS} />
 }
 
+// Width + opacity track the live drag distance from this dot's page (continuous,
+// not snapped), so the pill grows/shrinks smoothly as the carousel is dragged.
+function CoSignDot({ index, scrollX, cardWidth }: { index: number; scrollX: SharedValue<number>; cardWidth: number }) {
+    const style = useAnimatedStyle(() => {
+        const distance = Math.abs(scrollX.value / cardWidth - index)
+        return {
+            width: interpolate(distance, [0, 1], [14, 5], "clamp"),
+            opacity: interpolate(distance, [0, 1], [1, 0.35], "clamp"),
+        }
+    })
+    return <Animated.View style={[styles.coSignDot, style]} />
+}
+
 export default function DiscoverScreen() {
     const route = useRoute<DiscoverRouteProp>()
     const navigation = useNavigation<DiscoverNavigationProp>()
@@ -345,7 +360,8 @@ export default function DiscoverScreen() {
     const [quietToastKey, setQuietToastKey] = useState(0)
     const quietToastTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
     const [coSigns, setCoSigns] = useState<CoSignItem[]>([])
-    const [coSignIndex, setCoSignIndex] = useState(0)
+    const coSignScrollX = useSharedValue(0)
+    const coSignScrollOpacity = useSharedValue(1)
     const [isDiscoveryLoading, setIsDiscoveryLoading] = useState(false)
     const [discoveryError, setDiscoveryError] = useState<string | null>(null)
     const [trending, setTrending] = useState<CircleTrendingItem[]>([])
@@ -713,17 +729,20 @@ export default function DiscoverScreen() {
         }, [token]),
     )
 
-    useEffect(() => {
-        setCoSignIndex((current) => {
-            if (coSigns.length === 0) return 0
-            return Math.min(current, coSigns.length - 1)
-        })
-    }, [coSigns.length])
-
-    const handleCoSignMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-        const nextIndex = Math.round(event.nativeEvent.contentOffset.x / coSignCardWidth)
-        setCoSignIndex(Math.max(0, Math.min(nextIndex, coSigns.length - 1)))
-    }
+    // Dots track scrollX continuously (see CoSignDot) and dim while a drag or
+    // momentum fling is in flight, then settle back to full opacity on rest.
+    const coSignScrollHandler = useAnimatedScrollHandler({
+        onScroll: (event) => {
+            coSignScrollX.value = event.contentOffset.x
+        },
+        onBeginDrag: () => {
+            coSignScrollOpacity.value = withTiming(0.35, { duration: 150 })
+        },
+        onMomentumEnd: () => {
+            coSignScrollOpacity.value = withTiming(1, { duration: 200 })
+        },
+    })
+    const coSignDotsRowStyle = useAnimatedStyle(() => ({ opacity: coSignScrollOpacity.value }))
 
     const showQuietToast = () => {
         if (quietToastTimeout.current) clearTimeout(quietToastTimeout.current)
@@ -1111,54 +1130,55 @@ export default function DiscoverScreen() {
 
                                 {/* Co-Sign — live when people the viewer follows co-sign, locked otherwise */}
                                 {coSigns.length > 0 ? (
-                                    <>
-                                        <View style={styles.coSignSwipeWindow}>
-                                            <ScrollView
-                                                horizontal
-                                                pagingEnabled
-                                                snapToInterval={coSignCardWidth}
-                                                decelerationRate="fast"
-                                                showsHorizontalScrollIndicator={false}
-                                                bounces={false}
-                                                style={styles.coSignCarousel}
-                                                testID="co-sign-carousel"
-                                                onMomentumScrollEnd={handleCoSignMomentumEnd}
-                                            >
-                                                {coSigns.map((item) => (
-                                                    <View
-                                                        key={`co-sign-${item.song.id}`}
-                                                        style={[styles.coSignSlide, { width: coSignCardWidth }]}
-                                                    >
-                                                        <SocialDiscoveryCard
-                                                            item={item}
-                                                            token={token ?? ""}
-                                                            embedded
-                                                            onOpen={() => handleDiscoverySongPress(item)}
-                                                            onRate={() => handleRatePress(item)}
-                                                        />
-                                                    </View>
-                                                ))}
-                                            </ScrollView>
-                                        </View>
-                                        {hasMultipleCoSigns ? (
-                                            <View style={styles.coSignPagerRow}>
-                                                <Text style={styles.coSignPagerCount}>
-                                                    {coSignIndex + 1}/{coSigns.length}
-                                                </Text>
-                                                <View style={styles.coSignDots}>
-                                                    {coSigns.map((item, index) => (
-                                                        <View
-                                                            key={`co-sign-dot-${item.song.id}`}
-                                                            style={[
-                                                                styles.coSignDot,
-                                                                index === coSignIndex ? styles.coSignDotActive : null,
-                                                            ]}
-                                                        />
-                                                    ))}
+                                    <View style={styles.coSignSwipeWindow}>
+                                        <Animated.ScrollView
+                                            horizontal
+                                            pagingEnabled
+                                            snapToInterval={coSignCardWidth}
+                                            decelerationRate="fast"
+                                            showsHorizontalScrollIndicator={false}
+                                            bounces={false}
+                                            style={styles.coSignCarousel}
+                                            testID="co-sign-carousel"
+                                            onScroll={coSignScrollHandler}
+                                            scrollEventThrottle={16}
+                                        >
+                                            {coSigns.map((item, index) => (
+                                                <View
+                                                    key={`co-sign-${item.song.id}`}
+                                                    style={[styles.coSignSlide, { width: coSignCardWidth }]}
+                                                >
+                                                    <SocialDiscoveryCard
+                                                        item={item}
+                                                        token={token ?? ""}
+                                                        embedded
+                                                        pageIndex={index}
+                                                        pageCount={coSigns.length}
+                                                        onOpen={() => handleDiscoverySongPress(item)}
+                                                        onRate={() => handleRatePress(item)}
+                                                    />
                                                 </View>
-                                            </View>
+                                            ))}
+                                        </Animated.ScrollView>
+                                        {/* Overlaid outside the ScrollView so it stays fixed in place while the
+                                            cards swipe underneath it. Width/opacity per dot track the live drag
+                                            position continuously; the whole row also dims while actively scrolling. */}
+                                        {hasMultipleCoSigns ? (
+                                            <Animated.View
+                                                style={[styles.coSignDotsOverlay, coSignDotsRowStyle]}
+                                                pointerEvents="none"
+                                            >
+                                                {coSigns.map((item, index) => (
+                                                    <CoSignDot
+                                                        key={`co-sign-dot-${item.song.id}`}
+                                                        index={index}
+                                                        scrollX={coSignScrollX}
+                                                        cardWidth={coSignCardWidth}
+                                                    />
+                                                ))}
+                                            </Animated.View>
                                         ) : null}
-                                    </>
+                                    </View>
                                 ) : (
                                     <BouncyPressable
                                         style={styles.coSignLockedCard}
@@ -1315,34 +1335,73 @@ export default function DiscoverScreen() {
                                                 <Text style={styles.circleCountLabel}>IN CIRCLE</Text>
                                             </View>
                                         </TouchableOpacity>
-                                    ) : (
-                                        <BouncyPressable style={[styles.twoColCard, styles.circleCard, { width: twoColCardWidth }]}>
+                                    ) : circleSize >= CIRCLE_MIN_MEMBERS ? (
+                                        /* Warming up: enough circle members, so this isn't locked on an
+                                           action. It fills in once the circle converges on a song, so we
+                                           drop the counter and say what the card will show. */
+                                        <BouncyPressable
+                                            style={[styles.twoColCard, styles.circleCard, { width: twoColCardWidth }]}
+                                            testID="most-rated-warming"
+                                        >
                                             <MostRatedStars />
                                             <View style={styles.circlePill}>
                                                 <Text style={styles.circlePillText}>Most-rated</Text>
                                             </View>
-                                            <View style={styles.circleLockRow}>
+                                            {/* Icon + state centered in its own flex zone (even space above and
+                                                below it); the descriptor sits lower, lifted off the bottom. */}
+                                            <View style={styles.circleLockMain}>
                                                 <View style={styles.circleLockSquare}>
-                                                    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                                                    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+                                                        <Path d="M12 7v5l3 2M12 21a9 9 0 100-18 9 9 0 000 18z"
+                                                            stroke={colors.gold} strokeWidth={2}
+                                                            strokeLinecap="round" strokeLinejoin="round" />
+                                                    </Svg>
+                                                </View>
+                                                <Text style={styles.circleLockTitle}>Warming up</Text>
+                                            </View>
+                                            <Text style={styles.circleLockText}>Your circle's top song</Text>
+                                        </BouncyPressable>
+                                    ) : (
+                                        /* Needs circle members: fewer than 3 mutual follows, so no aggregate
+                                           can surface. The counter tracks mutual members, never one-way follows. */
+                                        <BouncyPressable
+                                            style={[styles.twoColCard, styles.circleCard, { width: twoColCardWidth }]}
+                                            testID="most-rated-locked"
+                                        >
+                                            <MostRatedStars />
+                                            <View style={styles.circlePill}>
+                                                <Text style={styles.circlePillText}>Most-rated</Text>
+                                            </View>
+                                            {/* Lock + unlock progress centered in its own flex zone (even space
+                                                above and below it); the descriptor sits lower, lifted off the
+                                                bottom. "X/3 friends" over "to unlock" is the lock signal, no label. */}
+                                            <View style={styles.circleLockMain}>
+                                                <View style={styles.circleLockSquare}>
+                                                    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
                                                         <Path d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4"
                                                             stroke={colors.gold} strokeWidth={2}
                                                             strokeLinecap="round" strokeLinejoin="round" />
                                                     </Svg>
                                                 </View>
-                                                <View style={styles.circleBars}>
-                                                    <View style={[styles.circleBar, { width: "72%" }]} />
-                                                    <View style={[styles.circleBar, { width: "44%" }]} />
+                                                <View style={styles.circleUnlockBlock}>
+                                                    <View style={styles.circleUnlockCountRow}>
+                                                        <Text style={styles.circleUnlockCount}>
+                                                            {Math.min(circleSize, CIRCLE_MIN_MEMBERS)}/{CIRCLE_MIN_MEMBERS}
+                                                        </Text>
+                                                        <Text style={styles.circleUnlockUnit}>friends</Text>
+                                                    </View>
+                                                    <Text style={styles.circleUnlockLabel}>to unlock</Text>
                                                 </View>
                                             </View>
-                                            <View style={styles.circleCountRow}>
-                                                <Text style={styles.circleCountNum}>—</Text>
-                                                <Text style={styles.circleCountLabel}>IN CIRCLE</Text>
-                                            </View>
+                                            <Text style={styles.circleLockText}>Your circle's top song</Text>
                                         </BouncyPressable>
                                     )}
                                 </View>
 
-                                {/* Curated Lists — locked with rated count progress */}
+                                {/* Curated Lists — REMOVED FOR LAUNCH, deliberately kept commented.
+                                    The feature is deferred to the future recommendations work (see
+                                    launch plan); restore this block (and its curated* styles below)
+                                    when lists ship rather than rebuilding from scratch.
                                 <View style={styles.discoverSectionRow}>
                                     <Text style={styles.discoverSectionLabel}>CURATED LISTS</Text>
                                 </View>
@@ -1362,6 +1421,7 @@ export default function DiscoverScreen() {
                                     </View>
                                     <Text style={styles.trendingCounter}>{Math.min(ratedCount, 30)}/30</Text>
                                 </BouncyPressable>
+                                */}
                             </>
                         )}
                     </>
@@ -1916,7 +1976,9 @@ const styles = StyleSheet.create({
     coSignSwipeWindow: {
         backgroundColor: colors.berry,
         borderRadius: 16,
-        marginBottom: 10,
+        // Match every other discovery card's gap (8) so the space above Trending
+        // equals the space below it — the swipe window read 2px heavy at 10.
+        marginBottom: 8,
         overflow: "hidden",
     },
     coSignCarousel: {
@@ -1925,36 +1987,22 @@ const styles = StyleSheet.create({
     coSignSlide: {
         backgroundColor: colors.berry,
     },
-    coSignPagerRow: {
+    coSignDotsOverlay: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: 8,
         flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "flex-end",
-        gap: 8,
-        marginTop: -7,
-        marginBottom: 6,
-    },
-    coSignPagerCount: {
-        fontFamily: fonts.mono,
-        fontSize: 9,
-        color: colors.inkDim,
-        letterSpacing: 0.7,
-        fontWeight: "700",
-    },
-    coSignDots: {
-        flexDirection: "row",
+        justifyContent: "center",
         alignItems: "center",
         gap: 4,
     },
+    // width/opacity are driven by CoSignDot's animated style; this just fixes the
+    // shape (borderRadius large enough to stay pill-shaped at the widest animated width).
     coSignDot: {
-        width: 5,
         height: 5,
-        borderRadius: 2.5,
-        backgroundColor: colors.line,
-    },
-    coSignDotActive: {
-        width: 14,
         borderRadius: 999,
-        backgroundColor: colors.berry,
+        backgroundColor: "#fff",
     },
     coSignLockedLeft: {
         flex: 1,
@@ -2133,16 +2181,12 @@ const styles = StyleSheet.create({
         fontWeight: "700",
         textTransform: "uppercase",
     },
-    circleLockRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 8,
-        marginBottom: 9,
-    },
+    // Dashed lock/clock square — enlarged so the lock + progress read as the card's
+    // centered focal point rather than a small bottom-corner glyph.
     circleLockSquare: {
-        width: 34,
-        height: 34,
-        borderRadius: 7,
+        width: 40,
+        height: 40,
+        borderRadius: 9,
         borderWidth: 1.5,
         borderColor: "rgba(245,184,64,0.55)",
         borderStyle: "dashed",
@@ -2150,14 +2194,56 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         flexShrink: 0,
     },
-    circleBars: {
-        flex: 1,
-        gap: 7,
+    circleLockTitle: {
+        fontFamily: fonts.display,
+        fontSize: 18,
+        color: "#fff",
+        letterSpacing: -0.2,
     },
-    circleBar: {
-        height: 7,
-        borderRadius: 4,
-        backgroundColor: "rgba(255,255,255,0.14)",
+    circleLockText: {
+        fontFamily: fonts.mono,
+        fontSize: 10.5,
+        lineHeight: 15,
+        color: colors.cdim,
+        // Sits lower than the lock but lifted off the very bottom edge.
+        marginBottom: 16,
+    },
+    // Lock/clock icon + state on one row that fills the space between the pill and the
+    // descriptor (flex:1) and centers itself. paddingBottom nudges the centered content a
+    // little higher. The count "X/3 friends / to unlock" is the lock signal, no "Locked" label.
+    circleLockMain: {
+        flex: 1,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingBottom: 4,
+    },
+    circleUnlockBlock: {
+        alignItems: "flex-start",
+        gap: 1,
+    },
+    circleUnlockCountRow: {
+        flexDirection: "row",
+        alignItems: "baseline",
+        gap: 4,
+    },
+    circleUnlockCount: {
+        fontFamily: fonts.display,
+        fontSize: 22,
+        color: colors.gold,
+        lineHeight: 22,
+    },
+    circleUnlockUnit: {
+        fontFamily: fonts.mono,
+        fontSize: 9,
+        letterSpacing: 0.3,
+        color: colors.cdim,
+    },
+    circleUnlockLabel: {
+        fontFamily: fonts.mono,
+        fontSize: 8,
+        letterSpacing: 0.4,
+        color: colors.cdim,
     },
     circleCountRow: {
         flexDirection: "row",
@@ -2284,6 +2370,8 @@ const styles = StyleSheet.create({
         letterSpacing: 0.5,
         marginTop: 2,
     },
+    // ── Curated Lists styles — feature commented out for launch (deferred to the
+    //    recommendations work); kept so the commented JSX block restores cleanly. ──
     curatedCard: {
         backgroundColor: colors.paper,
         borderWidth: 1,

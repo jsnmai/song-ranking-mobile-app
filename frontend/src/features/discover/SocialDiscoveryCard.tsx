@@ -10,14 +10,17 @@ type SocialDiscoveryCardProps = {
     onOpen: () => void;
     onRate: () => void;
     embedded?: boolean;
+    pageIndex?: number;
+    pageCount?: number;
 }
 
 const AVATAR_COLORS = [colors.accent, colors.sky, colors.plum, colors.gold, colors.butter]
 
-export default function SocialDiscoveryCard({ item, onOpen, embedded = false }: SocialDiscoveryCardProps) {
+export default function SocialDiscoveryCard({ item, onOpen, embedded = false, pageIndex = 0, pageCount = 1 }: SocialDiscoveryCardProps) {
     const coSignCount = item.co_sign_count
     const peopleLabel = coSignCount === 1 ? "person" : "people"
     const avg = item.average_visible_friend_score
+    const isPaged = pageCount > 1
 
     return (
         <TouchableOpacity
@@ -26,16 +29,21 @@ export default function SocialDiscoveryCard({ item, onOpen, embedded = false }: 
             activeOpacity={0.85}
             accessibilityLabel={`Open ${item.song.title}`}
         >
-            {/* Row 1: pill + chevron */}
+            {/* Row 1: pill + (pager count) + chevron */}
             <View style={styles.headerRow}>
                 <View style={styles.pill}>
                     <Text style={styles.pillText} numberOfLines={1}>Co-sign · {coSignCount} {peopleLabel}</Text>
                 </View>
-                <View style={styles.chevronCircle}>
-                    <Svg width={15} height={15} viewBox="0 0 24 24" fill="none"
-                        stroke="#fff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-                        <Path d="m9 6 6 6-6 6" />
-                    </Svg>
+                <View style={styles.headerRight}>
+                    {isPaged ? (
+                        <Text style={styles.pagerCount}>{pageIndex + 1}/{pageCount}</Text>
+                    ) : null}
+                    <View style={styles.chevronCircle}>
+                        <Svg width={15} height={15} viewBox="0 0 24 24" fill="none"
+                            stroke="#fff" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+                            <Path d="m9 6 6 6-6 6" />
+                        </Svg>
+                    </View>
                 </View>
             </View>
 
@@ -86,7 +94,9 @@ const styles = StyleSheet.create({
     card: {
         backgroundColor: colors.berry,
         borderRadius: 16,
-        paddingTop: 4,
+        // Top and horizontal padding match (10) so the chevron sits equidistant
+        // from the card's top and right edges.
+        paddingTop: 10,
         paddingBottom: 8,
         paddingHorizontal: 10,
         marginBottom: 8,
@@ -119,6 +129,19 @@ const styles = StyleSheet.create({
         fontWeight: "700",
         textTransform: "uppercase",
     },
+    headerRight: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        flexShrink: 0,
+    },
+    pagerCount: {
+        fontFamily: fonts.mono,
+        fontSize: 9,
+        color: "rgba(255,255,255,0.75)",
+        letterSpacing: 0.7,
+        fontWeight: "700",
+    },
     chevronCircle: {
         width: 28,
         height: 28,
@@ -127,7 +150,6 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
         flexShrink: 0,
-        marginTop: 2,
     },
     songRow: {
         flexDirection: "row",
