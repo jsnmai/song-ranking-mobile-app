@@ -26,7 +26,8 @@ from src.pydantic_schemas.circle import (
     CircleTrendingResponse,
     ViewerRating,
 )
-from src.pydantic_schemas.song import SongResponse
+from src.crud.song_provider_ref import list_apple_provider_refs_for_songs
+from src.services.song import build_song_response_from_provider_ref
 from src.sqlalchemy_tables.ranking import Ranking
 
 # A circle aggregate is only shown once at least this many visible circle members qualify.
@@ -64,10 +65,17 @@ def list_circle_most_rated(
         user_id,
         song_ids,
     )
+    apple_refs = list_apple_provider_refs_for_songs(
+        db,
+        song_ids,
+    )
     return CircleMostRatedResponse(
         items=[
             CircleMostRatedItem(
-                song=SongResponse.model_validate(songs[row.song_id]),
+                song=build_song_response_from_provider_ref(
+                    songs[row.song_id],
+                    apple_refs.get(row.song_id),
+                ),
                 circle_rating_count=row.contributor_count,
                 average_circle_score=round(row.average_score, 2),
                 contributors=_contributors(contributors.get(row.song_id, [])),
@@ -110,10 +118,17 @@ def list_circle_trending(
         user_id,
         song_ids,
     )
+    apple_refs = list_apple_provider_refs_for_songs(
+        db,
+        song_ids,
+    )
     return CircleTrendingResponse(
         items=[
             CircleTrendingItem(
-                song=SongResponse.model_validate(songs[row.song_id]),
+                song=build_song_response_from_provider_ref(
+                    songs[row.song_id],
+                    apple_refs.get(row.song_id),
+                ),
                 recent_circle_rating_count=row.contributor_count,
                 average_circle_score=round(row.average_score, 2),
                 contributors=_contributors(contributors.get(row.song_id, [])),

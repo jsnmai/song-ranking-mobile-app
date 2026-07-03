@@ -18,6 +18,7 @@ from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
 from src.sqlalchemy_tables.song import Song
+from src.sqlalchemy_tables.song_provider_ref import SongProviderRef
 
 POPULAR_PATH = "/api/v1/discover/popular"
 
@@ -302,6 +303,44 @@ def test_empty_platform_returns_no_items(
     payload = _get(client, viewer_token)
     assert payload["window"] == "all_time"
     assert payload["items"] == []
+
+
+def test_apple_backed_song_exposes_lazy_preview_hints(
+    client: TestClient,
+    db_session: Session,
+):
+    """An Apple-backed popular song surfaces the iTunes lazy-preview hints.
+
+    The client only renders "Provided courtesy of iTunes" when a song arrives with
+    preview_available=True and preview_url=None, which forces the tap-time Apple lookup that
+    re-derives provider="apple". Popular must attach those provider-ref hints (and drop the
+    stale stored Deezer URL) rather than serializing the raw song row, which would leave the
+    preview playing with no attribution.
+    """
+    _seed_weekly_floor(client, db_session)
+    token = _register(client, "carol@example.com", "carol")
+    song_id = _rated_in_window(db_session, "alice", 4242, "Apple Popular", 9.0)
+    _rated_in_window(db_session, "bob", 4242, "Apple Popular", 9.0)
+    # The song is created with a stored Deezer preview_url (see _song); attaching an Apple ref
+    # with a live preview makes this the hybrid case the fix targets.
+    db_session.add(
+        SongProviderRef(
+            song_id=song_id,
+            provider="apple",
+            provider_track_id="4242",
+            storefront="US",
+            url="https://music.apple.com/us/song/4242",
+            preview_available=True,
+        )
+    )
+    db_session.commit()
+
+    item = _item(_get(client, token), song_id)
+
+    assert item is not None
+    assert item["song"]["preview_available"] is True
+    assert item["song"]["preview_url"] is None
+    assert item["song"]["apple_view_url"] == "https://music.apple.com/us/song/4242"
 
 
 def test_requires_authentication(

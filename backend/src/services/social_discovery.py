@@ -5,12 +5,13 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from src.crud.social_discovery import SocialHighScoreRow, list_visible_followed_high_scores
+from src.crud.song_provider_ref import list_apple_provider_refs_for_songs
 from src.pydantic_schemas.social_discovery import (
     CoSignItem,
     CoSignsResponse,
     SocialDiscoveryContributor,
 )
-from src.pydantic_schemas.song import SongResponse
+from src.services.song import build_song_response_from_provider_ref
 from src.sqlalchemy_tables.song import Song
 
 HIGH_SCORE_THRESHOLD = 9.0
@@ -39,10 +40,17 @@ def list_co_signs(
         user_id=user_id,
         minimum_count=2,
     )
+    apple_refs = list_apple_provider_refs_for_songs(
+        db,
+        [group.song.id for group in groups],
+    )
     return CoSignsResponse(
         items=[
             CoSignItem(
-                song=SongResponse.model_validate(group.song),
+                song=build_song_response_from_provider_ref(
+                    group.song,
+                    apple_refs.get(group.song.id),
+                ),
                 co_sign_count=len(group.rows),
                 average_visible_friend_score=group.average_score,
                 latest_visible_rating_at=group.latest_at,

@@ -147,6 +147,21 @@ def build_song_response_from_provider_ref(
     if apple_ref is not None:
         response.apple_view_url = apple_ref.url
         response.preview_available = apple_ref.preview_available
+        if apple_ref.preview_available:
+            # Apple is the authoritative preview source for this song, so drop any stale
+            # stored (legacy Deezer) URL. Apple previews are ephemeral and fetched lazily on
+            # tap; leaving a stored URL would make the client play it directly and skip the
+            # Apple path — silently playing a Deezer preview with no iTunes attribution.
+            # Nulling it forces the preview_available-gated lazy fetch, which re-derives
+            # provider="apple" and renders the attribution. Guarded on preview_available so we
+            # never strip a working preview from a song Apple can't actually preview (e.g.
+            # search-annotated refs with preview_available unset).
+            #
+            # We deliberately do NOT set response.provider = "apple" here: SongResponse omits
+            # apple_track_id, and these payloads round-trip back into SongCreate requests
+            # (comparison sessions, re-rating), where an explicit "apple" provider without a
+            # track id fails validation. The lazy fetch supplies the provider instead.
+            response.preview_url = None
     elif response.deezer_id is not None:
         response.preview_available = response.preview_url is not None
     return response

@@ -11,8 +11,9 @@ from sqlalchemy.orm import Session
 
 from src.crud.circle_aggregates import get_songs_by_ids
 from src.crud.popular import aggregate_popular_this_week, all_time_most_rated
+from src.crud.song_provider_ref import list_apple_provider_refs_for_songs
 from src.pydantic_schemas.popular import PopularItem, PopularResponse
-from src.pydantic_schemas.song import SongResponse
+from src.services.song import build_song_response_from_provider_ref
 
 # A song needs at least this many distinct raters in the window to count as "popular this week".
 POPULAR_MIN_RATERS_WEEK = 2
@@ -36,14 +37,22 @@ def list_popular(
         limit=POPULAR_LIMIT,
     )
     if len(weekly) >= POPULAR_MIN_ITEMS:
+        song_ids = [row.song_id for row in weekly]
         songs = get_songs_by_ids(
             db,
-            [row.song_id for row in weekly],
+            song_ids,
+        )
+        apple_refs = list_apple_provider_refs_for_songs(
+            db,
+            song_ids,
         )
         return PopularResponse(
             items=[
                 PopularItem(
-                    song=SongResponse.model_validate(songs[row.song_id]),
+                    song=build_song_response_from_provider_ref(
+                        songs[row.song_id],
+                        apple_refs.get(row.song_id),
+                    ),
                     rating_count=row.rating_count,
                 )
                 for row in weekly
@@ -56,10 +65,17 @@ def list_popular(
         minimum_ratings=1,
         limit=POPULAR_LIMIT,
     )
+    apple_refs = list_apple_provider_refs_for_songs(
+        db,
+        [song.id for song in backfill],
+    )
     return PopularResponse(
         items=[
             PopularItem(
-                song=SongResponse.model_validate(song),
+                song=build_song_response_from_provider_ref(
+                    song,
+                    apple_refs.get(song.id),
+                ),
                 rating_count=song.global_rating_count,
             )
             for song in backfill
