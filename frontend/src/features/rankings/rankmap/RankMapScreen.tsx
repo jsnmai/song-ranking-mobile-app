@@ -59,8 +59,8 @@ const VIEWS: { key: RankView; label: string }[] = [
 ]
 
 const CAPTION: Record<RankView, string> = {
-    gravity: "Distance to your sun = how much you love it",
-    genres: "Stars cluster and connect by genre",
+    gravity: "Distance to your center = how much you love it",
+    genres: "Songs cluster and connect by genre",
     nebula: "Three clouds, sized by how often you go there",
 }
 
@@ -115,6 +115,12 @@ const CLOUD_LABEL_H = 46
 const CLOUD_CENTER_KEEPOUT = 48
 // Height of the Verdict left-rail taste-balance bar (bar + counts share it).
 const BALANCE_STRIP_H = 220
+// Sideways "TASTE BALANCE" label sits above the bar's like end (buckets render
+// like → alright → dislike, top to bottom). Length is the label's pre-rotation
+// width, i.e. its footprint once rotated -90deg to read sideways.
+const BALANCE_LABEL_LEN = 100
+const BALANCE_LABEL_GAP = 6
+const BALANCE_LABEL_H = BALANCE_LABEL_LEN + BALANCE_LABEL_GAP
 
 function clamp(value: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, value))
@@ -857,7 +863,7 @@ export default function RankMapScreen() {
                                         {con.genre}
                                     </Text>
                                     <Text style={[styles.clusterCount, { color: con.color }]}>
-                                        {con.nodes.length} STARS
+                                        {con.nodes.length} SONGS
                                     </Text>
                                 </View>
                             )
@@ -1067,43 +1073,48 @@ export default function RankMapScreen() {
 
             {showBalanceStrip && nebula && (
                 <View
-                    style={[styles.balanceStrip, { top: stageTop + Math.max(0, (stageH - BALANCE_STRIP_H) / 2) }]}
+                    style={[
+                        styles.balanceStrip,
+                        { top: stageTop + Math.max(0, (stageH - BALANCE_STRIP_H) / 2) - BALANCE_LABEL_H },
+                    ]}
                     pointerEvents="none"
                 >
                     <View style={styles.balanceLabelWrap}>
                         <Text style={styles.balanceVLabel}>TASTE BALANCE</Text>
                     </View>
-                    <View style={styles.balanceBar}>
-                        {nebula.map((c) => (
-                            <View
-                                key={c.key}
-                                style={{
-                                    flex: Math.max(c.list.length, 0.2),
-                                    backgroundColor: c.color,
-                                    opacity: activeBuckets.has(c.key) ? 1 : 0.28,
-                                }}
-                            />
-                        ))}
-                    </View>
-                    <View style={styles.balanceCounts}>
-                        {nebula.map((c) => (
-                            // Each count gets a flex slot proportional to its share — exactly like the
-                            // bar segment beside it — and centers its number, so it sits at the vertical
-                            // middle of its own bucket section.
-                            <View
-                                key={c.key}
-                                style={{
-                                    flex: Math.max(c.list.length, 0.2),
-                                    justifyContent: "center",
-                                    opacity: activeBuckets.has(c.key) ? 1 : 0.4,
-                                }}
-                            >
-                                <View style={styles.balanceCountRow}>
-                                    <Text style={styles.balanceCountNum}>{c.list.length}</Text>
-                                    <Text style={styles.balanceCountLabel}>{bucketLabel(c.key).toUpperCase()}</Text>
+                    <View style={styles.balanceStripRow}>
+                        <View style={styles.balanceBar}>
+                            {nebula.map((c) => (
+                                <View
+                                    key={c.key}
+                                    style={{
+                                        flex: Math.max(c.list.length, 0.2),
+                                        backgroundColor: c.color,
+                                        opacity: activeBuckets.has(c.key) ? 1 : 0.28,
+                                    }}
+                                />
+                            ))}
+                        </View>
+                        <View style={styles.balanceCounts}>
+                            {nebula.map((c) => (
+                                // Each count gets a flex slot proportional to its share — exactly like the
+                                // bar segment beside it — and centers its number, so it sits at the vertical
+                                // middle of its own bucket section.
+                                <View
+                                    key={c.key}
+                                    style={{
+                                        flex: Math.max(c.list.length, 0.2),
+                                        justifyContent: "center",
+                                        opacity: activeBuckets.has(c.key) ? 1 : 0.4,
+                                    }}
+                                >
+                                    <View style={styles.balanceCountRow}>
+                                        <Text style={styles.balanceCountNum}>{c.list.length}</Text>
+                                        <Text style={styles.balanceCountLabel}>{bucketLabel(c.key).toUpperCase()}</Text>
+                                    </View>
                                 </View>
-                            </View>
-                        ))}
+                            ))}
+                        </View>
                     </View>
                 </View>
             )}
@@ -1482,13 +1493,16 @@ const styles = StyleSheet.create({
         position: "absolute",
         left: 14,
         zIndex: 23,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 9,
     },
-    balanceLabelWrap: { width: 12, height: BALANCE_STRIP_H, alignItems: "center", justifyContent: "center" },
+    balanceLabelWrap: {
+        width: 12,
+        height: BALANCE_LABEL_LEN,
+        alignItems: "center",
+        justifyContent: "center",
+        marginBottom: BALANCE_LABEL_GAP,
+    },
     balanceVLabel: {
-        width: BALANCE_STRIP_H,
+        width: BALANCE_LABEL_LEN,
         textAlign: "center",
         transform: [{ rotate: "-90deg" }],
         fontFamily: fonts.mono,
@@ -1496,6 +1510,11 @@ const styles = StyleSheet.create({
         fontWeight: "700",
         letterSpacing: 2,
         color: colors.cdim,
+    },
+    balanceStripRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 9,
     },
     balanceBar: {
         width: 10,

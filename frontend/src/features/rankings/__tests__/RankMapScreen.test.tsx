@@ -114,7 +114,7 @@ describe("RankMapScreen", () => {
         expect(screen.getByText("Orbit")).toBeTruthy()
         expect(screen.getByText("Genres")).toBeTruthy()
         expect(screen.getByText("Verdict")).toBeTruthy()
-        expect(screen.getByText("DISTANCE TO YOUR SUN = HOW MUCH YOU LOVE IT")).toBeTruthy()
+        expect(screen.getByText("DISTANCE TO YOUR CENTER = HOW MUCH YOU LOVE IT")).toBeTruthy()
     })
 
     it("switches the caption when a different lens is chosen", () => {
