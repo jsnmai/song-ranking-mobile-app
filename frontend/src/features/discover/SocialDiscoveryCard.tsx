@@ -9,17 +9,19 @@ type SocialDiscoveryCardProps = {
     token: string;
     onOpen: () => void;
     onRate: () => void;
+    embedded?: boolean;
 }
 
 const AVATAR_COLORS = [colors.accent, colors.sky, colors.plum, colors.gold, colors.butter]
 
-export default function SocialDiscoveryCard({ item, onOpen }: SocialDiscoveryCardProps) {
+export default function SocialDiscoveryCard({ item, onOpen, embedded = false }: SocialDiscoveryCardProps) {
     const coSignCount = item.co_sign_count
+    const peopleLabel = coSignCount === 1 ? "person" : "people"
     const avg = item.average_visible_friend_score
 
     return (
         <TouchableOpacity
-            style={styles.card}
+            style={[styles.card, embedded ? styles.embeddedCard : null]}
             onPress={onOpen}
             activeOpacity={0.85}
             accessibilityLabel={`Open ${item.song.title}`}
@@ -27,7 +29,7 @@ export default function SocialDiscoveryCard({ item, onOpen }: SocialDiscoveryCar
             {/* Row 1: pill + chevron */}
             <View style={styles.headerRow}>
                 <View style={styles.pill}>
-                    <Text style={styles.pillText}>Co-sign · {coSignCount} people</Text>
+                    <Text style={styles.pillText} numberOfLines={1}>Co-sign · {coSignCount} {peopleLabel}</Text>
                 </View>
                 <View style={styles.chevronCircle}>
                     <Svg width={15} height={15} viewBox="0 0 24 24" fill="none"
@@ -68,7 +70,7 @@ export default function SocialDiscoveryCard({ item, onOpen }: SocialDiscoveryCar
                         </View>
                     ))}
                 </View>
-                <Text style={styles.tagline} numberOfLines={1}>people you follow gave it 9+</Text>
+                <Text style={styles.tagline} numberOfLines={2}>people you follow gave 9+</Text>
                 <View style={styles.avgBlock}>
                     <View style={styles.avgLabelWrap}>
                         <Text style={styles.avgLabel}>AVG</Text>
@@ -84,12 +86,17 @@ const styles = StyleSheet.create({
     card: {
         backgroundColor: colors.berry,
         borderRadius: 16,
-        paddingTop: 5,
-        paddingBottom: 12,
-        paddingHorizontal: 12,
-        marginBottom: 10,
+        paddingTop: 4,
+        paddingBottom: 8,
+        paddingHorizontal: 10,
+        marginBottom: 8,
         gap: 0,
         overflow: "hidden",
+    },
+    embeddedCard: {
+        backgroundColor: "transparent",
+        borderRadius: 0,
+        marginBottom: 0,
     },
     headerRow: {
         flexDirection: "row",
@@ -102,6 +109,7 @@ const styles = StyleSheet.create({
         borderRadius: 999,
         paddingHorizontal: 8,
         paddingVertical: 4,
+        flexShrink: 1,
     },
     pillText: {
         fontFamily: fonts.mono,
@@ -112,24 +120,24 @@ const styles = StyleSheet.create({
         textTransform: "uppercase",
     },
     chevronCircle: {
-        width: 34,
-        height: 34,
-        borderRadius: 17,
+        width: 28,
+        height: 28,
+        borderRadius: 14,
         backgroundColor: "rgba(255,255,255,0.22)",
         alignItems: "center",
         justifyContent: "center",
         flexShrink: 0,
-        marginTop: 4,
+        marginTop: 2,
     },
     songRow: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 11,
+        gap: 9,
     },
     coverFrame: {
-        width: 48,
-        height: 48,
-        borderRadius: 8,
+        width: 42,
+        height: 42,
+        borderRadius: 7,
         backgroundColor: "rgba(0,0,0,0.2)",
         overflow: "hidden",
         flexShrink: 0,
@@ -144,9 +152,9 @@ const styles = StyleSheet.create({
     },
     title: {
         fontFamily: fonts.display,
-        fontSize: 17,
+        fontSize: 16,
         color: "#fff",
-        lineHeight: 20,
+        lineHeight: 18,
     },
     artist: {
         fontFamily: fonts.mono,
@@ -157,18 +165,18 @@ const styles = StyleSheet.create({
     },
     socialRow: {
         flexDirection: "row",
-        alignItems: "flex-end",
-        gap: 8,
+        alignItems: "center",
+        gap: 7,
         justifyContent: "space-between",
-        marginTop: -10,
+        marginTop: 3,
     },
     avatarStack: {
         flexDirection: "row",
     },
     avatar: {
-        width: 26,
-        height: 26,
-        borderRadius: 13,
+        width: 23,
+        height: 23,
+        borderRadius: 11.5,
         borderWidth: 1.5,
         borderColor: colors.berry,
         alignItems: "center",
@@ -183,21 +191,19 @@ const styles = StyleSheet.create({
     tagline: {
         fontFamily: fonts.serif,
         fontStyle: "italic",
-        fontSize: 11.5,
+        fontSize: 10.5,
+        lineHeight: 12.5,
         color: "#fff",
         flex: 1,
         minWidth: 0,
     },
     avgBlock: {
         flexDirection: "row",
-        alignItems: "flex-end",
+        alignItems: "center",
         gap: 4,
         flexShrink: 0,
-        marginBottom: -8,
     },
-    avgLabelWrap: {
-        paddingBottom: 10,
-    },
+    avgLabelWrap: {},
     avgLabel: {
         fontFamily: fonts.mono,
         fontSize: 8,
@@ -208,8 +214,8 @@ const styles = StyleSheet.create({
     },
     avgNum: {
         fontFamily: fonts.display,
-        fontSize: 58,
+        fontSize: 36,
         color: "#fff",
-        lineHeight: 54,
+        lineHeight: 36,
     },
 })

@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import {
     ActivityIndicator,
     Image,
+    NativeScrollEvent,
+    NativeSyntheticEvent,
     Pressable,
     RefreshControl,
     ScrollView,
@@ -127,6 +129,38 @@ function ChevronIcon({ up = false, size = 11 }: { up?: boolean; size?: number })
                 d={up ? "M6 15l6-6 6 6" : "M6 9l6 6 6-6"}
                 stroke={colors.inkSoft}
                 strokeWidth={2.4}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+        </Svg>
+    )
+}
+
+function MoonIcon({ color = "#fff", size = 18 }: { color?: string; size?: number }) {
+    return (
+        <Svg
+            testID="quiet-moon-icon"
+            accessibilityLabel="Quiet for now"
+            width={size}
+            height={size}
+            viewBox="0 0 24 24"
+            fill="none"
+        >
+            <Path
+                d="M19.2 14.9A7.8 7.8 0 0 1 9.1 4.8A8.1 8.1 0 1 0 19.2 14.9Z"
+                fill={color}
+            />
+        </Svg>
+    )
+}
+
+function LockIcon({ color = "#fff", size = 20 }: { color?: string; size?: number }) {
+    return (
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+            <Path
+                d="M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2zM7 11V7a5 5 0 0 1 10 0v4"
+                stroke={color}
+                strokeWidth={2}
                 strokeLinecap="round"
                 strokeLinejoin="round"
             />
@@ -307,7 +341,11 @@ export default function DiscoverScreen() {
     const [followBusy, setFollowBusy] = useState<Set<string>>(new Set())
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [quietToastVisible, setQuietToastVisible] = useState(false)
+    const [quietToastKey, setQuietToastKey] = useState(0)
+    const quietToastTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
     const [coSigns, setCoSigns] = useState<CoSignItem[]>([])
+    const [coSignIndex, setCoSignIndex] = useState(0)
     const [isDiscoveryLoading, setIsDiscoveryLoading] = useState(false)
     const [discoveryError, setDiscoveryError] = useState<string | null>(null)
     const [trending, setTrending] = useState<CircleTrendingItem[]>([])
@@ -324,6 +362,7 @@ export default function DiscoverScreen() {
     // Size the 4 Popular tiles to fill the content row exactly (14px padding each side, three
     // 10px gaps), so the scroller rests flush with both screen edges while still bouncing.
     const { width: windowWidth } = useWindowDimensions()
+    const coSignCardWidth = windowWidth - 28
     const popularTileSize = (windowWidth - 28 - 30) / 4
     // Pin both two-col cards (New Release + Most-rated) to an identical width so the split
     // lands dead-centre. flex:1 alone let the Most-rated card's fixed-width count row bias it
@@ -641,6 +680,7 @@ export default function DiscoverScreen() {
     )
 
     const { refreshing, onRefresh } = usePullRefresh(refreshDiscovery)
+    const hasMultipleCoSigns = coSigns.length > 1
 
     // When the screen regains focus after the rate flow (or any push), silently re-run
     // the active song search so a row the user just rated shows its new score instead of
@@ -673,12 +713,47 @@ export default function DiscoverScreen() {
         }, [token]),
     )
 
+    useEffect(() => {
+        setCoSignIndex((current) => {
+            if (coSigns.length === 0) return 0
+            return Math.min(current, coSigns.length - 1)
+        })
+    }, [coSigns.length])
+
+    const handleCoSignMomentumEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+        const nextIndex = Math.round(event.nativeEvent.contentOffset.x / coSignCardWidth)
+        setCoSignIndex(Math.max(0, Math.min(nextIndex, coSigns.length - 1)))
+    }
+
+    const showQuietToast = () => {
+        if (quietToastTimeout.current) clearTimeout(quietToastTimeout.current)
+        setQuietToastKey((current) => current + 1)
+        setQuietToastVisible(true)
+        quietToastTimeout.current = setTimeout(() => {
+            setQuietToastVisible(false)
+            quietToastTimeout.current = null
+        }, 1200)
+    }
+
+    useEffect(() => () => { if (quietToastTimeout.current) clearTimeout(quietToastTimeout.current) }, [])
+
+    const dismissPopularConfirmation = useCallback(() => {
+        setConfirmingPopularId(null)
+    }, [])
+
+    useFocusEffect(
+        useCallback(() => {
+            return dismissPopularConfirmation
+        }, [dismissPopularConfirmation]),
+    )
+
     const trimmedQuery = query.trim()
     const hasQuery = trimmedQuery.length > 0
     // Recents are scoped to the active tab; collapse to a preview unless expanded.
     const tabRecents = recentSearches.filter(r => r.mode === searchMode)
     const visibleRecents = recentsExpanded ? tabRecents : tabRecents.slice(0, PREVIEW_RECENTS)
     const ratedCount = profile?.user_stats?.rated_count ?? 0
+    const hasEnoughFollowsForCoSign = (profile?.following_count ?? 0) >= 2
     // Hide the viewer's own score in search results until they've rated 10 songs.
     const scoresLocked = ratedCount < 10
 
@@ -756,9 +831,11 @@ export default function DiscoverScreen() {
 
             {/* Content */}
             <ScrollView
+                testID="discover-scroll"
                 style={styles.scroll}
                 contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 92 }]}
                 keyboardShouldPersistTaps="handled"
+                onScrollBeginDrag={dismissPopularConfirmation}
                 refreshControl={
                     searchFocused ? undefined : (
                         <RefreshControl
@@ -1009,7 +1086,7 @@ export default function DiscoverScreen() {
                                         showsHorizontalScrollIndicator={false}
                                         style={styles.popularScroll}
                                         contentContainerStyle={styles.popularScrollContent}
-                                        onScrollBeginDrag={() => setConfirmingPopularId(null)}
+                                        onScrollBeginDrag={dismissPopularConfirmation}
                                     >
                                         {popular.map((item) => (
                                             <PopularCard
@@ -1035,25 +1112,65 @@ export default function DiscoverScreen() {
                                 {/* Co-Sign — live when people the viewer follows co-sign, locked otherwise */}
                                 {coSigns.length > 0 ? (
                                     <>
-                                        {coSigns.map((item) => (
-                                            <SocialDiscoveryCard
-                                                key={`co-sign-${item.song.id}`}
-                                                item={item}
-                                                token={token ?? ""}
-                                                onOpen={() => handleDiscoverySongPress(item)}
-                                                onRate={() => handleRatePress(item)}
-                                            />
-                                        ))}
+                                        <View style={styles.coSignSwipeWindow}>
+                                            <ScrollView
+                                                horizontal
+                                                pagingEnabled
+                                                snapToInterval={coSignCardWidth}
+                                                decelerationRate="fast"
+                                                showsHorizontalScrollIndicator={false}
+                                                bounces={false}
+                                                style={styles.coSignCarousel}
+                                                testID="co-sign-carousel"
+                                                onMomentumScrollEnd={handleCoSignMomentumEnd}
+                                            >
+                                                {coSigns.map((item) => (
+                                                    <View
+                                                        key={`co-sign-${item.song.id}`}
+                                                        style={[styles.coSignSlide, { width: coSignCardWidth }]}
+                                                    >
+                                                        <SocialDiscoveryCard
+                                                            item={item}
+                                                            token={token ?? ""}
+                                                            embedded
+                                                            onOpen={() => handleDiscoverySongPress(item)}
+                                                            onRate={() => handleRatePress(item)}
+                                                        />
+                                                    </View>
+                                                ))}
+                                            </ScrollView>
+                                        </View>
+                                        {hasMultipleCoSigns ? (
+                                            <View style={styles.coSignPagerRow}>
+                                                <Text style={styles.coSignPagerCount}>
+                                                    {coSignIndex + 1}/{coSigns.length}
+                                                </Text>
+                                                <View style={styles.coSignDots}>
+                                                    {coSigns.map((item, index) => (
+                                                        <View
+                                                            key={`co-sign-dot-${item.song.id}`}
+                                                            style={[
+                                                                styles.coSignDot,
+                                                                index === coSignIndex ? styles.coSignDotActive : null,
+                                                            ]}
+                                                        />
+                                                    ))}
+                                                </View>
+                                            </View>
+                                        ) : null}
                                     </>
                                 ) : (
-                                    <BouncyPressable style={styles.coSignLockedCard}>
+                                    <BouncyPressable
+                                        style={styles.coSignLockedCard}
+                                        onPress={hasEnoughFollowsForCoSign ? showQuietToast : undefined}
+                                    >
                                         {/* Left: pill + kicker, then ghost row */}
                                         <View style={styles.coSignLockedLeft}>
                                             <View style={styles.coSignLockedHeader}>
                                                 <View style={styles.coSignPill}>
                                                     <Text style={styles.coSignPillText}>Co-sign</Text>
                                                 </View>
-                                                <Text style={styles.coSignKicker}>PEOPLE YOU FOLLOW 9s</Text>
+                                                <Text style={styles.coSignKicker}>PEOPLE YOU FOLLOW RATED 9+</Text>
                                             </View>
                                             <View style={styles.coSignGhostRow}>
                                                 <HatchBox size={46} radius={8} tone="light" />
@@ -1063,13 +1180,14 @@ export default function DiscoverScreen() {
                                                 </View>
                                             </View>
                                         </View>
-                                        {/* Right: lock circle */}
-                                        <View style={styles.coSignLockCircle}>
-                                            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-                                                <Path d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4"
-                                                    stroke="#fff" strokeWidth={2}
-                                                    strokeLinecap="round" strokeLinejoin="round" />
-                                            </Svg>
+                                        {/* Right: lock until enough follows; sleepy once follows are enough but quiet. */}
+                                        <View
+                                            style={styles.coSignLockCircle}
+                                            testID={hasEnoughFollowsForCoSign ? "co-sign-quiet-cue" : "co-sign-lock-cue"}
+                                        >
+                                            {hasEnoughFollowsForCoSign
+                                                ? <MoonIcon color="#fff" size={20} />
+                                                : <LockIcon color="#fff" size={22} />}
                                         </View>
                                     </BouncyPressable>
                                 )}
@@ -1249,6 +1367,18 @@ export default function DiscoverScreen() {
                     </>
                 )}
             </ScrollView>
+            {quietToastVisible ? (
+                <Animated.View
+                    key={quietToastKey}
+                    pointerEvents="none"
+                    entering={FadeIn.duration(90)}
+                    exiting={FadeOut.duration(380)}
+                    style={styles.quietToast}
+                    testID="discover-quiet-toast"
+                >
+                    <Text style={styles.quietToastText}>Quiet for now</Text>
+                </Animated.View>
+            ) : null}
         </View>
     )
 }
@@ -1257,6 +1387,27 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: colors.bg,
+    },
+    quietToast: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: 104,
+        alignItems: "center",
+        zIndex: 20,
+    },
+    quietToastText: {
+        overflow: "hidden",
+        borderRadius: 999,
+        backgroundColor: "rgba(17,20,29,0.9)",
+        color: "#fff",
+        fontFamily: fonts.mono,
+        fontSize: 10,
+        fontWeight: "700",
+        letterSpacing: 1.1,
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        textTransform: "uppercase",
     },
     // ── Header ─────────────────────────────────────────────────────────
     header: {
@@ -1762,6 +1913,49 @@ const styles = StyleSheet.create({
         alignItems: "center",
         gap: 12,
         overflow: "hidden",
+    },
+    coSignSwipeWindow: {
+        backgroundColor: colors.berry,
+        borderRadius: 16,
+        marginBottom: 10,
+        overflow: "hidden",
+    },
+    coSignCarousel: {
+        backgroundColor: colors.berry,
+    },
+    coSignSlide: {
+        backgroundColor: colors.berry,
+    },
+    coSignPagerRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "flex-end",
+        gap: 8,
+        marginTop: -7,
+        marginBottom: 6,
+    },
+    coSignPagerCount: {
+        fontFamily: fonts.mono,
+        fontSize: 9,
+        color: colors.inkDim,
+        letterSpacing: 0.7,
+        fontWeight: "700",
+    },
+    coSignDots: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+    },
+    coSignDot: {
+        width: 5,
+        height: 5,
+        borderRadius: 2.5,
+        backgroundColor: colors.line,
+    },
+    coSignDotActive: {
+        width: 14,
+        borderRadius: 999,
+        backgroundColor: colors.berry,
     },
     coSignLockedLeft: {
         flex: 1,

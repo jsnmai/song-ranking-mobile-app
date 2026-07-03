@@ -17,6 +17,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import Animated, {
     Easing,
+    FadeIn,
+    FadeOut,
     SlideInDown,
     SlideOutDown,
     useAnimatedStyle,
@@ -149,6 +151,24 @@ function LockIcon({ color, size = 14 }: { color: string; size?: number }) {
             stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
             <Path d="M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z" />
             <Path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        </Svg>
+    )
+}
+
+function MoonIcon({ color, size = 12 }: { color: string; size?: number }) {
+    return (
+        <Svg
+            testID="quiet-moon-icon"
+            accessibilityLabel="Quiet for now"
+            width={size}
+            height={size}
+            viewBox="0 0 24 24"
+            fill="none"
+        >
+            <Path
+                d="M19.2 14.9A7.8 7.8 0 0 1 9.1 4.8A8.1 8.1 0 1 0 19.2 14.9Z"
+                fill={color}
+            />
         </Svg>
     )
 }
@@ -510,6 +530,9 @@ export default function FeedScreen() {
     const [ownMenuEvent, setOwnMenuEvent] = useState<FeedEvent | null>(null)
     const [otherMenuEvent, setOtherMenuEvent] = useState<FeedEvent | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const [quietToastVisible, setQuietToastVisible] = useState(false)
+    const [quietToastKey, setQuietToastKey] = useState(0)
+    const quietToastTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
     const [friendsCardDismissed, setFriendsCardDismissed] = useState(false)
     // Session-only show/hide for the locked Social Cards block (Recent Verdict teaser +
     // the locked module grid). Only surfaced while the module gate itself is locked.
@@ -597,6 +620,7 @@ export default function FeedScreen() {
     const slamScale = useSharedValue(1)
     const slamTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
     useEffect(() => () => { if (slamTimeout.current) clearTimeout(slamTimeout.current) }, [])
+    useEffect(() => () => { if (quietToastTimeout.current) clearTimeout(quietToastTimeout.current) }, [])
     // Unread notifications badge on the header bell. Refetched whenever the Feed regains focus
     // (e.g. returning from the Notifications screen, where they get marked read).
     const [unreadCount, setUnreadCount] = useState(0)
@@ -614,14 +638,13 @@ export default function FeedScreen() {
     // The Feed module AREA (Split/Consensus/Re-rate/Disagreement/Match/Recent Verdict) unlocks at
     // rated >= MODULE_UNLOCK_RATED AND following >= 3. Below it the compact teaser grid shows; at it the
     // full cards go live per their own data rules. Keep in sync with backend MODULE_GATE_MIN_RATED.
-    const MODULE_UNLOCK_RATED = 5
+    const MODULE_UNLOCK_RATED = 10
     const modulesGateComplete =
         (profile?.user_stats?.rated_count ?? 0) >= MODULE_UNLOCK_RATED &&
         (profile?.following_count ?? 0) >= 3
-    // The Getting-started banner tracks the FULL onboarding journey, not just the module gate: its
-    // meter runs to 10 ratings (5 is only the "cards unlock" marker) and it also wants 3 follows.
-    // So it stays up until BOTH are done — a user who cleared the 5-rating module gate but is at,
-    // say, 6/10 still sees it counting toward Rankings-at-10.
+    // The Getting-started banner and Feed modules use one shared launch-readiness gate: 10 ratings
+    // plus 3 follows. That keeps the compact teasers, full cards, Rankings, and Taste Profile copy
+    // from implying separate unlock moments.
     const onboardingComplete = gettingStartedComplete && (profile?.following_count ?? 0) >= 3
     // This-or-That has its own, higher rated threshold so it doesn't surface in the same moment as
     // the score reveal or the module-strip unlock above. Keep in sync with backend
@@ -888,6 +911,16 @@ export default function FeedScreen() {
         navigation.navigate("SongDetail", { song: event.song })
     }
 
+    const showQuietToast = () => {
+        if (quietToastTimeout.current) clearTimeout(quietToastTimeout.current)
+        setQuietToastKey((current) => current + 1)
+        setQuietToastVisible(true)
+        quietToastTimeout.current = setTimeout(() => {
+            setQuietToastVisible(false)
+            quietToastTimeout.current = null
+        }, 1200)
+    }
+
     const openReport = (eventId: number) => {
         setReportingEventId(eventId)
         setReportReason(null)
@@ -1102,21 +1135,17 @@ export default function FeedScreen() {
             // hero swaps in the moment heroEvent exists, in either state.
             if (!modulesGateComplete) return null
             return (
-                <BouncyPressable style={styles.fvOuter}>
+                <BouncyPressable style={styles.fvOuter} onPress={showQuietToast}>
                     <View style={styles.fvInner}>
                         <DriftingStars dots={ORBIT_DOTS_DIM} />
                         <View style={{ position: "relative" }}>
                             <View style={styles.fullCellTop}>
                                 <View style={styles.fvPill}><Text style={styles.fvPillText}>Recent verdict</Text></View>
-                                <View style={styles.lockTagRow}>
-                                    <LockIcon color="rgba(255,255,255,0.85)" size={10} />
-                                    <Text style={styles.lockTagLabel}>LOCKED</Text>
-                                </View>
                             </View>
                             <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 12 }}>
-                                <View style={styles.lockDotXl}><LockIcon color="#fff" size={24} /></View>
+                                <View style={styles.lockDotXl}><MoonIcon color="#fff" size={18} /></View>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={styles.lvLockedTitle}>Locked for now</Text>
+                                    <Text style={styles.lvLockedTitle}>No verdicts yet</Text>
                                     <Text style={styles.lvLockedBody}>Follow people to see their freshest ratings.</Text>
                                 </View>
                             </View>
@@ -1127,7 +1156,7 @@ export default function FeedScreen() {
                             <View style={[styles.skBar, { width: "48%", height: 11, backgroundColor: "rgba(17,19,28,0.12)" }]} />
                             <View style={[styles.skBar, { width: "30%", height: 7, backgroundColor: "rgba(17,19,28,0.08)", marginTop: 6 }]} />
                         </View>
-                        <Text style={styles.fvHint}>FOLLOW TO UNLOCK</Text>
+                        <Text style={styles.fvHint}>FOLLOW FOR VERDICTS</Text>
                     </View>
                 </BouncyPressable>
             )
@@ -1233,14 +1262,14 @@ export default function FeedScreen() {
     const renderRerateRadar = () => {
         if (rerateRadar === null) {
             return (
-                <BouncyPressable style={[styles.fullCell, { height: 138, backgroundColor: colors.navy }]} testID="feed-rerate-radar-locked">
+                <BouncyPressable
+                    style={[styles.fullCell, { height: 138, backgroundColor: colors.navy }]}
+                    onPress={showQuietToast}
+                    testID="feed-rerate-radar-locked"
+                >
                     <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
                         <View style={styles.fullCellTop}>
                             <View style={styles.goldPill}><Text style={styles.goldPillText}>Re-rate radar</Text></View>
-                            <View style={styles.lockTagRow}>
-                                <LockIcon color="rgba(255,255,255,0.85)" size={10} />
-                                <Text style={styles.lockTagLabel}>LOCKED</Text>
-                            </View>
                         </View>
                         {/* Placeholder song row. Sits clear of the pill: the four space-between rows
                             share the freed height from the shorter sparkline below. */}
@@ -1263,11 +1292,11 @@ export default function FeedScreen() {
                                 strokeLinejoin="round"
                             />
                         </Svg>
-                        {/* Caption next to the lock. Capped at 2 lines so this row matches the Match
-                            Moment card's caption height and both lock dots line up across the pair. */}
+                        {/* Caption next to the quiet cue. Capped at 2 lines so this row matches the Match
+                            Moment card's caption height and both status dots line up across the pair. */}
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                            <View style={styles.lockDotSm}><LockIcon color="#fff" size={13} /></View>
-                            <Text style={[styles.lockCardDesc, { flex: 1, color: "rgba(255,255,255,0.55)" }]} numberOfLines={2}>When someone you follow changes a score</Text>
+                            <View style={styles.lockDotSm}><MoonIcon color="#fff" size={14} /></View>
+                            <Text style={[styles.lockCardDesc, { flex: 1, color: "rgba(255,255,255,0.55)" }]} numberOfLines={2}>Score shifts from people you follow</Text>
                         </View>
                     </View>
                 </BouncyPressable>
@@ -1350,17 +1379,17 @@ export default function FeedScreen() {
     const renderConsensus = () => {
         if (consensus === null) {
             return (
-                <BouncyPressable style={[styles.fullCell, { height: 138, backgroundColor: colors.sky }]} testID="feed-consensus-locked">
+                <BouncyPressable
+                    style={[styles.fullCell, { height: 138, backgroundColor: colors.sky }]}
+                    onPress={showQuietToast}
+                    testID="feed-consensus-locked"
+                >
                     <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
                         <View style={styles.fullCellTop}>
                             <View style={styles.lightPill}><Text style={styles.lightPillText}>Consensus</Text></View>
-                            <View style={styles.lockTagRow}>
-                                <LockIcon color="rgba(255,255,255,0.85)" size={10} />
-                                <Text style={styles.lockTagLabel}>LOCKED</Text>
-                            </View>
                         </View>
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                            <View style={styles.lockDotLg}><LockIcon color="#fff" size={18} /></View>
+                            <View style={styles.lockDotLg}><MoonIcon color="#fff" size={16} /></View>
                             <Text style={[styles.lockCardDesc, { flex: 1 }]}>How your circle scores a track</Text>
                         </View>
                         <View>
@@ -1430,29 +1459,29 @@ export default function FeedScreen() {
     const renderDisagreement = () => {
         if (disagreement === null) {
             return (
-                <BouncyPressable style={styles.fullDisagreeCard} testID="feed-disagreement-locked">
+                <BouncyPressable
+                    style={styles.fullDisagreeCard}
+                    onPress={showQuietToast}
+                    testID="feed-disagreement-locked"
+                >
                     <View style={styles.fullCellTop}>
                         <View style={styles.butterPill}><Text style={styles.butterPillText}>Disagreement spotlight</Text></View>
-                        <View style={styles.lockTagRow}>
-                            <LockIcon color={colors.inkDim} size={10} />
-                            <Text style={[styles.lockTagLabel, { color: colors.inkDim }]}>LOCKED</Text>
-                        </View>
                     </View>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 11 }}>
                         <HatchBox size={48} radius={9} tone="dark" />
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.disagreeLockedTitle}>Locked for now</Text>
+                            <Text style={styles.disagreeLockedTitle}>Quiet for now</Text>
                             <Text style={styles.disagreeLockedBody}>Rate more to see where you split from your circle.</Text>
                         </View>
                         <View style={{ flexDirection: "row", gap: 14, alignItems: "center" }}>
                             <View style={{ alignItems: "center" }}>
                                 <Text style={styles.disagreeColLabel}>YOU</Text>
-                                <View style={styles.disagreeColCircle}><LockIcon color={colors.inkDim} size={12} /></View>
+                                <View style={styles.disagreeColCircle}><MoonIcon color={colors.inkDim} size={13} /></View>
                             </View>
                             <View style={styles.disagreeDivider} />
                             <View style={{ alignItems: "center" }}>
                                 <Text style={styles.disagreeColLabel}>CIRCLE</Text>
-                                <View style={styles.disagreeColCircle}><LockIcon color={colors.inkDim} size={12} /></View>
+                                <View style={styles.disagreeColCircle}><MoonIcon color={colors.inkDim} size={13} /></View>
                             </View>
                         </View>
                     </View>
@@ -1508,7 +1537,11 @@ export default function FeedScreen() {
     const renderSplitDecision = () => {
         if (splitDecision === null) {
             return (
-                <BouncyPressable style={[styles.fullCell, { height: 138, backgroundColor: "#000" }]} testID="feed-split-locked">
+                <BouncyPressable
+                    style={[styles.fullCell, { height: 138, backgroundColor: "#000" }]}
+                    onPress={showQuietToast}
+                    testID="feed-split-locked"
+                >
                     <Svg style={StyleSheet.absoluteFill} viewBox="0 0 100 100" preserveAspectRatio="none">
                         <Polygon points="0,0 100,0 0,100" fill={colors.plum} />
                         <Polygon points="100,0 100,100 0,100" fill={colors.accent} />
@@ -1517,13 +1550,9 @@ export default function FeedScreen() {
                     <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
                         <View style={styles.fullCellTop}>
                             <View style={styles.darkPill}><Text style={styles.darkPillText}>Split</Text></View>
-                            <View style={styles.lockTagRow}>
-                                <LockIcon color="rgba(255,255,255,0.85)" size={10} />
-                                <Text style={styles.lockTagLabel}>LOCKED</Text>
-                            </View>
                         </View>
                         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 8 }}>
-                            <View style={styles.lockDotLg}><LockIcon color="#fff" size={18} /></View>
+                            <View style={styles.lockDotLg}><MoonIcon color="#fff" size={16} /></View>
                             <Text style={styles.fullLockHint}>When two people you follow split on a song</Text>
                         </View>
                     </View>
@@ -1587,15 +1616,15 @@ export default function FeedScreen() {
     const renderMatchMoment = () => {
         if (matchMoment === null) {
             return (
-                <BouncyPressable style={[styles.fullCell, { height: 138, backgroundColor: colors.mint }]} testID="feed-match-moment-locked">
+                <BouncyPressable
+                    style={[styles.fullCell, { height: 138, backgroundColor: colors.mint }]}
+                    onPress={showQuietToast}
+                    testID="feed-match-moment-locked"
+                >
                     <View style={styles.matchMomentBlob} />
                     <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
                         <View style={styles.fullCellTop}>
                             <View style={styles.lightPill}><Text style={styles.lightPillText}>Match moment</Text></View>
-                            <View style={styles.lockTagRow}>
-                                <LockIcon color="rgba(255,255,255,0.85)" size={10} />
-                                <Text style={styles.lockTagLabel}>LOCKED</Text>
-                            </View>
                         </View>
                         {/* Head-to-head: winner (check badge) › loser. Static › on the locked teaser. */}
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
@@ -1606,10 +1635,10 @@ export default function FeedScreen() {
                             <Text style={styles.matchMomentGt}>›</Text>
                             <HatchBox size={32} radius={7} tone="light" />
                         </View>
-                        {/* Caption next to the lock. Capped at 2 lines so this row matches the Re-rate
-                            card's caption height and both lock dots line up across the pair. */}
+                        {/* Caption next to the quiet cue. Capped at 2 lines so this row matches the Re-rate
+                            card's caption height and both status dots line up across the pair. */}
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                            <View style={styles.lockDotSm}><LockIcon color="#fff" size={13} /></View>
+                            <View style={styles.lockDotSm}><MoonIcon color="#fff" size={14} /></View>
                             <Text style={[styles.lockCardDesc, { flex: 1 }]} numberOfLines={2}>Picks from people you follow</Text>
                         </View>
                     </View>
@@ -1985,26 +2014,16 @@ export default function FeedScreen() {
 
     // Heads the whole social-cards area (Recent Verdict + the module grid). Rendered above
     // renderRecentVerdict() so it stays above Recent Verdict whether the verdict is the live hero,
-    // the locked teaser, or the compact locked row — in every gate state. While the module gate
-    // is locked it also carries a lock+following-count badge and the show/hide toggle that collapses
-    // the locked cards below (renderRecentVerdict + renderLockedSection).
+    // the locked teaser, or the compact locked row — in every gate state. When the section is
+    // entirely locked it keeps only the show/hide toggle; the Getting Started card owns progress.
     const renderSocialCardsHeader = () => {
-        const followingCount = profile?.following_count ?? 0
         return (
             // The header owns both its margins so it sits right in every state. For an empty user
             // Recent Verdict below is null, so the header can't lean on that card's top margin for its
             // bottom gap — hence an explicit marginBottom. Top is trimmed so the gap up to the Find
             // your people card above doesn't read as a void.
             <View style={[styles.sectionRow, { marginTop: 6, marginBottom: 8, alignItems: "center" }]}>
-                <View style={styles.socialCardsHeaderLeft}>
-                    <Text style={styles.sectionLabel}>TASTE SIGNALS</Text>
-                    {!modulesGateComplete && (
-                        <View style={styles.socialCardsLockBadge}>
-                            <LockIcon color={colors.inkDim} size={10} />
-                            <Text style={styles.socialCardsLockCount}>{Math.min(followingCount, 3)}/3 FOLLOWING</Text>
-                        </View>
-                    )}
-                </View>
+                <Text style={styles.sectionLabel}>SOCIAL CARDS</Text>
                 {socialCardsCollapsible && (
                     <TouchableOpacity
                         onPress={() => setSocialCardsCollapsed((c) => !c)}
@@ -2042,14 +2061,14 @@ export default function FeedScreen() {
 
     // Compact teaser grid — shown below the module gate (brand-new accounts). Each tile is a locked
     // placeholder that bounces on tap; the full-size cards replace this grid once the gate
-    // (rated >= MODULE_UNLOCK_RATED AND following >= 3) is met. The "TASTE SIGNALS" header is rendered
+    // (rated >= MODULE_UNLOCK_RATED AND following >= 3) is met. The "SOCIAL CARDS" header is rendered
     // above renderRecentVerdict() in the page body, so it always heads this whole area. Recent Verdict
     // appears here as a compact row only while it has no live hero (the live hero is promoted above).
     const renderLockedSection = () => (
         <View style={styles.lockedSection} testID="feed-social-cards-locked-section">
             {/* Recent Verdicts compact teaser — only while it's still locked. Once a followed
                 verdict exists it is promoted to the full hero above, so this row drops out and the
-                "TASTE SIGNALS" header then heads only the modules below that are still locked. */}
+                "SOCIAL CARDS" header then heads only the modules below that are still locked. */}
             {heroEvent === null && (
                 <BouncyPressable style={[styles.miniRow, styles.miniRowNavy]}>
                     <DriftingStars dots={ORBIT_DOTS_DIM_10} />
@@ -2083,7 +2102,7 @@ export default function FeedScreen() {
                         </View>
                         <View>
                             <Text style={[styles.miniTileLabel, { color: "#fff" }]}>Split Decision</Text>
-                            <Text style={[styles.miniTileSub, { color: "rgba(255,255,255,0.78)" }]} numberOfLines={1}>People you follow clash</Text>
+                            <Text style={[styles.miniTileSub, { color: "rgba(255,255,255,0.78)" }]} numberOfLines={2}>How people you follow clash</Text>
                         </View>
                     </View>
                 </BouncyPressable>
@@ -2133,7 +2152,7 @@ export default function FeedScreen() {
                         </View>
                         <View>
                             <Text style={[styles.miniTileLabel, { color: colors.cream }]}>Re-rate Radar</Text>
-                            <Text style={[styles.miniTileSub, { color: colors.cdim }]}>Someone you follow moved</Text>
+                            <Text style={[styles.miniTileSub, { color: colors.cdim }]} numberOfLines={2}>Shifts from people you follow</Text>
                         </View>
                     </View>
                 </BouncyPressable>
@@ -2193,21 +2212,26 @@ export default function FeedScreen() {
                         <View style={styles.orbitPill}>
                             <Text style={styles.orbitPillText}>Getting started</Text>
                         </View>
-                        <Text style={styles.friendCounter}>{followingCount} / 3 FOLLOWING</Text>
+                        <Text
+                            style={[styles.friendCounter, followingPending && styles.friendCounterActive]}
+                            testID="feed-getting-started-following-counter"
+                        >
+                            {followingCount} / 3 FOLLOWING
+                        </Text>
                     </View>
                     <Text style={styles.orbitTitle}>
                         {followingPending
                             ? "Songs rated. Follow people."
                             : ratingsPending
-                            ? "People followed. Keep rating."
+                            ? "Almost there! Keep rating."
                             : "Rate songs. Follow people."}
                     </Text>
                     <Text style={styles.orbitBody}>
                         {followingPending
                             ? "Follow 3 people to unlock the Feed modules below."
                             : ratingsPending
-                            ? "Rate 10 songs to unlock Rankings and your Taste Profile."
-                            : "Rate 5 songs and follow 3 people to unlock the Feed modules below."}
+                            ? "Rate 10 songs to unlock Rankings and Taste Profile"
+                            : "Rate 10 songs and follow 3 people to unlock the Feed modules below."}
                     </Text>
                     <View style={styles.tasteMeterRow}>
                         {Array.from({ length: 10 }).map((_, i) => {
@@ -2216,12 +2240,15 @@ export default function FeedScreen() {
                             return (
                                 <View
                                     key={i}
+                                    testID={`feed-getting-started-meter-tick-${i}`}
                                     style={[
                                         styles.tasteMeterSegment,
                                         // Empty segments all look identical. Reached segments climb a gold
                                         // ramp — muted gold early, bright luminous gold by 10 — so the bar
                                         // "shines up" as you progress (same hue, rising brightness).
-                                        i < rated && { backgroundColor: goldMeterShade(i) },
+                                        i < rated && {
+                                            backgroundColor: followingPending ? colors.gold : goldMeterShade(i),
+                                        },
                                     ]}
                                 />
                             )
@@ -2229,12 +2256,8 @@ export default function FeedScreen() {
                     </View>
                     <Text style={styles.tasteMeterLabel}>
                         {followingPending
-                            ? "10 / 10 RATED · MODULES AT 3 FOLLOWING"
-                            : ratingsPending && rated >= 5
-                            // Follows done and cards already unlocked → only Rankings-at-10 is left.
-                            ? `${rated} / 10 RATED · RANKINGS AT 10`
-                            // Both markers still ahead (both-pending, or follows-done but under 5).
-                            : `${rated} / 10 RATED · CARDS AT 5 · RANKINGS AT 10`}
+                            ? "10 / 10 RATED · FOLLOW 3 PEOPLE TO UNLOCK"
+                            : `${rated} / 10 RATED · SOCIAL CARDS AT 10`}
                     </Text>
                     <View style={styles.bannerBtns}>
                         {/* Ratings done → drop the rate CTA and promote Find people to the gold slot;
@@ -2336,14 +2359,14 @@ export default function FeedScreen() {
                     </View>
                 </TouchableOpacity>
 
-                {/* Below the gate (rated < 5 or follow < 3): banner + compact teaser grid, no module
+                {/* Below the gate (rated < 10 or follow < 3): banner + compact teaser grid, no module
                     data fetched. At the gate: the full-size cards go live per their own data rules. */}
                 {!onboardingComplete && renderGettingStartedBanner()}
                 {renderFindFriends()}
                 {renderThisOrThatHeader()}
                 {renderThisOrThat()}
                 {renderThisOrThatResultModal()}
-                {/* TASTE SIGNALS heads the whole area; Recent Verdict is its first card. Recent Verdict
+                {/* SOCIAL CARDS heads the whole area; Recent Verdict is its first card. Recent Verdict
                     sits with the other module cards but is never gated by rated count — only by having
                     a followed verdict — so it can go live before the rest. */}
                 {renderSocialCardsHeader()}
@@ -2641,7 +2664,7 @@ export default function FeedScreen() {
                 {renderThisOrThatHeader()}
                 {renderThisOrThat()}
                 {renderThisOrThatResultModal()}
-                {/* TASTE SIGNALS heads the whole area; Recent Verdict is its first card. Recent Verdict
+                {/* SOCIAL CARDS heads the whole area; Recent Verdict is its first card. Recent Verdict
                     sits with the other module cards but is never gated by rated count — only by having
                     a followed verdict — so it can go live before the rest. */}
                 {renderSocialCardsHeader()}
@@ -2711,6 +2734,18 @@ export default function FeedScreen() {
                 onToggleLikePrivacy={handleOwnToggleLikePrivacy}
                 onClose={() => setOwnMenuEvent(null)}
             />
+            {quietToastVisible ? (
+                <Animated.View
+                    key={quietToastKey}
+                    pointerEvents="none"
+                    entering={FadeIn.duration(90)}
+                    exiting={FadeOut.duration(380)}
+                    style={styles.quietToast}
+                    testID="feed-quiet-toast"
+                >
+                    <Text style={styles.quietToastText}>Quiet for now</Text>
+                </Animated.View>
+            ) : null}
         </View>
     )
 }
@@ -2744,6 +2779,27 @@ const styles = StyleSheet.create({
         fontSize: 13,
         paddingHorizontal: 18,
         paddingTop: 8,
+    },
+    quietToast: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: 104,
+        alignItems: "center",
+        zIndex: 20,
+    },
+    quietToastText: {
+        overflow: "hidden",
+        borderRadius: 999,
+        backgroundColor: "rgba(17,20,29,0.9)",
+        color: "#fff",
+        fontFamily: fonts.mono,
+        fontSize: 10,
+        fontWeight: "700",
+        letterSpacing: 1.1,
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        textTransform: "uppercase",
     },
     // ── Header ──────────────────────────────────────────────────────────
     header: {
@@ -2866,27 +2922,7 @@ const styles = StyleSheet.create({
         fontWeight: "700",
         letterSpacing: 0.5,
     },
-    // ── Social Cards header (lock+count badge, show/hide toggle) ───────────
-    socialCardsHeaderLeft: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 8,
-        flexShrink: 1,
-        minWidth: 0,
-    },
-    socialCardsLockBadge: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 4,
-        flexShrink: 0,
-    },
-    socialCardsLockCount: {
-        fontFamily: fonts.mono,
-        fontSize: 8.5,
-        letterSpacing: 0.6,
-        color: colors.inkDim,
-        fontWeight: "700",
-    },
+    // ── Social Cards header (show/hide toggle) ───────────
     socialCardsToggle: {
         flexDirection: "row",
         alignItems: "center",
@@ -3156,6 +3192,14 @@ const styles = StyleSheet.create({
         color: colors.cdim,
         fontWeight: "700",
     },
+    friendCounterActive: {
+        overflow: "hidden",
+        borderRadius: 999,
+        backgroundColor: "rgba(245,184,64,0.16)",
+        color: colors.gold,
+        paddingHorizontal: 9,
+        paddingVertical: 4,
+    },
     orbitTitle: {
         fontFamily: fonts.serif,
         fontStyle: "italic",
@@ -3176,8 +3220,8 @@ const styles = StyleSheet.create({
         marginTop: 10,
     },
     tasteMeterSegment: meterSegment,
-    // Filled-segment colours come from tasteGoldShade(i) inline (a muted→bright gold ramp), so there
-    // is no flat "filled" style here.
+    // Filled-segment colours come from goldMeterShade(i) inline except the follow-pending home
+    // stretch, where all completed ticks turn one uniform gold to say the rating work is done.
     tasteMeterLabel: {
         fontFamily: fonts.mono,
         fontSize: 8.5,
@@ -3340,7 +3384,7 @@ const styles = StyleSheet.create({
     // Recent Verdicts full card
     fvOuter: {
         marginHorizontal: 14,
-        // No top margin: Recent Verdict always sits right under the TASTE SIGNALS header, which now
+        // No top margin: Recent Verdict always sits right under the SOCIAL CARDS header, which now
         // owns the 8px gap below itself (so the gap is identical whether or not this card renders).
         marginBottom: 10,
         borderRadius: 20,
@@ -3481,7 +3525,7 @@ const styles = StyleSheet.create({
         letterSpacing: 0.8,
         textTransform: "uppercase",
     },
-    // Lock tag (icon + LOCKED text inline)
+    // Status tag for full-size locked/quiet cards.
     lockTagRow: {
         flexDirection: "row",
         alignItems: "center",
@@ -3495,7 +3539,7 @@ const styles = StyleSheet.create({
         fontWeight: "700",
         color: "rgba(255,255,255,0.85)",
     },
-    // Lock dots
+    // Quiet/status dots
     lockDotLg: {
         width: 34,
         height: 34,

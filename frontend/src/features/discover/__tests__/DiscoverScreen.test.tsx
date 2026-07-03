@@ -20,6 +20,11 @@ const mockGetNewRelease = jest.fn()
 const mockBookmarkSong = jest.fn()
 const mockRemoveBookmark = jest.fn()
 const mockCreatePlayer = jest.fn()
+let mockAuthProfile = {
+    // rated_count >= 10 → scores unlocked, so search results show the number.
+    user_stats: { rated_count: 50 },
+    following_count: 0,
+}
 
 jest.mock("react-native-safe-area-context", () => ({
     useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
@@ -57,8 +62,7 @@ jest.mock("@react-navigation/native", () => {
 jest.mock("../../auth/AuthContext", () => ({
     useAuth: () => ({
         token: "test-token",
-        // rated_count >= 10 → scores unlocked, so search results show the number.
-        profile: { user_stats: { rated_count: 50 } },
+        profile: mockAuthProfile,
     }),
 }))
 
@@ -156,6 +160,16 @@ const coSignItem = {
     is_bookmarked: false,
 }
 
+const secondCoSignItem = {
+    ...coSignItem,
+    song: {
+        ...ranking.song,
+        id: 43,
+        deezer_id: 124,
+        title: "Pink + White",
+    },
+}
+
 const trendingItem = {
     song: ranking.song,
     recent_circle_rating_count: 5,
@@ -191,6 +205,7 @@ const popularItem = {
 beforeEach(() => {
     jest.useFakeTimers()
     jest.resetAllMocks()
+    mockAuthProfile = { user_stats: { rated_count: 50 }, following_count: 0 }
     ;(SecureStore.getItemAsync as jest.Mock).mockResolvedValue(null)
     ;(SecureStore.setItemAsync as jest.Mock).mockResolvedValue(undefined)
     mockSearchSongs.mockResolvedValue({ results: [song] })
@@ -222,7 +237,34 @@ describe("DiscoverScreen", () => {
         // and the honest empty note shows instead of fabricated tiles.
         expect(await screen.findByText("POPULAR ON LISTN")).toBeTruthy()
         expect(screen.getByText("Nothing here yet. Rate a song to get it going.")).toBeTruthy()
+        expect(screen.getByText("PEOPLE YOU FOLLOW RATED 9+")).toBeTruthy()
+        expect(screen.getByTestId("co-sign-lock-cue")).toBeTruthy()
+        expect(screen.queryByTestId("co-sign-quiet-cue")).toBeNull()
         expect(screen.getByText("No lists yet")).toBeTruthy()
+    })
+
+    it("shows a sleepy Co-Sign cue when enough followed people have no qualifying 9+ activity", async () => {
+        mockAuthProfile = { user_stats: { rated_count: 50 }, following_count: 2 }
+        render(<DiscoverScreen />)
+
+        expect(await screen.findByText("PEOPLE YOU FOLLOW RATED 9+")).toBeTruthy()
+        expect(screen.getByTestId("co-sign-quiet-cue")).toBeTruthy()
+        expect(screen.getByTestId("quiet-moon-icon")).toBeTruthy()
+        expect(screen.queryByTestId("co-sign-lock-cue")).toBeNull()
+
+        jest.useFakeTimers()
+        try {
+            fireEvent.press(screen.getByTestId("co-sign-quiet-cue"))
+
+            expect(within(screen.getByTestId("discover-quiet-toast")).getByText("Quiet for now")).toBeTruthy()
+
+            act(() => {
+                jest.advanceTimersByTime(1200)
+            })
+            expect(screen.queryByTestId("discover-quiet-toast")).toBeNull()
+        } finally {
+            jest.useRealTimers()
+        }
     })
 
     it("renders Popular this-week tiles and opens song detail", async () => {
@@ -235,6 +277,19 @@ describe("DiscoverScreen", () => {
         fireEvent.press(await screen.findByLabelText("Preview Redbone"))
         fireEvent.press(await screen.findByLabelText("View Redbone"))
         expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { song: popularSong })
+    })
+
+    it("dismisses a Popular view confirmation when Discover starts scrolling", async () => {
+        mockGetPopular.mockResolvedValue({ items: [popularItem], window: "week", window_days: 7 })
+        render(<DiscoverScreen />)
+
+        fireEvent.press(await screen.findByLabelText("Preview Redbone"))
+        expect(screen.getByLabelText("View Redbone")).toBeTruthy()
+
+        fireEvent(screen.getByTestId("discover-scroll"), "scrollBeginDrag")
+
+        expect(screen.queryByLabelText("View Redbone")).toBeNull()
+        expect(screen.getByLabelText("Preview Redbone")).toBeTruthy()
     })
 
     it("renders the New Release daily pick and wires open plus rate", async () => {
@@ -272,8 +327,23 @@ describe("DiscoverScreen", () => {
 
         fireEvent.press(await screen.findByLabelText("Open Nights"))
 
-        expect(screen.getByText("people you follow gave it 9+")).toBeTruthy()
+        expect(screen.getByText("people you follow gave 9+")).toBeTruthy()
         expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { song: ranking.song })
+    })
+
+    it("renders co-sign recommendations as a swipeable one-card carousel", async () => {
+        mockListCoSigns.mockResolvedValue({ items: [coSignItem, secondCoSignItem] })
+        render(<DiscoverScreen />)
+
+        expect(await screen.findByText("Nights")).toBeTruthy()
+        expect(screen.getByText("Pink + White")).toBeTruthy()
+        expect(screen.getByText("1/2")).toBeTruthy()
+
+        fireEvent(screen.getByTestId("co-sign-carousel"), "momentumScrollEnd", {
+            nativeEvent: { contentOffset: { x: 1000 } },
+        })
+
+        expect(screen.getByText("2/2")).toBeTruthy()
     })
 
     it("renders co-sign card with followed-people count pill and avg score", async () => {
@@ -281,7 +351,7 @@ describe("DiscoverScreen", () => {
         render(<DiscoverScreen />)
 
         expect(await screen.findByText("Co-sign · 2 people")).toBeTruthy()
-        expect(screen.getByText("people you follow gave it 9+")).toBeTruthy()
+        expect(screen.getByText("people you follow gave 9+")).toBeTruthy()
     })
 
     it("opens unrated search results in Song Detail", async () => {

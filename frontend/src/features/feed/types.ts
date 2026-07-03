@@ -41,19 +41,19 @@ export type RerateRadarItem = {
     created_at: string;
 }
 
-// Consensus: how the viewer's friends (mutual follows) collectively scored one song —
-// friend average, friend count, and a 10-bin score distribution. The viewer is never included.
+// Consensus: how the viewer's circle (mutual follows) collectively scored one song —
+// circle average, contributor count, and a 10-bin score distribution. The viewer is never included.
 export type ConsensusModule = {
     song: PersistedSong;
     average_score: number;
     contributor_count: number;
     distribution: number[];   // always 10 bins, scores [0,1)…[9,10]
-    low_score: number;        // lowest friend score — spread bar's left endpoint
-    high_score: number;       // highest friend score — spread bar's right endpoint
+    low_score: number;        // lowest circle score — spread bar's left endpoint
+    high_score: number;       // highest circle score — spread bar's right endpoint
 }
 
-// Disagreement Spotlight: the song where YOUR score diverges most from your friends' average.
-// friends = mutual follows (viewer excluded from friends_average). gap = abs(your − friends).
+// Disagreement Spotlight: the song where YOUR score diverges most from your circle's average.
+// circle = mutual follows (viewer excluded from friends_average). gap = abs(your - circle).
 export type DisagreementModule = {
     song: PersistedSong;
     your_score: number;
