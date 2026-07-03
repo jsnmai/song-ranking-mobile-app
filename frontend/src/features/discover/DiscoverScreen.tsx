@@ -55,6 +55,11 @@ const RECENT_KEY = "discover_recent_searches"
 // behind a "Show more" chip, with each scope's stored history capped independently.
 const PREVIEW_RECENTS = 6
 const RECENT_CAP_PER_MODE = 12
+// A circle aggregate (Trending / Most-rated) needs this many visible circle members before it
+// can ever surface a song — mirrors CIRCLE_MIN_CONTRIBUTORS in the backend. Once the viewer has
+// this many mutual follows the card stops asking for more and instead waits for them to converge
+// on a song, so we split the locked card into "build your circle" vs "warming up" at this line.
+const CIRCLE_MIN_MEMBERS = 3
 // Song search fetches up to APPLE_SEARCH_LIMIT results in one request (apiRequests.ts) but
 // only shows this many at a time; "Load more" reveals more of what's already fetched.
 const SONG_RESULTS_PAGE_SIZE = 10
@@ -307,6 +312,10 @@ export default function DiscoverScreen() {
     const [discoveryError, setDiscoveryError] = useState<string | null>(null)
     const [trending, setTrending] = useState<CircleTrendingItem[]>([])
     const [mostRated, setMostRated] = useState<CircleMostRatedItem[]>([])
+    // Visible circle members (mutual follows) from the circle endpoints. Drives the honest
+    // "X/3" progress and the locked-vs-warming-up split on the circle cards: with < 3 members
+    // an aggregate can never surface (follow more), with >= 3 it just hasn't converged yet.
+    const [circleSize, setCircleSize] = useState(0)
     const [newRelease, setNewRelease] = useState<NewReleaseItem | null>(null)
     const [popular, setPopular] = useState<PopularItem[]>([])
     const [popularWindow, setPopularWindow] = useState<PopularWindow>("week")
@@ -579,6 +588,7 @@ export default function DiscoverScreen() {
             setCoSigns(coSignResponse.items)
             setTrending(trendingResponse.items)
             setMostRated(mostRatedResponse.items)
+            setCircleSize(trendingResponse.circle_size)
             setPopular(popularResponse.items)
             setPopularWindow(popularResponse.window)
             setNewRelease(newReleaseResponse.items[0] ?? null)
@@ -609,6 +619,7 @@ export default function DiscoverScreen() {
                     setCoSigns(coSignResponse.items)
                     setTrending(trendingResponse.items)
                     setMostRated(mostRatedResponse.items)
+                    setCircleSize(trendingResponse.circle_size)
                     setPopular(popularResponse.items)
                     setPopularWindow(popularResponse.window)
                     setNewRelease(newReleaseResponse.items[0] ?? null)
@@ -667,7 +678,6 @@ export default function DiscoverScreen() {
     // Recents are scoped to the active tab; collapse to a preview unless expanded.
     const tabRecents = recentSearches.filter(r => r.mode === searchMode)
     const visibleRecents = recentsExpanded ? tabRecents : tabRecents.slice(0, PREVIEW_RECENTS)
-    const followingCount = profile?.following_count ?? 0
     const ratedCount = profile?.user_stats?.rated_count ?? 0
     // Hide the viewer's own score in search results until they've rated 10 songs.
     const scoresLocked = ratedCount < 10
@@ -1022,7 +1032,7 @@ export default function DiscoverScreen() {
                                     </Text>
                                 )}
 
-                                {/* Co-Sign — live when friends co-sign exist, locked otherwise */}
+                                {/* Co-Sign — live when people the viewer follows co-sign, locked otherwise */}
                                 {coSigns.length > 0 ? (
                                     <>
                                         {coSigns.map((item) => (
@@ -1043,7 +1053,7 @@ export default function DiscoverScreen() {
                                                 <View style={styles.coSignPill}>
                                                     <Text style={styles.coSignPillText}>Co-sign</Text>
                                                 </View>
-                                                <Text style={styles.coSignKicker}>FRIENDS' UNANIMOUS 9s</Text>
+                                                <Text style={styles.coSignKicker}>PEOPLE YOU FOLLOW 9s</Text>
                                             </View>
                                             <View style={styles.coSignGhostRow}>
                                                 <HatchBox size={46} radius={8} tone="light" />
@@ -1100,7 +1110,30 @@ export default function DiscoverScreen() {
                                             <Text style={styles.trendingStatLabel}>THIS WEEK</Text>
                                         </View>
                                     </TouchableOpacity>
+                                ) : circleSize >= CIRCLE_MIN_MEMBERS ? (
+                                    /* Warming up: the viewer has enough circle members, so this is NOT
+                                       locked on an action they can take. It fills in once the circle rates the
+                                       same song this week, so we drop the lock + counter and say so plainly. */
+                                    <BouncyPressable style={styles.trendingCard}>
+                                        <View style={styles.trendingLockCircle}>
+                                            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                                                <Path d="M12 7v5l3 2M12 21a9 9 0 100-18 9 9 0 000 18z"
+                                                    stroke={colors.ink} strokeWidth={2}
+                                                    strokeLinecap="round" strokeLinejoin="round" />
+                                            </Svg>
+                                        </View>
+                                        <View style={styles.trendingTextBlock}>
+                                            <Text style={styles.trendingKicker}>TRENDING IN YOUR CIRCLE</Text>
+                                            <Text style={styles.trendingTitle}>Warming up</Text>
+                                            <Text style={styles.trendingBody}>
+                                                Nothing trending yet. This fills in as your circle rates the same songs.
+                                            </Text>
+                                        </View>
+                                    </BouncyPressable>
                                 ) : (
+                                    /* Needs circle members: fewer than 3 visible circle members, so an aggregate can
+                                       never surface. The counter tracks mutual circle members (not one-way
+                                       follows), so it can't read 3/3 while the card stays locked. */
                                     <BouncyPressable style={styles.trendingCard}>
                                         <View style={styles.trendingLockCircle}>
                                             <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
@@ -1113,10 +1146,10 @@ export default function DiscoverScreen() {
                                             <Text style={styles.trendingKicker}>TRENDING IN YOUR CIRCLE</Text>
                                             <Text style={styles.trendingTitle}>Locked</Text>
                                             <Text style={styles.trendingBody}>
-                                                Follow friends to see what's hot in your circle.
+                                                Add people who follow you back to see what's hot in your circle.
                                             </Text>
                                         </View>
-                                        <Text style={styles.trendingCounter}>{Math.min(followingCount, 3)}/3</Text>
+                                        <Text style={styles.trendingCounter}>{Math.min(circleSize, CIRCLE_MIN_MEMBERS)}/{CIRCLE_MIN_MEMBERS}</Text>
                                     </BouncyPressable>
                                 )}
 
@@ -1161,7 +1194,7 @@ export default function DiscoverScreen() {
                                             </View>
                                             <View style={[styles.circleCountRow, styles.circleCountRowTop]}>
                                                 <Text style={styles.circleCountNum}>{mostRated[0].circle_rating_count}</Text>
-                                                <Text style={styles.circleCountLabel}>TOTAL RATINGS</Text>
+                                                <Text style={styles.circleCountLabel}>IN CIRCLE</Text>
                                             </View>
                                         </TouchableOpacity>
                                     ) : (
@@ -1185,7 +1218,7 @@ export default function DiscoverScreen() {
                                             </View>
                                             <View style={styles.circleCountRow}>
                                                 <Text style={styles.circleCountNum}>—</Text>
-                                                <Text style={styles.circleCountLabel}>TOTAL RATINGS</Text>
+                                                <Text style={styles.circleCountLabel}>IN CIRCLE</Text>
                                             </View>
                                         </BouncyPressable>
                                     )}

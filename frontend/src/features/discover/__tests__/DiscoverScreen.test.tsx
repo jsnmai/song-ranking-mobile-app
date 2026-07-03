@@ -196,8 +196,8 @@ beforeEach(() => {
     mockSearchSongs.mockResolvedValue({ results: [song] })
     mockSearchProfiles.mockResolvedValue({ results: [profile] })
     mockListCoSigns.mockResolvedValue({ items: [] })
-    mockGetCircleTrending.mockResolvedValue({ items: [], window_days: 7 })
-    mockGetCircleMostRated.mockResolvedValue({ items: [] })
+    mockGetCircleTrending.mockResolvedValue({ items: [], window_days: 7, circle_size: 0 })
+    mockGetCircleMostRated.mockResolvedValue({ items: [], circle_size: 0 })
     mockGetPopular.mockResolvedValue({ items: [], window: "all_time", window_days: 7 })
     mockGetNewRelease.mockResolvedValue({ items: [] })
     mockBookmarkSong.mockResolvedValue({ id: 9 })
@@ -272,16 +272,16 @@ describe("DiscoverScreen", () => {
 
         fireEvent.press(await screen.findByLabelText("Open Nights"))
 
-        expect(screen.getByText("everyone gave it 9+")).toBeTruthy()
+        expect(screen.getByText("people you follow gave it 9+")).toBeTruthy()
         expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { song: ranking.song })
     })
 
-    it("renders co-sign card with friend count pill and avg score", async () => {
+    it("renders co-sign card with followed-people count pill and avg score", async () => {
         mockListCoSigns.mockResolvedValue({ items: [coSignItem] })
         render(<DiscoverScreen />)
 
-        expect(await screen.findByText("Co-sign · 2 friends")).toBeTruthy()
-        expect(screen.getByText("everyone gave it 9+")).toBeTruthy()
+        expect(await screen.findByText("Co-sign · 2 people")).toBeTruthy()
+        expect(screen.getByText("people you follow gave it 9+")).toBeTruthy()
     })
 
     it("opens unrated search results in Song Detail", async () => {
@@ -325,22 +325,22 @@ describe("DiscoverScreen", () => {
     })
 
     it("renders the live Trending card from the top circle song and opens it", async () => {
-        mockGetCircleTrending.mockResolvedValue({ items: [trendingItem], window_days: 7 })
+        mockGetCircleTrending.mockResolvedValue({ items: [trendingItem], window_days: 7, circle_size: 4 })
         render(<DiscoverScreen />)
 
         expect(await screen.findByText("THIS WEEK")).toBeTruthy()
         // Most-rated had no items, so its locked state remains.
-        expect(screen.getByText("TOTAL RATINGS")).toBeTruthy()
+        expect(screen.getByText("IN CIRCLE")).toBeTruthy()
 
         fireEvent.press(screen.getByLabelText("Open Nights"))
         expect(mockNavigate).toHaveBeenCalledWith("SongDetail", { song: ranking.song })
     })
 
     it("renders the live Most-rated card with the circle rating count, song, and artist", async () => {
-        mockGetCircleMostRated.mockResolvedValue({ items: [mostRatedItem] })
+        mockGetCircleMostRated.mockResolvedValue({ items: [mostRatedItem], circle_size: 4 })
         render(<DiscoverScreen />)
 
-        expect(await screen.findByText("TOTAL RATINGS")).toBeTruthy()
+        expect(await screen.findByText("IN CIRCLE")).toBeTruthy()
         expect(screen.getByText("12")).toBeTruthy()
         // "FRANK OCEAN" also appears in the Popular on LISTn placeholders, so scope to the Most-rated card.
         expect(within(screen.getByLabelText("Open Nights")).getByText("FRANK OCEAN")).toBeTruthy()
@@ -352,7 +352,29 @@ describe("DiscoverScreen", () => {
         render(<DiscoverScreen />)
 
         expect(await screen.findByText("Locked")).toBeTruthy()
-        expect(screen.getByText("TOTAL RATINGS")).toBeTruthy()
+        expect(screen.getByText("IN CIRCLE")).toBeTruthy()
+    })
+
+    it("counts mutual circle members, not one-way follows, in the locked Trending counter", async () => {
+        // The viewer follows people who don't follow back (circle_size 0) even though they
+        // may follow many one-way. The counter must read 0/3, never a misleading 3/3.
+        mockGetCircleTrending.mockResolvedValue({ items: [], window_days: 7, circle_size: 0 })
+        render(<DiscoverScreen />)
+
+        expect(await screen.findByText("0/3")).toBeTruthy()
+        expect(screen.getByText("Locked")).toBeTruthy()
+    })
+
+    it("shows the Warming up state when the circle is big enough but has nothing trending", async () => {
+        // 3 visible mutual members but no shared song this week: this is NOT locked on a user
+        // action, so it drops the lock/counter and explains it will fill in.
+        mockGetCircleTrending.mockResolvedValue({ items: [], window_days: 7, circle_size: 3 })
+        render(<DiscoverScreen />)
+
+        expect(await screen.findByText("Warming up")).toBeTruthy()
+        // No lock copy and no X/3 counter in this state.
+        expect(screen.queryByText("Locked")).toBeNull()
+        expect(screen.queryByText("3/3")).toBeNull()
     })
 
     it("switches to user search and opens another user's profile", async () => {

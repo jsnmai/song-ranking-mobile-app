@@ -10,6 +10,7 @@ export type SocialDiscoveryContributor = {
 export type CoSignItem = {
     song: PersistedSong;
     co_sign_count: number;
+    // API name is legacy: Co-Sign averages visible people the viewer follows.
     average_visible_friend_score: number;
     latest_visible_rating_at: string;
     contributors: SocialDiscoveryContributor[];
@@ -47,6 +48,9 @@ export type CircleTrendingItem = {
 export type CircleTrendingResponse = {
     items: CircleTrendingItem[];
     window_days: number;
+    // Viewer's visible circle members (mutual follows). Distinguishes "not enough circle"
+    // (< 3) from "circle has nothing trending yet" (>= 3 but items empty).
+    circle_size: number;
 }
 
 export type CircleMostRatedItem = {
@@ -60,6 +64,8 @@ export type CircleMostRatedItem = {
 
 export type CircleMostRatedResponse = {
     items: CircleMostRatedItem[];
+    // Viewer's visible circle members (mutual follows); see CircleTrendingResponse.circle_size.
+    circle_size: number;
 }
 
 // --- New release (a fresh drop from this week, global for every viewer) ---

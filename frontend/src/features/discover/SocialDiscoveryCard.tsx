@@ -14,7 +14,7 @@ type SocialDiscoveryCardProps = {
 const AVATAR_COLORS = [colors.accent, colors.sky, colors.plum, colors.gold, colors.butter]
 
 export default function SocialDiscoveryCard({ item, onOpen }: SocialDiscoveryCardProps) {
-    const friendCount = item.contributors.length
+    const coSignCount = item.co_sign_count
     const avg = item.average_visible_friend_score
 
     return (
@@ -27,7 +27,7 @@ export default function SocialDiscoveryCard({ item, onOpen }: SocialDiscoveryCar
             {/* Row 1: pill + chevron */}
             <View style={styles.headerRow}>
                 <View style={styles.pill}>
-                    <Text style={styles.pillText}>Co-sign · {friendCount} friends</Text>
+                    <Text style={styles.pillText}>Co-sign · {coSignCount} people</Text>
                 </View>
                 <View style={styles.chevronCircle}>
                     <Svg width={15} height={15} viewBox="0 0 24 24" fill="none"
@@ -68,7 +68,7 @@ export default function SocialDiscoveryCard({ item, onOpen }: SocialDiscoveryCar
                         </View>
                     ))}
                 </View>
-                <Text style={styles.tagline} numberOfLines={1}>everyone gave it 9+</Text>
+                <Text style={styles.tagline} numberOfLines={1}>people you follow gave it 9+</Text>
                 <View style={styles.avgBlock}>
                     <View style={styles.avgLabelWrap}>
                         <Text style={styles.avgLabel}>AVG</Text>
