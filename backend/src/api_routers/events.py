@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
-from src.core.limiter import limiter
+from src.core.limiter import limiter, user_or_ip_key
 from src.pydantic_schemas.events import InteractionEventCreate, InteractionEventResponse
 from src.services.events import record_client_event
 from src.sqlalchemy_tables.user import User
@@ -20,7 +20,7 @@ router = APIRouter(
     response_model=InteractionEventResponse,
     status_code=201,
 )
-@limiter.limit("240/minute")
+@limiter.limit("240/minute", key_func=user_or_ip_key)
 def create_event(
     request: Request,
     data: InteractionEventCreate,

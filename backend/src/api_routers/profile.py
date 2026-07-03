@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
-from src.core.limiter import limiter
+from src.core.limiter import limiter, user_or_ip_key
 from src.pydantic_schemas.auxstrology import AuxstrologyResponse
 from src.pydantic_schemas.bookmarks import BookmarkListResponse
 from src.pydantic_schemas.profile import (
@@ -96,7 +96,7 @@ def profile_me(
     "/me",
     response_model=ProfileSummaryResponse,
 )
-@limiter.limit("30/minute")
+@limiter.limit("30/minute", key_func=user_or_ip_key)
 def profile_edit(
     data: ProfileEdit,
     request: Request,
@@ -193,7 +193,7 @@ def profile_search(
     "/me/recent-ratings",
     response_model=RecentRatingsResponse,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def my_recent_ratings(
     request: Request,
     db: Session = Depends(get_db),
@@ -207,7 +207,7 @@ def my_recent_ratings(
     "/me/taste",
     response_model=TasteProfileResponse,
 )
-@limiter.limit("60/minute")
+@limiter.limit("60/minute", key_func=user_or_ip_key)
 def my_taste_profile(
     request: Request,
     db: Session = Depends(get_db),
@@ -224,7 +224,7 @@ def my_taste_profile(
     "/{username}/taste",
     response_model=TasteProfileResponse,
 )
-@limiter.limit("60/minute")
+@limiter.limit("60/minute", key_func=user_or_ip_key)
 def user_taste_profile(
     request: Request,
     username: str,
@@ -243,7 +243,7 @@ def user_taste_profile(
     "/me/auxstrology",
     response_model=AuxstrologyResponse,
 )
-@limiter.limit("60/minute")
+@limiter.limit("60/minute", key_func=user_or_ip_key)
 def my_auxstrology(
     request: Request,
     db: Session = Depends(get_db),
@@ -260,7 +260,7 @@ def my_auxstrology(
     "/{username}/auxstrology",
     response_model=AuxstrologyResponse,
 )
-@limiter.limit("60/minute")
+@limiter.limit("60/minute", key_func=user_or_ip_key)
 def user_auxstrology(
     request: Request,
     username: str,
@@ -279,7 +279,7 @@ def user_auxstrology(
     "/{username}/compatibility",
     response_model=CompatibilityResponse,
 )
-@limiter.limit("60/minute")
+@limiter.limit("60/minute", key_func=user_or_ip_key)
 def profile_compatibility(
     request: Request,
     username: str,
@@ -313,7 +313,7 @@ def profile_blocked(
     "/me/most-compatible",
     response_model=MostCompatibleResponse,
 )
-@limiter.limit("60/minute")
+@limiter.limit("60/minute", key_func=user_or_ip_key)
 def my_most_compatible(
     request: Request,
     scope: Literal["friends", "global"] = Query("friends"),
@@ -341,7 +341,7 @@ def my_most_compatible(
     "/{username}/recent-ratings",
     response_model=RecentRatingsResponse,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def profile_recent_ratings(
     request: Request,
     username: str,
@@ -356,7 +356,7 @@ def profile_recent_ratings(
     "/{username}/activity",
     response_model=ProfileActivityResponse,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def profile_activity(
     request: Request,
     username: str,
@@ -377,7 +377,7 @@ def profile_activity(
     "/{username}/rankings/anchors",
     response_model=RankingAnchorsResponse,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def profile_ranking_anchors(
     request: Request,
     username: str,
@@ -396,7 +396,7 @@ def profile_ranking_anchors(
     "/{username}/rankings/facets",
     response_model=ProfileRankingFacetsResponse,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def profile_ranking_facets(
     request: Request,
     username: str,
@@ -415,7 +415,7 @@ def profile_ranking_facets(
     "/{username}/rankings",
     response_model=RankingListResponse,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def profile_rankings(
     request: Request,
     username: str,
@@ -447,7 +447,7 @@ def profile_rankings(
     "/{username}/bookmarks",
     response_model=BookmarkListResponse,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def profile_bookmarks(
     request: Request,
     username: str,
@@ -518,7 +518,7 @@ def profile_unblock(
     response_model=ProfileReportResponse,
     status_code=201,
 )
-@limiter.limit("5/minute")
+@limiter.limit("5/minute", key_func=user_or_ip_key)
 def profile_report(
     request: Request,
     username: str,

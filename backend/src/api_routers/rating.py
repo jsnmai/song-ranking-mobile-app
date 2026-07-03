@@ -4,7 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
-from src.core.limiter import limiter
+from src.core.limiter import limiter, user_or_ip_key
 from src.pydantic_schemas.profile import ProfileReportResponse, RatingEventReportCreate
 from src.pydantic_schemas.rating import (
     RankingAnchorsResponse,
@@ -41,7 +41,7 @@ router = APIRouter(
     response_model=RatingFinalizeResponse,
     status_code=201,
 )
-@limiter.limit("30/minute")
+@limiter.limit("30/minute", key_func=user_or_ip_key)
 def finalize_rating_endpoint(
     request: Request,
     data: RatingFinalizeRequest,
@@ -76,7 +76,7 @@ def finalize_rating_endpoint(
     "/ratings/{song_id}",
     response_model=RatingRemoveResponse,
 )
-@limiter.limit("30/minute")
+@limiter.limit("30/minute", key_func=user_or_ip_key)
 def remove_rating_endpoint(
     request: Request,
     song_id: int,
@@ -95,7 +95,7 @@ def remove_rating_endpoint(
     "/rankings/me",
     response_model=RankingListResponse,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def my_rankings(
     request: Request,
     limit: int = Query(
@@ -120,7 +120,7 @@ def my_rankings(
     "/rankings/me/anchors",
     response_model=RankingAnchorsResponse,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def my_ranking_anchors(
     request: Request,
     db: Session = Depends(get_db),
@@ -137,7 +137,7 @@ def my_ranking_anchors(
     "/rankings/me/bucket/{bucket}",
     response_model=RankingListResponse,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def my_bucket_rankings(
     request: Request,
     bucket: str,
@@ -152,7 +152,7 @@ def my_bucket_rankings(
     "/rankings/me/by-deezer/{deezer_id}",
     response_model=RankingResponse,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def my_ranking_by_deezer_id(
     request: Request,
     deezer_id: int,
@@ -171,7 +171,7 @@ def my_ranking_by_deezer_id(
     "/rankings/me/by-song/{song_id}",
     response_model=RankingResponse,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def my_ranking_by_song_id(
     request: Request,
     song_id: int,
@@ -190,7 +190,7 @@ def my_ranking_by_song_id(
     "/rankings/reorder",
     response_model=RankingReorderResponse,
 )
-@limiter.limit("30/minute")
+@limiter.limit("30/minute", key_func=user_or_ip_key)
 def reorder_rankings_endpoint(
     request: Request,
     data: RankingReorderRequest,
@@ -210,7 +210,7 @@ def reorder_rankings_endpoint(
     response_model=ProfileReportResponse,
     status_code=201,
 )
-@limiter.limit("5/minute")
+@limiter.limit("5/minute", key_func=user_or_ip_key)
 def report_rating_event_endpoint(
     request: Request,
     rating_event_id: int,

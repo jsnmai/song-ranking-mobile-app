@@ -32,6 +32,12 @@ from src.crud.password_reset import (
     invalidate_user_tokens,
     mark_consumed,
 )
+from src.crud.login_attempt import (
+    clear_failed_logins,
+    count_failed_logins_since,
+    delete_failed_logins_before,
+    record_failed_login,
+)
 from src.crud.password_reset_request import (
     count_requests_since,
     delete_requests_before,
@@ -167,27 +173,51 @@ def login_user(
     """
     Authenticate a user and return a JWT access token.
 
-    1. User with this email exists? → 401 if not
-    2. Password matches the stored hash? → 401 if not
-    3. Issue a JWT with the user ID as the subject claim
+    1. Per-email failure throttle (BEFORE user lookup, known and unknown emails alike):
+       too many recent failures → 429. Per-IP limits alone are evadable by rotating
+       source addresses; this bounds guessing per ACCOUNT.
+    2. User with this email exists? → 401 if not (with a decoy bcrypt verify so the
+       unknown-email path costs the same as a wrong password)
+    3. Password matches the stored hash? → 401 if not, recording the failure
+    4. Success clears the email's failure history and issues a JWT
 
-    Both failures return the same 401 — prevents email enumeration.
+    Both credential failures return the same 401 — prevents email enumeration.
     """
+    now = datetime.now(timezone.utc)
+    email_hash = email_throttle_hash(email)
+    window_start = now - timedelta(minutes=settings.login_failure_window_minutes)
+
+    # Opportunistic cleanup so the throttle log never grows unbounded.
+    delete_failed_logins_before(db, window_start)
+    if count_failed_logins_since(db, email_hash, window_start) >= settings.login_max_failures_per_window:
+        db.commit()  # persist the opportunistic cleanup
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many login attempts. Try again later.",
+        )
+
     user = get_by_email(
         db,
         email,
     )
-    # short-circuit: verify_password only runs when user exists — avoids AttributeError on None
+    if not user:
+        # Decoy verify: the unknown-email path must cost a real bcrypt comparison,
+        # or response timing becomes an email-enumeration oracle.
+        dummy_verify()
     if not user or not verify_password(
         password,
         user.hashed_password,
     ):
+        record_failed_login(db, email_hash)
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    clear_failed_logins(db, email_hash)
+    db.commit()
     token = create_access_token({"sub": str(user.id)})
     return Token(access_token=token)
 

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
-from src.core.limiter import limiter
+from src.core.limiter import limiter, user_or_ip_key
 from src.pydantic_schemas.popular import PopularResponse
 from src.services.popular import list_popular
 from src.sqlalchemy_tables.user import User
@@ -23,7 +23,7 @@ router = APIRouter(
     "/popular",
     response_model=PopularResponse,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def popular(
     request: Request,
     db: Session = Depends(get_db),

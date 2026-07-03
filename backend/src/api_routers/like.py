@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
-from src.core.limiter import limiter
+from src.core.limiter import limiter, user_or_ip_key
 from src.pydantic_schemas.like import ActivityLikeResponse
 from src.pydantic_schemas.profile import ProfileListResponse
 from src.pydantic_schemas.profile_modules import RecentRatingItem
@@ -25,7 +25,7 @@ router = APIRouter(
     "/{rating_event_id}",
     response_model=RecentRatingItem,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def activity_card(
     request: Request,
     rating_event_id: int,
@@ -44,7 +44,7 @@ def activity_card(
     "/{rating_event_id}/likes",
     response_model=ActivityLikeResponse,
 )
-@limiter.limit("120/minute")
+@limiter.limit("120/minute", key_func=user_or_ip_key)
 def like_activity_card(
     request: Request,
     rating_event_id: int,
@@ -63,7 +63,7 @@ def like_activity_card(
     "/{rating_event_id}/likes",
     response_model=ActivityLikeResponse,
 )
-@limiter.limit("120/minute")
+@limiter.limit("120/minute", key_func=user_or_ip_key)
 def unlike_activity_card(
     request: Request,
     rating_event_id: int,
@@ -82,7 +82,7 @@ def unlike_activity_card(
     "/{rating_event_id}/likes",
     response_model=ProfileListResponse,
 )
-@limiter.limit("120/minute")
+@limiter.limit("120/minute", key_func=user_or_ip_key)
 def activity_likers(
     request: Request,
     rating_event_id: int,

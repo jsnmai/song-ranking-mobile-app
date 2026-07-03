@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
-from src.core.limiter import limiter
+from src.core.limiter import limiter, user_or_ip_key
 from src.pydantic_schemas.new_release import NewReleaseResponse
 from src.services.new_release import get_new_release
 from src.sqlalchemy_tables.user import User
@@ -22,7 +22,7 @@ router = APIRouter(
     "/new-release",
     response_model=NewReleaseResponse,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def new_release(
     request: Request,
     db: Session = Depends(get_db),

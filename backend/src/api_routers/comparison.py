@@ -5,7 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
-from src.core.limiter import limiter
+from src.core.limiter import limiter, user_or_ip_key
 from src.pydantic_schemas.comparison import (
     ComparisonChoiceRequest,
     ComparisonSessionCancelResponse,
@@ -37,7 +37,7 @@ router = APIRouter(
     response_model=ComparisonSessionResponse,
     status_code=201,
 )
-@limiter.limit("30/minute")
+@limiter.limit("30/minute", key_func=user_or_ip_key)
 def start_session(
     request: Request,
     data: ComparisonSessionStartRequest,
@@ -56,7 +56,7 @@ def start_session(
     "/active",
     response_model=ComparisonSessionResponse | None,
 )
-@limiter.limit("60/minute")
+@limiter.limit("60/minute", key_func=user_or_ip_key)
 def active_session(
     request: Request,
     db: Session = Depends(get_db),
@@ -73,7 +73,7 @@ def active_session(
     "/{session_uuid}/choices",
     response_model=ComparisonSessionResponse,
 )
-@limiter.limit("120/minute")
+@limiter.limit("120/minute", key_func=user_or_ip_key)
 def choose_winner(
     request: Request,
     session_uuid: UUID,
@@ -94,7 +94,7 @@ def choose_winner(
     "/{session_uuid}/undo",
     response_model=ComparisonSessionResponse,
 )
-@limiter.limit("120/minute")
+@limiter.limit("120/minute", key_func=user_or_ip_key)
 def undo_choice(
     request: Request,
     session_uuid: UUID,
@@ -115,7 +115,7 @@ def undo_choice(
     "/{session_uuid}/finalize",
     response_model=ComparisonSessionFinalizeResponse,
 )
-@limiter.limit("30/minute")
+@limiter.limit("30/minute", key_func=user_or_ip_key)
 def finalize_session(
     request: Request,
     session_uuid: UUID,
@@ -144,7 +144,7 @@ def finalize_session(
     "/{session_uuid}",
     response_model=ComparisonSessionCancelResponse,
 )
-@limiter.limit("60/minute")
+@limiter.limit("60/minute", key_func=user_or_ip_key)
 def cancel_session(
     request: Request,
     session_uuid: UUID,

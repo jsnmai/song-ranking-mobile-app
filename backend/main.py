@@ -80,18 +80,20 @@ app = FastAPI(
 )
 
 # CORS (Cross-Origin Resource Sharing) middlware lets browsers make cross-origin requests to this API.
-# Without it, browsers block requests from one origin e.g. localhost:8081 to a 
-# different origin (localhost:8000) unless the server explicitly allows it. 
+# Without it, browsers block requests from one origin e.g. localhost:8081 to a
+# different origin (localhost:8000) unless the server explicitly allows it.
 # This middleware adds the headers that tell the browser
 # "yes, the frontend at these origins is allowed to talk to me."
 # In development this is our local Expo server
 # For production, replace cors_origins with the explicit app domain.
+# Methods/headers are explicit allowlists (not "*"): the API only speaks these,
+# and a wildcard grant is needless surface for any future browser client.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.cors_origins],
     allow_credentials=True,  # allows the frontend to send cookies / auth headers
-    allow_methods=["*"],     # allow GET, POST, PUT, DELETE, etc.
-    allow_headers=["*"],     # allow Authorization header (needed for JWT)
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
 
 # Wire the rate limiter into app.state so slowapi can find it when decorators fire and intercept requests.
@@ -100,6 +102,30 @@ app.add_exception_handler(
     RateLimitExceeded,             # When a route's limit is exceeded
     _rate_limit_exceeded_handler,  # converts slowapi's internal error into HTTP 429 "Too Many Requests" response.
 )
+
+
+# Swagger/ReDoc need inline scripts and styles, so the strict API CSP would break them.
+# Everything else this server returns is JSON, where `default-src 'none'` is free hardening.
+_DOCS_PATHS = ("/docs", "/redoc", "/openapi.json")
+
+
+@app.middleware("http")
+async def security_headers_middleware(
+    request: Request,
+    call_next: Callable[[Request], Awaitable[Response]],
+) -> Response:
+    """Attach baseline security headers to every response."""
+    response = await call_next(request)
+    # Browsers must never MIME-sniff API responses or frame them.
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    # TLS terminates at the platform proxy in production; HSTS pins clients to HTTPS.
+    # Harmless on plain-HTTP local dev — browsers ignore HSTS over HTTP.
+    response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+    if not request.url.path.startswith(_DOCS_PATHS):
+        response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+    return response
 
 
 @app.middleware("http")

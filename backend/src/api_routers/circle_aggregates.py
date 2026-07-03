@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
-from src.core.limiter import limiter
+from src.core.limiter import limiter, user_or_ip_key
 from src.pydantic_schemas.circle import CircleMostRatedResponse, CircleTrendingResponse
 from src.services.circle_aggregates import list_circle_most_rated, list_circle_trending
 from src.sqlalchemy_tables.user import User
@@ -22,7 +22,7 @@ router = APIRouter(
     "/most-rated",
     response_model=CircleMostRatedResponse,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def circle_most_rated(
     request: Request,
     db: Session = Depends(get_db),
@@ -39,7 +39,7 @@ def circle_most_rated(
     "/trending",
     response_model=CircleTrendingResponse,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def circle_trending(
     request: Request,
     db: Session = Depends(get_db),

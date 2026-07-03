@@ -3,7 +3,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
-from src.core.limiter import limiter
+from src.core.limiter import limiter, user_or_ip_key
 from src.pydantic_schemas.bookmarks import (
     BookmarkCreate,
     BookmarkListResponse,
@@ -31,7 +31,7 @@ router = APIRouter(
     "",
     response_model=BookmarkListResponse,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def my_bookmarks(
     request: Request,
     db: Session = Depends(get_db),
@@ -48,7 +48,7 @@ def my_bookmarks(
     "/by-deezer/{deezer_id}",
     response_model=BookmarkStatusResponse,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def bookmark_status(
     request: Request,
     deezer_id: int,
@@ -67,7 +67,7 @@ def bookmark_status(
     "/by-song/{song_id}",
     response_model=BookmarkStatusResponse,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def bookmark_status_by_song(
     request: Request,
     song_id: int,
@@ -86,7 +86,7 @@ def bookmark_status_by_song(
     "",
     response_model=BookmarkResponse,
 )
-@limiter.limit("60/minute")
+@limiter.limit("60/minute", key_func=user_or_ip_key)
 def bookmark_song_endpoint(
     request: Request,
     data: BookmarkCreate,
@@ -111,7 +111,7 @@ def bookmark_song_endpoint(
     "/{song_id}",
     response_model=BookmarkRemoveResponse,
 )
-@limiter.limit("60/minute")
+@limiter.limit("60/minute", key_func=user_or_ip_key)
 def remove_bookmark_endpoint(
     request: Request,
     song_id: int,

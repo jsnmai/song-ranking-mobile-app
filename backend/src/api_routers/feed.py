@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
-from src.core.limiter import limiter
+from src.core.limiter import limiter, user_or_ip_key
 from src.pydantic_schemas.feed import (
     CircleRatersResponse,
     FeedListResponse,
@@ -35,7 +35,7 @@ router = APIRouter(
     "",
     response_model=FeedListResponse,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def my_feed(
     request: Request,
     limit: int = Query(
@@ -60,7 +60,7 @@ def my_feed(
     "/modules",
     response_model=FeedModulesResponse,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def feed_modules(
     request: Request,
     db: Session = Depends(get_db),
@@ -77,7 +77,7 @@ def feed_modules(
     "/this-or-that/choice",
     response_model=ThisOrThatChoiceResponse,
 )
-@limiter.limit("60/minute")
+@limiter.limit("60/minute", key_func=user_or_ip_key)
 def this_or_that_choice(
     request: Request,
     data: ThisOrThatChoiceRequest,
@@ -96,7 +96,7 @@ def this_or_that_choice(
     "/this-or-that/undo",
     response_model=ThisOrThatUndoResponse,
 )
-@limiter.limit("60/minute")
+@limiter.limit("60/minute", key_func=user_or_ip_key)
 def this_or_that_undo(
     request: Request,
     data: ThisOrThatUndoRequest,
@@ -115,7 +115,7 @@ def this_or_that_undo(
     "/this-or-that/dismiss",
     response_model=ThisOrThatDismissResponse,
 )
-@limiter.limit("60/minute")
+@limiter.limit("60/minute", key_func=user_or_ip_key)
 def this_or_that_dismiss(
     request: Request,
     data: ThisOrThatDismissRequest,
@@ -134,7 +134,7 @@ def this_or_that_dismiss(
     "/songs/{song_id}/circle-raters",
     response_model=CircleRatersResponse,
 )
-@limiter.limit("120/minute")
+@limiter.limit("120/minute", key_func=user_or_ip_key)
 def song_circle_raters(
     request: Request,
     song_id: int,

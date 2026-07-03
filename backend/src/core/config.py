@@ -77,6 +77,14 @@ class Settings(BaseSettings):
     # independently of the JWT secret.
     email_hash_pepper: str | None = None
 
+    # Per-email login throttle: per-IP limits alone are evadable by rotating source
+    # addresses, so failed logins are ALSO capped per account (HMAC-keyed email).
+    # The check runs before user lookup and behaves identically for known/unknown
+    # emails, so it never becomes an enumeration oracle. NIST-friendly: 10 failures
+    # per 15-minute window throttles online guessing without hard-locking accounts.
+    login_max_failures_per_window: int = 10
+    login_failure_window_minutes: int = 15
+
     # Password-reset tunables (config-driven so they can change without a deploy).
     reset_code_ttl_minutes: int = 15
     reset_code_max_attempts: int = 5

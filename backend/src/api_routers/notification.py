@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from src.core.dependencies import get_current_user, get_db
-from src.core.limiter import limiter
+from src.core.limiter import limiter, user_or_ip_key
 from src.pydantic_schemas.notification import (
     NotificationListResponse,
     UnreadCountResponse,
@@ -25,7 +25,7 @@ router = APIRouter(
     "",
     response_model=NotificationListResponse,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def my_notifications(
     request: Request,
     limit: int = Query(default=30, ge=1, le=50),
@@ -46,7 +46,7 @@ def my_notifications(
     "/unread-count",
     response_model=UnreadCountResponse,
 )
-@limiter.limit("300/minute")
+@limiter.limit("300/minute", key_func=user_or_ip_key)
 def unread_count(
     request: Request,
     db: Session = Depends(get_db),
@@ -63,7 +63,7 @@ def unread_count(
     "/read",
     response_model=UnreadCountResponse,
 )
-@limiter.limit("120/minute")
+@limiter.limit("120/minute", key_func=user_or_ip_key)
 def mark_read(
     request: Request,
     db: Session = Depends(get_db),
