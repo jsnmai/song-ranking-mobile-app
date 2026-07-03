@@ -56,7 +56,7 @@ describe("searchSongs", () => {
         const response = await searchSongs("frank ocean", "test-token")
 
         expect(mockFetch).toHaveBeenCalledWith(
-            "https://itunes.apple.com/search?term=frank%20ocean&media=music&entity=song&country=US&limit=10",
+            "https://itunes.apple.com/search?term=frank%20ocean&media=music&entity=song&country=US&limit=50",
         )
         expect(mockPost).toHaveBeenCalledWith(
             "/api/v1/search/apple/annotations",

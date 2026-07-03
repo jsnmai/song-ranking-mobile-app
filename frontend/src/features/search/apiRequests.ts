@@ -7,7 +7,11 @@ import { AppleSearchAnnotationRequest, AppleSearchAnnotationResponse, SongSearch
 
 const APPLE_SEARCH_URL = "https://itunes.apple.com/search"
 const APPLE_STOREFRONT = "US"
-const APPLE_SEARCH_LIMIT = 10
+// Apple's public search API doesn't support offset-based pagination (verified: an offset
+// param is silently ignored), so "load more" is client-side over one larger fetched batch
+// rather than a second network request. Capped at 50 to match the backend annotation
+// endpoint's per-request item limit (AppleSearchAnnotationRequest.results, max_length=50).
+const APPLE_SEARCH_LIMIT = 50
 
 type AppleSearchPayload = {
     results?: AppleSearchRow[];

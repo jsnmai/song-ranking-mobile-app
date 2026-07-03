@@ -34,6 +34,8 @@ import Svg, { Circle, Defs, Path, RadialGradient, Rect, Stop } from "react-nativ
 
 import { ApiError } from "../../api/client"
 import BouncyPressable from "../../components/BouncyPressable"
+import { DriftingStars, StarDot } from "../../components/DriftingStars"
+import FindYourPeopleCard from "../../components/FindYourPeopleCard"
 import HatchBox from "../../components/HatchBox"
 import { AppStackParamList, DiscoverStackParamList, TabParamList } from "../../navigation/types"
 import { bucketColor, colors, fonts } from "../../theme"
@@ -53,6 +55,9 @@ const RECENT_KEY = "discover_recent_searches"
 // behind a "Show more" chip, with each scope's stored history capped independently.
 const PREVIEW_RECENTS = 6
 const RECENT_CAP_PER_MODE = 12
+// Song search fetches up to APPLE_SEARCH_LIMIT results in one request (apiRequests.ts) but
+// only shows this many at a time; "Load more" reveals more of what's already fetched.
+const SONG_RESULTS_PAGE_SIZE = 10
 
 type DiscoverRouteProp = RouteProp<DiscoverStackParamList, "DiscoverHome">
 type DiscoverNavigationProp = CompositeNavigationProp<
@@ -262,26 +267,18 @@ const MOST_RATED_STARS: { left: `${number}%`; top: `${number}%`; size: number; o
     { left: "40%", top: "90%", size: 1.5, opacity: 0.28 },
 ]
 
+// Normalized for the shared drifting starfield: percent coords, radius = half the dot size,
+// gold accents carried through as per-dot colours.
+const MOST_RATED_DOTS: StarDot[] = MOST_RATED_STARS.map((s) => ({
+    x: parseFloat(s.left),
+    y: parseFloat(s.top),
+    r: s.size / 2,
+    o: s.opacity,
+    c: s.gold ? colors.gold : undefined,
+}))
+
 function MostRatedStars() {
-    return (
-        <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            {MOST_RATED_STARS.map((s, i) => (
-                <View
-                    key={i}
-                    style={{
-                        position: "absolute",
-                        left: s.left,
-                        top: s.top,
-                        width: s.size,
-                        height: s.size,
-                        borderRadius: s.size / 2,
-                        backgroundColor: s.gold ? colors.gold : "#fff",
-                        opacity: s.opacity,
-                    }}
-                />
-            ))}
-        </View>
-    )
+    return <DriftingStars dots={MOST_RATED_DOTS} />
 }
 
 export default function DiscoverScreen() {
@@ -296,8 +293,11 @@ export default function DiscoverScreen() {
     const [recentSearches, setRecentSearches] = useState<RecentEntry[]>([])
     // Whether the current scope's recents are expanded past the preview count.
     const [recentsExpanded, setRecentsExpanded] = useState(false)
+    // Session-only dismiss for the People-tab "Find your people" nudge (like the Feed card).
+    const [findPeopleDismissed, setFindPeopleDismissed] = useState(false)
     const recentLoaded = useRef(false)
     const [songResults, setSongResults] = useState<SongSearchResult[]>([])
+    const [visibleSongCount, setVisibleSongCount] = useState(SONG_RESULTS_PAGE_SIZE)
     const [profileResults, setProfileResults] = useState<Profile[]>([])
     const [followBusy, setFollowBusy] = useState<Set<string>>(new Set())
     const [isLoading, setIsLoading] = useState(false)
@@ -429,6 +429,13 @@ export default function DiscoverScreen() {
         navigation.navigate("OtherProfile", { username: p.username })
     }
 
+    // People-tab "Find your people" card actions. Contacts-sync and invite aren't built
+    // yet, so both buttons fall back to surfacing the search field (bringing the keyboard
+    // up) so the user can start typing a name — the Feed card's deferred equivalent.
+    const handleFindPeople = () => {
+        searchRef.current?.focus()
+    }
+
     const handleSearchRatePress = (song: SongSearchResult) => {
         // Skip Song Detail and drop straight into the rating flow.
         addToRecent(query, "songs")
@@ -513,6 +520,7 @@ export default function DiscoverScreen() {
                     const response = await searchSongs(trimmedQuery, token)
                     if (isCurrentSearch) {
                         setSongResults(response.results)
+                        setVisibleSongCount(SONG_RESULTS_PAGE_SIZE)
                         setProfileResults([])
                     }
                 } else {
@@ -762,6 +770,19 @@ export default function DiscoverScreen() {
                             </View>
                         )}
 
+                        {/* Find-your-people nudge — People tab resting state, above Recent so
+                            it's the first thing a friendless user sees. It disappears once they
+                            follow 3+ people (or dismiss it), letting Recent take the top. */}
+                        {searchMode === "users" && !isLoading && error === null && !hasQuery
+                            && followingCount < 3 && !findPeopleDismissed && (
+                            <FindYourPeopleCard
+                                style={styles.findPeopleCard}
+                                onConnect={handleFindPeople}
+                                onInvite={handleFindPeople}
+                                onDismiss={() => setFindPeopleDismissed(true)}
+                            />
+                        )}
+
                         {/* No query: recent searches, scoped to the active tab. The RECENT /
                             Clear header stays anchored; only the chip cloud below it slides
                             toward the tab you just tapped. */}
@@ -836,7 +857,7 @@ export default function DiscoverScreen() {
                         {/* Song results — rated rows show your score, others a Rate pill */}
                         {!isLoading && error === null && searchMode === "songs" && songResults.length > 0 && (
                             <View style={styles.resultCard}>
-                                {songResults.map((song, i) => {
+                                {songResults.slice(0, visibleSongCount).map((song, i) => {
                                     const rated = song.my_bucket != null && song.my_score != null
                                     return (
                                         <TouchableOpacity
@@ -876,6 +897,16 @@ export default function DiscoverScreen() {
                                     )
                                 })}
                             </View>
+                        )}
+
+                        {!isLoading && error === null && searchMode === "songs" && songResults.length > visibleSongCount && (
+                            <TouchableOpacity
+                                style={styles.loadMoreBtn}
+                                onPress={() => setVisibleSongCount((c) => c + SONG_RESULTS_PAGE_SIZE)}
+                                activeOpacity={0.7}
+                            >
+                                <Text style={styles.loadMoreText}>Load more</Text>
+                            </TouchableOpacity>
                         )}
 
                         {/* People results — taste match + relationship note + follow action */}
@@ -1283,6 +1314,12 @@ const styles = StyleSheet.create({
     scopeBtnTextActive: {
         color: "#fff",
     },
+    // ── Find your people (People tab) ──────────────────────────────────
+    // No horizontal margin — scrollContent already pads 14. Bottom gap separates it
+    // from the RECENT label below.
+    findPeopleCard: {
+        marginBottom: 18,
+    },
     // ── Recent searches ────────────────────────────────────────────────
     recentHeader: {
         flexDirection: "row",
@@ -1443,6 +1480,21 @@ const styles = StyleSheet.create({
     resultRowBorder: {
         borderTopWidth: 1,
         borderTopColor: colors.line,
+    },
+    loadMoreBtn: {
+        alignItems: "center",
+        justifyContent: "center",
+        marginTop: 10,
+        paddingVertical: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: colors.line,
+        backgroundColor: colors.paper,
+    },
+    loadMoreText: {
+        fontFamily: fonts.display,
+        fontSize: 12,
+        color: colors.inkSoft,
     },
     cover: {
         width: 44,
