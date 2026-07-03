@@ -321,6 +321,7 @@ export default function ProfileScreen() {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             onStartShouldSetResponderCapture={dismissTastePopoverForScreenTouch}
+            onScrollBeginDrag={dismissTastePopover}
         >
             {openTasteTile ? (
                 <Pressable
