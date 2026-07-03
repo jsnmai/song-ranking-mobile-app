@@ -745,13 +745,13 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
         gap: 9,
-        // Hard ink offset shadow — matches the score-reveal / Discover primary-action
-        // treatment. Solid ink, no blur, so it reads as a crisp black shadow rather
-        // than a faint smudge.
+        // Hard ink offset shadow — the app's prominent-button treatment (matches Song Detail's
+        // primary action). Solid ink, no blur; 3px offset so a full-width button reads with a
+        // crisp black edge rather than a thin smudge (small pills use a lighter 2px offset).
         shadowColor: colors.ink,
         shadowOpacity: 1,
         shadowRadius: 0,
-        shadowOffset: { width: 2, height: 2 },
+        shadowOffset: { width: 3, height: 3 },
     },
     nextButtonDisabled: {
         backgroundColor: colors.sand,

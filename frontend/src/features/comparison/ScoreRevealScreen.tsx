@@ -409,11 +409,12 @@ const styles = StyleSheet.create({
         borderBottomColor: colors.line,
     },
     slotRank: {
-        fontFamily: fonts.serif,
-        fontStyle: "italic",
-        fontSize: 12,
+        // Real italic serif face — fontStyle:"italic" does NOT render italic for custom RN
+        // fonts, so the rank was showing upright. This is the design's italic serif numeral (fG).
+        fontFamily: fonts.serifItalic,
+        fontSize: 16,
         color: colors.inkDim,
-        width: 18,
+        width: 22,
         textAlign: "center",
         flexShrink: 0,
     },
@@ -441,8 +442,10 @@ const styles = StyleSheet.create({
         flexWrap: "nowrap",
     },
     slotTitle: {
-        fontFamily: fonts.serif,
-        fontSize: 13,
+        // Archivo Black display face (fD in the design kit) — matches the hero title and the
+        // design's slot rows. The old Fraunces serif here read as a different type system.
+        fontFamily: fonts.display,
+        fontSize: 12.5,
         color: colors.ink,
         flexShrink: 1,
     },
@@ -491,13 +494,13 @@ const styles = StyleSheet.create({
         gap: 8,
         borderRadius: 13,
         paddingVertical: 15,
-        // Hard ink offset shadow — the app's primary-action treatment (matches the
-        // Discover rate/follow pills). Solid ink, no blur, so it reads as a crisp
-        // black shadow rather than a faint smudge.
+        // Hard ink offset shadow — the app's prominent-button treatment (matches Song Detail's
+        // primary action). Solid ink, no blur; 3px offset so this full-width button reads with a
+        // crisp black edge rather than a thin smudge (small pills use a lighter 2px offset).
         shadowColor: colors.ink,
         shadowOpacity: 1,
         shadowRadius: 0,
-        shadowOffset: { width: 2, height: 2 },
+        shadowOffset: { width: 3, height: 3 },
     },
     viewBtnText: {
         fontFamily: fonts.display,
@@ -505,24 +508,17 @@ const styles = StyleSheet.create({
         color: "#fff",
     },
     doneBtn: {
+        // Solid black — the design kit's primary button (ink fill, white label).
         borderRadius: 13,
         paddingVertical: 15,
         paddingHorizontal: 20,
         alignItems: "center",
         justifyContent: "center",
-        borderWidth: 1.5,
-        borderColor: colors.line,
-        // Opaque fill so the hard ink shadow casts a solid black block behind the
-        // outlined button, matching the View in Rankings shadow beside it.
-        backgroundColor: colors.bg,
-        shadowColor: colors.ink,
-        shadowOpacity: 1,
-        shadowRadius: 0,
-        shadowOffset: { width: 2, height: 2 },
+        backgroundColor: colors.ink,
     },
     doneBtnText: {
         fontFamily: fonts.display,
         fontSize: 13,
-        color: colors.ink,
+        color: "#fff",
     },
 })
