@@ -106,12 +106,15 @@ function titleCase(s: string): string {
 // recognize it and keep it out of the world's dead-center slot (see below).
 export const UNKNOWN_GENRE = "Unknown"
 
-// Derive a single genre label from the song's enrichment fields.
+// Derive a single genre label from the song's enrichment fields. MusicBrainz-first,
+// Deezer fallback, first-letter-capitalized — kept identical to the backend's
+// _resolve_genre (backend/src/services/taste.py) so a song shows the same genre on the
+// Rank Map and on the Taste Profile's Top Genres.
 function songGenre(r: RankingResponse): string {
-    const deezer = r.song.genre_deezer?.trim()
-    if (deezer) return deezer
     const mb = r.song.genres_mb?.find((g) => g && g.trim())
     if (mb) return titleCase(mb.trim())
+    const deezer = r.song.genre_deezer?.trim()
+    if (deezer) return titleCase(deezer)
     return UNKNOWN_GENRE
 }
 

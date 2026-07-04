@@ -168,6 +168,26 @@ def test_taste_genres_mb_takes_priority_over_deezer(
     assert data["overall"]["genres"][0]["name"] == "Alternative R&B"
 
 
+def test_taste_lowercase_musicbrainz_genre_is_capitalized(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    """Lowercase MusicBrainz tags are first-letter-capitalized so Top Genres and the Rank
+    Map (which title-cases too) show the same label."""
+    token, _ = _register(client, "lc@example.com", "lcuser")
+    _rate(client, token, deezer_id=1, artist="Artist A", bucket="like", genre_deezer="Electronic")
+
+    song = db_session.query(Song).filter(Song.deezer_id == 1).first()
+    assert song is not None
+    song.genres_mb = ["trap"]
+    db_session.commit()
+
+    response = _get_taste(client, token)
+
+    data = response.json()
+    assert data["overall"]["genres"][0]["name"] == "Trap"
+
+
 def test_taste_percentages_sum_to_100(client: TestClient) -> None:
     """Genre percentages across the overall section sum to approximately 100%."""
     token, _ = _register(client, "pct@example.com", "pctuser")

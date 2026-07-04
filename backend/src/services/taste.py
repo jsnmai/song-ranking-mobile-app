@@ -160,12 +160,26 @@ def _resolve_genre(
     genres_mb: list[str] | None,
     genre_deezer: str | None,
 ) -> str:
-    """Prefer MusicBrainz genre, fall back to Deezer genre, then Unknown."""
+    """Prefer the first MusicBrainz tag, fall back to Deezer, then Unknown.
+
+    Mirrors the Rank Map's songGenre() (frontend/.../rankmap/layouts.ts) exactly — same
+    MusicBrainz-first priority, same first-letter capitalization — so a song lands in the
+    same genre label on the Taste Profile's Top Genres and on the Rank Map.
+    """
     if genres_mb:
-        return genres_mb[0]
-    if genre_deezer:
-        return genre_deezer
+        for tag in genres_mb:
+            if tag and tag.strip():
+                return _format_genre(tag)
+    if genre_deezer and genre_deezer.strip():
+        return _format_genre(genre_deezer)
     return "Unknown"
+
+
+def _format_genre(name: str) -> str:
+    """Capitalize the first letter so lowercase MusicBrainz tags (e.g. "trap") read
+    consistently with Title-Case Deezer genres and match the Rank Map's titleCase()."""
+    trimmed = name.strip()
+    return trimmed[:1].upper() + trimmed[1:]
 
 
 def _compute_genres(
