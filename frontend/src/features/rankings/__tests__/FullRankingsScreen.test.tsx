@@ -5,6 +5,7 @@ import { RankingResponse } from "../../comparison/types"
 
 const mockGoBack = jest.fn()
 const mockNavigate = jest.fn()
+const mockPopToTop = jest.fn()
 const mockListMyRankings = jest.fn()
 
 jest.mock("react-native-safe-area-context", () => ({
@@ -106,7 +107,7 @@ const dislikeRanking = makeRanking(9, "Bad Religion", "Frank Ocean", "channel OR
 const extraRanking1 = makeRanking(10, "Solar Power", "Lorde", "Solar Power", "like", 4)
 const extraRanking2 = makeRanking(11, "See You Again", "Tyler, the Creator", "Flower Boy", "dislike", 5)
 const rankings = [likeRanking, okayRanking, dislikeRanking, extraRanking1, extraRanking2]
-const navigation = { goBack: mockGoBack, navigate: mockNavigate }
+const navigation = { goBack: mockGoBack, navigate: mockNavigate, popToTop: mockPopToTop }
 
 beforeEach(() => {
     jest.resetAllMocks()
@@ -115,6 +116,15 @@ beforeEach(() => {
 })
 
 describe("FullRankingsScreen", () => {
+    it("leaves All Rankings when no rankings remain", async () => {
+        mockListMyRankings.mockResolvedValue({ rankings: [], next_cursor: null })
+
+        render(<FullRankingsScreen navigation={navigation as never} route={{} as never} />)
+
+        await screen.findByText("All Rankings")
+        expect(mockPopToTop).toHaveBeenCalled()
+    })
+
     it("renders a back button, reorder button, bucket tabs, and filter button", async () => {
         render(<FullRankingsScreen navigation={navigation as never} route={{} as never} />)
 

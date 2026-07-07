@@ -138,6 +138,9 @@ export default function FullRankingsScreen({ navigation, route }: FullRankingsSc
                 cursor = response.next_cursor
             } while (cursor !== null)
             setRankings(allRankings)
+            if (allRankings.length === 0) {
+                navigation.popToTop()
+            }
         } catch (err) {
             if (err instanceof ApiError) {
                 setError(err.detail)
@@ -149,7 +152,7 @@ export default function FullRankingsScreen({ navigation, route }: FullRankingsSc
         } finally {
             setIsLoading(false)
         }
-    }, [token])
+    }, [navigation, token])
 
     const clearDetailFilters = () => {
         setArtistFilter(null)
