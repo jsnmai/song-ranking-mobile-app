@@ -14,6 +14,7 @@ from scripts.demo_seed_data import (
     DISCO_CO_SIGN_DEEZER_ID,
     SMOKE_APPLE_TRACK_ID,
     SMOKE_DEMO_DEEZER_ID,
+    SONG_CATALOG,
     demo_email,
     seed_email,
 )
@@ -363,6 +364,41 @@ def test_seed_demo_smoke_has_apple_preview_ref(
     assert apple_ref.provider_track_id == SMOKE_APPLE_TRACK_ID
     assert apple_ref.preview_available is True
     assert apple_ref.url is not None
+
+
+def test_seed_demo_catalog_uses_real_apple_search_rows(
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every demo catalog song is real Apple-shaped metadata, not placeholder content."""
+    _run_seed(db_session, monkeypatch)
+
+    demo_deezer_ids = [int(entry["deezer_id"]) for entry in SONG_CATALOG]
+    songs = (
+        db_session.execute(
+            select(Song).where(Song.deezer_id.in_(demo_deezer_ids)),
+        )
+        .scalars()
+        .all()
+    )
+    apple_refs = (
+        db_session.execute(
+            select(SongProviderRef)
+            .join(Song, Song.id == SongProviderRef.song_id)
+            .where(Song.deezer_id.in_(demo_deezer_ids))
+            .where(SongProviderRef.provider == "apple"),
+        )
+        .scalars()
+        .all()
+    )
+
+    assert len(songs) == len(SONG_CATALOG)
+    assert len(apple_refs) == len(SONG_CATALOG)
+    assert all(not song.title.startswith("Demo Track") for song in songs)
+    assert all(song.preview_url is None for song in songs)
+    assert all("example.com" not in (song.cover_url or "") for song in songs)
+    assert all(ref.confidence == "dev_seed" for ref in apple_refs)
+    assert all(ref.preview_available is True for ref in apple_refs)
 
 
 def test_discovery_seed_co_sign_present(

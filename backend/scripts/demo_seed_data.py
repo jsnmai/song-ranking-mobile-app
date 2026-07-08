@@ -683,54 +683,465 @@ COMPATIBILITY_PAIRS: tuple[tuple[str, str], ...] = (
 )
 
 
-def _artist_for_deezer_id(deezer_id: int) -> str:
-    artists = ("Frank Ocean", "Kendrick Lamar", "Taylor Swift", "Bon Iver", "SZA")
-    return artists[(deezer_id - DEMO_DEEZER_ID_START) % len(artists)]
-
-
-def _genre_for_deezer_id(deezer_id: int) -> str:
-    genres = ("Rock", "Hip-Hop", "Pop", "R&B", "Indie")
-    return genres[(deezer_id - DEMO_DEEZER_ID_START) % len(genres)]
-
-
-def _song_catalog_entry(
+def _apple_song(
     deezer_id: int,
+    title: str,
+    artist: str,
+    album: str,
+    cover_url: str,
+    genre_deezer: str,
+    apple_track_id: str,
+    apple_artist_id: str,
+    apple_album_id: str,
+    apple_view_url: str,
+    preview_available: bool = True,
 ) -> dict[str, object]:
-    """Build deterministic demo song metadata, with one real Apple-backed preview fixture."""
-    if deezer_id == SMOKE_DEMO_DEEZER_ID:
-        return {
-            "deezer_id": deezer_id,
-            "title": "Smoke",
-            "artist": "Skrillex, ISOxo, Cristale & TeeZandos",
-            "album": "Smoke - Single",
-            "cover_url": SMOKE_APPLE_ARTWORK_URL,
-            "genre_deezer": "Electronic",
-            "preview_url": None,
-            "apple_track_id": SMOKE_APPLE_TRACK_ID,
-            "apple_artist_id": "356545647",
-            "apple_album_id": "1895874910",
-            "apple_view_url": SMOKE_APPLE_VIEW_URL,
-            "artwork_url": SMOKE_APPLE_ARTWORK_URL,
-            "preview_available": True,
-        }
-
+    """Build an Apple-backed seed row while keeping the old fixture id stable."""
     return {
         "deezer_id": deezer_id,
-        "title": f"Demo Track {deezer_id - DEMO_DEEZER_ID_START + 1:02d}",
-        "artist": _artist_for_deezer_id(deezer_id),
-        "album": "LISTn Demo Sessions",
-        "genre_deezer": _genre_for_deezer_id(deezer_id),
-        "preview_url": (
-            f"https://example.com/demo-preview-{deezer_id}.mp3"
-            if deezer_id % 3 != 0
-            else None
-        ),
+        "title": title,
+        "artist": artist,
+        "album": album,
+        "cover_url": cover_url,
+        "genre_deezer": genre_deezer,
+        "preview_url": None,
+        "apple_track_id": apple_track_id,
+        "apple_artist_id": apple_artist_id,
+        "apple_album_id": apple_album_id,
+        "apple_view_url": apple_view_url,
+        "artwork_url": cover_url,
+        "preview_available": preview_available,
     }
 
 
-SONG_CATALOG: tuple[dict[str, object], ...] = tuple(
-    _song_catalog_entry(deezer_id)
-    for deezer_id in range(DEMO_DEEZER_ID_START, DEMO_DEEZER_ID_END + 1)
+SONG_CATALOG: tuple[dict[str, object], ...] = (
+    _apple_song(
+        SMOKE_DEMO_DEEZER_ID,
+        "Smoke",
+        "Skrillex, ISOxo, Cristale & TeeZandos",
+        "Smoke - Single",
+        SMOKE_APPLE_ARTWORK_URL,
+        "Electronic",
+        SMOKE_APPLE_TRACK_ID,
+        "356545647",
+        "1895874910",
+        SMOKE_APPLE_VIEW_URL,
+    ),
+    _apple_song(
+        9_000_002,
+        "Pink + White",
+        "Frank Ocean",
+        "Blonde",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/bb/45/68/"
+        "bb4568f3-68cd-619d-fbcb-4e179916545d/BlondCover-Final.jpg/600x600bb.jpg",
+        "Pop",
+        "1146195714",
+        "442122051",
+        "1146195596",
+        "https://music.apple.com/us/album/pink-white/1146195596?i=1146195714&uo=4",
+    ),
+    _apple_song(
+        9_000_003,
+        "HUMBLE.",
+        "Kendrick Lamar",
+        "DAMN.",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/ab/16/ef/"
+        "ab16efe9-e7f1-66ec-021c-5592a23f0f9e/17UMGIM88793.rgb.jpg/600x600bb.jpg",
+        "Hip-Hop/Rap",
+        "1440882165",
+        "368183298",
+        "1440881722",
+        "https://music.apple.com/us/album/humble/1440881722?i=1440882165&uo=4",
+    ),
+    _apple_song(
+        9_000_004,
+        "Cruel Summer",
+        "Taylor Swift",
+        "Lover",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/49/3d/ab/"
+        "493dab54-f920-9043-6181-80993b8116c9/19UMGIM53909.rgb.jpg/600x600bb.jpg",
+        "Pop",
+        "1468058171",
+        "159260351",
+        "1468058165",
+        "https://music.apple.com/us/album/cruel-summer/1468058165?i=1468058171&uo=4",
+    ),
+    _apple_song(
+        9_000_005,
+        "Skinny Love",
+        "Bon Iver",
+        "For Emma, Forever Ago",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/21/2f/ea/"
+        "212fea18-5fdc-ba4d-5dd7-1b07aaa88b67/656605211565.tif/600x600bb.jpg",
+        "Alternative",
+        "947059829",
+        "273428126",
+        "947059824",
+        "https://music.apple.com/us/album/skinny-love/947059824?i=947059829&uo=4",
+    ),
+    _apple_song(
+        9_000_006,
+        "Good Days",
+        "SZA",
+        "SOS",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/62/93/13/"
+        "6293132e-20ff-67ab-3d1f-96bb6797a6ba/196589564955.jpg/600x600bb.jpg",
+        "R&B/Soul",
+        "1658650802",
+        "605800394",
+        "1658650093",
+        "https://music.apple.com/us/album/good-days/1658650093?i=1658650802&uo=4",
+    ),
+    _apple_song(
+        9_000_007,
+        "Super Shy",
+        "NewJeans",
+        "NewJeans 'Super Shy' - Single",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/63/e5/e2/"
+        "63e5e2e4-829b-924d-a1dc-8058a1d69bd4/196922462702_Cover.jpg/600x600bb.jpg",
+        "K-Pop",
+        "1692686518",
+        "1635469693",
+        "1692686264",
+        "https://music.apple.com/us/album/super-shy/1692686264?i=1692686518&uo=4",
+    ),
+    _apple_song(
+        9_000_008,
+        "Not Like Us",
+        "Kendrick Lamar",
+        "Not Like Us - Single",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/31/3a/3f/"
+        "313a3fbc-bb8f-80c7-b5a2-e226869a38cd/24UMGIM51924.rgb.jpg/600x600bb.jpg",
+        "Hip-Hop/Rap",
+        "1781353929",
+        "368183298",
+        "1781353928",
+        "https://music.apple.com/us/album/not-like-us/1781353928?i=1781353929&uo=4",
+    ),
+    _apple_song(
+        9_000_009,
+        "Kill Bill",
+        "SZA",
+        "SOS",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/bd/3b/a9/"
+        "bd3ba9fb-9609-144f-bcfe-ead67b5f6ab3/196589564931.jpg/600x600bb.jpg",
+        "R&B/Soul",
+        "1657869393",
+        "605800394",
+        "1657869377",
+        "https://music.apple.com/us/album/kill-bill/1657869377?i=1657869393&uo=4",
+    ),
+    _apple_song(
+        9_000_010,
+        "Anti-Hero",
+        "Taylor Swift",
+        "Midnights",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/3d/01/f2/"
+        "3d01f2e5-5a08-835f-3d30-d031720b2b80/22UM1IM07364.rgb.jpg/600x600bb.jpg",
+        "Pop",
+        "1649434293",
+        "159260351",
+        "1649434004",
+        "https://music.apple.com/us/album/anti-hero/1649434004?i=1649434293&uo=4",
+    ),
+    _apple_song(
+        9_000_011,
+        "Bad Habit",
+        "Steve Lacy",
+        "Gemini Rights",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/41/cf/77/"
+        "41cf7744-535f-3679-0ca6-c1b8d3f98c8f/196874557266.jpg/600x600bb.jpg",
+        "R&B/Soul",
+        "6788150545",
+        "1210275020",
+        "6788150539",
+        "https://music.apple.com/us/album/bad-habit/6788150539?i=6788150545&uo=4",
+    ),
+    _apple_song(
+        9_000_012,
+        "Blinding Lights",
+        "The Weeknd",
+        "Blinding Lights - Single",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/a6/6e/bf/"
+        "a66ebf79-5008-8948-b352-a790fc87446b/19UM1IM04638.rgb.jpg/600x600bb.jpg",
+        "R&B/Soul",
+        "1488408568",
+        "479756766",
+        "1488408555",
+        "https://music.apple.com/us/album/blinding-lights/1488408555?i=1488408568&uo=4",
+    ),
+    _apple_song(
+        9_000_013,
+        "Get Lucky",
+        "Daft Punk, Pharrell Williams & Nile Rodgers",
+        "Random Access Memories",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/e8/43/5f/"
+        "e8435ffa-b6b9-b171-40ab-4ff3959ab661/886443919266.jpg/600x600bb.jpg",
+        "Pop",
+        "617154366",
+        "5468295",
+        "617154241",
+        "https://music.apple.com/us/album/get-lucky/617154241?i=617154366&uo=4",
+    ),
+    _apple_song(
+        9_000_014,
+        "Midnight City",
+        "M83",
+        "Hurry Up, We're Dreaming",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/cb/7b/a9/"
+        "cb7ba903-b5f1-cc21-90db-7a81b7aa0997/724596951057.jpg/600x600bb.jpg",
+        "Electronic",
+        "828259377",
+        "46086389",
+        "828259375",
+        "https://music.apple.com/us/album/midnight-city/828259375?i=828259377&uo=4",
+    ),
+    _apple_song(
+        9_000_015,
+        "Dreams",
+        "Fleetwood Mac",
+        "Greatest Hits",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/d2/48/f4/"
+        "d248f4ae-a7e4-a48e-1588-6617de3e8d76/mzi.izeorbmm.jpg/600x600bb.jpg",
+        "Rock",
+        "202272624",
+        "158038",
+        "202271826",
+        "https://music.apple.com/us/album/dreams/202271826?i=202272624&uo=4",
+    ),
+    _apple_song(
+        9_000_016,
+        "Everlong",
+        "Foo Fighters",
+        "The Colour And The Shape",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/68/f5/86/"
+        "68f586ca-a375-9965-a864-9e227e77ef5b/884977570328.jpg/600x600bb.jpg",
+        "Rock",
+        "362133505",
+        "6906197",
+        "362133451",
+        "https://music.apple.com/us/album/everlong/362133451?i=362133505&uo=4",
+    ),
+    _apple_song(
+        9_000_017,
+        "Royals",
+        "Lorde",
+        "The Love Club EP",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/b9/e2/d0/"
+        "b9e2d0af-8ce2-e078-d4e2-eccf24d7e206/12UMGIM55707.rgb.jpg/600x600bb.jpg",
+        "Alternative",
+        "1594982922",
+        "602767352",
+        "1594982748",
+        "https://music.apple.com/us/album/royals/1594982748?i=1594982922&uo=4",
+    ),
+    _apple_song(
+        9_000_018,
+        "This Is America",
+        "Childish Gambino",
+        "This Is America - Single",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/f7/a4/ee/"
+        "f7a4ee19-086e-7aba-ea4d-c36be6ea69d4/886447095850.jpg/600x600bb.jpg",
+        "Hip-Hop/Rap",
+        "1379065464",
+        "466842536",
+        "1379065454",
+        "https://music.apple.com/us/album/this-is-america/1379065454?i=1379065464&uo=4",
+    ),
+    _apple_song(
+        9_000_019,
+        "Latch (feat. Sam Smith)",
+        "Disclosure",
+        "The Singles - EP",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/71/ed/a0/"
+        "71eda00a-4017-94a7-f6ee-e6a965458fd7/13UMGIM28546.rgb.jpg/600x600bb.jpg",
+        "Electronic",
+        "1471695442",
+        "520848228",
+        "1471695436",
+        "https://music.apple.com/us/album/latch-feat-sam-smith/1471695436?i=1471695442&uo=4",
+    ),
+    _apple_song(
+        9_000_020,
+        "Sweet Disposition",
+        "The Temper Trap",
+        "(500) Days of Summer (Music from the Motion Picture)",
+        "https://is1-ssl.mzstatic.com/image/thumb/Features/fc/78/d1/dj.ktqhcjke.jpg/600x600bb.jpg",
+        "Soundtrack",
+        "321980767",
+        "202033981",
+        "321980590",
+        "https://music.apple.com/us/album/sweet-disposition/321980590?i=321980767&uo=4",
+    ),
+    _apple_song(
+        9_000_021,
+        "Heat Waves",
+        "Glass Animals",
+        "Dreamland",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/da/8b/77/"
+        "da8b7731-6f4f-eacf-5e74-8b23389eefa1/20UMGIM03371.rgb.jpg/600x600bb.jpg",
+        "Alternative",
+        "1508562516",
+        "528928008",
+        "1508562310",
+        "https://music.apple.com/us/album/heat-waves/1508562310?i=1508562516&uo=4",
+    ),
+    _apple_song(
+        9_000_022,
+        "As It Was",
+        "Harry Styles",
+        "Harry's House",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/2a/19/fb/"
+        "2a19fb85-2f70-9e44-f2a9-82abe679b88e/886449990061.jpg/600x600bb.jpg",
+        "Pop",
+        "1615585008",
+        "471260289",
+        "1615584999",
+        "https://music.apple.com/us/album/as-it-was/1615584999?i=1615585008&uo=4",
+    ),
+    _apple_song(
+        9_000_023,
+        "Levitating",
+        "Dua Lipa",
+        "Future Nostalgia",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/6c/11/d6/"
+        "6c11d681-aa3a-d59e-4c2e-f77e181026ab/190295092665.jpg/600x600bb.jpg",
+        "Pop",
+        "1538003843",
+        "1031397873",
+        "1538003494",
+        "https://music.apple.com/us/album/levitating/1538003494?i=1538003843&uo=4",
+    ),
+    _apple_song(
+        9_000_024,
+        "Motion Sickness",
+        "Phoebe Bridgers",
+        "Stranger in the Alps",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/20/4c/6e/"
+        "204c6ef3-8e95-4cee-2256-202ca62aebed/60220.jpg/600x600bb.jpg",
+        "Alternative",
+        "1256607810",
+        "697833299",
+        "1256607808",
+        "https://music.apple.com/us/album/motion-sickness/1256607808?i=1256607810&uo=4",
+    ),
+    _apple_song(
+        9_000_025,
+        "Kyoto",
+        "Phoebe Bridgers",
+        "Punisher",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/39/91/4f/"
+        "39914f60-e9aa-4ae9-3962-44b0a5e5d570/656605150062.jpg/600x600bb.jpg",
+        "Alternative",
+        "1504699860",
+        "697833299",
+        "1504699857",
+        "https://music.apple.com/us/album/kyoto/1504699857?i=1504699860&uo=4",
+    ),
+    _apple_song(
+        9_000_026,
+        "Electric Feel",
+        "MGMT",
+        "Oracular Spectacular",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/72/f3/ed/"
+        "72f3edba-cbb0-4887-bb89-4aedf97ecd12/888880287779.jpg/600x600bb.jpg",
+        "Alternative",
+        "264720106",
+        "251553551",
+        "264720008",
+        "https://music.apple.com/us/album/electric-feel/264720008?i=264720106&uo=4",
+    ),
+    _apple_song(
+        9_000_027,
+        "Ribs",
+        "Lorde",
+        "Pure Heroine",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/96/a5/09/"
+        "96a50916-169b-724c-b722-b8c474406352/13UAAIM68691.rgb.jpg/600x600bb.jpg",
+        "Alternative",
+        "1440818666",
+        "602767352",
+        "1440818584",
+        "https://music.apple.com/us/album/ribs/1440818584?i=1440818666&uo=4",
+    ),
+    _apple_song(
+        9_000_028,
+        "Mr. Brightside",
+        "The Killers",
+        "Direct Hits",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/11/64/9c/"
+        "11649c80-2066-dba8-77a9-df7eecae26c1/17UM1IM06937.rgb.jpg/600x600bb.jpg",
+        "Rock",
+        "1440891171",
+        "6483093",
+        "1440891166",
+        "https://music.apple.com/us/album/mr-brightside/1440891166?i=1440891171&uo=4",
+    ),
+    _apple_song(
+        9_000_029,
+        "Time to Pretend",
+        "MGMT",
+        "Oracular Spectacular",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/e5/06/cc/"
+        "e506ccd5-56ec-3d4c-69f7-14900bea74f0/mzi.bbgsikee.jpg/600x600bb.jpg",
+        "Alternative",
+        "273519673",
+        "251553551",
+        "273519664",
+        "https://music.apple.com/us/album/time-to-pretend/273519664?i=273519673&uo=4",
+    ),
+    _apple_song(
+        9_000_030,
+        "Oblivion",
+        "Grimes",
+        "Visions",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/5e/07/53/"
+        "5e0753c1-f3fb-e464-908f-8efc0a249b9b/652637320886.png/600x600bb.jpg",
+        "Electronic",
+        "499875050",
+        "2756920",
+        "499874506",
+        "https://music.apple.com/us/album/oblivion/499874506?i=499875050&uo=4",
+    ),
+    _apple_song(
+        9_000_031,
+        "Archie, Marry Me",
+        "Alvvays",
+        "Alvvays",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/90/78/52/"
+        "907852ec-15c8-c6cb-c810-6912dd18577d/644110028297.png/600x600bb.jpg",
+        "Alternative",
+        "1651310198",
+        "730606893",
+        "1651310191",
+        "https://music.apple.com/us/album/archie-marry-me/1651310191?i=1651310198&uo=4",
+    ),
+    _apple_song(
+        9_000_032,
+        "good 4 u",
+        "Olivia Rodrigo",
+        "SOUR (Video Version)",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/76/46/48/"
+        "76464884-0e9c-1951-a3f6-ce02f74c2b19/21UMGIM26093.rgb.jpg/600x600bb.jpg",
+        "Pop",
+        "1582277652",
+        "979458609",
+        "1582277315",
+        "https://music.apple.com/us/album/good-4-u/1582277315?i=1582277652&uo=4",
+    ),
+    _apple_song(
+        9_000_033,
+        "XS",
+        "Rina Sawayama",
+        "SAWAYAMA",
+        "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/b8/da/9c/"
+        "b8da9cab-3c87-0d86-9548-5b7d15156eca/192641421341_Cover.jpg/600x600bb.jpg",
+        "Alternative",
+        "1493469443",
+        "638343826",
+        "1493469433",
+        "https://music.apple.com/us/album/xs/1493469433?i=1493469443&uo=4",
+    ),
 )
 
 
