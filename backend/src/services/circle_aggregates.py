@@ -18,6 +18,7 @@ from src.crud.circle_aggregates import (
     get_viewer_rankings,
     list_circle_contributors,
 )
+from src.crud.song_provider_ref import list_apple_provider_refs_for_songs
 from src.pydantic_schemas.circle import (
     CircleContributor,
     CircleMostRatedItem,
@@ -26,7 +27,6 @@ from src.pydantic_schemas.circle import (
     CircleTrendingResponse,
     ViewerRating,
 )
-from src.crud.song_provider_ref import list_apple_provider_refs_for_songs
 from src.services.song import build_song_response_from_provider_ref
 from src.sqlalchemy_tables.ranking import Ranking
 

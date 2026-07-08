@@ -24,6 +24,12 @@ from src.crud.account_deletion import (
     delete_taste_history_for_user,
     list_ranked_song_ids_for_user,
 )
+from src.crud.login_attempt import (
+    clear_failed_logins,
+    count_failed_logins_since,
+    delete_failed_logins_before,
+    record_failed_login,
+)
 from src.crud.password_reset import (
     create_token,
     delete_expired,
@@ -31,12 +37,6 @@ from src.crud.password_reset import (
     increment_attempts,
     invalidate_user_tokens,
     mark_consumed,
-)
-from src.crud.login_attempt import (
-    clear_failed_logins,
-    count_failed_logins_since,
-    delete_failed_logins_before,
-    record_failed_login,
 )
 from src.crud.password_reset_request import (
     count_requests_since,
