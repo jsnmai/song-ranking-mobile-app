@@ -2,6 +2,8 @@
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from src.crud.taste import TasteRow
+from src.services.taste import _compute_top_artists
 from src.sqlalchemy_tables.artist import Artist, SongArtistCredit
 from src.sqlalchemy_tables.song import Song
 
@@ -272,20 +274,29 @@ def test_taste_top_artists_use_structured_artist_credits(
     assert "Skrillex & ISOxo" not in [artist["name"] for artist in artists]
 
 
-def test_taste_top_artist_ties_use_best_score_then_name(client: TestClient) -> None:
-    """Equal artist counts sort predictably by highest score, then name."""
-    token, _ = _register(client, "artistties@example.com", "artistties")
-    _rate(client, token, deezer_id=20, artist="Lower Artist", bucket="dislike")
-    _rate(client, token, deezer_id=21, artist="Higher Artist", bucket="like")
-    _rate(client, token, deezer_id=22, artist="Alpha Artist", bucket="alright")
+def test_taste_top_artist_ties_use_average_then_best_score_then_name() -> None:
+    """Equal artist counts sort by average score, then best score, then name."""
+    artists = _compute_top_artists(
+        [
+            TasteRow(bucket="like", score=10.0, genres_mb=None, genre_deezer=None, artist="Outlier Artist"),
+            TasteRow(bucket="dislike", score=1.0, genres_mb=None, genre_deezer=None, artist="Outlier Artist"),
+            TasteRow(bucket="like", score=8.0, genres_mb=None, genre_deezer=None, artist="Steady Artist"),
+            TasteRow(bucket="like", score=7.0, genres_mb=None, genre_deezer=None, artist="Steady Artist"),
+            TasteRow(bucket="like", score=8.0, genres_mb=None, genre_deezer=None, artist="Spiky Artist"),
+            TasteRow(bucket="like", score=6.0, genres_mb=None, genre_deezer=None, artist="Spiky Artist"),
+            TasteRow(bucket="like", score=7.0, genres_mb=None, genre_deezer=None, artist="Beta Artist"),
+            TasteRow(bucket="like", score=7.0, genres_mb=None, genre_deezer=None, artist="Beta Artist"),
+            TasteRow(bucket="like", score=7.0, genres_mb=None, genre_deezer=None, artist="Alpha Artist"),
+            TasteRow(bucket="like", score=7.0, genres_mb=None, genre_deezer=None, artist="Alpha Artist"),
+        ]
+    )
 
-    response = _get_taste(client, token)
-
-    artists = response.json()["overall"]["top_artists"]
-    assert [artist["name"] for artist in artists] == [
-        "Higher Artist",
+    assert [artist.name for artist in artists] == [
+        "Steady Artist",
+        "Spiky Artist",
         "Alpha Artist",
-        "Lower Artist",
+        "Beta Artist",
+        "Outlier Artist",
     ]
 
 
