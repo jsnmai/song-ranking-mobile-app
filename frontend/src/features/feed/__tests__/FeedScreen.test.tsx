@@ -849,6 +849,82 @@ describe("FeedScreen", () => {
         expect(mockChooseThisOrThat).not.toHaveBeenCalled()
     })
 
+    it("keeps This-or-That preview buttons visible when lookup returns no preview", async () => {
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 15, bookmarked_count: 0 },
+            following_count: 0,
+        }
+        mockFetchPreviewUrlBySongId.mockResolvedValue({
+            preview_url: null,
+            apple_view_url: "https://music.apple.com/us/album/pink-white/1440841363?i=1440841364",
+            provider: "apple",
+        })
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+        mockGetFeedModules.mockResolvedValue({ ...emptyModules, this_or_that: thisOrThatModule })
+
+        jest.useFakeTimers()
+        try {
+            render(<FeedScreen />)
+
+            await waitFor(() => {
+                expect(screen.getByTestId("feed-this-or-that-card")).toBeTruthy()
+            })
+
+            await act(async () => {
+                fireEvent.press(screen.getByTestId("feed-this-or-that-preview-43"))
+            })
+
+            await waitFor(() => {
+                expect(mockFetchPreviewUrlBySongId).toHaveBeenCalledWith(43, "test-token")
+            })
+            expect(screen.getByTestId("feed-this-or-that-preview-43")).toBeTruthy()
+            expect(within(screen.getByTestId("feed-quiet-toast")).getByText("Preview unavailable")).toBeTruthy()
+            expect(screen.queryByText("Preview unavailable")).toBeTruthy()
+            expect(screen.queryByText("Provided courtesy of iTunes")).toBeNull()
+            expect(mockToggleAudio).not.toHaveBeenCalled()
+
+            fireEvent.press(screen.getByTestId("feed-this-or-that-preview-43"))
+            expect(mockFetchPreviewUrlBySongId).toHaveBeenCalledTimes(1)
+            expect(screen.getByTestId("feed-this-or-that-preview-43")).toBeTruthy()
+        } finally {
+            jest.useRealTimers()
+        }
+    })
+
+    it("shows a This-or-That preview unavailable toast for songs already marked unavailable", async () => {
+        mockCurrentProfile = {
+            ...mockCurrentProfile,
+            user_stats: { rated_count: 15, bookmarked_count: 0 },
+            following_count: 0,
+        }
+        const unavailableModule: ThisOrThatModule = {
+            ...thisOrThatModule,
+            right: {
+                ...thisOrThatModule.right,
+                song: {
+                    ...neighborSong,
+                    preview_url: null,
+                    preview_available: false,
+                },
+            },
+        }
+        mockListMyFeed.mockResolvedValue({ events: [feedEvent], next_cursor: null })
+        mockGetFeedModules.mockResolvedValue({ ...emptyModules, this_or_that: unavailableModule })
+
+        render(<FeedScreen />)
+
+        await waitFor(() => {
+            expect(screen.getByTestId("feed-this-or-that-card")).toBeTruthy()
+        })
+
+        fireEvent.press(screen.getByTestId("feed-this-or-that-preview-43"))
+
+        expect(mockFetchPreviewUrlBySongId).not.toHaveBeenCalled()
+        expect(screen.getByTestId("feed-this-or-that-preview-43")).toBeTruthy()
+        expect(within(screen.getByTestId("feed-quiet-toast")).getByText("Preview unavailable")).toBeTruthy()
+    })
+
     it("deselects an armed side on a second tap, and arms the other side when tapped instead", async () => {
         mockCurrentProfile = {
             ...mockCurrentProfile,
@@ -1095,7 +1171,7 @@ describe("FeedScreen", () => {
         await waitFor(() => {
             expect(screen.getByTestId("feed-this-or-that-collapsed")).toBeTruthy()
         })
-        expect(screen.getByText("Tap to compare two songs")).toBeTruthy()
+        expect(screen.getByText("Tap to refine your rankings")).toBeTruthy()
 
         fireEvent.press(screen.getByTestId("feed-this-or-that-collapsed"))
 

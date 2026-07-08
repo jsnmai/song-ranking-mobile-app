@@ -551,6 +551,7 @@ export default function FeedScreen() {
     const [otherMenuEvent, setOtherMenuEvent] = useState<FeedEvent | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [quietToastVisible, setQuietToastVisible] = useState(false)
+    const [quietToastText, setQuietToastText] = useState("It’s Quiet For Now")
     const [quietToastKey, setQuietToastKey] = useState(0)
     const quietToastTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
     const [friendsCardDismissed, setFriendsCardDismissed] = useState(false)
@@ -606,7 +607,7 @@ export default function FeedScreen() {
     const [thisOrThatPreviewUrl, setThisOrThatPreviewUrl] = useState<string | null>(null)
     const [thisOrThatPreviewAppleViewUrl, setThisOrThatPreviewAppleViewUrl] = useState<string | null>(null)
     const [thisOrThatPreviewIsApple, setThisOrThatPreviewIsApple] = useState(false)
-    const [thisOrThatPreviewUnavailableSongId, setThisOrThatPreviewUnavailableSongId] = useState<number | null>(null)
+    const [thisOrThatPreviewUnavailableSongIds, setThisOrThatPreviewUnavailableSongIds] = useState<number[]>([])
     const [thisOrThatPreviewLoadingSongId, setThisOrThatPreviewLoadingSongId] = useState<number | null>(null)
     const [shouldPlayThisOrThatAfterLoad, setShouldPlayThisOrThatAfterLoad] = useState(false)
     const {
@@ -646,7 +647,7 @@ export default function FeedScreen() {
         setThisOrThatPreviewUrl(null)
         setThisOrThatPreviewAppleViewUrl(null)
         setThisOrThatPreviewIsApple(false)
-        setThisOrThatPreviewUnavailableSongId(null)
+        setThisOrThatPreviewUnavailableSongIds([])
         setThisOrThatPreviewLoadingSongId(null)
         setShouldPlayThisOrThatAfterLoad(false)
     }, [thisOrThat?.left.song.id, thisOrThat?.right.song.id, stopThisOrThatPreview])
@@ -880,6 +881,12 @@ export default function FeedScreen() {
 
     const handleThisOrThatPreview = async (side: ThisOrThatModule["left"]) => {
         if (!token || thisOrThatSaving || thisOrThatResult !== null) return
+        const knownUnavailable = thisOrThatPreviewUnavailableSongIds.includes(side.song.id)
+            || (side.song.preview_available === false && side.song.preview_url === null)
+        if (knownUnavailable) {
+            showQuietToast("Preview unavailable")
+            return
+        }
         if (thisOrThatPreviewSongId === side.song.id && thisOrThatPreviewUrl !== null) {
             toggleThisOrThatPreview()
             return
@@ -889,7 +896,6 @@ export default function FeedScreen() {
         setThisOrThatPreviewUrl(null)
         setThisOrThatPreviewAppleViewUrl(null)
         setThisOrThatPreviewIsApple(false)
-        setThisOrThatPreviewUnavailableSongId(null)
         setShouldPlayThisOrThatAfterLoad(false)
         setThisOrThatPreviewLoadingSongId(side.song.id)
         try {
@@ -897,10 +903,14 @@ export default function FeedScreen() {
             setThisOrThatPreviewAppleViewUrl(response.apple_view_url)
             setThisOrThatPreviewIsApple(response.provider === "apple")
             if (response.preview_url !== null) {
+                setThisOrThatPreviewUnavailableSongIds((current) => current.filter((songId) => songId !== side.song.id))
                 setThisOrThatPreviewUrl(response.preview_url)
                 setShouldPlayThisOrThatAfterLoad(true)
             } else {
-                setThisOrThatPreviewUnavailableSongId(side.song.id)
+                setThisOrThatPreviewUnavailableSongIds((current) => (
+                    current.includes(side.song.id) ? current : [...current, side.song.id]
+                ))
+                showQuietToast("Preview unavailable")
             }
         } catch {
             setError("Could not load preview.")
@@ -995,8 +1005,9 @@ export default function FeedScreen() {
         navigation.navigate("SongDetail", { song: event.song })
     }
 
-    const showQuietToast = () => {
+    const showQuietToast = (message = "It’s Quiet For Now") => {
         if (quietToastTimeout.current) clearTimeout(quietToastTimeout.current)
+        setQuietToastText(message)
         setQuietToastKey((current) => current + 1)
         setQuietToastVisible(true)
         quietToastTimeout.current = setTimeout(() => {
@@ -1004,6 +1015,7 @@ export default function FeedScreen() {
             quietToastTimeout.current = null
         }, 1200)
     }
+    const showDefaultQuietToast = () => showQuietToast()
 
     const openReport = (eventId: number) => {
         setReportingEventId(eventId)
@@ -1219,7 +1231,7 @@ export default function FeedScreen() {
             // hero swaps in the moment heroEvent exists, in either state.
             if (!modulesGateComplete) return null
             return (
-                <BouncyPressable style={styles.fvOuter} onPress={showQuietToast}>
+                <BouncyPressable style={styles.fvOuter} onPress={showDefaultQuietToast}>
                     <View style={styles.fvInner}>
                         <DriftingStars dots={ORBIT_DOTS_DIM} />
                         <View style={{ position: "relative" }}>
@@ -1348,7 +1360,7 @@ export default function FeedScreen() {
             return (
                 <BouncyPressable
                     style={[styles.fullCell, { height: 138, backgroundColor: colors.navy }]}
-                    onPress={showQuietToast}
+                    onPress={showDefaultQuietToast}
                     testID="feed-rerate-radar-locked"
                 >
                     <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
@@ -1465,7 +1477,7 @@ export default function FeedScreen() {
             return (
                 <BouncyPressable
                     style={[styles.fullCell, { height: 138, backgroundColor: colors.sky }]}
-                    onPress={showQuietToast}
+                    onPress={showDefaultQuietToast}
                     testID="feed-consensus-locked"
                 >
                     <View style={[styles.fullCellPad, { justifyContent: "space-between" }]}>
@@ -1545,7 +1557,7 @@ export default function FeedScreen() {
             return (
                 <BouncyPressable
                     style={styles.fullDisagreeCard}
-                    onPress={showQuietToast}
+                    onPress={showDefaultQuietToast}
                     testID="feed-disagreement-locked"
                 >
                     <View style={styles.fullCellTop}>
@@ -1628,7 +1640,7 @@ export default function FeedScreen() {
             return (
                 <BouncyPressable
                     style={[styles.fullCell, { height: 138, backgroundColor: "#000" }]}
-                    onPress={showQuietToast}
+                    onPress={showDefaultQuietToast}
                     testID="feed-split-locked"
                 >
                     <Svg style={StyleSheet.absoluteFill} viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -1707,7 +1719,7 @@ export default function FeedScreen() {
             return (
                 <BouncyPressable
                     style={[styles.fullCell, { height: 138, backgroundColor: colors.mint }]}
-                    onPress={showQuietToast}
+                    onPress={showDefaultQuietToast}
                     testID="feed-match-moment-locked"
                 >
                     <View style={styles.matchMomentBlob} />
@@ -1827,7 +1839,7 @@ export default function FeedScreen() {
                         <TuneIcon color={colors.gold} size={11} />
                         <Text style={styles.totCollapsedKicker}>THIS-OR-THAT</Text>
                     </View>
-                    <Text style={styles.totCollapsedBody}>Tap to compare two songs</Text>
+                    <Text style={styles.totCollapsedBody}>Tap to refine your rankings</Text>
                 </View>
                 <View style={styles.totCollapsedChevron}>
                     <ChevronRightIcon color={colors.cream} size={14} />
@@ -1900,9 +1912,8 @@ export default function FeedScreen() {
             const isDimmed = armedThisOrThatSongId !== null && !isArmed
             const isPreviewActive = thisOrThatPreviewSongId === side.song.id
             const isPreviewLoading = thisOrThatPreviewLoadingSongId === side.song.id
-            const isPreviewUnavailable = thisOrThatPreviewUnavailableSongId === side.song.id
-            const canPreview = (side.song.preview_available !== false || side.song.preview_url !== null)
-                && !isPreviewUnavailable
+            const isPreviewUnavailable = thisOrThatPreviewUnavailableSongIds.includes(side.song.id)
+                || (side.song.preview_available === false && side.song.preview_url === null)
             return (
                 <TouchableOpacity
                     style={styles.totHalf}
@@ -1931,35 +1942,35 @@ export default function FeedScreen() {
                             pointerEvents="none"
                         />
                     )}
-                    {canPreview && (
-                        <Pressable
-                            style={[
-                                styles.totPreviewButton,
-                                isPreviewActive && styles.totPreviewButtonActive,
-                            ]}
-                            accessibilityLabel={
-                                isPreviewLoading
-                                    ? `Loading ${side.song.title} preview`
+                    <Pressable
+                        style={[
+                            styles.totPreviewButton,
+                            isPreviewActive && !isPreviewUnavailable && styles.totPreviewButtonActive,
+                        ]}
+                        accessibilityLabel={
+                            isPreviewLoading
+                                ? `Loading ${side.song.title} preview`
+                                : isPreviewUnavailable
+                                    ? `Preview unavailable for ${side.song.title}`
                                     : isPreviewActive && isThisOrThatPreviewPlaying
                                         ? `Pause ${side.song.title} preview`
                                         : `Play ${side.song.title} preview`
-                            }
-                            disabled={resolving || isPreviewLoading}
-                            onPress={(event) => {
-                                event?.stopPropagation?.()
-                                handleThisOrThatPreview(side)
-                            }}
-                            testID={`feed-this-or-that-preview-${side.song.id}`}
-                        >
-                            {isPreviewLoading ? (
-                                <ActivityIndicator size="small" color={colors.cream} />
-                            ) : isPreviewActive && isThisOrThatPreviewPlaying ? (
-                                <PauseIcon color={colors.cream} />
-                            ) : (
-                                <PlayIcon color={colors.cream} />
-                            )}
-                        </Pressable>
-                    )}
+                        }
+                        disabled={resolving || isPreviewLoading}
+                        onPress={(event) => {
+                            event?.stopPropagation?.()
+                            handleThisOrThatPreview(side)
+                        }}
+                        testID={`feed-this-or-that-preview-${side.song.id}`}
+                    >
+                        {isPreviewLoading ? (
+                            <ActivityIndicator size="small" color={colors.cream} />
+                        ) : isPreviewActive && isThisOrThatPreviewPlaying && !isPreviewUnavailable ? (
+                            <PauseIcon color={colors.cream} />
+                        ) : (
+                            <PlayIcon color={colors.cream} />
+                        )}
+                    </Pressable>
                     {isArmed && (
                         <Animated.View style={[styles.totConfirmPillWrap, totConfirmAnimatedStyle]} pointerEvents="box-none">
                             <TouchableOpacity
@@ -1980,11 +1991,7 @@ export default function FeedScreen() {
                 </TouchableOpacity>
             )
         }
-        const showPreviewFooter = thisOrThatPreviewSongId !== null
-            && (
-                (thisOrThatPreviewUrl !== null && thisOrThatPreviewIsApple)
-                || thisOrThatPreviewUnavailableSongId === thisOrThatPreviewSongId
-            )
+        const showPreviewFooter = thisOrThatPreviewUrl !== null && thisOrThatPreviewIsApple
 
         return (
             <View style={styles.thisOrThatCard} testID="feed-this-or-that-card">
@@ -2015,16 +2022,12 @@ export default function FeedScreen() {
                 {showPreviewFooter && (
                     <View style={styles.totAppleAttribution}>
                         <Text style={styles.totAppleCourtesy} numberOfLines={1}>
-                            {thisOrThatPreviewUnavailableSongId === thisOrThatPreviewSongId
-                                ? "Preview unavailable"
-                                : "Provided courtesy of iTunes"}
+                            Provided courtesy of iTunes
                         </Text>
                         {thisOrThatPreviewAppleViewUrl !== null && (
                             <Pressable onPress={handleOpenThisOrThatApple}>
                                 <Text style={styles.totAppleLink} numberOfLines={1}>
-                                    {thisOrThatPreviewUnavailableSongId === thisOrThatPreviewSongId
-                                        ? "Listen on Apple Music"
-                                        : "Get on Apple Music"}
+                                    Get on Apple Music
                                 </Text>
                             </Pressable>
                         )}
@@ -2897,7 +2900,7 @@ export default function FeedScreen() {
                     style={styles.quietToast}
                     testID="feed-quiet-toast"
                 >
-                    <Text style={styles.quietToastText}>It’s Quiet For Now</Text>
+                    <Text style={styles.quietToastText}>{quietToastText}</Text>
                 </Animated.View>
             ) : null}
         </View>
@@ -4480,8 +4483,8 @@ const styles = StyleSheet.create({
         justifyContent: "center",
     },
     totPreviewButtonActive: {
-        backgroundColor: "rgba(245,184,64,0.34)",
-        borderColor: "rgba(245,184,64,0.72)",
+        backgroundColor: "rgba(255,90,60,0.34)",
+        borderColor: "rgba(255,90,60,0.72)",
     },
     totHalfCaption: {
         position: "absolute",
@@ -4587,7 +4590,7 @@ const styles = StyleSheet.create({
     totAppleLink: {
         fontFamily: fonts.monoBold,
         fontSize: 9,
-        color: colors.gold,
+        color: colors.accent,
         letterSpacing: 0.4,
     },
     // ── This or That result popup (compact Score Reveal echo) ──────────────
