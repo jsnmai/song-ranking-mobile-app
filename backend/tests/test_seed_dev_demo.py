@@ -12,6 +12,8 @@ from scripts.demo_seed_data import (
     DISCO_ALREADY_RATED_DEEZER_ID,
     DISCO_BLOCKED_DEEZER_ID,
     DISCO_CO_SIGN_DEEZER_ID,
+    SMOKE_APPLE_TRACK_ID,
+    SMOKE_DEMO_DEEZER_ID,
     demo_email,
     seed_email,
 )
@@ -34,6 +36,8 @@ from src.sqlalchemy_tables.notification import Notification
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
+from src.sqlalchemy_tables.song import Song
+from src.sqlalchemy_tables.song_provider_ref import SongProviderRef
 from src.sqlalchemy_tables.user import User
 from src.sqlalchemy_tables.user_similarity_snapshot import UserSimilaritySnapshot
 from tests.conftest import TEST_DATABASE_URL
@@ -337,6 +341,28 @@ def _login(client, email: str) -> str:
     )
     assert response.status_code == 200
     return response.json()["access_token"]
+
+
+def test_seed_demo_smoke_has_apple_preview_ref(
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """demo_power's first This-or-That song is a real Apple-backed preview fixture."""
+    _run_seed(db_session, monkeypatch)
+
+    song, apple_ref = db_session.execute(
+        select(Song, SongProviderRef)
+        .join(SongProviderRef, SongProviderRef.song_id == Song.id)
+        .where(Song.deezer_id == SMOKE_DEMO_DEEZER_ID)
+        .where(SongProviderRef.provider == "apple")
+    ).one()
+
+    assert song.title == "Smoke"
+    assert song.artist == "Skrillex, ISOxo, Cristale & TeeZandos"
+    assert song.preview_url is None
+    assert apple_ref.provider_track_id == SMOKE_APPLE_TRACK_ID
+    assert apple_ref.preview_available is True
+    assert apple_ref.url is not None
 
 
 def test_discovery_seed_co_sign_present(

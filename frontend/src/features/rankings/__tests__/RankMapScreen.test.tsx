@@ -34,7 +34,7 @@ jest.mock("../../../hooks/useAudioPlayer", () => ({
     useAudioPlayer: () => ({ isPlaying: false, currentTime: 0, duration: null, toggle: mockToggle, stop: jest.fn() }),
 }))
 
-// BloomCard fetches the live preview URL by deezer id (like Song Detail).
+// BloomCard fetches preview URLs lazily when the play button is tapped.
 const mockFetchPreviewUrl = jest.fn()
 const mockFetchPreviewUrlBySongId = jest.fn()
 jest.mock("../../songs/apiRequests", () => ({
@@ -100,7 +100,7 @@ beforeEach(() => {
     mockRouteRankings = [ALPHA, BETA, GAMMA]
     mockFetchPreviewUrl.mockResolvedValue(null)
     mockFetchPreviewUrlBySongId.mockResolvedValue({
-        preview_url: "https://example.com/apple-live-preview.m4a",
+        preview_url: "https://preview.listn.local/apple-live-preview.m4a",
         apple_view_url: "https://music.apple.com/us/album/saved/2?i=2",
         provider: "apple",
     })
@@ -208,14 +208,96 @@ describe("RankMapScreen", () => {
     })
 
     it("plays the audio preview from a tapped star that has one", async () => {
-        mockFetchPreviewUrl.mockResolvedValue("https://example.com/beta.mp3")
+        mockFetchPreviewUrl.mockResolvedValue("https://preview.listn.local/beta.mp3")
         render(<RankMapScreen />)
 
         fireEvent.press(screen.getByLabelText("Beta"))
-        // The play button appears once the live preview URL resolves.
-        fireEvent.press(await screen.findByLabelText("Play Beta preview"))
+        expect(mockFetchPreviewUrl).not.toHaveBeenCalled()
 
+        await act(async () => {
+            fireEvent.press(await screen.findByLabelText("Play Beta preview"))
+        })
+
+        await waitFor(() => {
+            expect(mockFetchPreviewUrl).toHaveBeenCalledWith(2, "test-token")
+        })
         expect(mockToggle).toHaveBeenCalled()
+    })
+
+    it("treats dev demo placeholder preview URLs as unavailable instead of trying to play them", async () => {
+        const placeholderBeta: RankingResponse = {
+            ...BETA,
+            song: {
+                ...BETA.song,
+                preview_url: "https://example.com/demo-preview-9000002.mp3",
+                preview_available: true,
+            },
+        }
+        mockRouteRankings = [ALPHA, placeholderBeta, GAMMA]
+
+        render(<RankMapScreen />)
+
+        fireEvent.press(screen.getByLabelText("Beta"))
+
+        expect(await screen.findByLabelText("Preview unavailable for Beta")).toBeTruthy()
+        fireEvent.press(screen.getByLabelText("Preview unavailable for Beta"))
+
+        expect(screen.getByTestId("rank-map-preview-toast")).toBeTruthy()
+        expect(mockFetchPreviewUrl).not.toHaveBeenCalled()
+        expect(mockFetchPreviewUrlBySongId).not.toHaveBeenCalled()
+        expect(mockToggle).not.toHaveBeenCalled()
+    })
+
+    it("does not flash a loading preview when a known-unavailable verdict song is opened", async () => {
+        const unavailableBeta: RankingResponse = {
+            ...BETA,
+            song: {
+                ...BETA.song,
+                preview_url: null,
+                preview_available: false,
+            },
+        }
+        mockRouteRankings = [ALPHA, unavailableBeta, GAMMA]
+
+        jest.useFakeTimers()
+        try {
+            render(<RankMapScreen />)
+
+            fireEvent.press(screen.getByLabelText("Beta"))
+
+            expect(await screen.findByLabelText("Preview unavailable for Beta")).toBeTruthy()
+            expect(screen.queryByLabelText("Loading Beta preview")).toBeNull()
+            expect(mockFetchPreviewUrl).not.toHaveBeenCalled()
+            expect(mockFetchPreviewUrlBySongId).not.toHaveBeenCalled()
+
+            fireEvent.press(screen.getByLabelText("Preview unavailable for Beta"))
+
+            expect(mockFetchPreviewUrl).not.toHaveBeenCalled()
+            expect(mockFetchPreviewUrlBySongId).not.toHaveBeenCalled()
+            expect(screen.getByTestId("rank-map-preview-toast")).toBeTruthy()
+            expect(screen.getByText("Preview unavailable")).toBeTruthy()
+        } finally {
+            jest.useRealTimers()
+        }
+    })
+
+    it("keeps the verdict preview button visible when a lazy lookup finds no preview", async () => {
+        mockFetchPreviewUrl.mockResolvedValue(null)
+        render(<RankMapScreen />)
+
+        fireEvent.press(screen.getByLabelText("Beta"))
+
+        await act(async () => {
+            fireEvent.press(await screen.findByLabelText("Play Beta preview"))
+        })
+
+        await waitFor(() => {
+            expect(mockFetchPreviewUrl).toHaveBeenCalledWith(2, "test-token")
+        })
+        expect(screen.getByLabelText("Preview unavailable for Beta")).toBeTruthy()
+        expect(screen.getByTestId("rank-map-preview-toast")).toBeTruthy()
+        expect(screen.queryByText("Provided courtesy of iTunes")).toBeNull()
+        expect(mockToggle).not.toHaveBeenCalled()
     })
 
     it("uses by-song preview lazily for saved Apple bloom cards", async () => {
@@ -245,6 +327,35 @@ describe("RankMapScreen", () => {
         await waitFor(() => {
             expect(mockFetchPreviewUrlBySongId).toHaveBeenCalledWith(2, "test-token")
         })
+        expect(screen.getByText("Provided courtesy of iTunes")).toBeTruthy()
+        expect(screen.getByText("Get on Apple Music")).toBeTruthy()
+    })
+
+    it("prefers by-song Apple lookup for hybrid legacy ids with Apple preview hints", async () => {
+        const hybridAppleBeta: RankingResponse = {
+            ...BETA,
+            song: {
+                ...BETA.song,
+                deezer_id: 2,
+                preview_url: null,
+                preview_available: true,
+                apple_view_url: null,
+            },
+        }
+        mockRouteRankings = [ALPHA, hybridAppleBeta, GAMMA]
+
+        render(<RankMapScreen />)
+
+        fireEvent.press(screen.getByLabelText("Beta"))
+
+        await act(async () => {
+            fireEvent.press(await screen.findByLabelText("Play Beta preview"))
+        })
+
+        await waitFor(() => {
+            expect(mockFetchPreviewUrlBySongId).toHaveBeenCalledWith(2, "test-token")
+        })
+        expect(mockFetchPreviewUrl).not.toHaveBeenCalled()
         expect(screen.getByText("Provided courtesy of iTunes")).toBeTruthy()
         expect(screen.getByText("Get on Apple Music")).toBeTruthy()
     })

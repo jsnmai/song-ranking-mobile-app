@@ -16,6 +16,13 @@ DISCO_CO_SIGN_DEEZER_ID = 9_000_031
 DISCO_BLOCKED_DEEZER_ID = 9_000_033
 # Already-rated test: demo_disc_a rates this at 9.375 but power has already rated it → must not appear.
 DISCO_ALREADY_RATED_DEEZER_ID = 9_000_001
+SMOKE_DEMO_DEEZER_ID = 9_000_001
+SMOKE_APPLE_TRACK_ID = "6764676334"
+SMOKE_APPLE_VIEW_URL = "https://music.apple.com/us/album/smoke/1895874910?i=6764676334&uo=4"
+SMOKE_APPLE_ARTWORK_URL = (
+    "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/49/6f/61/"
+    "496f61fd-0c54-7d6e-812c-79c0d159aa72/075679582362.jpg/600x600bb.jpg"
+)
 
 # Shared songs used for compatibility pairs (power / friend / opposite / newbie overlap).
 SHARED_COMPAT_DEEZER_IDS = list(range(DEMO_DEEZER_ID_START, DEMO_DEEZER_ID_START + 8))
@@ -242,7 +249,8 @@ DEMO_ACCOUNTS: tuple[DemoAccountSpec, ...] = (
     DemoAccountSpec(
         seed_email("seed_locked_full"), "seed_locked_full", "Seed Locked Full", "public",
         avatar_color="plum",
-        note="Feed FULL-SIZE locked cards: gate met (6 rated / 3 follows) but follows inactive → every module card locked.",
+        note="Feed FULL-SIZE locked cards: gate met (6 rated / 3 follows) but follows inactive "
+        "→ every module card locked.",
     ),
 )
 
@@ -685,8 +693,28 @@ def _genre_for_deezer_id(deezer_id: int) -> str:
     return genres[(deezer_id - DEMO_DEEZER_ID_START) % len(genres)]
 
 
-SONG_CATALOG: tuple[dict[str, object], ...] = tuple(
-    {
+def _song_catalog_entry(
+    deezer_id: int,
+) -> dict[str, object]:
+    """Build deterministic demo song metadata, with one real Apple-backed preview fixture."""
+    if deezer_id == SMOKE_DEMO_DEEZER_ID:
+        return {
+            "deezer_id": deezer_id,
+            "title": "Smoke",
+            "artist": "Skrillex, ISOxo, Cristale & TeeZandos",
+            "album": "Smoke - Single",
+            "cover_url": SMOKE_APPLE_ARTWORK_URL,
+            "genre_deezer": "Electronic",
+            "preview_url": None,
+            "apple_track_id": SMOKE_APPLE_TRACK_ID,
+            "apple_artist_id": "356545647",
+            "apple_album_id": "1895874910",
+            "apple_view_url": SMOKE_APPLE_VIEW_URL,
+            "artwork_url": SMOKE_APPLE_ARTWORK_URL,
+            "preview_available": True,
+        }
+
+    return {
         "deezer_id": deezer_id,
         "title": f"Demo Track {deezer_id - DEMO_DEEZER_ID_START + 1:02d}",
         "artist": _artist_for_deezer_id(deezer_id),
@@ -698,6 +726,10 @@ SONG_CATALOG: tuple[dict[str, object], ...] = tuple(
             else None
         ),
     }
+
+
+SONG_CATALOG: tuple[dict[str, object], ...] = tuple(
+    _song_catalog_entry(deezer_id)
     for deezer_id in range(DEMO_DEEZER_ID_START, DEMO_DEEZER_ID_END + 1)
 )
 

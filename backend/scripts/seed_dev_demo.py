@@ -25,16 +25,17 @@ from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
 
 import src.sqlalchemy_tables.block  # noqa: F401
+import src.sqlalchemy_tables.bookmark  # noqa: F401
 
 # Register all ORM models before any delete/insert touches metadata.
 import src.sqlalchemy_tables.comparison  # noqa: F401
 import src.sqlalchemy_tables.follow  # noqa: F401
+import src.sqlalchemy_tables.interaction_event  # noqa: F401
 import src.sqlalchemy_tables.like  # noqa: F401
 import src.sqlalchemy_tables.notification  # noqa: F401
 import src.sqlalchemy_tables.profile  # noqa: F401
 import src.sqlalchemy_tables.ranking  # noqa: F401
 import src.sqlalchemy_tables.rating_event  # noqa: F401
-import src.sqlalchemy_tables.bookmark  # noqa: F401
 import src.sqlalchemy_tables.song  # noqa: F401
 import src.sqlalchemy_tables.user  # noqa: F401
 import src.sqlalchemy_tables.user_similarity_snapshot  # noqa: F401
@@ -70,6 +71,7 @@ from src.core.security import hash_password
 from src.crud.profile import get_by_user_id
 from src.crud.similarity import upsert_snapshot
 from src.crud.song import recompute_song_aggregates, upsert_from_deezer
+from src.crud.song_provider_ref import ensure_apple_ref, get_by_provider_track
 from src.crud.user import create_user_with_profile, get_by_email
 from src.db.session import SessionLocal
 from src.pydantic_schemas.song import SongCreate
@@ -77,14 +79,15 @@ from src.services.rating import BUCKET_SCORE_RANGES
 from src.services.similarity import get_algorithm
 from src.services.similarity_tasks import _resolve_genre
 from src.sqlalchemy_tables.block import Block
+from src.sqlalchemy_tables.bookmark import Bookmark
 from src.sqlalchemy_tables.comparison import Comparison
 from src.sqlalchemy_tables.follow import Follow
+from src.sqlalchemy_tables.interaction_event import InteractionEvent
 from src.sqlalchemy_tables.like import Like
 from src.sqlalchemy_tables.notification import Notification
 from src.sqlalchemy_tables.profile import Profile
 from src.sqlalchemy_tables.ranking import Ranking
 from src.sqlalchemy_tables.rating_event import RatingEvent
-from src.sqlalchemy_tables.bookmark import Bookmark
 from src.sqlalchemy_tables.song import Song
 from src.sqlalchemy_tables.user import User
 from src.sqlalchemy_tables.user_similarity_snapshot import UserSimilaritySnapshot
@@ -324,6 +327,7 @@ def clear_demo_scoped_rows(
         ),
     )
     db.execute(delete(Like).where(Like.user_id.in_(demo_user_ids)))
+    db.execute(delete(InteractionEvent).where(InteractionEvent.user_id.in_(demo_user_ids)))
     db.execute(delete(RatingEvent).where(RatingEvent.user_id.in_(demo_user_ids)))
     db.execute(delete(Comparison).where(Comparison.user_id.in_(demo_user_ids)))
     db.execute(delete(Ranking).where(Ranking.user_id.in_(demo_user_ids)))
@@ -355,6 +359,7 @@ def seed_songs(
     song_ids: dict[int, int] = {}
     for entry in SONG_CATALOG:
         deezer_id = int(entry["deezer_id"])
+        cover_url = str(entry.get("cover_url") or f"https://picsum.photos/seed/listn{deezer_id}/300/300")
         payload = SongCreate(
             deezer_id=deezer_id,
             isrc=None,
@@ -362,7 +367,7 @@ def seed_songs(
             artist=str(entry["artist"]),
             artist_deezer_id=900_000 + (deezer_id % 100),
             album=str(entry["album"]),
-            cover_url=f"https://picsum.photos/seed/listn{deezer_id}/300/300",
+            cover_url=cover_url,
             preview_url=(
                 None
                 if entry["preview_url"] is None
@@ -371,6 +376,48 @@ def seed_songs(
             genre_deezer=str(entry["genre_deezer"]),
         )
         song = upsert_from_deezer(db, payload)
+        apple_track_id = entry.get("apple_track_id")
+        if isinstance(apple_track_id, str):
+            apple_artist_id = str(entry["apple_artist_id"])
+            apple_album_id = str(entry["apple_album_id"])
+            apple_view_url = str(entry["apple_view_url"])
+            artwork_url = str(entry["artwork_url"])
+            preview_available = bool(entry["preview_available"])
+            song.title = payload.title
+            song.artist = payload.artist
+            song.album = payload.album
+            song.cover_url = payload.cover_url
+            song.preview_url = None
+            song.preview_url_expires_at = None
+            song.genre_deezer = payload.genre_deezer
+            apple_ref = get_by_provider_track(
+                db,
+                provider="apple",
+                provider_track_id=apple_track_id,
+                storefront="US",
+            )
+            if apple_ref is None:
+                ensure_apple_ref(
+                    db,
+                    song=song,
+                    apple_track_id=apple_track_id,
+                    storefront="US",
+                    provider_artist_id=apple_artist_id,
+                    provider_album_id=apple_album_id,
+                    url=apple_view_url,
+                    artwork_url=artwork_url,
+                    preview_available=preview_available,
+                    confidence="dev_seed",
+                )
+            else:
+                apple_ref.song_id = song.id
+                apple_ref.provider_artist_id = apple_artist_id
+                apple_ref.provider_album_id = apple_album_id
+                apple_ref.url = apple_view_url
+                apple_ref.artwork_url = artwork_url
+                apple_ref.preview_available = preview_available
+                apple_ref.confidence = "dev_seed"
+                apple_ref.matched_at = datetime.now(timezone.utc)
         song_ids[deezer_id] = song.id
 
     db.flush()
