@@ -64,6 +64,79 @@ describe("apiClient", () => {
         expect(unauthorizedHandler).toHaveBeenCalledTimes(1)
     })
 
+    it("fails requests with an already-rejected token locally, without touching the network", async () => {
+        setUnauthorizedHandler(jest.fn())
+        mockFetch.mockResolvedValue({
+            ok: false,
+            status: 401,
+            headers: {
+                get: () => null,
+            },
+            json: async () => ({ detail: "Could not validate credentials." }),
+        })
+
+        // First request reaches the server and gets the real 401.
+        await expect(apiClient.get("/api/v1/notifications/unread-count", "dead-token")).rejects.toMatchObject({
+            status: 401,
+        })
+        expect(mockFetch).toHaveBeenCalledTimes(1)
+
+        // Every later request with the same dead token is rejected locally — no fetch. This is
+        // what stops a stale screen or effect from flooding the API with doomed 401 calls.
+        await expect(apiClient.get("/api/v1/notifications/unread-count", "dead-token")).rejects.toMatchObject({
+            status: 401,
+            detail: "Your session has expired. Please sign in again.",
+        })
+        await expect(apiClient.get("/api/v1/feed", "dead-token")).rejects.toMatchObject({ status: 401 })
+        expect(mockFetch).toHaveBeenCalledTimes(1)
+    })
+
+    it("lets a fresh token through after a previous token was rejected", async () => {
+        setUnauthorizedHandler(jest.fn())
+        mockFetch.mockResolvedValueOnce({
+            ok: false,
+            status: 401,
+            headers: {
+                get: () => null,
+            },
+            json: async () => ({ detail: "Could not validate credentials." }),
+        })
+
+        await expect(apiClient.get("/api/v1/feed", "old-token")).rejects.toMatchObject({ status: 401 })
+
+        // Re-login issues a new token — it must not be blocked by the old token's latch.
+        mockFetch.mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            headers: {
+                get: () => null,
+            },
+            json: async () => ({ unread_count: 0 }),
+        })
+
+        await expect(apiClient.get("/api/v1/notifications/unread-count", "new-token")).resolves.toEqual({
+            unread_count: 0,
+        })
+        expect(mockFetch).toHaveBeenCalledTimes(2)
+    })
+
+    it("latches a rejected token even when no unauthorized handler is registered", async () => {
+        // AuthProvider remounts leave brief windows with no handler — the latch must not depend on it.
+        setUnauthorizedHandler(null)
+        mockFetch.mockResolvedValue({
+            ok: false,
+            status: 401,
+            headers: {
+                get: () => null,
+            },
+            json: async () => ({ detail: "Could not validate credentials." }),
+        })
+
+        await expect(apiClient.get("/api/v1/feed", "orphan-token")).rejects.toMatchObject({ status: 401 })
+        await expect(apiClient.get("/api/v1/feed", "orphan-token")).rejects.toMatchObject({ status: 401 })
+        expect(mockFetch).toHaveBeenCalledTimes(1)
+    })
+
     it("normalizes FastAPI validation errors before screens render them", async () => {
         mockFetch.mockResolvedValue({
             ok: false,

@@ -48,7 +48,6 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): voi
 }
 
 async function runUnauthorizedHandler(token: string): Promise<void> {
-    if (!unauthorizedHandler) return
     if (handledUnauthorizedToken === token) {
         if (unauthorizedHandlerPromise) {
             await unauthorizedHandlerPromise
@@ -56,7 +55,10 @@ async function runUnauthorizedHandler(token: string): Promise<void> {
         return
     }
 
+    // Latch the rejected token before the handler check, so a 401'd token is remembered
+    // even during windows where no handler is registered (e.g. provider remounts).
     handledUnauthorizedToken = token
+    if (!unauthorizedHandler) return
     unauthorizedHandlerPromise = Promise.resolve(unauthorizedHandler()).finally(() => {
         unauthorizedHandlerPromise = null
     })
@@ -66,6 +68,13 @@ async function runUnauthorizedHandler(token: string): Promise<void> {
 async function request<ResponseType>(requestMethod: string, path: string, requestOptions: RequestOptions={}): Promise<ResponseType> {
     // <ResponseType> is a generic, lets one function handle all endpoints while still giving TypeScript type info
     // requestOptions defaults to empty {} if not provided
+
+    // A token the backend has already rejected is dead for good (there is no refresh flow) —
+    // fail locally instead of re-sending a doomed request. Without this, any screen or effect
+    // still holding the stale token can flood the API with 401s until logout state propagates.
+    if (requestOptions.token && requestOptions.token === handledUnauthorizedToken) {
+        throw new ApiError(401, "Your session has expired. Please sign in again.", null)
+    }
 
     // Build parameters for fetch call: fetch(url+path, fetchOptions)
     // 1. Check for token and add "Authorization" header if it exists. Public endpoints (login, register) won't have a token
