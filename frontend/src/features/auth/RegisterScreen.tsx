@@ -288,7 +288,7 @@ function StepBirthday({
             <Text style={styles.heading}>When's your{"\n"}birthday?</Text>
             {/* Neutral age screen: do not state the age cutoff before the user answers. */}
             <Text style={styles.sub}>
-                We use your birthday to verify your age — it's never shown on your profile.
+                We use your birthday to verify your age. It's never shown on your profile.
             </Text>
 
             {/* Date cells */}
@@ -346,7 +346,7 @@ function StepBirthday({
             {ageOk && !blocked && (
                 <View style={styles.ageChip}>
                     <Text style={{ color: MINT, fontSize: 12.5, fontWeight: "600" }}>
-                        ✓ You're {age} — all set
+                        ✓ You're {age}, all set
                     </Text>
                 </View>
             )}

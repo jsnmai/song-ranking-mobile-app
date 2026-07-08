@@ -579,7 +579,7 @@ export default function ProfileScreen() {
                                     <Text style={styles.auxKicker}>AUXSTROLOGY</Text>
                                     <Text style={styles.auxTitleLocked}>Locked for now</Text>
                                     <Text style={styles.auxBodyLocked}>
-                                        Rate songs and we'll name your sound — your genres, moods & quirks.
+                                        Rate songs and we'll name your sound: your genres, moods & quirks.
                                     </Text>
                                 </View>
                             </View>

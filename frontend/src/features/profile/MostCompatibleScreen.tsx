@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
 
 import { ApiError } from "../../api/client"
@@ -42,13 +42,10 @@ export default function MostCompatibleScreen({ navigation }: Props) {
         fetch()
     }, [token])
 
-    // PAYWALL: the global "taste twins" view is premium-only and there's no payment flow yet, so this
-    // is a placeholder. When in-app purchases ship, this opens the real upgrade flow and the Global tab
-    // fetches getMostCompatible(token, "global") instead of showing the locked state.
-    const handleUpgrade = () => {
-        Alert.alert("Coming soon", "Global taste twins will unlock with LISTn Premium.")
-    }
-
+    // PAYWALL: the global "taste twins" view is premium-only and there's no payment flow yet, so the
+    // locked state shows a quiet COMING SOON chip instead of an upgrade button. A CTA that only opened
+    // an OS "coming soon" alert would be a dead-end affordance. When in-app purchases ship, the chip
+    // becomes the real upgrade button and the Global tab fetches getMostCompatible(token, "global").
     return (
         <View style={styles.container}>
             <View style={styles.header}>
@@ -126,11 +123,11 @@ export default function MostCompatibleScreen({ navigation }: Props) {
                     <Text style={styles.lockedGlobalTitle}>Global taste twins</Text>
                     <Text style={styles.lockedGlobalBody}>
                         Your circle shows friends who match your taste. Go global to find listeners across
-                        all of LISTn who share it — even people you don't follow.
+                        all of LISTn who share it, even people you don't follow.
                     </Text>
-                    <TouchableOpacity style={styles.upgradeBtn} onPress={handleUpgrade} testID="compat-global-upgrade">
-                        <Text style={styles.upgradeBtnText}>Unlock with Premium</Text>
-                    </TouchableOpacity>
+                    <View style={styles.comingSoonChip} testID="compat-global-coming-soon">
+                        <Text style={styles.comingSoonChipText}>COMING SOON</Text>
+                    </View>
                 </View>
             )}
         </View>
@@ -306,18 +303,20 @@ const styles = StyleSheet.create({
         lineHeight: 20,
         textAlign: "center",
     },
-    upgradeBtn: {
+    // Quiet, non-interactive replacement for an upgrade button until a real payment flow exists.
+    comingSoonChip: {
         marginTop: 8,
-        backgroundColor: colors.ink,
-        paddingVertical: 12,
-        paddingHorizontal: 24,
+        paddingVertical: 8,
+        paddingHorizontal: 16,
         borderRadius: 999,
+        borderWidth: 1,
+        borderColor: colors.line,
     },
-    upgradeBtnText: {
+    comingSoonChipText: {
         fontFamily: fonts.mono,
-        fontSize: 13,
-        letterSpacing: 0.5,
+        fontSize: 11,
+        letterSpacing: 1.5,
         fontWeight: "700",
-        color: "#fff",
+        color: colors.inkDim,
     },
 })

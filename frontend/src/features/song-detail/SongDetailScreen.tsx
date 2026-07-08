@@ -353,7 +353,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
         setMenuOpen(false)
         try {
             await Share.share({
-                message: `${song.title} by ${song.artist}${ranking && !scoresLocked ? ` — ${ranking.score.toFixed(1)}/10 on LISTn` : " — on LISTn"}`,
+                message: `${song.title} by ${song.artist}${ranking && !scoresLocked ? ` · ${ranking.score.toFixed(1)}/10 on LISTn` : " · on LISTn"}`,
             })
         } catch { /* ignore */ }
     }

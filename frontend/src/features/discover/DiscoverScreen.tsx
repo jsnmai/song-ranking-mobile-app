@@ -1700,7 +1700,7 @@ const styles = StyleSheet.create({
         color: colors.inkDim,
     },
     emptyText: {
-        color: colors.inkDim,
+        color: colors.inkSoft,
         fontSize: 14,
         marginTop: 30,
         textAlign: "center",

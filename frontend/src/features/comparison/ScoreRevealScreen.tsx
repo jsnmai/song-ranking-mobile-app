@@ -196,7 +196,7 @@ export default function ScoreRevealScreen({ navigation, route }: ScoreRevealProp
                         <View style={styles.lockedBox}>
                             <Text style={styles.lockedTitle}>Rating logged ✓</Text>
                             <Text style={styles.lockedBody}>
-                                Keep rating to calibrate your taste — scores and rankings unlock
+                                Keep rating to calibrate your taste. Scores and rankings unlock
                                 once you&apos;ve rated {SCORE_UNLOCK_THRESHOLD} songs.
                             </Text>
                             <Text style={styles.lockedMeter}>

@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
         fontSize: 13,
     },
     empty: {
-        color: colors.inkDim,
+        color: colors.inkSoft,
         fontSize: 15,
         marginTop: 42,
         textAlign: "center",

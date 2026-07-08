@@ -221,7 +221,7 @@ const STEPS: Step[] = [
     {
         visual: <VisRate />,
         title: "Rate it in\none tap.",
-        sub: "Heard a song? Drop it into Like, Okay, or Dislike.\nNo 5-star math — just how it landed.",
+        sub: "Heard a song? Drop it into Like, Okay, or Dislike.\nNo 5-star math, just how it landed.",
     },
     {
         visual: <VisVersus />,
@@ -231,7 +231,7 @@ const STEPS: Step[] = [
     {
         visual: <VisRank />,
         title: "Your ranking,\nalways live.",
-        sub: "Every rating snaps into place — fueling your full rankings, stats, and listening insights that grow as you go.",
+        sub: "Every rating snaps into place, fueling your full rankings, stats, and listening insights that grow as you go.",
     },
 ]
 

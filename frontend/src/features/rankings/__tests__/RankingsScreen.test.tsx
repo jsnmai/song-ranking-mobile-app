@@ -156,7 +156,7 @@ describe("RankingsScreen", () => {
         await waitFor(() => {
             expect(screen.getByText("No match-ups yet")).toBeTruthy()
         })
-        expect(screen.getByText("As you rate, LISTn pits each song against others to place it — those head-to-heads land here.")).toBeTruthy()
+        expect(screen.getByText("As you rate, LISTn pits each song against others to place it. Those head-to-heads land here.")).toBeTruthy()
         fireEvent.press(screen.getByText("VIEW LOG"))
 
         expect(mockNavigate).toHaveBeenCalledWith("VersusHistory")

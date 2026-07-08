@@ -235,7 +235,7 @@ export default function SettingsScreen({ navigation }: SettingsProps) {
                                 </View>
                                 {username.length > 0 && !usernameValid && (
                                     <Text style={styles.fieldHint}>
-                                        3–20 characters · letters, numbers, and underscores only.
+                                        3 to 20 characters · letters, numbers, and underscores only.
                                     </Text>
                                 )}
                             </View>

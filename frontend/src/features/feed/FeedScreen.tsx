@@ -2841,7 +2841,7 @@ export default function FeedScreen() {
                         <View style={styles.emptyMsgBlock}>
                             <Text style={styles.emptyMsgTitle}>Your feed is empty</Text>
                             <Text style={styles.emptyMsgBody}>
-                                Follow people and rate songs — their ratings, re-rates and co-signs will land here.
+                                Follow people and rate songs. Their ratings, re-rates and co-signs will land here.
                             </Text>
                         </View>
                     )}

@@ -583,7 +583,7 @@ export default function RankingsScreen() {
                     </View>
                     <Text style={styles.versusEmptyTitle}>No match-ups yet</Text>
                     <Text style={styles.versusEmptyBody}>
-                        As you rate, LISTn pits each song against others to place it — those head-to-heads land here.
+                        As you rate, LISTn pits each song against others to place it. Those head-to-heads land here.
                     </Text>
                 </View>
             ) : (
@@ -718,7 +718,7 @@ export default function RankingsScreen() {
                     </View>
                     <Text style={styles.versusEmptyTitle}>No match-ups yet</Text>
                     <Text style={styles.versusEmptyBody}>
-                        As you rate, LISTn pits each song against others to place it — those head-to-heads land here.
+                        As you rate, LISTn pits each song against others to place it. Those head-to-heads land here.
                     </Text>
                 </View>
                 <View style={styles.bottomSpacer} />

@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
     },
     empty: {
-        color: colors.inkDim,
+        color: colors.inkSoft,
         fontSize: 15,
         marginTop: 42,
         textAlign: "center",
