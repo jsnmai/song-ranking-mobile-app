@@ -42,14 +42,16 @@ function fmtTime(sec: number): string {
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`
 }
 
+// String test instead of new URL(): this is the app's only URL-parsing call site, and React
+// Native's URL implementation differs from Node's — if a hostname getter threw on device,
+// the old catch-all would have classified EVERY preview as a fixture and silently killed
+// previews app-wide while Jest (full Node URL) stayed green. A regex behaves identically
+// in both environments. Malformed URLs now flow to the player, whose failure handling
+// (useAudioPlayer onPlaybackFailed) resets the UI and shows the unavailable toast.
+const RESERVED_FIXTURE_PREVIEW_URL_PATTERN = /^https?:\/\/([^/?#]*\.)?example\.com(?=[/?#]|$)/i
+
 function isReservedFixturePreviewUrl(url: string | null): boolean {
-    if (url === null) return false
-    try {
-        const hostname = new URL(url).hostname.toLowerCase()
-        return hostname === "example.com" || hostname.endsWith(".example.com")
-    } catch {
-        return true
-    }
+    return url !== null && RESERVED_FIXTURE_PREVIEW_URL_PATTERN.test(url)
 }
 
 function playablePreviewUrl(url: string | null): string | null {
@@ -111,7 +113,12 @@ export function BloomCard({
         if (previewToastTimeout.current) clearTimeout(previewToastTimeout.current)
     }, [])
 
-    const { isPlaying, currentTime, duration, toggle, stop } = useAudioPlayer(previewUrl)
+    // A dead URL (404, stale CDN link, non-media response) resets to the play state and
+    // shows the toast; clearing previewUrl lets the next tap re-fetch a fresh URL lazily.
+    const { isPlaying, currentTime, duration, toggle, stop } = useAudioPlayer(previewUrl, () => {
+        setPreviewUrl(null)
+        showPreviewUnavailableToast()
+    })
     const hasPreview = previewUrl !== null
     const knownUnavailable = previewUnavailable
         || (

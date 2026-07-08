@@ -10,7 +10,7 @@ const mockRemoveListener = jest.fn()
 const mockCreatePlayer = jest.fn()
 
 // Capture the status listener so tests can simulate playback events (e.g. didJustFinish).
-type MockStatus = { didJustFinish?: boolean; currentTime?: number; duration?: number }
+type MockStatus = { didJustFinish?: boolean; currentTime?: number; duration?: number; playbackState?: string }
 let capturedStatusListener: ((status: MockStatus) => void) | null = null
 
 jest.mock("expo-audio", () => ({
@@ -144,5 +144,65 @@ describe("useAudioPlayer", () => {
         })
 
         expect(result.current.isPlaying).toBe(false)
+    })
+
+    it("tears down and reports failure when the native player fails to load the source", () => {
+        // Regression: a dead URL (404 / non-media response) used to leave the UI stuck on
+        // "playing" at 0:00 forever — play() is optimistic and a failed player never advances.
+        const onPlaybackFailed = jest.fn()
+        const { result } = renderHook(() =>
+            useAudioPlayer("https://cdn.example-music.test/dead-preview.mp3", onPlaybackFailed),
+        )
+
+        act(() => {
+            result.current.toggle()
+        })
+        expect(result.current.isPlaying).toBe(true)
+
+        // iOS reports AVPlayer.Status.failed as playbackState "failed" on the status stream.
+        act(() => {
+            capturedStatusListener?.({ playbackState: "failed" })
+        })
+
+        expect(result.current.isPlaying).toBe(false)
+        expect(mockRemove).toHaveBeenCalledTimes(1)
+        expect(mockRemoveListener).toHaveBeenCalledTimes(1)
+        expect(onPlaybackFailed).toHaveBeenCalledTimes(1)
+    })
+
+    it("reports failure and stays stopped when player creation throws", () => {
+        const onPlaybackFailed = jest.fn()
+        mockCreatePlayer.mockImplementation(() => {
+            throw new Error("invalid source")
+        })
+        const { result } = renderHook(() =>
+            useAudioPlayer("not-a-real-url", onPlaybackFailed),
+        )
+
+        act(() => {
+            result.current.toggle()
+        })
+
+        expect(result.current.isPlaying).toBe(false)
+        expect(onPlaybackFailed).toHaveBeenCalledTimes(1)
+    })
+
+    it("does not fire the failure callback on ordinary status updates", () => {
+        const onPlaybackFailed = jest.fn()
+        const { result } = renderHook(() =>
+            useAudioPlayer("https://cdn.example-music.test/preview.mp3", onPlaybackFailed),
+        )
+
+        act(() => {
+            result.current.toggle()
+        })
+        act(() => {
+            capturedStatusListener?.({ playbackState: "readyToPlay", currentTime: 3, duration: 30 })
+            capturedStatusListener?.({ didJustFinish: true })
+        })
+
+        expect(result.current.currentTime).toBe(0) // reset by didJustFinish
+        expect(result.current.duration).toBe(30)
+        expect(onPlaybackFailed).not.toHaveBeenCalled()
     })
 })
