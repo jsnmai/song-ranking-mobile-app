@@ -279,6 +279,46 @@ describe("SongDetailScreen", () => {
         expect(screen.getByText("Get on Apple Music")).toBeTruthy()
     })
 
+    it("never resolves a hybrid song (deezer id + Apple ref) through the legacy Deezer path", async () => {
+        // Migration-era hybrids carry a deezer_id alongside their Apple ref. The deezer_id can
+        // point at a DIFFERENT track in Deezer's catalog (seeded fixture ids literally do), so
+        // refreshing by it fetches the wrong song's audio. Regression: Apple identity must win.
+        const hybridRanking: RankingResponse = {
+            ...ranking,
+            song: {
+                ...ranking.song,
+                deezer_id: 9000001, // fake fixture id — a real but unrelated track on Deezer
+                provider: "deezer_legacy",
+                preview_url: null,
+                preview_available: true, // the Apple ref's hint marks this song Apple-identified
+            },
+        }
+
+        render(
+            <SongDetailScreen
+                navigation={navigation as never}
+                route={{ params: { ranking: hybridRanking } } as never}
+            />,
+        )
+
+        const playButton = await screen.findByLabelText("Play Preview")
+        // The mount effect must NOT have eagerly fetched by deezer_id.
+        expect(mockFetchPreviewUrl).not.toHaveBeenCalled()
+
+        await act(async () => {
+            fireEvent.press(playButton)
+        })
+
+        // The play press resolves via the durable song id (Apple ref), never the Deezer id.
+        await waitFor(() => {
+            expect(mockFetchPreviewUrlBySongId).toHaveBeenCalledWith(42, "test-token")
+        })
+        expect(mockFetchPreviewUrl).not.toHaveBeenCalled()
+        await waitFor(() => {
+            expect(mockCreatePlayer).toHaveBeenCalledWith("https://example.com/apple-live-preview.m4a")
+        })
+    })
+
     it("keeps iTunes attribution hidden until the preview is first played", async () => {
         const appleSearchSong = {
             ...ranking.song,

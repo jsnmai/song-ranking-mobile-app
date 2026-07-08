@@ -523,7 +523,14 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
             setIsPreviewLoading(false)
             return () => { isActive = false }
         }
-        if (song.provider === "apple" || song.deezer_id == null) {
+        // Apple-identified songs — native Apple songs AND migration-era hybrids that carry a
+        // deezer_id alongside an Apple ref (apple_track_id / a non-null preview_available
+        // hint) — must never resolve previews through the legacy Deezer path: their
+        // deezer_id can point at a DIFFERENT track in Deezer's catalog, so refreshing by it
+        // fetches (and persists) the wrong song's audio. They use the payload URL here and
+        // the by-song Apple lookup on the play button (canFetchSavedPreview) instead.
+        const hasAppleIdentity = song.apple_track_id != null || song.preview_available != null
+        if (song.provider === "apple" || song.deezer_id == null || hasAppleIdentity) {
             setPreviewUrl(song.preview_url)
             setPreviewAppleViewUrl(song.provider === "apple" && song.preview_url !== null ? song.apple_view_url ?? null : null)
             setIsPreviewLoading(false)
@@ -542,7 +549,7 @@ export default function SongDetailScreen({ navigation, route }: SongDetailProps)
         }
         loadPreviewUrl()
         return () => { isActive = false }
-    }, [isRated, song.apple_view_url, song.deezer_id, song.preview_url, song.provider, token])
+    }, [isRated, song.apple_track_id, song.apple_view_url, song.deezer_id, song.preview_available, song.preview_url, song.provider, token])
 
     useEffect(() => {
         if (!shouldPlayAfterPreviewLoad || previewUrl === null) return
