@@ -1,10 +1,10 @@
-# Best-effort identity matching against a user's own rated songs.
+# Conservative identity matching against a user's own rated songs.
 #
 # Apple's iTunes Search/Lookup API never returns ISRC, so a search result surfaced through
 # Apple has no cross-provider key to compare against a song the user rated before the
-# Deezer->Apple migration. This module matches on normalized title/artist (album as a
-# tie-breaker) instead, scoped strictly to one user's own rated songs so a match can never
-# reattach a rating to a song some other user rated.
+# Deezer->Apple migration. This module matches on normalized title/artist/album, scoped
+# strictly to one user's own rated songs so a match can never reattach a rating to a song
+# some other user rated.
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -62,15 +62,17 @@ def match_candidate(
     album: str | None = None,
 ) -> RankingRow | None:
     """
-    Return the one candidate matching title+artist, or None if there is no confident match.
+    Return the one candidate matching title+artist+album, or None if there is no confident match.
 
-    Ties on title+artist are broken by album when possible; an unresolved tie returns None
-    rather than guessing, since misattaching someone's rating to the wrong song is worse
-    than leaving one song un-deduplicated.
+    Apple search returns many same-title/same-artist rows for compilations, singles, and
+    remixes. Album agreement is required even when the user has only one rated song with
+    that title+artist, since misattaching someone's rating to the wrong song is worse than
+    leaving one song un-deduplicated.
     """
     normalized_title = normalize_match_text(title)
     normalized_artist = normalize_match_text(artist)
-    if not normalized_title or not normalized_artist:
+    normalized_album = normalize_match_text(album)
+    if not normalized_title or not normalized_artist or not normalized_album:
         return None
 
     matches = [
@@ -78,21 +80,10 @@ def match_candidate(
         for candidate in candidates
         if candidate.normalized_title == normalized_title
         and candidate.normalized_artist == normalized_artist
+        and candidate.normalized_album == normalized_album
     ]
-    if not matches:
-        return None
     if len(matches) == 1:
         return RankingRow(ranking=matches[0].ranking, song=matches[0].song)
-
-    normalized_album = normalize_match_text(album)
-    if normalized_album:
-        narrowed = [
-            candidate
-            for candidate in matches
-            if candidate.normalized_album == normalized_album
-        ]
-        if len(narrowed) == 1:
-            return RankingRow(ranking=narrowed[0].ranking, song=narrowed[0].song)
 
     return None
 

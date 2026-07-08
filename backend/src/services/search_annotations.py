@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session
 
 from src.crud.rating import list_all_user_rankings_with_songs
-from src.crud.song_provider_ref import ensure_apple_ref, list_provider_rating_annotations
+from src.crud.song_provider_ref import list_provider_rating_annotations
 from src.pydantic_schemas.search import (
     AppleSearchAnnotationItem,
     AppleSearchAnnotationRequest,
@@ -10,7 +10,6 @@ from src.pydantic_schemas.search import (
     AppleSearchAnnotationResult,
 )
 from src.services.song_matching import build_match_candidates, match_candidate
-from src.sqlalchemy_tables.song import Song
 
 
 def annotate_apple_search_results(
@@ -62,7 +61,6 @@ def annotate_apple_search_results(
     )
 
     annotations: list[AppleSearchAnnotationResult] = []
-    self_heal_writes: list[tuple[Song, str, str]] = []
     for item in data.results:
         storefront = item.storefront or "US"
         direct = by_identity.get((item.apple_track_id, storefront))
@@ -97,9 +95,6 @@ def annotate_apple_search_results(
             )
             continue
 
-        if direct is None:
-            self_heal_writes.append((fallback.song, item.apple_track_id, storefront))
-
         annotations.append(
             AppleSearchAnnotationResult(
                 apple_track_id=item.apple_track_id,
@@ -110,25 +105,5 @@ def annotate_apple_search_results(
                 already_rated=True,
             )
         )
-
-    if self_heal_writes:
-        try:
-            for song, apple_track_id, storefront in self_heal_writes:
-                ensure_apple_ref(
-                    db,
-                    song=song,
-                    apple_track_id=apple_track_id,
-                    storefront=storefront,
-                    provider_artist_id=None,
-                    provider_album_id=None,
-                    url=None,
-                    artwork_url=None,
-                    preview_available=None,
-                    confidence="apple_legacy_fallback_match",
-                )
-            db.commit()
-        except Exception:
-            db.rollback()
-            raise
 
     return AppleSearchAnnotationResponse(results=annotations)

@@ -19,6 +19,22 @@ class ProviderRankingRow:
     ranking: Ranking | None
 
 
+def is_untrusted_legacy_apple_ref(ref: SongProviderRef) -> bool:
+    """
+    Return True for Apple refs written by the old search fallback without provider facts.
+
+    Those rows were created from title/artist matches during read-only search annotation, so
+    they can point at unrelated compilation or remix tracks. Refs created from a finalize
+    action carry provider facts such as a store URL or preview availability and remain usable.
+    """
+    return (
+        ref.provider == "apple"
+        and ref.confidence == "apple_legacy_fallback_match"
+        and ref.url is None
+        and ref.preview_available is None
+    )
+
+
 def get_by_provider_track(
     db: Session,
     provider: str,
@@ -32,6 +48,15 @@ def get_by_provider_track(
         .where(SongProviderRef.provider_track_id == provider_track_id)
         .where(SongProviderRef.storefront == storefront)
     ).scalar_one_or_none()
+
+
+def delete_provider_ref(
+    db: Session,
+    provider_ref: SongProviderRef,
+) -> None:
+    """Delete one stale provider ref without committing."""
+    db.delete(provider_ref)
+    db.flush()
 
 
 def get_song_provider_ref(
@@ -51,6 +76,11 @@ def get_song_provider_ref(
         .where(SongProviderRef.song_id == song_id)
         .where(SongProviderRef.provider == provider)
     ).scalars().all()
+    refs = [
+        ref
+        for ref in refs
+        if not is_untrusted_legacy_apple_ref(ref)
+    ]
     if not refs:
         return None
     return max(refs, key=_provider_ref_priority)
@@ -72,6 +102,8 @@ def list_apple_provider_refs_for_songs(
     ).scalars().all()
     selected: dict[int, SongProviderRef] = {}
     for ref in refs:
+        if is_untrusted_legacy_apple_ref(ref):
+            continue
         current = selected.get(ref.song_id)
         if current is None or _provider_ref_priority(ref) > _provider_ref_priority(current):
             selected[ref.song_id] = ref
@@ -97,7 +129,10 @@ def get_song_by_provider_track(
 ) -> Song | None:
     """Return a durable song by provider reference."""
     row = db.execute(
-        select(Song)
+        select(
+            Song,
+            SongProviderRef,
+        )
         .join(
             SongProviderRef,
             SongProviderRef.song_id == Song.id,
@@ -105,8 +140,13 @@ def get_song_by_provider_track(
         .where(SongProviderRef.provider == provider)
         .where(SongProviderRef.provider_track_id == provider_track_id)
         .where(SongProviderRef.storefront == storefront)
-    ).scalar_one_or_none()
-    return row
+    ).one_or_none()
+    if row is None:
+        return None
+    song, provider_ref = row
+    if is_untrusted_legacy_apple_ref(provider_ref):
+        return None
+    return song
 
 
 def create_provider_ref(
@@ -282,4 +322,5 @@ def list_provider_rating_annotations(
             ranking=row[1],
         )
         for row in rows
+        if not is_untrusted_legacy_apple_ref(row[0])
     ]

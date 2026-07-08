@@ -376,6 +376,80 @@ def test_rankings_prefer_previewable_apple_ref_when_duplicate_refs_exist(
     assert response_song["apple_view_url"] == "https://music.apple.com/us/album/smoke/1?i=previewable-track"
 
 
+def test_untrusted_search_fallback_ref_is_ignored_for_preview_selection(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    """Search-written fallback refs without provider facts cannot drive preview lookup."""
+    token = _get_token(
+        client,
+        email="unsafe-fallback@example.com",
+        username="unsafefallback",
+    )
+    user = db_session.execute(
+        select(User).where(User.email == "unsafe-fallback@example.com")
+    ).scalar_one()
+    song = Song(
+        deezer_id=9100,
+        isrc="USAT22602482",
+        title="Smoke",
+        artist="Skrillex, ISOxo, Cristale & TeeZandos",
+        artist_deezer_id=None,
+        album="SOMA",
+        cover_url="https://example.com/smoke.jpg",
+        preview_url="https://e-cdns-preview.dzcdn.net/stream/smoke?exp=9999999999&hdnea=token",
+        preview_url_expires_at=datetime.now(timezone.utc) + timedelta(days=365),
+    )
+    db_session.add(song)
+    db_session.flush()
+    db_session.add_all(
+        [
+            SongProviderRef(
+                song_id=song.id,
+                provider="apple",
+                provider_track_id="junk-compilation-track",
+                storefront="US",
+                url=None,
+                preview_available=None,
+                confidence="apple_legacy_fallback_match",
+            ),
+            Ranking(
+                user_id=user.id,
+                song_id=song.id,
+                bucket="like",
+                position=1,
+                score=10.0,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    selected_ref = get_song_provider_ref(
+        db_session,
+        song.id,
+        "apple",
+    )
+    assert selected_ref is None
+
+    def fail_apple_lookup(*args, **kwargs):
+        raise AssertionError("Unsafe fallback ref must not trigger Apple lookup.")
+
+    monkeypatch.setattr("src.services.song.lookup_apple_song", fail_apple_lookup)
+
+    response = client.get(
+        f"/api/v1/songs/by-id/{song.id}/preview-url",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "preview_url": "https://e-cdns-preview.dzcdn.net/stream/smoke?exp=9999999999&hdnea=token",
+        "apple_view_url": None,
+        "provider": "deezer",
+    }
+
+
 def test_apple_bookmark_creates_song_and_provider_ref(
     client: TestClient,
     db_session: Session,
@@ -1100,11 +1174,11 @@ def test_ranking_by_song_and_legacy_by_deezer_both_work(client: TestClient):
 # --- Legacy-song fallback matching (songs rated before the Apple search migration) --------
 
 
-def test_apple_annotation_fallback_matches_legacy_song_and_self_heals_ref(
+def test_apple_annotation_fallback_matches_legacy_song_without_writing_ref(
     client: TestClient,
     db_session: Session,
 ):
-    """A song rated before the Apple migration self-heals its missing Apple ref on match."""
+    """A song rated before the Apple migration can annotate safely without mutating identity."""
     token = _get_token(client)
     finalized = _finalize(client, token, _deezer_payload())
     legacy_song_id = finalized["ranking"]["song_id"]
@@ -1131,23 +1205,73 @@ def test_apple_annotation_fallback_matches_legacy_song_and_self_heals_ref(
     assert result["my_bucket"] == "like"
     assert result["already_rated"] is True
 
-    provider_ref = db_session.execute(
+    provider_refs = db_session.execute(
         select(SongProviderRef)
         .where(SongProviderRef.provider == "apple")
         .where(SongProviderRef.provider_track_id == "3001")
-    ).scalar_one()
-    assert provider_ref.song_id == legacy_song_id
-    assert provider_ref.confidence == "apple_legacy_fallback_match"
+    ).scalars().all()
+    assert provider_refs == []
 
-    # Self-heal took: a follow-up request without title/artist now resolves via the direct hit.
+    # Annotation is intentionally read-only: without match fields, there is no direct hit.
     follow_up = client.post(
         "/api/v1/search/apple/annotations",
         json={"results": [{"apple_track_id": "3001", "storefront": "US"}]},
         headers={"Authorization": f"Bearer {token}"},
     )
     follow_up_result = follow_up.json()["results"][0]
-    assert follow_up_result["song_id"] == legacy_song_id
-    assert follow_up_result["already_rated"] is True
+    assert follow_up_result["song_id"] is None
+    assert follow_up_result["already_rated"] is False
+
+
+def test_apple_annotation_fallback_requires_album_match_for_single_candidate(
+    client: TestClient,
+    db_session: Session,
+):
+    """Same-title/same-artist Apple rows from other albums stay unrated."""
+    token = _get_token(client)
+    legacy_payload = _deezer_payload()
+    legacy_payload["song"]["deezer_id"] = 8300
+    legacy_payload["song"]["isrc"] = "USAT22602481"
+    legacy_payload["song"]["title"] = "Smoke"
+    legacy_payload["song"]["artist"] = "Skrillex, ISOxo, Cristale & TeeZandos"
+    legacy_payload["song"]["artist_deezer_id"] = 8301
+    legacy_payload["song"]["album"] = "SOMA"
+    finalized = _finalize(client, token, legacy_payload)
+    legacy_song_id = finalized["ranking"]["song_id"]
+
+    response = client.post(
+        "/api/v1/search/apple/annotations",
+        json={
+            "results": [
+                {
+                    "apple_track_id": "8302",
+                    "storefront": "US",
+                    "title": "Smoke",
+                    "artist": "Skrillex, ISOxo, Cristale & TeeZandos",
+                    "album": "VIP Club Music",
+                }
+            ]
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    result = response.json()["results"][0]
+    assert result["song_id"] is None
+    assert result["my_bucket"] is None
+    assert result["already_rated"] is False
+
+    refs = db_session.execute(
+        select(SongProviderRef)
+        .where(SongProviderRef.provider == "apple")
+        .where(SongProviderRef.provider_track_id == "8302")
+    ).scalars().all()
+    assert refs == []
+
+    ranking = db_session.execute(
+        select(Ranking).where(Ranking.song_id == legacy_song_id)
+    ).scalar_one()
+    assert ranking.song_id == legacy_song_id
 
 
 def test_apple_finalize_fallback_reuses_legacy_song_without_apple_lookup(
@@ -1155,7 +1279,7 @@ def test_apple_finalize_fallback_reuses_legacy_song_without_apple_lookup(
     db_session: Session,
     monkeypatch,
 ):
-    """Finalize reuses a legacy-rated song by title/artist match instead of creating a duplicate."""
+    """Finalize reuses a legacy-rated song by title/artist/album match instead of creating a duplicate."""
     token = _get_token(client)
     finalized = _finalize(client, token, _deezer_payload())
     legacy_song_id = finalized["ranking"]["song_id"]
@@ -1187,6 +1311,112 @@ def test_apple_finalize_fallback_reuses_legacy_song_without_apple_lookup(
         .where(SongProviderRef.provider_track_id == "3002")
     ).scalar_one()
     assert provider_ref.song_id == legacy_song_id
+
+
+def test_apple_finalize_fallback_requires_album_match_for_single_candidate(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    """Rating a same-title/same-artist Apple track from another album creates a new song."""
+    token = _get_token(client)
+    legacy_payload = _deezer_payload()
+    legacy_payload["song"]["deezer_id"] = 8400
+    legacy_payload["song"]["isrc"] = "USAT22602481"
+    legacy_payload["song"]["title"] = "Smoke"
+    legacy_payload["song"]["artist"] = "Skrillex, ISOxo, Cristale & TeeZandos"
+    legacy_payload["song"]["artist_deezer_id"] = 8401
+    legacy_payload["song"]["album"] = "SOMA"
+    legacy = _finalize(client, token, legacy_payload)
+    legacy_song_id = legacy["ranking"]["song_id"]
+
+    monkeypatch.setattr(
+        "src.services.provider_catalog.httpx.get",
+        lambda *args, **kwargs: MockAppleResponse({"results": []}),
+    )
+
+    apple_payload = _apple_payload(apple_track_id="8402", title="Smoke")
+    apple_payload["song"]["artist"] = "Skrillex, ISOxo, Cristale & TeeZandos"
+    apple_payload["song"]["album"] = "VIP Club Music"
+    apple_payload["song"]["apple_view_url"] = (
+        "https://music.apple.com/us/album/smoke/8402?i=8402"
+    )
+    apple_payload["song"]["apple_album_id"] = "84020"
+    apple_payload["song"]["isrc"] = None
+    apple_payload["bucket"] = "dislike"
+    response = _finalize(client, token, apple_payload)
+
+    assert response["ranking"]["song_id"] != legacy_song_id
+
+    songs = db_session.execute(select(Song)).scalars().all()
+    assert len(songs) == 2
+
+    provider_ref = db_session.execute(
+        select(SongProviderRef)
+        .where(SongProviderRef.provider == "apple")
+        .where(SongProviderRef.provider_track_id == "8402")
+    ).scalar_one()
+    assert provider_ref.song_id == response["ranking"]["song_id"]
+    assert provider_ref.song_id != legacy_song_id
+
+
+def test_apple_finalize_reclaims_untrusted_search_fallback_ref_for_new_song(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    """A real finalize action can replace a stale search-written fallback identity."""
+    token = _get_token(client)
+    legacy_payload = _deezer_payload()
+    legacy_payload["song"]["deezer_id"] = 8500
+    legacy_payload["song"]["isrc"] = "USAT22602481"
+    legacy_payload["song"]["title"] = "Smoke"
+    legacy_payload["song"]["artist"] = "Skrillex, ISOxo, Cristale & TeeZandos"
+    legacy_payload["song"]["artist_deezer_id"] = 8501
+    legacy_payload["song"]["album"] = "SOMA"
+    legacy = _finalize(client, token, legacy_payload)
+    legacy_song_id = legacy["ranking"]["song_id"]
+    legacy_song = db_session.get(Song, legacy_song_id)
+    assert legacy_song is not None
+    db_session.add(
+        SongProviderRef(
+            song_id=legacy_song_id,
+            provider="apple",
+            provider_track_id="8502",
+            storefront="US",
+            url=None,
+            preview_available=None,
+            confidence="apple_legacy_fallback_match",
+        )
+    )
+    db_session.commit()
+
+    monkeypatch.setattr(
+        "src.services.provider_catalog.httpx.get",
+        lambda *args, **kwargs: MockAppleResponse({"results": []}),
+    )
+
+    apple_payload = _apple_payload(apple_track_id="8502", title="Smoke")
+    apple_payload["song"]["artist"] = "Skrillex, ISOxo, Cristale & TeeZandos"
+    apple_payload["song"]["album"] = "VIP Club Music"
+    apple_payload["song"]["apple_view_url"] = (
+        "https://music.apple.com/us/album/smoke/8502?i=8502"
+    )
+    apple_payload["song"]["apple_album_id"] = "85020"
+    apple_payload["song"]["isrc"] = None
+    apple_payload["bucket"] = "dislike"
+    response = _finalize(client, token, apple_payload)
+
+    new_song_id = response["ranking"]["song_id"]
+    assert new_song_id != legacy_song_id
+
+    provider_ref = db_session.execute(
+        select(SongProviderRef)
+        .where(SongProviderRef.provider == "apple")
+        .where(SongProviderRef.provider_track_id == "8502")
+    ).scalar_one()
+    assert provider_ref.song_id == new_song_id
+    assert provider_ref.confidence == "apple_client_search"
 
 
 def test_apple_annotation_fallback_overrides_conflicting_apple_ref(

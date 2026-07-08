@@ -8,7 +8,14 @@ from sqlalchemy.orm import Session
 
 from src.crud.rating import get_user_ranking_by_song
 from src.crud.song import create_from_provider_metadata
-from src.crud.song_provider_ref import create_provider_ref, ensure_apple_ref, get_song_by_provider_track
+from src.crud.song_provider_ref import (
+    create_provider_ref,
+    delete_provider_ref,
+    ensure_apple_ref,
+    get_by_provider_track,
+    get_song_by_provider_track,
+    is_untrusted_legacy_apple_ref,
+)
 from src.pydantic_schemas.song import SongCreate, normalize_storefront
 from src.services.song_matching import find_users_rated_song_match
 from src.sqlalchemy_tables.song import Song
@@ -44,12 +51,27 @@ def resolve_song_for_finalize(
 
     apple_track_id = str(data.apple_track_id).strip()
     storefront = normalize_storefront(data.storefront)
-    existing_song = get_song_by_provider_track(
+    existing_ref = get_by_provider_track(
         db,
         provider="apple",
         provider_track_id=apple_track_id,
         storefront=storefront,
     )
+    if existing_ref is not None and is_untrusted_legacy_apple_ref(existing_ref):
+        delete_provider_ref(
+            db,
+            existing_ref,
+        )
+        existing_ref = None
+
+    existing_song = None
+    if existing_ref is not None:
+        existing_song = get_song_by_provider_track(
+            db,
+            provider="apple",
+            provider_track_id=apple_track_id,
+            storefront=storefront,
+        )
     if existing_song is not None and user_id is not None:
         if get_user_ranking_by_song(db, user_id, existing_song.id) is not None:
             return existing_song
