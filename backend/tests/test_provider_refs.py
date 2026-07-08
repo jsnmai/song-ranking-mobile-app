@@ -1360,6 +1360,91 @@ def test_apple_finalize_fallback_requires_album_match_for_single_candidate(
     assert provider_ref.song_id != legacy_song_id
 
 
+def test_apple_annotation_fallback_matches_across_self_titled_single_container(
+    client: TestClient,
+    db_session: Session,
+):
+    """A rating made on the "<Title> - Single" release annotates the album cut as rated.
+
+    The single's album name restates the track itself, so it can't discriminate between
+    songs — requiring album agreement there left the same recording showing unrated (and
+    ratable into a duplicate) whenever it resurfaced under its album release.
+    """
+    token = _get_token(client)
+    legacy_payload = _deezer_payload()
+    legacy_payload["song"]["deezer_id"] = 8600
+    legacy_payload["song"]["isrc"] = "USAT22602481"
+    legacy_payload["song"]["title"] = "Smoke"
+    legacy_payload["song"]["artist"] = "Skrillex, ISOxo, Cristale & TeeZandos"
+    legacy_payload["song"]["artist_deezer_id"] = 8601
+    legacy_payload["song"]["album"] = "Smoke - Single"
+    finalized = _finalize(client, token, legacy_payload)
+    legacy_song_id = finalized["ranking"]["song_id"]
+
+    response = client.post(
+        "/api/v1/search/apple/annotations",
+        json={
+            "results": [
+                {
+                    "apple_track_id": "8602",
+                    "storefront": "US",
+                    "title": "Smoke",
+                    "artist": "Skrillex, ISOxo, Cristale & TeeZandos",
+                    "album": "SOMA",
+                }
+            ]
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    result = response.json()["results"][0]
+    assert result["song_id"] == legacy_song_id
+    assert result["already_rated"] is True
+
+
+def test_apple_finalize_fallback_reuses_song_rated_on_single_container(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+):
+    """Rating the album cut of a song rated via its single updates the same ranking."""
+    token = _get_token(client)
+    legacy_payload = _deezer_payload()
+    legacy_payload["song"]["deezer_id"] = 8610
+    legacy_payload["song"]["isrc"] = "USAT22602481"
+    legacy_payload["song"]["title"] = "Smoke"
+    legacy_payload["song"]["artist"] = "Skrillex, ISOxo, Cristale & TeeZandos"
+    legacy_payload["song"]["artist_deezer_id"] = 8611
+    legacy_payload["song"]["album"] = "Smoke - Single"
+    legacy = _finalize(client, token, legacy_payload)
+    legacy_song_id = legacy["ranking"]["song_id"]
+
+    monkeypatch.setattr(
+        "src.services.provider_catalog.httpx.get",
+        lambda *args, **kwargs: MockAppleResponse({"results": []}),
+    )
+
+    apple_payload = _apple_payload(apple_track_id="8612", title="Smoke")
+    apple_payload["song"]["artist"] = "Skrillex, ISOxo, Cristale & TeeZandos"
+    apple_payload["song"]["album"] = "SOMA"
+    apple_payload["song"]["apple_view_url"] = (
+        "https://music.apple.com/us/album/smoke/8612?i=8612"
+    )
+    apple_payload["song"]["apple_album_id"] = "86120"
+    apple_payload["song"]["isrc"] = None
+    response = _finalize(client, token, apple_payload)
+
+    # Same song, same ranking — no duplicate row forked for the album release.
+    assert response["ranking"]["song_id"] == legacy_song_id
+    songs = db_session.execute(select(Song)).scalars().all()
+    assert len(songs) == 1
+    rankings = db_session.execute(
+        select(Ranking).where(Ranking.song_id == legacy_song_id)
+    ).scalars().all()
+    assert len(rankings) == 1
+
+
 def test_apple_finalize_reclaims_untrusted_search_fallback_ref_for_new_song(
     client: TestClient,
     db_session: Session,

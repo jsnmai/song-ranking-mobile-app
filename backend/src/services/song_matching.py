@@ -55,6 +55,18 @@ def build_match_candidates(rows: list[RankingRow]) -> list[MatchCandidate]:
     ]
 
 
+def _is_self_titled_container(normalized_album: str, normalized_title: str) -> bool:
+    """Whether an album is Apple's single/EP container named after the track itself.
+
+    Apple names those releases "<Title> - Single" / "<Title> - EP", which normalization
+    folds to "<title> single" / "<title> ep". Such an album restates the track's own name,
+    so it carries no discriminating information about WHICH song this is — requiring album
+    agreement against it can only block a legitimate match (rated the single, later saw the
+    album cut of the same recording), never prevent a collision.
+    """
+    return normalized_album in (f"{normalized_title} single", f"{normalized_title} ep")
+
+
 def match_candidate(
     candidates: list[MatchCandidate],
     title: str,
@@ -67,7 +79,12 @@ def match_candidate(
     Apple search returns many same-title/same-artist rows for compilations, singles, and
     remixes. Album agreement is required even when the user has only one rated song with
     that title+artist, since misattaching someone's rating to the wrong song is worse than
-    leaving one song un-deduplicated.
+    leaving one song un-deduplicated. The one exception: a self-titled single/EP container
+    ("<Title> - Single") names the track, not a real album, so when either side's album is
+    that container and exactly one candidate matches title+artist, the match holds — this is
+    what lets a rating made on the single follow the same recording onto its album release
+    (and vice versa) instead of the album cut showing unrated or forking a duplicate song.
+    Two disagreeing REAL albums still refuse to match.
     """
     normalized_title = normalize_match_text(title)
     normalized_artist = normalize_match_text(artist)
@@ -75,15 +92,26 @@ def match_candidate(
     if not normalized_title or not normalized_artist or not normalized_album:
         return None
 
-    matches = [
+    title_artist_matches = [
         candidate
         for candidate in candidates
         if candidate.normalized_title == normalized_title
         and candidate.normalized_artist == normalized_artist
-        and candidate.normalized_album == normalized_album
     ]
-    if len(matches) == 1:
-        return RankingRow(ranking=matches[0].ranking, song=matches[0].song)
+    album_matches = [
+        candidate
+        for candidate in title_artist_matches
+        if candidate.normalized_album == normalized_album
+    ]
+    if len(album_matches) == 1:
+        return RankingRow(ranking=album_matches[0].ranking, song=album_matches[0].song)
+    if len(album_matches) == 0 and len(title_artist_matches) == 1:
+        only = title_artist_matches[0]
+        if (
+            _is_self_titled_container(normalized_album, normalized_title)
+            or _is_self_titled_container(only.normalized_album, only.normalized_title)
+        ):
+            return RankingRow(ranking=only.ranking, song=only.song)
 
     return None
 
